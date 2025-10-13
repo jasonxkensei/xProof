@@ -1,7 +1,8 @@
 import express, { type Express } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth, requireAuth } from "./auth";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import { db } from "./db";
+import { storage } from "./storage";
 import { certifications, users, SUBSCRIPTION_TIERS } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -45,10 +46,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication first
   await setupAuth(app);
 
-  // Create certification
-  app.post("/api/certifications", requireAuth, async (req, res) => {
+  // Get current user endpoint
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Create certification
+  app.post("/api/certifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
 
       // Get user to check subscription limits
       const [user] = await db.select().from(users).where(eq(users.id, userId));
@@ -155,9 +171,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user's certifications
-  app.get("/api/certifications", requireAuth, async (req, res) => {
+  app.get("/api/certifications", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = req.user.claims.sub;
       const userCertifications = await db
         .select()
         .from(certifications)
@@ -215,9 +231,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create subscription
-  app.post("/api/create-subscription", requireAuth, async (req, res) => {
+  app.post("/api/create-subscription", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = req.user.claims.sub;
       const { plan } = req.body;
 
       if (!["pro", "business"].includes(plan)) {

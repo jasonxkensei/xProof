@@ -80,6 +80,7 @@ export const insertCertificationSchema = createInsertSchema(certifications).omit
   updatedAt: true,
 });
 
+export type UpsertUser = typeof users.$inferInsert;
 export type InsertCertification = z.infer<typeof insertCertificationSchema>;
 export type Certification = typeof certifications.$inferSelect;
 
