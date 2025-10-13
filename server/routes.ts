@@ -13,7 +13,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-12-18.acacia",
+  apiVersion: "2025-09-30.clover",
 });
 
 // MultiversX blockchain integration
@@ -89,7 +89,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tier = user.subscriptionTier as keyof typeof SUBSCRIPTION_TIERS;
       const limit = SUBSCRIPTION_TIERS[tier].monthlyLimit;
       
-      if (user.monthlyUsage >= limit) {
+      if ((user.monthlyUsage || 0) >= limit) {
         return res.status(403).json({
           message: `Monthly limit reached. Upgrade your plan to certify more files.`,
           limit,
@@ -154,7 +154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Increment monthly usage
       await db
         .update(users)
-        .set({ monthlyUsage: user.monthlyUsage + 1 })
+        .set({ monthlyUsage: (user.monthlyUsage || 0) + 1 })
         .where(eq(users.id, userId));
 
       res.status(201).json({
@@ -295,7 +295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const invoice = subscription.latest_invoice as Stripe.Invoice;
-      const paymentIntent = invoice.payment_intent as Stripe.PaymentIntent;
+      const paymentIntent = (invoice as any).payment_intent as Stripe.PaymentIntent;
 
       // Update user subscription info
       await db
