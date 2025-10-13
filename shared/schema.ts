@@ -37,6 +37,8 @@ export const users = pgTable("users", {
   subscriptionStatus: varchar("subscription_status").default("active"), // active, canceled, past_due
   monthlyUsage: integer("monthly_usage").default(0),
   usageResetDate: timestamp("usage_reset_date").defaultNow(),
+  companyName: varchar("company_name"),
+  companyLogoUrl: varchar("company_logo_url"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -80,7 +82,6 @@ export const insertCertificationSchema = createInsertSchema(certifications).omit
   updatedAt: true,
 });
 
-export type UpsertUser = typeof users.$inferInsert;
 export type InsertCertification = z.infer<typeof insertCertificationSchema>;
 export type Certification = typeof certifications.$inferSelect;
 

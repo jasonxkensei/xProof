@@ -56,6 +56,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update user branding (Business tier only)
+  app.patch('/api/user/branding', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { companyName, companyLogoUrl } = req.body;
+
+      // Get user to check subscription tier
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Check if user has Business tier
+      if (user.subscriptionTier !== 'business') {
+        return res.status(403).json({ 
+          message: "Custom branding is only available for Business tier. Please upgrade your subscription.",
+          requiredTier: "business",
+          currentTier: user.subscriptionTier
+        });
+      }
+
+      // Validate input
+      const schema = z.object({
+        companyName: z.string().min(1).max(100),
+        companyLogoUrl: z.string().url().optional().or(z.literal("")),
+      });
+
+      const validatedData = schema.parse({ companyName, companyLogoUrl });
+
+      // Update user branding
+      await db
+        .update(users)
+        .set({
+          companyName: validatedData.companyName,
+          companyLogoUrl: validatedData.companyLogoUrl || null,
+        })
+        .where(eq(users.id, userId));
+
+      res.json({ message: "Branding updated successfully" });
+    } catch (error) {
+      console.error("Error updating branding:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to update branding" });
+    }
+  });
+
   // Create certification
   app.post("/api/certifications", isAuthenticated, async (req: any, res) => {
     try {
@@ -226,8 +275,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pdfBuffer = await generateCertificatePDF({
         certification,
         subscriptionTier: user.subscriptionTier || 'free',
-        companyName: undefined, // TODO: Add to user schema for Business tier
-        companyLogoUrl: undefined,
+        companyName: user.companyName || undefined,
+        companyLogoUrl: user.companyLogoUrl || undefined,
       });
 
       // Set headers for PDF download

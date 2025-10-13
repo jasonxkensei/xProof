@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Upload, FileText, ExternalLink, Download, Copy, LogOut, CreditCard } from "lucide-react";
+import { Shield, Upload, FileText, ExternalLink, Download, Copy, LogOut, CreditCard, Settings as SettingsIcon } from "lucide-react";
 import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { format } from "date-fns";
 import { Link } from "wouter";
@@ -94,6 +94,12 @@ export default function Dashboard() {
             <Badge variant={tierInfo.variant as any} className="hidden sm:inline-flex" data-testid="badge-subscription-tier">
               {tierInfo.label}
             </Badge>
+            <Button asChild variant="ghost" size="sm" data-testid="button-settings">
+              <Link href="/settings">
+                <SettingsIcon className="mr-2 h-4 w-4" />
+                Settings
+              </Link>
+            </Button>
             <Button asChild variant="ghost" size="sm" data-testid="button-logout">
               <a href="/api/logout">
                 <LogOut className="mr-2 h-4 w-4" />

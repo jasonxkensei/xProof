@@ -11,6 +11,7 @@ import Certify from "@/pages/certify";
 import ProofPage from "@/pages/proof";
 import Pricing from "@/pages/pricing";
 import Subscribe from "@/pages/subscribe";
+import Settings from "@/pages/settings";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -26,6 +27,7 @@ function Router() {
           <Route path="/certify" component={Certify} />
           <Route path="/pricing" component={Pricing} />
           <Route path="/subscribe" component={Subscribe} />
+          <Route path="/settings" component={Settings} />
         </>
       )}
       <Route path="/proof/:id" component={ProofPage} />
