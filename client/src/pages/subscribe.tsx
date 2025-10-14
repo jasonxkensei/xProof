@@ -5,8 +5,9 @@ import { useStripe, Elements, PaymentElement, useElements } from '@stripe/react-
 import { loadStripe } from '@stripe/stripe-js';
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Shield, ArrowLeft, Loader2 } from "lucide-react";
+import { Shield, ArrowLeft, Loader2, CreditCard, Coins } from "lucide-react";
 import { Link } from "wouter";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
   throw new Error('Missing required Stripe key: VITE_STRIPE_PUBLIC_KEY');
@@ -69,6 +70,79 @@ const SubscribeForm = ({ plan }: { plan: string }) => {
         )}
       </Button>
     </form>
+  );
+};
+
+const XMoneyPayment = ({ plan }: { plan: string }) => {
+  const { toast } = useToast();
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const planPrices: Record<string, number> = {
+    pro: 9.99,
+    business: 39,
+  };
+
+  const handleXMoneyPayment = async () => {
+    setIsProcessing(true);
+    try {
+      const data = await apiRequest("POST", "/api/xmoney/create-payment", {
+        amount: planPrices[plan],
+        currency: "USD",
+        description: `ProofMint ${plan.charAt(0).toUpperCase() + plan.slice(1)} Subscription`,
+      }) as { paymentUrl?: string; orderId?: string; message?: string };
+      
+      if (data.paymentUrl) {
+        // Redirect to xMoney payment page
+        window.location.href = data.paymentUrl;
+      } else {
+        toast({
+          title: "Error",
+          description: data.message || "Failed to create payment link",
+          variant: "destructive",
+        });
+        setIsProcessing(false);
+      }
+    } catch (error: any) {
+      const errorMessage = error.message || "Failed to initialize xMoney payment";
+      toast({
+        title: "Payment Error",
+        description: errorMessage.includes("503") 
+          ? "xMoney payment service is not configured. Please use card payment."
+          : errorMessage,
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border bg-muted/50 p-4">
+        <p className="text-sm text-muted-foreground">
+          Pay with cryptocurrency using xMoney (powered by MultiversX)
+        </p>
+        <p className="mt-2 text-2xl font-bold">${planPrices[plan]}/month</p>
+      </div>
+      
+      <Button 
+        onClick={handleXMoneyPayment}
+        disabled={isProcessing} 
+        className="w-full"
+        data-testid="button-xmoney-payment"
+      >
+        {isProcessing ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Redirecting to xMoney...
+          </>
+        ) : (
+          <>
+            <Coins className="mr-2 h-4 w-4" />
+            Pay with Crypto
+          </>
+        )}
+      </Button>
+    </div>
   );
 };
 
@@ -163,18 +237,39 @@ export default function Subscribe() {
           </p>
         </div>
 
-        {!clientSecret ? (
-          <div className="flex flex-col items-center gap-4 py-16">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            <p className="text-sm text-muted-foreground">Setting up your subscription...</p>
-          </div>
-        ) : (
-          <div className="rounded-lg border bg-card p-6">
-            <Elements stripe={stripePromise} options={{ clientSecret }}>
-              <SubscribeForm plan={plan} />
-            </Elements>
-          </div>
-        )}
+        <Tabs defaultValue="stripe" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-6" data-testid="tabs-payment-method">
+            <TabsTrigger value="stripe" data-testid="tab-stripe">
+              <CreditCard className="mr-2 h-4 w-4" />
+              Card Payment
+            </TabsTrigger>
+            <TabsTrigger value="xmoney" data-testid="tab-xmoney">
+              <Coins className="mr-2 h-4 w-4" />
+              Crypto (xMoney)
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="stripe">
+            {!clientSecret ? (
+              <div className="flex flex-col items-center gap-4 py-16">
+                <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                <p className="text-sm text-muted-foreground">Setting up your subscription...</p>
+              </div>
+            ) : (
+              <div className="rounded-lg border bg-card p-6">
+                <Elements stripe={stripePromise} options={{ clientSecret }}>
+                  <SubscribeForm plan={plan} />
+                </Elements>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="xmoney">
+            <div className="rounded-lg border bg-card p-6">
+              <XMoneyPayment plan={plan} />
+            </div>
+          </TabsContent>
+        </Tabs>
 
         <div className="mt-8 text-center text-sm text-muted-foreground">
           <p>By subscribing, you agree to our Terms of Service and Privacy Policy</p>

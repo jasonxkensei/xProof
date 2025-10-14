@@ -13,6 +13,8 @@ import ProofPage from "@/pages/proof";
 import Pricing from "@/pages/pricing";
 import Subscribe from "@/pages/subscribe";
 import Settings from "@/pages/settings";
+import PaymentSuccess from "@/pages/payment-success";
+import PaymentCancel from "@/pages/payment-cancel";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -32,6 +34,8 @@ function Router() {
         </>
       )}
       <Route path="/proof/:id" component={ProofPage} />
+      <Route path="/payment/success" component={PaymentSuccess} />
+      <Route path="/payment/cancel" component={PaymentCancel} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -88,11 +88,18 @@ Preferred communication style: Simple, everyday language.
 ### External Dependencies
 
 **Payment Processing**
-- **Stripe** for subscription management and payment processing
-- Stripe API version: 2025-09.30.clover
-- Client-side integration with `@stripe/stripe-js` and `@stripe/react-stripe-js`
-- Server-side subscription creation and webhook handling
-- Payment intents for one-time and recurring payments
+- **Dual Payment System**: Stripe and xMoney integration for flexible payment options
+- **Stripe** for traditional card payments and subscription management
+  - Stripe API version: 2025-09.30.clover
+  - Client-side integration with `@stripe/stripe-js` and `@stripe/react-stripe-js`
+  - Server-side subscription creation and webhook handling at `/api/webhooks/stripe`
+  - Payment intents for one-time and recurring payments
+- **xMoney** for MultiversX blockchain payments
+  - Native MultiversX payment gateway integration
+  - REST API calls to xMoney service for order creation and status tracking
+  - Webhook handler at `/api/webhooks/xmoney` with HMAC SHA256 signature verification
+  - Constant-time signature verification for timing-attack protection
+  - Support for cryptocurrency payments via MultiversX network
 
 **Blockchain Services**
 - **MultiversX** blockchain for proof-of-existence certification
@@ -119,6 +126,9 @@ Preferred communication style: Simple, everyday language.
 - `SESSION_SECRET`: Express session encryption key (required)
 - `STRIPE_SECRET_KEY`: Stripe API key (required)
 - `VITE_STRIPE_PUBLIC_KEY`: Stripe publishable key for client (required)
+- `XMONEY_API_KEY`: xMoney API key for payment processing (optional)
+- `XMONEY_SITE_ID`: xMoney site identifier (optional)
+- `XMONEY_WEBHOOK_SECRET`: xMoney webhook signature verification secret (optional)
 - `ISSUER_URL`: OIDC provider URL for Replit Auth
 - `REPL_ID`: Replit environment identifier
 - `REPLIT_DOMAINS`: Domain configuration for authentication callbacks
