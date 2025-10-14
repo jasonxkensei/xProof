@@ -4,10 +4,10 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useGetIsLoggedIn } from "@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn";
+import { useWalletAuth } from "@/hooks/useWalletAuth";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
-import Unlock from "@/pages/unlock";
+import WalletCallback from "@/pages/wallet-callback";
 import Dashboard from "@/pages/dashboard";
 import Certify from "@/pages/certify";
 import ProofPage from "@/pages/proof";
@@ -18,14 +18,22 @@ import PaymentSuccess from "@/pages/payment-success";
 import PaymentCancel from "@/pages/payment-cancel";
 
 function Router() {
-  const isLoggedIn = useGetIsLoggedIn();
+  const { isAuthenticated, isLoading } = useWalletAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <Switch>
-      {!isLoggedIn ? (
+      {!isAuthenticated ? (
         <>
           <Route path="/" component={Landing} />
-          <Route path="/unlock" component={Unlock} />
+          <Route path="/wallet-callback" component={WalletCallback} />
         </>
       ) : (
         <>

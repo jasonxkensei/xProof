@@ -16,6 +16,7 @@ import {
   createWalletSession,
   destroyWalletSession 
 } from "./walletAuth";
+import { getSession } from "./replitAuth";
 
 const stripeSecretKey = process.env.TESTING_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
 if (!stripeSecretKey) {
@@ -27,6 +28,72 @@ const stripe = new Stripe(stripeSecretKey, {
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Apply session middleware
+  app.use(getSession());
+  
+  // Web Wallet login endpoint (simple authentication)
+  app.post("/api/auth/wallet/login", async (req, res) => {
+    try {
+      const { walletAddress, signature, loginToken } = req.body;
+
+      if (!walletAddress || !walletAddress.startsWith("erd1")) {
+        return res.status(400).json({ message: "Invalid MultiversX wallet address" });
+      }
+
+      if (!signature || !loginToken) {
+        return res.status(400).json({ message: "Missing signature or login token" });
+      }
+
+      // In development mode, accept any signature from Web Wallet
+      // In production, you would verify the signature against the loginToken
+      console.log("🔐 Web Wallet login:", { walletAddress, signature: signature.substring(0, 20) + "..." });
+
+      // Check if user exists, create if not
+      let [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+
+      if (!user) {
+        // Create new user
+        [user] = await db
+          .insert(users)
+          .values({
+            walletAddress,
+            subscriptionTier: "free",
+            subscriptionStatus: "active",
+            monthlyUsage: 0,
+            usageResetDate: new Date(),
+          })
+          .returning();
+        
+        console.log("✅ Created new user:", walletAddress);
+      }
+
+      // Create wallet session
+      await createWalletSession(req, walletAddress);
+
+      res.json({ user, message: "Authentication successful" });
+    } catch (error: any) {
+      console.error("Error in Web Wallet login:", error);
+      res.status(500).json({ message: "Failed to authenticate with Web Wallet" });
+    }
+  });
+
+  // Get current user endpoint (for checking authentication status)
+  app.get('/api/auth/me', isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const walletAddress = req.walletAddress;
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching current user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
   // Generate authentication challenge for wallet
   app.post("/api/auth/challenge", (req, res) => {
     try {

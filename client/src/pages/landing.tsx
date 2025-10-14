@@ -1,10 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Shield, Zap, FileCheck, Lock, Globe, Award, Wallet } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { loginWithWallet } from "@/lib/walletAuth";
 
 export default function Landing() {
-  const [, navigate] = useLocation();
+  const handleConnect = () => {
+    loginWithWallet();
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -32,7 +34,7 @@ export default function Landing() {
             <Button 
               variant="ghost" 
               size="sm" 
-              onClick={() => navigate('/unlock')}
+              onClick={handleConnect}
               data-testid="button-login"
             >
               <Wallet className="mr-2 h-4 w-4" />
@@ -40,7 +42,7 @@ export default function Landing() {
             </Button>
             <Button 
               size="sm" 
-              onClick={() => navigate('/unlock')}
+              onClick={handleConnect}
               data-testid="button-get-started"
             >
               Get Started
@@ -69,7 +71,7 @@ export default function Landing() {
             <Button 
               size="lg" 
               className="text-base" 
-              onClick={() => navigate('/unlock')}
+              onClick={handleConnect}
               data-testid="button-start-free"
             >
               <Wallet className="mr-2 h-5 w-5" />
@@ -263,7 +265,7 @@ export default function Landing() {
                   <Button 
                     variant="outline" 
                     className="w-full" 
-                    onClick={() => navigate('/unlock')}
+                    onClick={handleConnect}
                     data-testid="button-start-free-tier"
                   >
                     Get Started
@@ -301,7 +303,7 @@ export default function Landing() {
                   </ul>
                   <Button 
                     className="w-full" 
-                    onClick={() => navigate('/unlock')}
+                    onClick={handleConnect}
                     data-testid="button-start-pro"
                   >
                     Start Pro Trial
@@ -337,7 +339,7 @@ export default function Landing() {
                   <Button 
                     variant="outline" 
                     className="w-full" 
-                    onClick={() => navigate('/unlock')}
+                    onClick={handleConnect}
                     data-testid="button-start-business"
                   >
                     Start Business Trial
