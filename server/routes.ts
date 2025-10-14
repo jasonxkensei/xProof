@@ -9,6 +9,7 @@ import { z } from "zod";
 import Stripe from "stripe";
 import { generateCertificatePDF } from "./certificateGenerator";
 import { createXMoneyOrder, getXMoneyOrderStatus, verifyXMoneyWebhook, isXMoneyConfigured } from "./xmoney";
+import { recordOnBlockchain, isMultiversXConfigured } from "./blockchain";
 
 const stripeSecretKey = process.env.TESTING_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
 if (!stripeSecretKey) {
@@ -18,25 +19,6 @@ if (!stripeSecretKey) {
 const stripe = new Stripe(stripeSecretKey, {
   apiVersion: "2025-09-30.clover",
 });
-
-// MultiversX blockchain integration
-async function recordOnBlockchain(fileHash: string): Promise<{
-  transactionHash: string;
-  transactionUrl: string;
-}> {
-  // TODO: Integrate with MultiversX API
-  // For now, we'll simulate the blockchain transaction
-  // In production, this would call the MultiversX REST API
-  
-  // Simulated transaction hash (in production, this comes from MultiversX)
-  const transactionHash = `tx_${Date.now()}_${fileHash.substring(0, 8)}`;
-  const transactionUrl = `https://explorer.multiversx.com/transactions/${transactionHash}`;
-  
-  return {
-    transactionHash,
-    transactionUrl,
-  };
-}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication first
@@ -167,8 +149,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Record on blockchain
-      const { transactionHash, transactionUrl } = await recordOnBlockchain(data.fileHash);
+      // Record on blockchain with file metadata
+      const { transactionHash, transactionUrl } = await recordOnBlockchain(
+        data.fileHash,
+        data.fileName,
+        data.authorName
+      );
 
       // Create certification
       const [certification] = await db

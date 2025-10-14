@@ -1,0 +1,335 @@
+1) package.json
+
+Crée package.json :
+
+{
+  "name": "proofmint-replit",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    "dotenv": "^16.0.3",
+    "node-fetch": "^2.6.7",
+    "pdfkit": "^0.13.0",
+    "qrcode": "^1.5.1",
+    "@multiversx/sdk-core": "^1.2.0"
+  }
+}
+
+
+Si Replit te propose d’installer, lance npm install.
+
+2) .env.example
+
+Crée un fichier .env (ou configure Replit Secrets). Exemple :
+
+PRIVATE_KEY=0x...TA_CLE_PRIVEE_SANS_ESPACES...
+SENDER_ADDRESS=erd1...
+RECEIVER_ADDRESS=erd1...   # peut être la même adresse si tu envoies vers toi-même
+GATEWAY_URL=https://gateway.multiversx.com/transactions
+CHAIN_ID=1
+PORT=3000
+
+
+Pour tests sur devnet, change GATEWAY_URL vers l’endpoint devnet (ex: https://devnet-gateway.multiversx.com/transactions) et CHAIN_ID en conséquence.
+
+PRIVATE_KEY : clé privée du compte qui paiera la tx (NE PAS partager).
+
+3) server.js (backend - Express)
+
+Crée server.js à la racine :
+
+require('dotenv').config();
+const express = require('express');
+const bodyParser = require('body-parser');
+const fetch = require('node-fetch');
+const QRCode = require('qrcode');
+const PDFDocument = require('pdfkit');
+const { Transaction, Address, TransactionPayload, Account, SignedTransaction, GasEstimator } = require('@multiversx/sdk-core');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.static('public'));
+app.use(bodyParser.json({ limit: '1mb' }));
+
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const SENDER_ADDRESS = process.env.SENDER_ADDRESS;
+const RECEIVER_ADDRESS = process.env.RECEIVER_ADDRESS;
+const GATEWAY_URL = process.env.GATEWAY_URL || 'https://gateway.multiversx.com/transactions';
+const CHAIN_ID = process.env.CHAIN_ID || '1';
+
+// Basic safety checks
+if (!PRIVATE_KEY || !SENDER_ADDRESS || !RECEIVER_ADDRESS) {
+  console.error('⚠️ Configure PRIVATE_KEY, SENDER_ADDRESS, RECEIVER_ADDRESS dans .env');
+  process.exit(1);
+}
+
+// Utility: submit signed transaction to gateway
+async function submitTx(signedTx) {
+  const body = {
+    // gateway expects "tx": "<signed-hex>"
+    tx: signedTx,
+  };
+  const res = await fetch(GATEWAY_URL, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const json = await res.json();
+  return json;
+}
+
+/*
+  Endpoint: /api/certify
+  body: { fileHash: string, author?: string, filename?: string }
+  - builds a transaction with data: "certify:<hash>"
+  - signs with PRIVATE_KEY
+  - submits to gateway
+  - returns { ok: true, txHash, explorerUrl, pdfUrlBase64 } (pdf as base64)
+*/
+app.post('/api/certify', async (req, res) => {
+  try {
+    const { fileHash, author = '', filename = '' } = req.body;
+
+    if (!fileHash || typeof fileHash !== 'string') {
+      return res.status(400).json({ ok: false, error: 'fileHash missing' });
+    }
+
+    // Build payload data (text) - keep format clear
+    const payloadText = `certify:${fileHash}|author:${author}|file:${filename}`;
+    const payload = Buffer.from(payloadText).toString('hex'); // hex payload
+
+    // Build a transaction object using erdjs-compatible approach
+    // NOTE: @multiversx/sdk-core expects certain structures; we'll craft a minimal signed tx:
+    // Use Transaction class to create a transaction body and sign it locally.
+
+    // For nonce and chain-specific data we'd normally fetch account nonce + chain info.
+    // Simpler approach: call gateway to get recommended nonce/endpoint is more involved.
+    // We'll use Gateway /accounts/{address} to get nonce and send tx.
+
+    // 1) get account info to fetch nonce and chainNonce if needed
+    const accountInfoRes = await fetch(`https://gateway.multiversx.com/accounts/${SENDER_ADDRESS}`);
+    const accountInfo = await accountInfoRes.json();
+    const nonce = parseInt(accountInfo.nonce || '0', 10);
+
+    // 2) create Transaction object (sdk-core)
+    const tx = new Transaction({
+      nonce: nonce,
+      value: '0',
+      receiver: new Address(RECEIVER_ADDRESS),
+      sender: new Address(SENDER_ADDRESS),
+      gasLimit: 6000000,
+      // data must be Buffer
+      data: Buffer.from(payloadText),
+      chainID: CHAIN_ID.toString()
+    });
+
+    // 3) sign the transaction locally with private key
+    // sdk-core requires an account object to sign; we can use Account with privateKey
+    const account = Account.fromPrivateKey(Buffer.from(PRIVATE_KEY.replace(/^0x/i, ''), 'hex'));
+    const signed = tx.sign(account);
+
+    // 4) serialize to hex
+    const txHex = signed.serialize().toString('hex');
+
+    // 5) submit to gateway
+    const submitResult = await submitTx(txHex);
+
+    if (submitResult && submitResult.data && submitResult.data.txHash) {
+      const txHash = submitResult.data.txHash;
+      const explorerUrl = `https://explorer.multiversx.com/transactions/${txHash}`;
+
+      // Generate PDF certificate with QR code (returned as base64)
+      const pdfBase64 = await generateCertificatePDF({
+        fileHash,
+        author,
+        filename,
+        txHash,
+        explorerUrl,
+      });
+
+      return res.json({ ok: true, txHash, explorerUrl, pdfBase64 });
+    } else {
+      // Gateway error: return full response for debugging
+      return res.status(500).json({ ok: false, error: 'gateway_error', details: submitResult });
+    }
+  } catch (err) {
+    console.error('certify error', err);
+    return res.status(500).json({ ok: false, error: err.message || err.toString() });
+  }
+});
+
+// Generate a small PDF certificate and return base64
+async function generateCertificatePDF({ fileHash, author, filename, txHash, explorerUrl }) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const chunks = [];
+      doc.on('data', (c) => chunks.push(c));
+      doc.on('end', () => {
+        const result = Buffer.concat(chunks);
+        resolve(result.toString('base64'));
+      });
+
+      // Header
+      doc.fontSize(20).text('CERTIFICAT PROOFMINT', { align: 'center' });
+      doc.moveDown();
+
+      doc.fontSize(12).text(`Fichier : ${filename || '(non fourni)'}`);
+      doc.text(`Auteur : ${author || '(non fourni)'}`);
+      doc.text(`Hash (SHA-256) : ${fileHash}`);
+      doc.text(`Transaction : ${txHash}`);
+      doc.moveDown();
+
+      doc.text('Vérifier la preuve sur la blockchain :');
+      doc.text(explorerUrl);
+      doc.moveDown();
+
+      // Generate QR code for explorerUrl, embed as PNG
+      const qrDataUrl = await QRCode.toDataURL(explorerUrl, { margin: 1, scale: 6 });
+      const png = qrDataUrl.replace(/^data:image\/png;base64,/, '');
+      const qrBuffer = Buffer.from(png, 'base64');
+
+      // Place QR on the right
+      const qrSize = 150;
+      doc.image(qrBuffer, doc.page.width - qrSize - 60, doc.y - 20, { width: qrSize });
+
+      doc.moveDown(4);
+      doc.fontSize(10).fillColor('gray').text('ProofMint — Preuve enregistrée sur MultiversX', { align: 'left' });
+
+      doc.end();
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+app.listen(PORT, () => {
+  console.log(`Server started on port ${PORT}`);
+});
+
+
+Remarques techniques :
+
+J’utilise @multiversx/sdk-core pour construire et signer la tx localement. (Account.fromPrivateKey, Transaction, etc.)
+
+Si ton environnement requiert un autre package, on pourra adapter (ex: erdjs anciennes versions).
+
+GATEWAY_URL peut pointer vers devnet/mainnet selon ce que tu souhaites tester.
+
+nonce est lu depuis /accounts/{address} — si tu rencontres problème de nonce, on peut ajouter gestion d’erreurs et retry.
+
+4) public/index.html (front-end)
+
+Crée un dossier public et dedans index.html :
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>ProofMint - Demo</title>
+  <style>
+    body { font-family: Inter, Arial; max-width:800px; margin:40px auto; padding:0 20px; }
+    .card { border:1px solid #eee; padding:20px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.03); }
+    input, button { padding:10px; font-size:14px; }
+    pre { background:#f5f5f5; padding:10px; border-radius:6px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h1>ProofMint — Replit Demo</h1>
+  <div class="card">
+    <p><strong>1)</strong> Choisis un fichier (hash calculé côté client — le fichier n'est jamais envoyé).</p>
+    <input id="file" type="file" />
+    <p>
+      <label>Nom / auteur (optionnel):</label><br />
+      <input id="author" placeholder="Auteur / signature" style="width:60%" />
+    </p>
+    <p>
+      <button id="btn">Calculer hash & envoyer sur la blockchain</button>
+    </p>
+    <div id="status"></div>
+    <h3>Résultat</h3>
+    <pre id="result">—</pre>
+  </div>
+
+  <script>
+    async function computeSHA256(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+      // convert buffer to hex
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      return hashHex;
+    }
+
+    document.getElementById('btn').addEventListener('click', async () => {
+      const fileEl = document.getElementById('file');
+      const status = document.getElementById('status');
+      const result = document.getElementById('result');
+      if (!fileEl.files.length) return alert('Choisis un fichier.');
+
+      const file = fileEl.files[0];
+      status.innerText = 'Calcul du hash SHA-256 côté client…';
+      const hash = await computeSHA256(file);
+      status.innerText = 'Hash calculé — envoi au backend…';
+
+      const author = document.getElementById('author').value || '';
+
+      try {
+        const resp = await fetch('/api/certify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileHash: hash, author, filename: file.name })
+        });
+        const data = await resp.json();
+        if (!data.ok) {
+          result.innerText = 'Erreur : ' + JSON.stringify(data);
+          status.innerText = 'Échec';
+          return;
+        }
+        status.innerText = 'Transaction envoyée ✓';
+        // Show tx hash and download PDF link
+        const explorer = data.explorerUrl;
+        const pdfBase64 = data.pdfBase64;
+        result.innerText = `Hash: ${hash}\nTx: ${data.txHash}\nExplorer: ${explorer}\n\nTélécharger le certificat PDF (base64) :`;
+
+        // create download link for PDF
+        const link = document.createElement('a');
+        link.href = 'data:application/pdf;base64,' + pdfBase64;
+        link.download = `proofmint_cert_${data.txHash}.pdf`;
+        link.innerText = 'Télécharger le certificat PDF';
+        result.appendChild(document.createElement('br'));
+        result.appendChild(link);
+
+      } catch (err) {
+        console.error(err);
+        result.innerText = 'Erreur inattendue: ' + err.message;
+        status.innerText = 'Erreur';
+      }
+    });
+  </script>
+</body>
+</html>
+
+5) Checklist / Débogage si ta certif n’apparaît pas
+
+Si après installation la tx n’apparaît pas dans l’explorer :
+
+Vérifie GATEWAY_URL : testnet vs mainnet — si tu utilises devnet, ouvre l’explorer devnet.
+
+Vérifie le PRIVATE_KEY et que le SENDER_ADDRESS correspond bien à la clé.
+
+Vérifie le solde EGLD du compte (il doit couvrir frais gas).
+
+Regarde la réponse complète du gateway — on renvoie details dans l’erreur pour debugging.
+
+Vérifie le nonce : si le compte a plusieurs tx pendantes, le nonce peut être incorrect → fetch /accounts/{address} pour vérifier.
+
+Si tu obtiens une erreur invalid transaction ou signature incorrecte, probable que le formattage ou la version du SDK ne correspond pas à l’endpoint : on adaptera le code de signature (je peux te fournir une variante si tu me donnes l’erreur exacte).
+
+Pour logs rapides : ajoute console.log() avant l’envoi du txHex, et log submitResult.
