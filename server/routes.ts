@@ -8,6 +8,7 @@ import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import Stripe from "stripe";
 import { generateCertificatePDF } from "./certificateGenerator";
+import { createXMoneyOrder, getXMoneyOrderStatus, verifyXMoneyWebhook, isXMoneyConfigured } from "./xmoney";
 
 const stripeSecretKey = process.env.TESTING_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
 if (!stripeSecretKey) {
@@ -434,6 +435,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Webhook error:", error);
       res.status(400).send(`Webhook Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  });
+
+  // xMoney payment routes
+  
+  // Create payment order
+  app.post("/api/xmoney/create-payment", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isXMoneyConfigured()) {
+        return res.status(503).json({ 
+          message: "xMoney payment service is not configured. Please contact support." 
+        });
+      }
+
+      const userId = req.user.claims.sub;
+      const { amount, currency, description } = req.body;
+
+      // Validate input
+      const schema = z.object({
+        amount: z.number().positive(),
+        currency: z.string().min(3).max(3),
+        description: z.string().min(1),
+      });
+
+      const validatedData = schema.parse({ amount, currency, description });
+
+      // Get user email for payment
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Create xMoney order
+      const order = await createXMoneyOrder({
+        amount: validatedData.amount,
+        currency: validatedData.currency,
+        orderDescription: validatedData.description,
+        customerEmail: user.email || undefined,
+        returnUrl: `${req.protocol}://${req.get("host")}/payment/success`,
+        cancelUrl: `${req.protocol}://${req.get("host")}/payment/cancel`,
+      });
+
+      res.json(order);
+    } catch (error) {
+      console.error("Error creating xMoney payment:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Failed to create payment" 
+      });
+    }
+  });
+
+  // Get order status
+  app.get("/api/xmoney/order/:orderId", isAuthenticated, async (req, res) => {
+    try {
+      if (!isXMoneyConfigured()) {
+        return res.status(503).json({ 
+          message: "xMoney payment service is not configured." 
+        });
+      }
+
+      const { orderId } = req.params;
+      const orderStatus = await getXMoneyOrderStatus(orderId);
+      res.json(orderStatus);
+    } catch (error) {
+      console.error("Error fetching xMoney order status:", error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Failed to fetch order status" 
+      });
+    }
+  });
+
+  // xMoney webhook
+  app.post("/api/webhooks/xmoney", express.raw({ type: "application/json" }), async (req, res) => {
+    try {
+      const signature = req.headers["x-xmoney-signature"] as string;
+      const payload = req.body.toString();
+
+      if (!signature) {
+        return res.status(400).json({ message: "Missing webhook signature" });
+      }
+
+      // Verify webhook signature
+      if (!verifyXMoneyWebhook(payload, signature)) {
+        console.error("Invalid xMoney webhook signature");
+        return res.status(401).json({ message: "Invalid signature" });
+      }
+
+      const event = JSON.parse(payload);
+
+      // Handle different webhook events
+      switch (event.type) {
+        case "payment.succeeded": {
+          const { orderId, transactionId, amount, metadata } = event.data;
+          
+          // Update user subscription or certification status based on metadata
+          if (metadata?.userId && metadata?.plan) {
+            await db
+              .update(users)
+              .set({
+                subscriptionTier: metadata.plan,
+                subscriptionStatus: "active",
+              })
+              .where(eq(users.id, metadata.userId));
+          }
+
+          console.log(`xMoney payment succeeded: ${orderId} / ${transactionId}`);
+          break;
+        }
+
+        case "payment.failed": {
+          const { orderId, reason } = event.data;
+          console.log(`xMoney payment failed: ${orderId} - ${reason}`);
+          break;
+        }
+
+        case "refund.processed": {
+          const { transactionId, refundId } = event.data;
+          console.log(`xMoney refund processed: ${transactionId} / ${refundId}`);
+          break;
+        }
+
+        default:
+          console.log(`Unhandled xMoney webhook event: ${event.type}`);
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error("xMoney webhook error:", error);
+      res.status(400).json({ 
+        message: error instanceof Error ? error.message : "Webhook processing failed" 
+      });
     }
   });
 

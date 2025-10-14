@@ -3,7 +3,16 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
-app.use(express.json());
+
+// Skip JSON parsing for webhooks to preserve raw body for signature verification
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/webhooks/')) {
+    next(); // Webhooks will use express.raw() middleware
+  } else {
+    express.json()(req, res, next);
+  }
+});
+
 app.use(express.urlencoded({ extended: false }));
 
 app.use((req, res, next) => {
