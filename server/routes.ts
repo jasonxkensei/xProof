@@ -222,16 +222,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Missing signed transaction" });
       }
 
-      // Broadcast transaction to MultiversX
-      const { txHash, explorerUrl } = await broadcastSignedTransaction(signedTransaction);
-
-      // If certification data is provided, create certification record
+      // If certification data is provided, validate and create certification record
       if (certificationData) {
         const userId = req.user.claims.sub;
+        
+        // Get user to check subscription limits
         const [user] = await db.select().from(users).where(eq(users.id, userId));
 
         if (!user) {
           return res.status(404).json({ message: "User not found" });
+        }
+
+        // Check if usage needs to be reset (monthly)
+        const now = new Date();
+        const resetDate = new Date(user.usageResetDate!);
+        if (now.getMonth() !== resetDate.getMonth() || now.getFullYear() !== resetDate.getFullYear()) {
+          // Reset monthly usage
+          await db
+            .update(users)
+            .set({ monthlyUsage: 0, usageResetDate: now })
+            .where(eq(users.id, userId));
+          user.monthlyUsage = 0;
         }
 
         // Check subscription limits
@@ -246,17 +257,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
+        // Validate certification data
+        const schema = z.object({
+          fileName: z.string().min(1),
+          fileHash: z.string().min(1),
+          fileType: z.string().optional(),
+          fileSize: z.number().optional(),
+          authorName: z.string().min(1),
+          authorSignature: z.string().optional(),
+        });
+
+        const validatedData = schema.parse(certificationData);
+
+        // Check if hash already exists
+        const [existing] = await db
+          .select()
+          .from(certifications)
+          .where(eq(certifications.fileHash, validatedData.fileHash));
+
+        if (existing) {
+          return res.status(409).json({
+            message: "This file has already been certified",
+            certificationId: existing.id,
+          });
+        }
+
+        // Broadcast transaction to MultiversX
+        const { txHash, explorerUrl } = await broadcastSignedTransaction(signedTransaction);
+
         // Create certification record
         const [certification] = await db
           .insert(certifications)
           .values({
             userId,
-            fileName: certificationData.fileName,
-            fileHash: certificationData.fileHash,
-            fileType: certificationData.fileType || "unknown",
-            fileSize: certificationData.fileSize || 0,
-            authorName: certificationData.authorName,
-            authorSignature: certificationData.authorSignature,
+            fileName: validatedData.fileName,
+            fileHash: validatedData.fileHash,
+            fileType: validatedData.fileType || "unknown",
+            fileSize: validatedData.fileSize || 0,
+            authorName: validatedData.authorName,
+            authorSignature: validatedData.authorSignature,
             transactionHash: txHash,
             transactionUrl: explorerUrl,
             blockchainStatus: "pending", // Will be confirmed later
@@ -277,6 +316,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           certification,
         });
       } else {
+        // Just broadcast without creating certification
+        const { txHash, explorerUrl } = await broadcastSignedTransaction(signedTransaction);
+        
         res.json({
           success: true,
           txHash,
@@ -284,6 +326,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid certification data", errors: error.errors });
+      }
       console.error("Error broadcasting transaction:", error);
       res.status(500).json({ 
         message: "Failed to broadcast transaction",
