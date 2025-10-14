@@ -1,11 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Shield, Zap, FileCheck, Lock, Globe, Award, Wallet } from "lucide-react";
-import { Link } from "wouter";
-import { useXPortalAuth } from "@/contexts/XPortalAuthContext";
+import { Link, useLocation } from "wouter";
 
 export default function Landing() {
-  const { connectWallet, isConnecting } = useXPortalAuth();
+  const [, navigate] = useLocation();
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,20 +32,18 @@ export default function Landing() {
             <Button 
               variant="ghost" 
               size="sm" 
-              onClick={connectWallet}
-              disabled={isConnecting}
+              onClick={() => navigate('/unlock')}
               data-testid="button-login"
             >
               <Wallet className="mr-2 h-4 w-4" />
-              {isConnecting ? "Connecting..." : "Connect Wallet"}
+              Connect Wallet
             </Button>
             <Button 
               size="sm" 
-              onClick={connectWallet}
-              disabled={isConnecting}
+              onClick={() => navigate('/unlock')}
               data-testid="button-get-started"
             >
-              {isConnecting ? "Connecting..." : "Get Started"}
+              Get Started
             </Button>
           </div>
         </div>
@@ -72,12 +69,11 @@ export default function Landing() {
             <Button 
               size="lg" 
               className="text-base" 
-              onClick={connectWallet}
-              disabled={isConnecting}
+              onClick={() => navigate('/unlock')}
               data-testid="button-start-free"
             >
               <Wallet className="mr-2 h-5 w-5" />
-              {isConnecting ? "Connecting..." : "Certify Your First File Free"}
+              Certify Your First File Free
             </Button>
             <Button asChild variant="outline" size="lg" className="text-base" data-testid="button-learn-more">
               <a href="#how-it-works">Learn How It Works</a>
@@ -267,11 +263,10 @@ export default function Landing() {
                   <Button 
                     variant="outline" 
                     className="w-full" 
-                    onClick={connectWallet}
-                    disabled={isConnecting}
+                    onClick={() => navigate('/unlock')}
                     data-testid="button-start-free-tier"
                   >
-                    {isConnecting ? "Connecting..." : "Get Started"}
+                    Get Started
                   </Button>
                 </CardContent>
               </Card>
@@ -306,11 +301,10 @@ export default function Landing() {
                   </ul>
                   <Button 
                     className="w-full" 
-                    onClick={connectWallet}
-                    disabled={isConnecting}
+                    onClick={() => navigate('/unlock')}
                     data-testid="button-start-pro"
                   >
-                    {isConnecting ? "Connecting..." : "Start Pro Trial"}
+                    Start Pro Trial
                   </Button>
                 </CardContent>
               </Card>
@@ -343,11 +337,10 @@ export default function Landing() {
                   <Button 
                     variant="outline" 
                     className="w-full" 
-                    onClick={connectWallet}
-                    disabled={isConnecting}
+                    onClick={() => navigate('/unlock')}
                     data-testid="button-start-business"
                   >
-                    {isConnecting ? "Connecting..." : "Start Business Trial"}
+                    Start Business Trial
                   </Button>
                 </CardContent>
               </Card>
