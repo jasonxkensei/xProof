@@ -5,6 +5,7 @@ import { loginWithWallet } from "@/lib/walletAuth";
 
 export default function Landing() {
   const handleConnect = () => {
+    // Simple redirect to MultiversX Web Wallet
     loginWithWallet();
   };
 

@@ -1,0 +1,237 @@
+🧩 Étape 1 — Dépendances
+npm install js-sha256 jspdf qrcode @multiversx/sdk-core @multiversx/sdk-wallet @multiversx/sdk-dapp @replit/database
+
+🧩 Étape 2 — Configuration réseau MultiversX
+
+Crée un fichier /src/config/networkConfig.js :
+
+export const network = {
+  id: "devnet",
+  name: "Devnet MultiversX",
+  apiAddress: "https://devnet-api.multiversx.com",
+  gatewayAddress: "https://devnet-gateway.multiversx.com",
+  explorerAddress: "https://devnet-explorer.multiversx.com",
+  walletConnectBridge: "wss://relay.walletconnect.com",
+};
+
+🧩 Étape 3 — Authentification xPortal via WalletConnect V2
+
+Crée /src/components/ConnectXPortal.jsx :
+
+import React, { useEffect, useState } from "react";
+import {
+  DappProvider,
+  useGetAccount,
+  useGetLoginInfo,
+  logout,
+} from "@multiversx/sdk-dapp/hooks";
+import {
+  walletConnectV2,
+  initWalletConnectV2,
+} from "@multiversx/sdk-dapp/walletConnectV2";
+import { network } from "../config/networkConfig";
+
+export function ConnectXPortal() {
+  const { address } = useGetAccount();
+  const { isLoggedIn } = useGetLoginInfo();
+  const [connecting, setConnecting] = useState(false);
+
+  useEffect(() => {
+    initWalletConnectV2({
+      projectId: "proofmint",
+      relayUrl: network.walletConnectBridge,
+      metadata: {
+        name: "ProofMint",
+        description: "Certifiez vos fichiers sur la blockchain MultiversX",
+        url: "https://proofmint.app",
+        icons: ["https://assets.multiversx.com/logo.png"],
+      },
+    });
+  }, []);
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      await walletConnectV2.connect();
+    } catch (err) {
+      console.error("Erreur connexion xPortal :", err);
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  if (isLoggedIn) {
+    return (
+      <div className="flex flex-col items-center">
+        <p className="text-green-400">
+          ✅ Connecté à xPortal : {address.slice(0, 6)}...{address.slice(-4)}
+        </p>
+        <button
+          onClick={logout}
+          className="mt-3 bg-red-600 px-3 py-1 rounded-lg"
+        >
+          Déconnexion
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={handleConnect}
+      disabled={connecting}
+      className="px-6 py-2 rounded-xl bg-primary text-white"
+    >
+      {connecting ? "Connexion..." : "Connecter xPortal"}
+    </button>
+  );
+}
+
+🧩 Étape 4 — Wrapper du DappProvider
+
+Dans /src/App.jsx :
+
+import React from "react";
+import { DappProvider } from "@multiversx/sdk-dapp/wrappers";
+import { network } from "./config/networkConfig";
+import UploadCertify from "./pages/UploadCertify";
+
+export default function App() {
+  return (
+    <DappProvider
+      environment={network.id}
+      customNetworkConfig={{
+        apiTimeout: 6000,
+        walletConnectV2ProjectId: "proofmint",
+      }}
+    >
+      <UploadCertify />
+    </DappProvider>
+  );
+}
+
+🧩 Étape 5 — Hash local du fichier
+
+Crée /src/utils/hashFile.js :
+
+export async function hashFile(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+🧩 Étape 6 — Envoi de la transaction
+
+Crée /src/utils/sendTransaction.js :
+
+import { Transaction, TransactionPayload, Address, GasLimit } from "@multiversx/sdk-core";
+import { sendTransactions } from "@multiversx/sdk-dapp/services";
+
+export async function sendProofTransaction(walletAddress, fileHash) {
+  const tx = new Transaction({
+    data: new TransactionPayload(`certify:${fileHash}`),
+    gasLimit: new GasLimit(6000000),
+    receiver: new Address(walletAddress),
+    value: "0",
+  });
+
+  const { sessionId } = await sendTransactions({
+    transactions: [tx],
+    transactionsDisplayInfo: {
+      processingMessage: "Certification en cours...",
+      errorMessage: "Erreur lors de l’envoi de la transaction",
+      successMessage: "Certification réussie !",
+    },
+  });
+
+  return sessionId;
+}
+
+🧩 Étape 7 — Affichage du résultat
+
+Crée /src/components/ProofResult.jsx :
+
+export function ProofResult({ txHash }) {
+  return (
+    <div className="text-center mt-6">
+      <h2 className="text-xl font-bold text-white">✅ Certification réussie</h2>
+      <p className="text-gray-400 mt-2">
+        Transaction visible sur MultiversX Explorer :
+      </p>
+      <a
+        href={`https://devnet-explorer.multiversx.com/transactions/${txHash}`}
+        target="_blank"
+        rel="noreferrer"
+        className="text-primary underline"
+      >
+        {txHash}
+      </a>
+    </div>
+  );
+}
+
+🧩 Étape 8 — Page principale d’upload + certification
+
+Crée /src/pages/UploadCertify.jsx :
+
+import React, { useState } from "react";
+import { hashFile } from "../utils/hashFile";
+import { sendProofTransaction } from "../utils/sendTransaction";
+import { ConnectXPortal } from "../components/ConnectXPortal";
+import { ProofResult } from "../components/ProofResult";
+
+export default function UploadCertify() {
+  const [file, setFile] = useState(null);
+  const [txHash, setTxHash] = useState("");
+
+  const handleCertify = async () => {
+    const hash = await hashFile(file);
+    const sessionId = await sendProofTransaction("erd1...", hash); // adresse de réception test
+    setTxHash(sessionId);
+  };
+
+  return (
+    <div className="text-center">
+      <h1 className="text-3xl font-bold text-white mb-4">ProofMint</h1>
+      <ConnectXPortal />
+      <input type="file" onChange={(e) => setFile(e.target.files[0])} className="my-4" />
+      <button onClick={handleCertify} className="bg-primary text-white px-6 py-2 rounded-xl">
+        Certifier sur blockchain
+      </button>
+      {txHash && <ProofResult txHash={txHash} />}
+    </div>
+  );
+}
+
+🧩 Étape 9 — Tests finaux
+
+Lance le projet
+
+Clique sur “Connecter xPortal”
+
+Scan le QR code avec ton appli xPortal
+
+Uploade un petit fichier texte
+
+Clique sur “Certifier sur blockchain”
+
+Vérifie la transaction sur
+👉 https://devnet-explorer.multiversx.com
+
+✅ Résultat attendu
+
+QR code xPortal → connexion réussie
+
+Affichage ✅ Connecté : erd1...
+
+Transaction “certify:<hash>” sur Devnet visible publiquement
+
+Interface fluide, sans appel bloqué à devnet-wallet.multiversx.com
+
+💡 Bonus :
+Une fois que ce flux est validé, on ajoutera ensuite :
+
+génération du certificat PDF (jspdf + QR code),
+
+et sauvegarde des proofs dans @replit/database.

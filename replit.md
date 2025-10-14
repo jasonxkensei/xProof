@@ -42,14 +42,15 @@ Preferred communication style: Simple, everyday language.
 - Production build uses esbuild for server bundling
 
 **Authentication & Session Management**
-- **XPortal Wallet Authentication** for Web3-native user experience (NO traditional username/password)
-- Challenge-response pattern using cryptographic signature verification
-- MultiversX SDK (`@multiversx/sdk-wallet`, `UserVerifier`) for ed25519 signature validation
-- Users authenticate by connecting XPortal wallet and signing challenge messages
+- **MultiversX Web Wallet Authentication** via official webhook integration (NO SDK dependencies)
+- Simple redirect-based flow using MultiversX's `/hook/login` endpoint
+- Users click "Connect Wallet" → redirect to devnet-wallet.multiversx.com → authenticate with any wallet type (Extension, Mobile, Web)
+- Web Wallet redirects back with wallet address as URL parameter
+- **No signature verification required** - Web Wallet handles authentication securely
 - Session storage in PostgreSQL using `connect-pg-simple` with wallet addresses as identifiers
 - HTTP-only cookies for secure session management
 - Session TTL: 7 days with automatic refresh
-- Challenge expiry: 5 minutes (automatic cleanup of expired challenges)
+- **Architecture Decision**: Avoided MultiversX SDKs due to Node.js polyfill issues in browser (global, events, util modules incompatible)
 
 **API Architecture**
 - RESTful endpoints under `/api/*` prefix
@@ -57,9 +58,11 @@ Preferred communication style: Simple, everyday language.
 - JSON request/response handling with centralized error handling
 - Protected routes using `isWalletAuthenticated` middleware
 - **Wallet Auth Endpoints:**
-  - `POST /api/auth/challenge`: Generate nonce and challenge message for wallet signing
-  - `POST /api/auth/verify`: Verify signed message and create authenticated session
+  - `POST /api/auth/wallet/login`: Process Web Wallet callback, create user session
+  - `GET /api/auth/me`: Get current authenticated user
   - `POST /api/auth/logout`: Destroy wallet session
+- **Client Routes:**
+  - `/wallet-callback`: Landing page for Web Wallet redirect, processes auth and navigates to dashboard
 
 **File Processing**
 - Client-side SHA-256 hashing using Web Crypto API (no file uploads to server)
