@@ -61,16 +61,37 @@ export default function Certify() {
 
   const certifyMutation = useMutation({
     mutationFn: async (data: CertificationData) => {
-      // Build MultiversX transaction
+      if (!wallet.address) {
+        throw new Error("Wallet not connected");
+      }
+
+      // Get account info (nonce) from backend
+      const accountResponse = await apiRequest("GET", `/api/blockchain/account/${wallet.address}`);
+      const accountInfo = await accountResponse.json() as {
+        address: string;
+        nonce: number;
+        balance: string;
+      };
+      
+      // Build MultiversX transaction data
       const txData = `certify:${data.fileHash}:${data.fileName}:${data.authorName}`;
       
-      // Build transaction object for XPortal
+      // Encode to base64 (browser-safe)
+      const encoder = new TextEncoder();
+      const dataBytes = encoder.encode(txData);
+      const base64Data = btoa(String.fromCharCode(...Array.from(dataBytes)));
+      
+      // Build complete transaction object for XPortal
       const transaction = {
+        nonce: accountInfo.nonce,
         value: "0",
-        receiver: wallet.address!, // Send to self
+        receiver: wallet.address, // Send to self
+        sender: wallet.address,
+        gasPrice: 1000000000, // 1 Gwei
         gasLimit: 500000,
-        data: Buffer.from(txData).toString("base64"),
+        data: base64Data,
         chainID: import.meta.env.VITE_MULTIVERSX_CHAIN_ID || "D",
+        version: 1,
       };
 
       // Sign transaction with XPortal

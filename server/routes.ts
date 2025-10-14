@@ -213,6 +213,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get account info (nonce) for transaction building
+  app.get("/api/blockchain/account/:address", isAuthenticated, async (req: any, res) => {
+    try {
+      const { address } = req.params;
+      
+      // Validate address format
+      if (!address || !address.startsWith("erd1")) {
+        return res.status(400).json({ message: "Invalid MultiversX address" });
+      }
+
+      // Get gateway URL from env
+      const gatewayUrl = process.env.MULTIVERSX_GATEWAY_URL || "https://devnet-gateway.multiversx.com";
+      
+      // Fetch account info from MultiversX gateway
+      const response = await fetch(`${gatewayUrl}/address/${address}`);
+      
+      if (!response.ok) {
+        throw new Error(`Gateway error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      res.json({
+        address,
+        nonce: data.data?.account?.nonce || 0,
+        balance: data.data?.account?.balance || "0",
+      });
+    } catch (error: any) {
+      console.error("Error fetching account info:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch account info",
+        error: error.message 
+      });
+    }
+  });
+
   // Broadcast signed transaction (XPortal integration)
   app.post("/api/blockchain/broadcast", isAuthenticated, async (req: any, res) => {
     try {
