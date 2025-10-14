@@ -180,8 +180,9 @@ export default function Subscribe() {
       // Create subscription payment intent
       apiRequest("POST", "/api/create-subscription", { plan })
         .then((data) => {
-          if (data.clientSecret) {
-            setClientSecret(data.clientSecret);
+          const response = data as { clientSecret?: string };
+          if (response.clientSecret) {
+            setClientSecret(response.clientSecret);
           }
         })
         .catch((error) => {
