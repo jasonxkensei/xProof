@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useXPortalAuth } from "@/contexts/XPortalAuthContext";
+import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -22,22 +22,15 @@ type BrandingFormData = z.infer<typeof brandingSchema>;
 
 export default function Settings() {
   const { toast } = useToast();
-  const { user, isLoading: authLoading, isAuthenticated, connectWallet } = useXPortalAuth();
+  const { user, isLoading: authLoading, isAuthenticated } = useWalletAuth();
   const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      toast({
-        title: "Unauthorized",
-        description: "Please connect your XPortal wallet to continue.",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        connectWallet();
-      }, 500);
+      // User will be redirected to landing page by App.tsx
       return;
     }
-  }, [isAuthenticated, authLoading, toast, connectWallet]);
+  }, [isAuthenticated, authLoading]);
 
   const form = useForm<BrandingFormData>({
     resolver: zodResolver(brandingSchema),

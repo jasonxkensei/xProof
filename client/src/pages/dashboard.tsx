@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useXPortalAuth } from "@/contexts/XPortalAuthContext";
+import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import type { Certification } from "@shared/schema";
 
 export default function Dashboard() {
   const { toast } = useToast();
-  const { user, isLoading: authLoading, isAuthenticated, disconnectWallet } = useXPortalAuth();
+  const { user, isLoading: authLoading, isAuthenticated, logout } = useWalletAuth();
 
   const { data: certifications, isLoading: certsLoading } = useQuery<Certification[]>({
     queryKey: ["/api/certifications"],
@@ -93,7 +93,7 @@ export default function Dashboard() {
                 Settings
               </Link>
             </Button>
-            <Button variant="ghost" size="sm" onClick={disconnectWallet} data-testid="button-logout">
+            <Button variant="ghost" size="sm" onClick={() => logout()} data-testid="button-logout">
               <LogOut className="mr-2 h-4 w-4" />
               Disconnect
             </Button>

@@ -5,9 +5,16 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 interface User {
   id: number;
   walletAddress: string;
-  email?: string;
-  tier: string;
+  email?: string | null;
+  subscriptionTier: string;
   subscriptionStatus: string;
+  monthlyUsage: number;
+  companyName?: string | null;
+  companyLogoUrl?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  usageResetDate?: Date | null;
+  createdAt?: Date | null;
 }
 
 export function useWalletAuth() {

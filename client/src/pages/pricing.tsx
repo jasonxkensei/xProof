@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useXPortalAuth } from "@/contexts/XPortalAuthContext";
+import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Link } from "wouter";
 
 export default function Pricing() {
   const { toast } = useToast();
-  const { user, isLoading: authLoading, isAuthenticated, connectWallet } = useXPortalAuth();
+  const { user, isLoading: authLoading, isAuthenticated } = useWalletAuth();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
