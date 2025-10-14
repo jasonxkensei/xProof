@@ -5,6 +5,7 @@ interface XPortalWallet {
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   getAddress: () => string | null;
+  signMessage: (message: string) => Promise<string>;
   signTransaction: (transaction: any) => Promise<any>;
   isConnected: () => boolean;
 }
@@ -13,6 +14,53 @@ declare global {
   interface Window {
     elrondWallet?: XPortalWallet;
   }
+}
+
+// Development mode: Create simulated wallet for testing
+// In production, users would need the XPortal browser extension installed
+const createSimulatedWallet = (): XPortalWallet => {
+  let connected = false;
+  let address: string | null = null;
+
+  return {
+    async connect() {
+      // Simulate wallet connection
+      address = "erd1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq6gq4hu";
+      connected = true;
+      console.log("🔗 Simulated wallet connected:", address);
+    },
+    async disconnect() {
+      address = null;
+      connected = false;
+      console.log("❌ Simulated wallet disconnected");
+    },
+    getAddress() {
+      return address;
+    },
+    async signMessage(message: string) {
+      if (!connected) throw new Error("Wallet not connected");
+      // Simulate signature (in production, this would be real ed25519 signature)
+      const simSignature = Array.from({ length: 128 }, () => 
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('');
+      console.log("✍️ Simulated message signing:", message.substring(0, 50) + "...");
+      return simSignature;
+    },
+    async signTransaction(transaction: any) {
+      if (!connected) throw new Error("Wallet not connected");
+      console.log("✍️ Simulated transaction signing:", transaction);
+      return { ...transaction, signature: "simulated_signature" };
+    },
+    isConnected() {
+      return connected;
+    },
+  };
+};
+
+// Check if in development mode and inject simulated wallet
+if (import.meta.env.DEV && !window.elrondWallet) {
+  console.log("🔧 Development mode: Using simulated XPortal wallet");
+  window.elrondWallet = createSimulatedWallet();
 }
 
 export function useXPortalWallet() {
@@ -73,6 +121,23 @@ export function useXPortalWallet() {
     }
   };
 
+  const signMessage = async (message: string) => {
+    if (!window.elrondWallet) {
+      throw new Error("XPortal wallet not available");
+    }
+
+    if (!isConnected) {
+      throw new Error("Wallet not connected");
+    }
+
+    try {
+      const signature = await window.elrondWallet.signMessage(message);
+      return signature;
+    } catch (error: any) {
+      throw new Error(`Failed to sign message: ${error.message}`);
+    }
+  };
+
   const signTransaction = async (transaction: any) => {
     if (!window.elrondWallet) {
       throw new Error("XPortal wallet not available");
@@ -96,6 +161,7 @@ export function useXPortalWallet() {
     isAvailable,
     connect,
     disconnect,
+    signMessage,
     signTransaction,
   };
 }
