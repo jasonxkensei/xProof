@@ -24,12 +24,13 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// User storage table (required for Replit Auth)
+// User storage table (XPortal wallet-based auth)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
-  firstName: varchar("first_name"),
-  lastName: varchar("last_name"),
+  walletAddress: varchar("wallet_address").unique().notNull(), // MultiversX wallet address (erd1...)
+  email: varchar("email"), // Optional, for notifications
+  firstName: varchar("first_name"), // Optional
+  lastName: varchar("last_name"), // Optional
   profileImageUrl: varchar("profile_image_url"),
   stripeCustomerId: varchar("stripe_customer_id"),
   stripeSubscriptionId: varchar("stripe_subscription_id"),

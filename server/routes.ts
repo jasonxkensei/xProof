@@ -24,7 +24,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication first
   await setupAuth(app);
 
-  // Get current user endpoint
+  // XPortal authentication - create or fetch user by wallet address  
+  app.post("/api/auth/xportal", async (req, res) => {
+    try {
+      const { walletAddress } = req.body;
+
+      if (!walletAddress || !walletAddress.startsWith("erd1")) {
+        return res.status(400).json({ message: "Invalid MultiversX wallet address" });
+      }
+
+      // Check if user exists
+      const [existingUser] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+
+      if (existingUser) {
+        return res.json(existingUser);
+      }
+
+      // Create new user
+      const [newUser] = await db
+        .insert(users)
+        .values({
+          walletAddress,
+          subscriptionTier: "free",
+          subscriptionStatus: "active",
+          monthlyUsage: 0,
+          usageResetDate: new Date(),
+        })
+        .returning();
+
+      res.json(newUser);
+    } catch (error: any) {
+      console.error("Error with XPortal auth:", error);
+      res.status(500).json({ message: "Failed to authenticate", error: error.message });
+    }
+  });
+
+  // Get current user endpoint (legacy Replit Auth)
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

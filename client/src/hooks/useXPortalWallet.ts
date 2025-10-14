@@ -25,10 +25,15 @@ export function useXPortalWallet() {
     const checkWallet = () => {
       if (window.elrondWallet) {
         setIsAvailable(true);
-        if (window.elrondWallet.isConnected()) {
-          const addr = window.elrondWallet.getAddress();
-          setAddress(addr);
-          setIsConnected(!!addr);
+        // Try to get current address (if already connected)
+        try {
+          const addr = window.elrondWallet.getAddress?.();
+          if (addr) {
+            setAddress(addr);
+            setIsConnected(true);
+          }
+        } catch (e) {
+          // Not connected yet, that's fine
         }
       }
     };
