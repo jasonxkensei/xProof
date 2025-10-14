@@ -1,0 +1,118 @@
+Voici un exemple complet ProofMint prêt à coller dans Replit, avec frontend + backend reliés, simulateur Devnet, bouton Mainnet, et XPortal pour signer et envoyer les certificats. Tout est prêt pour tester directement.
+
+1️⃣ Structure des fichiers Replit
+/frontend
+  - index.html
+  - script.js
+/backend
+  - server.js
+.env
+
+2️⃣ Fichier .env (Devnet pour test)
+MULTIVERSX_GATEWAY_URL=https://devnet-gateway.multiversx.com
+
+
+⚠️ On n’utilise pas la clé privée, tout passe par XPortal.
+
+3️⃣ Frontend index.html
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>ProofMint XPortal Demo</title>
+</head>
+<body>
+  <h1>ProofMint XPortal Demo</h1>
+  <button id="connectWalletBtn">Connect XPortal</button>
+  <p id="walletAddress">Wallet non connecté</p>
+  <input id="certHash" placeholder="Hash du certificat" />
+  <button id="sendCertBtn">Envoyer certificat</button>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
+4️⃣ Frontend script.js
+const connectBtn = document.getElementById("connectWalletBtn");
+const sendBtn = document.getElementById("sendCertBtn");
+const walletAddressEl = document.getElementById("walletAddress");
+const certHashInput = document.getElementById("certHash");
+
+let walletAddress = null;
+
+// Connect XPortal
+connectBtn.onclick = async () => {
+  try {
+    await window.elrondWallet?.connect();
+    walletAddress = window.elrondWallet?.getAddress();
+    walletAddressEl.textContent = `Wallet connecté : ${walletAddress}`;
+    console.log("Wallet connecté :", walletAddress);
+  } catch (err) {
+    console.error("Erreur connexion XPortal :", err);
+    alert("Impossible de connecter le wallet");
+  }
+};
+
+// Envoyer certificat
+sendBtn.onclick = async () => {
+  if (!walletAddress) return alert("Connectez d'abord votre wallet !");
+  const hash = certHashInput.value.trim();
+  if (!hash) return alert("Entrez le hash du certificat");
+
+  const tx = {
+    nonce: 0,
+    value: "0",
+    receiver: walletAddress,
+    gasLimit: 500000,
+    data: `certify:${hash}`,
+  };
+
+  try {
+    const signedTx = await window.elrondWallet?.signTransaction(tx);
+    console.log("Transaction signée :", signedTx);
+
+    // Envoi au backend pour broadcast
+    const res = await fetch("/broadcast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(signedTx),
+    });
+    const result = await res.json();
+    alert("Transaction envoyée : " + JSON.stringify(result));
+  } catch (err) {
+    console.error("Erreur signature / envoi :", err);
+    alert("Erreur lors de l'envoi de la transaction");
+  }
+};
+
+5️⃣ Backend server.js
+const express = require("express");
+const fetch = require("node-fetch");
+const bodyParser = require("body-parser");
+require("dotenv").config();
+
+const app = express();
+app.use(bodyParser.json());
+
+const GATEWAY_URL = process.env.MULTIVERSX_GATEWAY_URL;
+
+// Endpoint pour recevoir la TX signée et la broadcast
+app.post("/broadcast", async (req, res) => {
+  const signedTx = req.body;
+  if (!signedTx) return res.status(400).json({ error: "Pas de transaction" });
+
+  try {
+    const response = await fetch(`${GATEWAY_URL}/transactions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(signedTx),
+    });
+    const data = await response.json();
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("Erreur broadcast :", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.listen(3000, () => console.log("Backend ProofMint en écoute sur :3000"));
