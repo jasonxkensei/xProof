@@ -32,15 +32,15 @@
 
   --sidebar-border: 0 0% 90%;
 
-  --sidebar-primary: 160 84% 39%;
+  --sidebar-primary: 194 100% 50%;
 
-  --sidebar-primary-foreground: 160 84% 98%;
+  --sidebar-primary-foreground: 194 15% 98%;
 
-  --sidebar-accent: 160 12% 92%;
+  --sidebar-accent: 194 20% 92%;
 
-  --sidebar-accent-foreground: 160 84% 25%;
+  --sidebar-accent-foreground: 194 100% 30%;
 
-  --sidebar-ring: 160 84% 39%;
+  --sidebar-ring: 194 100% 50%;
 
   --popover: 0 0% 100%;
 
@@ -48,33 +48,33 @@
 
   --popover-border: 0 0% 92%;
 
-  --primary: 160 84% 39%;
+  --primary: 194 100% 50%;
 
-  --primary-foreground: 160 84% 98%;
+  --primary-foreground: 194 15% 98%;
 
-  --secondary: 0 0% 92%;
+  --secondary: 255 67% 69%;
 
-  --secondary-foreground: 0 0% 10%;
+  --secondary-foreground: 255 10% 98%;
 
   --muted: 0 0% 94%;
 
   --muted-foreground: 0 0% 40%;
 
-  --accent: 160 8% 94%;
+  --accent: 194 20% 94%;
 
-  --accent-foreground: 160 84% 30%;
+  --accent-foreground: 194 100% 35%;
 
   --destructive: 0 84% 35%;
 
   --destructive-foreground: 0 84% 98%;
 
   --input: 0 0% 80%;
-  --ring: 160 84% 39%;
-  --chart-1: 160 84% 35%;
-  --chart-2: 142 76% 32%;
-  --chart-3: 200 80% 38%;
-  --chart-4: 280 65% 42%;
-  --chart-5: 45 93% 42%;
+  --ring: 194 100% 50%;
+  --chart-1: 194 100% 50%;
+  --chart-2: 255 67% 69%;
+  --chart-3: 156 100% 50%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 45 93% 50%;
 
   --font-sans: Space Grotesk, Inter, system-ui, -apple-system, sans-serif;
   --font-serif: Georgia, serif;
@@ -132,67 +132,67 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 0 0% 8%;
+  --background: 222 13% 5%;
 
-  --foreground: 0 0% 98%;
+  --foreground: 0 0% 100%;
 
-  --border: 0 0% 20%;
+  --border: 220 10% 15%;
 
-  --card: 0 0% 12%;
+  --card: 220 13% 9%;
 
-  --card-foreground: 0 0% 98%;
+  --card-foreground: 0 0% 100%;
 
-  --card-border: 0 0% 16%;
+  --card-border: 220 10% 12%;
 
-  --sidebar: 0 0% 10%;
+  --sidebar: 222 13% 7%;
 
-  --sidebar-foreground: 0 0% 98%;
+  --sidebar-foreground: 0 0% 100%;
 
-  --sidebar-border: 0 0% 14%;
+  --sidebar-border: 220 10% 12%;
 
-  --sidebar-primary: 160 84% 39%;
+  --sidebar-primary: 194 100% 50%;
 
-  --sidebar-primary-foreground: 160 84% 98%;
+  --sidebar-primary-foreground: 194 15% 98%;
 
-  --sidebar-accent: 160 18% 16%;
+  --sidebar-accent: 194 30% 12%;
 
-  --sidebar-accent-foreground: 160 84% 85%;
+  --sidebar-accent-foreground: 194 100% 75%;
 
-  --sidebar-ring: 160 84% 45%;
+  --sidebar-ring: 194 100% 55%;
 
-  --popover: 0 0% 14%;
+  --popover: 220 13% 10%;
 
-  --popover-foreground: 0 0% 98%;
+  --popover-foreground: 0 0% 100%;
 
-  --popover-border: 0 0% 18%;
+  --popover-border: 220 10% 15%;
 
-  --primary: 160 84% 35%;
+  --primary: 194 100% 50%;
 
-  --primary-foreground: 160 84% 98%;
+  --primary-foreground: 194 15% 98%;
 
-  --secondary: 0 0% 18%;
+  --secondary: 255 67% 69%;
 
-  --secondary-foreground: 0 0% 98%;
+  --secondary-foreground: 255 10% 98%;
 
-  --muted: 160 6% 16%;
+  --muted: 220 10% 12%;
 
-  --muted-foreground: 0 0% 65%;
+  --muted-foreground: 0 0% 63%;
 
-  --accent: 160 12% 15%;
+  --accent: 194 40% 15%;
 
-  --accent-foreground: 160 84% 85%;
+  --accent-foreground: 194 100% 75%;
 
-  --destructive: 0 84% 32%;
+  --destructive: 0 84% 50%;
 
-  --destructive-foreground: 0 84% 98%;
+  --destructive-foreground: 0 10% 98%;
 
-  --input: 0 0% 25%;
-  --ring: 160 84% 45%;
-  --chart-1: 160 84% 65%;
-  --chart-2: 142 76% 55%;
-  --chart-3: 200 80% 60%;
-  --chart-4: 280 65% 65%;
-  --chart-5: 45 93% 58%;
+  --input: 220 10% 20%;
+  --ring: 194 100% 55%;
+  --chart-1: 194 100% 60%;
+  --chart-2: 255 67% 75%;
+  --chart-3: 156 100% 60%;
+  --chart-4: 280 65% 70%;
+  --chart-5: 45 93% 65%;
 
   --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.3);
   --shadow-xs: 0px 1px 3px 0px hsl(0 0% 0% / 0.4);
@@ -353,5 +353,41 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
+  }
+
+  /* MultiversX-style glow effects */
+  .glow-cyan {
+    box-shadow: 0 0 16px rgba(0, 194, 255, 0.3);
+  }
+
+  .glow-cyan-hover:hover {
+    box-shadow: 0 0 16px rgba(0, 194, 255, 0.4);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 16px rgba(123, 97, 255, 0.3);
+  }
+
+  .glow-purple-hover:hover {
+    box-shadow: 0 0 16px rgba(123, 97, 255, 0.4);
+  }
+
+  .glow-green {
+    box-shadow: 0 0 16px rgba(0, 255, 163, 0.3);
+  }
+
+  .glow-green-hover:hover {
+    box-shadow: 0 0 16px rgba(0, 255, 163, 0.4);
+  }
+
+  /* Glass morphism effect for cards */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-card:hover {
+    border-color: rgba(0, 194, 255, 0.4);
   }
 }
