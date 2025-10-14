@@ -2,9 +2,7 @@ import {
   Transaction,
   TransactionComputer,
   Address,
-  Account,
 } from "@multiversx/sdk-core";
-import { UserSigner } from "@multiversx/sdk-wallet";
 
 // MultiversX configuration from environment
 const PRIVATE_KEY = process.env.MULTIVERSX_PRIVATE_KEY;
@@ -107,22 +105,14 @@ export async function recordOnBlockchain(
       chainID: CHAIN_ID,
     });
 
-    // Create signer from private key
+    // Sign transaction with private key using ed25519
     const privateKeyHex = PRIVATE_KEY!.replace(/^0x/i, "");
     const privateKeyBuffer = Buffer.from(privateKeyHex, "hex");
-    const signer = UserSigner.fromWallet(
-      { version: 4, bech32: SENDER_ADDRESS!, publicKey: "", crypto: { cipher: "", cipherparams: { iv: "" }, ciphertext: "", kdf: "", kdfparams: { dklen: 0, salt: "", n: 0, r: 0, p: 0 }, mac: "" } },
-      ""
-    );
     
-    // Simpler approach: sign directly using the private key
     const computer = new TransactionComputer();
     const serializedTx = computer.computeBytesForSigning(transaction);
     
-    // Manual signature using crypto (since UserSigner.fromWallet requires full wallet format)
-    const { createHash } = await import("crypto");
     const ed = await import("@noble/ed25519");
-    
     const signature = await ed.sign(serializedTx, privateKeyBuffer.slice(0, 32));
     transaction.signature = Buffer.from(signature);
 
