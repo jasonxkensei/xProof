@@ -147,6 +147,54 @@ export async function recordOnBlockchain(
 }
 
 /**
+ * Broadcast a signed transaction (from XPortal or other wallet)
+ */
+export async function broadcastSignedTransaction(signedTx: any): Promise<{
+  txHash: string;
+  explorerUrl: string;
+}> {
+  try {
+    const response = await fetch(`${GATEWAY_URL}/transaction/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(signedTx),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gateway error: ${response.statusText} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    
+    if (result.error) {
+      throw new Error(`Transaction error: ${result.error}`);
+    }
+
+    if (!result.data?.txHash) {
+      throw new Error(`Invalid gateway response: ${JSON.stringify(result)}`);
+    }
+
+    // Build explorer URL based on network
+    const explorerBaseUrl = CHAIN_ID === "D" 
+      ? "https://devnet-explorer.multiversx.com"
+      : CHAIN_ID === "T"
+      ? "https://testnet-explorer.multiversx.com"
+      : "https://explorer.multiversx.com";
+
+    return {
+      txHash: result.data.txHash,
+      explorerUrl: `${explorerBaseUrl}/transactions/${result.data.txHash}`,
+    };
+  } catch (error: any) {
+    console.error("❌ Broadcast error:", error);
+    throw new Error(`Failed to broadcast transaction: ${error.message}`);
+  }
+}
+
+/**
  * Verify a transaction exists on the blockchain
  */
 export async function verifyTransaction(txHash: string): Promise<{

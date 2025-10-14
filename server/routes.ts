@@ -9,7 +9,7 @@ import { z } from "zod";
 import Stripe from "stripe";
 import { generateCertificatePDF } from "./certificateGenerator";
 import { createXMoneyOrder, getXMoneyOrderStatus, verifyXMoneyWebhook, isXMoneyConfigured } from "./xmoney";
-import { recordOnBlockchain, isMultiversXConfigured } from "./blockchain";
+import { recordOnBlockchain, isMultiversXConfigured, broadcastSignedTransaction } from "./blockchain";
 
 const stripeSecretKey = process.env.TESTING_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
 if (!stripeSecretKey) {
@@ -210,6 +210,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching certifications:", error);
       res.status(500).json({ message: "Failed to fetch certifications" });
+    }
+  });
+
+  // Broadcast signed transaction (XPortal integration)
+  app.post("/api/blockchain/broadcast", isAuthenticated, async (req: any, res) => {
+    try {
+      const { signedTransaction, certificationData } = req.body;
+
+      if (!signedTransaction) {
+        return res.status(400).json({ message: "Missing signed transaction" });
+      }
+
+      // Broadcast transaction to MultiversX
+      const { txHash, explorerUrl } = await broadcastSignedTransaction(signedTransaction);
+
+      // If certification data is provided, create certification record
+      if (certificationData) {
+        const userId = req.user.claims.sub;
+        const [user] = await db.select().from(users).where(eq(users.id, userId));
+
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        // Check subscription limits
+        const tier = user.subscriptionTier as keyof typeof SUBSCRIPTION_TIERS;
+        const limit = SUBSCRIPTION_TIERS[tier].monthlyLimit;
+        
+        if ((user.monthlyUsage || 0) >= limit) {
+          return res.status(403).json({
+            message: `Monthly limit reached. Upgrade your plan to certify more files.`,
+            limit,
+            usage: user.monthlyUsage,
+          });
+        }
+
+        // Create certification record
+        const [certification] = await db
+          .insert(certifications)
+          .values({
+            userId,
+            fileName: certificationData.fileName,
+            fileHash: certificationData.fileHash,
+            fileType: certificationData.fileType || "unknown",
+            fileSize: certificationData.fileSize || 0,
+            authorName: certificationData.authorName,
+            authorSignature: certificationData.authorSignature,
+            transactionHash: txHash,
+            transactionUrl: explorerUrl,
+            blockchainStatus: "pending", // Will be confirmed later
+            isPublic: true,
+          })
+          .returning();
+
+        // Increment monthly usage
+        await db
+          .update(users)
+          .set({ monthlyUsage: (user.monthlyUsage || 0) + 1 })
+          .where(eq(users.id, userId));
+
+        res.json({
+          success: true,
+          txHash,
+          explorerUrl,
+          certification,
+        });
+      } else {
+        res.json({
+          success: true,
+          txHash,
+          explorerUrl,
+        });
+      }
+    } catch (error: any) {
+      console.error("Error broadcasting transaction:", error);
+      res.status(500).json({ 
+        message: "Failed to broadcast transaction",
+        error: error.message 
+      });
     }
   });
 

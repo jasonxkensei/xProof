@@ -60,10 +60,15 @@ Preferred communication style: Simple, everyday language.
 - Server receives only hash metadata for blockchain recording
 
 **Blockchain Integration**
-- MultiversX blockchain for immutable proof storage
-- Simulated transaction recording (TODO: actual MultiversX API integration)
+- **MultiversX blockchain** for immutable proof storage with dual modes:
+  - **XPortal Mode (Recommended)**: Users connect their XPortal wallet, sign transactions client-side, and pay their own gas fees
+  - **Server Mode (Optional)**: Automated signing using server-side private key for seamless UX
+- Real MultiversX SDK integration (`@multiversx/sdk-core`, `@multiversx/sdk-wallet`, `@noble/ed25519`)
+- Transaction signing and broadcasting to MultiversX Gateway
+- Support for Mainnet, Devnet, and Testnet networks
 - Transaction hash and explorer URL generation for verification
 - Public proof pages accessible via `/proof/:id` for verification
+- Broadcast endpoint (`/api/blockchain/broadcast`) for XPortal-signed transactions
 
 ### Data Storage Solutions
 
@@ -129,6 +134,12 @@ Preferred communication style: Simple, everyday language.
 - `XMONEY_API_KEY`: xMoney API key for payment processing (optional)
 - `XMONEY_SITE_ID`: xMoney site identifier (optional)
 - `XMONEY_WEBHOOK_SECRET`: xMoney webhook signature verification secret (optional)
+- **MultiversX Configuration (Optional - for server-side signing mode):**
+  - `MULTIVERSX_PRIVATE_KEY`: Private key for signing transactions server-side (hex format)
+  - `MULTIVERSX_SENDER_ADDRESS`: Wallet address that pays gas fees (erd1... format)
+  - `MULTIVERSX_CHAIN_ID`: Network ID ("1" = Mainnet, "D" = Devnet, "T" = Testnet)
+  - `MULTIVERSX_GATEWAY_URL`: Gateway URL (e.g., "https://devnet-gateway.multiversx.com")
+  - **Note**: If not configured, app uses XPortal wallet mode (users sign with their own wallets)
 - `ISSUER_URL`: OIDC provider URL for Replit Auth
 - `REPL_ID`: Replit environment identifier
 - `REPLIT_DOMAINS`: Domain configuration for authentication callbacks
