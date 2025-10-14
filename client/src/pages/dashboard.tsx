@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/useAuth";
+import { useXPortalAuth } from "@/contexts/XPortalAuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import type { Certification } from "@shared/schema";
 
 export default function Dashboard() {
   const { toast } = useToast();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { user, isLoading: authLoading, isAuthenticated, disconnectWallet } = useXPortalAuth();
 
   const { data: certifications, isLoading: certsLoading } = useQuery<Certification[]>({
     queryKey: ["/api/certifications"],
@@ -22,17 +22,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
+      // User will be redirected to landing page by App.tsx
       return;
     }
-  }, [isAuthenticated, authLoading, toast]);
+  }, [isAuthenticated, authLoading]);
 
   if (authLoading || certsLoading) {
     return (
@@ -100,11 +93,9 @@ export default function Dashboard() {
                 Settings
               </Link>
             </Button>
-            <Button asChild variant="ghost" size="sm" data-testid="button-logout">
-              <a href="/api/logout">
-                <LogOut className="mr-2 h-4 w-4" />
-                Log out
-              </a>
+            <Button variant="ghost" size="sm" onClick={disconnectWallet} data-testid="button-logout">
+              <LogOut className="mr-2 h-4 w-4" />
+              Disconnect
             </Button>
           </div>
         </div>
@@ -159,7 +150,7 @@ export default function Dashboard() {
               <div className="text-2xl font-bold capitalize" data-testid="text-subscription-plan">
                 {user?.subscriptionTier || "Free"}
               </div>
-              <Button asChild variant="link" className="h-auto p-0 text-xs" data-testid="link-upgrade">
+              <Button asChild variant="ghost" className="h-auto p-0 text-xs text-primary hover:text-primary/80" data-testid="link-upgrade">
                 <Link href="/pricing">
                   {user?.subscriptionTier === "free" ? "Upgrade plan" : "Manage subscription"}
                 </Link>
@@ -192,7 +183,7 @@ export default function Dashboard() {
                           <h3 className="font-semibold truncate" data-testid={`text-filename-${cert.id}`}>
                             {cert.fileName}
                           </h3>
-                          {getStatusBadge(cert.blockchainStatus)}
+                          {getStatusBadge(cert.blockchainStatus || "pending")}
                         </div>
                         <div className="space-y-1 text-sm text-muted-foreground">
                           <div className="flex items-center gap-2">
@@ -210,7 +201,7 @@ export default function Dashboard() {
                             </Button>
                           </div>
                           <p data-testid={`text-date-${cert.id}`}>
-                            {format(new Date(cert.createdAt), "PPP 'at' p")}
+                            {cert.createdAt ? format(new Date(cert.createdAt), "PPP 'at' p") : "Unknown date"}
                           </p>
                         </div>
                       </div>

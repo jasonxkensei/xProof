@@ -1,9 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Shield, Zap, FileCheck, Lock, Globe, Award } from "lucide-react";
+import { Shield, Zap, FileCheck, Lock, Globe, Award, Wallet } from "lucide-react";
 import { Link } from "wouter";
+import { useXPortalAuth } from "@/contexts/XPortalAuthContext";
 
 export default function Landing() {
+  const { connectWallet, isConnecting } = useXPortalAuth();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -27,11 +30,23 @@ export default function Landing() {
             </a>
           </nav>
           <div className="flex items-center gap-3">
-            <Button asChild variant="ghost" size="sm" data-testid="button-login">
-              <a href="/api/login">Log in</a>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={connectWallet}
+              disabled={isConnecting}
+              data-testid="button-login"
+            >
+              <Wallet className="mr-2 h-4 w-4" />
+              {isConnecting ? "Connecting..." : "Connect Wallet"}
             </Button>
-            <Button asChild size="sm" data-testid="button-get-started">
-              <a href="/api/login">Get Started</a>
+            <Button 
+              size="sm" 
+              onClick={connectWallet}
+              disabled={isConnecting}
+              data-testid="button-get-started"
+            >
+              {isConnecting ? "Connecting..." : "Get Started"}
             </Button>
           </div>
         </div>
@@ -54,8 +69,15 @@ export default function Landing() {
             Get an immutable, verifiable proof of ownership—no coding required.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button asChild size="lg" className="text-base" data-testid="button-start-free">
-              <a href="/api/login">Certify Your First File Free</a>
+            <Button 
+              size="lg" 
+              className="text-base" 
+              onClick={connectWallet}
+              disabled={isConnecting}
+              data-testid="button-start-free"
+            >
+              <Wallet className="mr-2 h-5 w-5" />
+              {isConnecting ? "Connecting..." : "Certify Your First File Free"}
             </Button>
             <Button asChild variant="outline" size="lg" className="text-base" data-testid="button-learn-more">
               <a href="#how-it-works">Learn How It Works</a>
@@ -242,8 +264,14 @@ export default function Landing() {
                       <span>Public verification page</span>
                     </li>
                   </ul>
-                  <Button asChild variant="outline" className="w-full" data-testid="button-start-free-tier">
-                    <a href="/api/login">Get Started</a>
+                  <Button 
+                    variant="outline" 
+                    className="w-full" 
+                    onClick={connectWallet}
+                    disabled={isConnecting}
+                    data-testid="button-start-free-tier"
+                  >
+                    {isConnecting ? "Connecting..." : "Get Started"}
                   </Button>
                 </CardContent>
               </Card>
@@ -276,8 +304,13 @@ export default function Landing() {
                       <span>Custom branding</span>
                     </li>
                   </ul>
-                  <Button asChild className="w-full" data-testid="button-start-pro">
-                    <a href="/api/login">Start Pro Trial</a>
+                  <Button 
+                    className="w-full" 
+                    onClick={connectWallet}
+                    disabled={isConnecting}
+                    data-testid="button-start-pro"
+                  >
+                    {isConnecting ? "Connecting..." : "Start Pro Trial"}
                   </Button>
                 </CardContent>
               </Card>
@@ -307,8 +340,14 @@ export default function Landing() {
                       <span>Dedicated support</span>
                     </li>
                   </ul>
-                  <Button asChild variant="outline" className="w-full" data-testid="button-start-business">
-                    <a href="/api/login">Start Business Trial</a>
+                  <Button 
+                    variant="outline" 
+                    className="w-full" 
+                    onClick={connectWallet}
+                    disabled={isConnecting}
+                    data-testid="button-start-business"
+                  >
+                    {isConnecting ? "Connecting..." : "Start Business Trial"}
                   </Button>
                 </CardContent>
               </Card>

@@ -42,17 +42,24 @@ Preferred communication style: Simple, everyday language.
 - Production build uses esbuild for server bundling
 
 **Authentication & Session Management**
-- **Replit Auth** via OpenID Connect (OIDC) for user authentication
-- Passport.js strategy for OIDC integration
-- Session storage in PostgreSQL using `connect-pg-simple`
+- **XPortal Wallet Authentication** for Web3-native user experience (NO traditional username/password)
+- Challenge-response pattern using cryptographic signature verification
+- MultiversX SDK (`@multiversx/sdk-wallet`, `UserVerifier`) for ed25519 signature validation
+- Users authenticate by connecting XPortal wallet and signing challenge messages
+- Session storage in PostgreSQL using `connect-pg-simple` with wallet addresses as identifiers
 - HTTP-only cookies for secure session management
 - Session TTL: 7 days with automatic refresh
+- Challenge expiry: 5 minutes (automatic cleanup of expired challenges)
 
 **API Architecture**
 - RESTful endpoints under `/api/*` prefix
 - Express middleware for request logging with duration tracking
 - JSON request/response handling with centralized error handling
-- Protected routes using `isAuthenticated` middleware
+- Protected routes using `isWalletAuthenticated` middleware
+- **Wallet Auth Endpoints:**
+  - `POST /api/auth/challenge`: Generate nonce and challenge message for wallet signing
+  - `POST /api/auth/verify`: Verify signed message and create authenticated session
+  - `POST /api/auth/logout`: Destroy wallet session
 
 **File Processing**
 - Client-side SHA-256 hashing using Web Crypto API (no file uploads to server)
@@ -79,11 +86,12 @@ Preferred communication style: Simple, everyday language.
 - Connection pooling with Neon Pool for efficient resource usage
 
 **Schema Design**
-- `users`: Authentication profiles with Stripe integration fields (customerId, subscriptionId, tier, status)
-- `certifications`: File certification records (hash, metadata, blockchain references, visibility settings)
-- `sessions`: Express session storage for authentication state
+- `users`: Wallet-based profiles with `walletAddress` as primary identifier, Stripe integration fields (customerId, subscriptionId, tier, status), and optional email
+- `certifications`: File certification records (hash, metadata, blockchain references, visibility settings) linked to users via `userId`
+- `sessions`: Express session storage for wallet authentication state (stores `walletAddress`)
 - Subscription tier tracking with monthly usage limits and reset dates
 - Cascade deletion for user-owned certifications
+- All queries use `walletAddress` for user lookups (wallet-first architecture)
 
 **Migration Strategy**
 - Drizzle Kit for schema migrations in `./migrations` directory
@@ -140,6 +148,4 @@ Preferred communication style: Simple, everyday language.
   - `MULTIVERSX_CHAIN_ID`: Network ID ("1" = Mainnet, "D" = Devnet, "T" = Testnet)
   - `MULTIVERSX_GATEWAY_URL`: Gateway URL (e.g., "https://devnet-gateway.multiversx.com")
   - **Note**: If not configured, app uses XPortal wallet mode (users sign with their own wallets)
-- `ISSUER_URL`: OIDC provider URL for Replit Auth
 - `REPL_ID`: Replit environment identifier
-- `REPLIT_DOMAINS`: Domain configuration for authentication callbacks

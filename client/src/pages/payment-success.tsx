@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useXPortalAuth } from "@/contexts/XPortalAuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Shield, CheckCircle, Loader2, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 
 export default function PaymentSuccess() {
-  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const { isLoading: authLoading, isAuthenticated, connectWallet } = useXPortalAuth();
   const [status, setStatus] = useState<"checking" | "success" | "error" | "pending">("checking");
   const [message, setMessage] = useState("");
 
@@ -109,8 +109,8 @@ export default function PaymentSuccess() {
               </p>
               <div className="flex gap-4">
                 {!isAuthenticated && (
-                  <Button asChild size="lg" data-testid="button-login">
-                    <a href="/api/login">Log In to View Status</a>
+                  <Button size="lg" onClick={connectWallet} data-testid="button-login">
+                    Connect Wallet to View Status
                   </Button>
                 )}
                 <Button asChild variant="outline" size="lg" data-testid="button-dashboard-pending">

@@ -9,6 +9,11 @@ interface User {
   monthlyUsage: number;
   companyName: string | null;
   companyLogoUrl: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  usageResetDate?: Date | null;
+  createdAt?: Date | null;
 }
 
 interface AuthContextType {
@@ -16,8 +21,9 @@ interface AuthContextType {
   wallet: ReturnType<typeof useXPortalWallet>;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: () => Promise<void>;
-  logout: () => Promise<void>;
+  isConnecting: boolean;
+  connectWallet: () => Promise<void>;
+  disconnectWallet: () => Promise<void>;
 }
 
 const XPortalAuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,15 +39,32 @@ export function XPortalAuthProvider({ children }: { children: ReactNode }) {
       if (wallet.isConnected && wallet.address) {
         try {
           setIsLoading(true);
-          // Register or fetch user by wallet address
-          const response = await apiRequest("POST", "/api/auth/xportal", {
+          
+          // Step 1: Request challenge from server
+          const challengeResponse = await apiRequest("POST", "/api/auth/challenge", {
             walletAddress: wallet.address,
-          });
-          const userData = await response.json();
-          setUser(userData);
+          }) as { nonce: string; message: string };
+          
+          // Step 2: Sign the message with wallet
+          const signature = await wallet.signMessage(challengeResponse.message);
+          
+          if (!signature) {
+            throw new Error("Failed to sign message");
+          }
+          
+          // Step 3: Verify signature and create session
+          const userData = await apiRequest("POST", "/api/auth/verify", {
+            walletAddress: wallet.address,
+            signature,
+            nonce: challengeResponse.nonce,
+          }) as { user: User; message: string };
+          
+          setUser(userData.user);
         } catch (error) {
           console.error("Error syncing user:", error);
           setUser(null);
+          // Disconnect wallet if authentication fails
+          await wallet.disconnect();
         } finally {
           setIsLoading(false);
         }
@@ -54,13 +77,20 @@ export function XPortalAuthProvider({ children }: { children: ReactNode }) {
     syncUser();
   }, [wallet.isConnected, wallet.address]);
 
-  const login = async () => {
+  const connectWallet = async () => {
     await wallet.connect();
   };
 
-  const logout = async () => {
-    await wallet.disconnect();
-    setUser(null);
+  const disconnectWallet = async () => {
+    try {
+      // Call logout endpoint to destroy server session
+      await apiRequest("POST", "/api/auth/logout", {});
+    } catch (error) {
+      console.error("Error logging out:", error);
+    } finally {
+      await wallet.disconnect();
+      setUser(null);
+    }
   };
 
   return (
@@ -70,8 +100,9 @@ export function XPortalAuthProvider({ children }: { children: ReactNode }) {
         wallet,
         isLoading,
         isAuthenticated: wallet.isConnected && !!user,
-        login,
-        logout,
+        isConnecting: wallet.isConnecting,
+        connectWallet,
+        disconnectWallet,
       }}
     >
       {children}

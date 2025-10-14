@@ -1,6 +1,5 @@
 import express, { type Express } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth, isAuthenticated } from "./replitAuth";
 import { db } from "./db";
 import { storage } from "./storage";
 import { certifications, users, SUBSCRIPTION_TIERS } from "@shared/schema";
@@ -10,6 +9,13 @@ import Stripe from "stripe";
 import { generateCertificatePDF } from "./certificateGenerator";
 import { createXMoneyOrder, getXMoneyOrderStatus, verifyXMoneyWebhook, isXMoneyConfigured } from "./xmoney";
 import { recordOnBlockchain, isMultiversXConfigured, broadcastSignedTransaction } from "./blockchain";
+import { 
+  isWalletAuthenticated, 
+  generateChallenge, 
+  verifyWalletSignature, 
+  createWalletSession,
+  destroyWalletSession 
+} from "./walletAuth";
 
 const stripeSecretKey = process.env.TESTING_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
 if (!stripeSecretKey) {
@@ -21,11 +27,8 @@ const stripe = new Stripe(stripeSecretKey, {
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Setup authentication first
-  await setupAuth(app);
-
-  // XPortal authentication - create or fetch user by wallet address  
-  app.post("/api/auth/xportal", async (req, res) => {
+  // Generate authentication challenge for wallet
+  app.post("/api/auth/challenge", (req, res) => {
     try {
       const { walletAddress } = req.body;
 
@@ -33,40 +36,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid MultiversX wallet address" });
       }
 
-      // Check if user exists
-      const [existingUser] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
-
-      if (existingUser) {
-        return res.json(existingUser);
-      }
-
-      // Create new user
-      const [newUser] = await db
-        .insert(users)
-        .values({
-          walletAddress,
-          subscriptionTier: "free",
-          subscriptionStatus: "active",
-          monthlyUsage: 0,
-          usageResetDate: new Date(),
-        })
-        .returning();
-
-      res.json(newUser);
+      const nonce = generateChallenge(walletAddress);
+      const message = `ProofMint Login\n\nSign this message to authenticate.\n\nNonce: ${nonce}`;
+      
+      res.json({ nonce, message });
     } catch (error: any) {
-      console.error("Error with XPortal auth:", error);
-      res.status(500).json({ message: "Failed to authenticate", error: error.message });
+      console.error("Error generating challenge:", error);
+      res.status(500).json({ message: "Failed to generate challenge" });
     }
   });
 
-  // Get current user endpoint (legacy Replit Auth)
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // Verify wallet signature and create session
+  app.post("/api/auth/verify", async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const { walletAddress, signature, nonce } = req.body;
+
+      if (!walletAddress || !signature || !nonce) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      // Verify signature
+      const isValid = verifyWalletSignature(walletAddress, signature, nonce);
+      
+      if (!isValid) {
+        return res.status(401).json({ message: "Invalid signature" });
+      }
+
+      // Check if user exists, create if not
+      let [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+
+      if (!user) {
+        // Create new user
+        [user] = await db
+          .insert(users)
+          .values({
+            walletAddress,
+            subscriptionTier: "free",
+            subscriptionStatus: "active",
+            monthlyUsage: 0,
+            usageResetDate: new Date(),
+          })
+          .returning();
+      }
+
+      // Create wallet session
+      await createWalletSession(req, walletAddress);
+
+      res.json({ user, message: "Authentication successful" });
+    } catch (error: any) {
+      console.error("Error verifying signature:", error);
+      res.status(500).json({ message: "Failed to verify signature" });
+    }
+  });
+
+  // Logout endpoint
+  app.post("/api/auth/logout", async (req, res) => {
+    try {
+      await destroyWalletSession(req);
+      res.json({ message: "Logged out successfully" });
+    } catch (error: any) {
+      console.error("Error logging out:", error);
+      res.status(500).json({ message: "Failed to log out" });
+    }
+  });
+
+  // Get current user endpoint
+  app.get('/api/auth/user', isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const walletAddress = req.walletAddress;
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
+      
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -75,13 +118,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update user branding (Business tier only)
-  app.patch('/api/user/branding', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/user/branding', isWalletAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const walletAddress = req.walletAddress;
       const { companyName, companyLogoUrl } = req.body;
 
       // Get user to check subscription tier
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
       
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -111,7 +154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           companyName: validatedData.companyName,
           companyLogoUrl: validatedData.companyLogoUrl || null,
         })
-        .where(eq(users.id, userId));
+        .where(eq(users.walletAddress, walletAddress));
 
       res.json({ message: "Branding updated successfully" });
     } catch (error) {
@@ -124,12 +167,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create certification
-  app.post("/api/certifications", isAuthenticated, async (req: any, res) => {
+  app.post("/api/certifications", isWalletAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const walletAddress = req.walletAddress;
 
       // Get user to check subscription limits
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
       
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -143,7 +186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db
           .update(users)
           .set({ monthlyUsage: 0, usageResetDate: now })
-          .where(eq(users.id, userId));
+          .where(eq(users.walletAddress, walletAddress));
         user.monthlyUsage = 0;
       }
 
@@ -195,7 +238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [certification] = await db
         .insert(certifications)
         .values({
-          userId,
+          userId: user.id!,
           fileName: data.fileName,
           fileHash: data.fileHash,
           fileType: data.fileType || "unknown",
@@ -216,7 +259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db
         .update(users)
         .set({ monthlyUsage: (user.monthlyUsage || 0) + 1 })
-        .where(eq(users.id, userId));
+        .where(eq(users.walletAddress, walletAddress));
 
       res.status(201).json({
         ...certification,
@@ -232,13 +275,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user's certifications
-  app.get("/api/certifications", isAuthenticated, async (req: any, res) => {
+  app.get("/api/certifications", isWalletAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const walletAddress = req.walletAddress;
+      
+      // Get user first to get their ID
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
       const userCertifications = await db
         .select()
         .from(certifications)
-        .where(eq(certifications.userId, userId))
+        .where(eq(certifications.userId, user.id!))
         .orderBy(desc(certifications.createdAt));
 
       res.json(userCertifications);
@@ -249,7 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get account info (nonce) for transaction building
-  app.get("/api/blockchain/account/:address", isAuthenticated, async (req: any, res) => {
+  app.get("/api/blockchain/account/:address", isWalletAuthenticated, async (req: any, res) => {
     try {
       const { address } = req.params;
       
@@ -285,7 +335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Broadcast signed transaction (XPortal integration)
-  app.post("/api/blockchain/broadcast", isAuthenticated, async (req: any, res) => {
+  app.post("/api/blockchain/broadcast", isWalletAuthenticated, async (req: any, res) => {
     try {
       const { signedTransaction, certificationData } = req.body;
 
@@ -295,10 +345,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // If certification data is provided, validate and create certification record
       if (certificationData) {
-        const userId = req.user.claims.sub;
+        const walletAddress = req.walletAddress;
         
         // Get user to check subscription limits
-        const [user] = await db.select().from(users).where(eq(users.id, userId));
+        const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
 
         if (!user) {
           return res.status(404).json({ message: "User not found" });
@@ -312,7 +362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await db
             .update(users)
             .set({ monthlyUsage: 0, usageResetDate: now })
-            .where(eq(users.id, userId));
+            .where(eq(users.walletAddress, walletAddress));
           user.monthlyUsage = 0;
         }
 
@@ -360,7 +410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const [certification] = await db
           .insert(certifications)
           .values({
-            userId,
+            userId: user.id!,
             fileName: validatedData.fileName,
             fileHash: validatedData.fileHash,
             fileType: validatedData.fileType || "unknown",
@@ -378,7 +428,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db
           .update(users)
           .set({ monthlyUsage: (user.monthlyUsage || 0) + 1 })
-          .where(eq(users.id, userId));
+          .where(eq(users.walletAddress, walletAddress));
 
         res.json({
           success: true,
@@ -472,16 +522,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create subscription
-  app.post("/api/create-subscription", isAuthenticated, async (req: any, res) => {
+  app.post("/api/create-subscription", isWalletAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const walletAddress = req.walletAddress;
       const { plan } = req.body;
 
       if (!["pro", "business"].includes(plan)) {
         return res.status(400).json({ message: "Invalid plan" });
       }
 
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
       
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -491,7 +541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let customerId = user.stripeCustomerId;
       
       if (!customerId) {
-        console.log('Creating Stripe customer for user:', userId);
+        console.log('Creating Stripe customer for user:', user.id);
         const customer = await stripe.customers.create({
           email: user.email || undefined,
           metadata: {
@@ -503,7 +553,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db
           .update(users)
           .set({ stripeCustomerId: customerId })
-          .where(eq(users.id, userId));
+          .where(eq(users.walletAddress, walletAddress));
       }
 
       // Create subscription
@@ -547,7 +597,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subscriptionTier: plan,
           subscriptionStatus: subscription.status,
         })
-        .where(eq(users.id, userId));
+        .where(eq(users.walletAddress, walletAddress));
 
       res.json({ clientSecret: paymentIntent.client_secret });
     } catch (error) {
@@ -622,7 +672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // xMoney payment routes
   
   // Create payment order
-  app.post("/api/xmoney/create-payment", isAuthenticated, async (req: any, res) => {
+  app.post("/api/xmoney/create-payment", isWalletAuthenticated, async (req: any, res) => {
     try {
       if (!isXMoneyConfigured()) {
         return res.status(503).json({ 
@@ -630,7 +680,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const userId = req.user.claims.sub;
+      const walletAddress = req.walletAddress;
       const { amount, currency, description } = req.body;
 
       // Validate input
@@ -643,7 +693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = schema.parse({ amount, currency, description });
 
       // Get user email for payment
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -671,7 +721,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get order status
-  app.get("/api/xmoney/order/:orderId", isAuthenticated, async (req, res) => {
+  app.get("/api/xmoney/order/:orderId", isWalletAuthenticated, async (req, res) => {
     try {
       if (!isXMoneyConfigured()) {
         return res.status(503).json({ 

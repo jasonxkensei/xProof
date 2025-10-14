@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useXPortalAuth } from "@/contexts/XPortalAuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useStripe, Elements, PaymentElement, useElements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
@@ -148,7 +148,7 @@ const XMoneyPayment = ({ plan }: { plan: string }) => {
 
 export default function Subscribe() {
   const { toast } = useToast();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { user, isLoading: authLoading, isAuthenticated, connectWallet } = useXPortalAuth();
   const [clientSecret, setClientSecret] = useState("");
   const [plan, setPlan] = useState<string>("pro");
 
@@ -156,15 +156,15 @@ export default function Subscribe() {
     if (!authLoading && !isAuthenticated) {
       toast({
         title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
+        description: "Please connect your XPortal wallet to continue.",
         variant: "destructive",
       });
       setTimeout(() => {
-        window.location.href = "/api/login";
+        connectWallet();
       }, 500);
       return;
     }
-  }, [isAuthenticated, authLoading, toast]);
+  }, [isAuthenticated, authLoading, toast, connectWallet]);
 
   useEffect(() => {
     // Get plan from URL query params
