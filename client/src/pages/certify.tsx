@@ -4,13 +4,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Shield, Upload, File, CheckCircle, Loader2, ArrowLeft } from "lucide-react";
+import { Shield, Upload, File, CheckCircle, Loader2, ArrowLeft, Wallet } from "lucide-react";
 import { computeFileHash } from "@/lib/hashUtils";
 import { Link, useLocation } from "wouter";
+import { useXPortalWallet } from "@/hooks/useXPortalWallet";
 
 interface CertificationData {
   fileName: string;
@@ -26,6 +27,7 @@ export default function Certify() {
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const wallet = useXPortalWallet();
 
   const [file, setFile] = useState<File | null>(null);
   const [fileHash, setFileHash] = useState<string>("");
@@ -59,7 +61,27 @@ export default function Certify() {
 
   const certifyMutation = useMutation({
     mutationFn: async (data: CertificationData) => {
-      const response = await apiRequest("POST", "/api/certifications", data);
+      // Build MultiversX transaction
+      const txData = `certify:${data.fileHash}:${data.fileName}:${data.authorName}`;
+      
+      // Build transaction object for XPortal
+      const transaction = {
+        value: "0",
+        receiver: wallet.address!, // Send to self
+        gasLimit: 500000,
+        data: Buffer.from(txData).toString("base64"),
+        chainID: import.meta.env.VITE_MULTIVERSX_CHAIN_ID || "D",
+      };
+
+      // Sign transaction with XPortal
+      const signedTx = await wallet.signTransaction(transaction);
+
+      // Broadcast to backend
+      const response = await apiRequest("POST", "/api/blockchain/broadcast", {
+        signedTransaction: signedTx,
+        certificationData: data,
+      });
+
       return response;
     },
     onSuccess: (data) => {
@@ -129,6 +151,22 @@ export default function Certify() {
     setIsDragging(false);
   }, []);
 
+  const handleWalletConnect = async () => {
+    try {
+      await wallet.connect();
+      toast({
+        title: "Wallet Connected",
+        description: "XPortal wallet connected successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Connection Failed",
+        description: error.message || "Failed to connect XPortal wallet",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -136,6 +174,15 @@ export default function Certify() {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!wallet.isConnected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your XPortal wallet first",
         variant: "destructive",
       });
       return;
@@ -313,6 +360,87 @@ export default function Certify() {
             </Card>
           )}
 
+          {/* XPortal Wallet Connection */}
+          {file && fileHash && (
+            <Card>
+              <CardHeader>
+                <CardTitle>XPortal Wallet</CardTitle>
+                <CardDescription>
+                  Connect your XPortal wallet to sign the blockchain transaction
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!wallet.isAvailable ? (
+                  <div className="rounded-lg border-2 border-dashed border-border p-6 text-center">
+                    <Wallet className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+                    <p className="mb-2 text-sm font-medium">XPortal Extension Not Found</p>
+                    <p className="mb-4 text-xs text-muted-foreground">
+                      Please install the XPortal browser extension to continue
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      data-testid="link-install-xportal"
+                    >
+                      <a
+                        href="https://chrome.google.com/webstore/detail/xportal/dngmlblcodfobpdpecaadgfbcggfjfnm"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Install XPortal Extension
+                      </a>
+                    </Button>
+                  </div>
+                ) : wallet.isConnected ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between rounded-lg bg-primary/5 p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary">
+                          <CheckCircle className="h-5 w-5 text-primary-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">Wallet Connected</p>
+                          <p className="font-mono text-xs text-muted-foreground" data-testid="text-wallet-address">
+                            {wallet.address?.slice(0, 10)}...{wallet.address?.slice(-8)}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => wallet.disconnect()}
+                        data-testid="button-disconnect-wallet"
+                      >
+                        Disconnect
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      You'll be asked to sign the transaction in your XPortal wallet
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Button
+                      type="button"
+                      onClick={handleWalletConnect}
+                      className="w-full"
+                      data-testid="button-connect-wallet"
+                    >
+                      <Wallet className="mr-2 h-4 w-4" />
+                      Connect XPortal Wallet
+                    </Button>
+                    <p className="text-xs text-muted-foreground text-center">
+                      Your wallet will sign the certification transaction
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Submit */}
           {file && fileHash && (
             <div className="flex justify-end gap-3">
@@ -326,18 +454,18 @@ export default function Certify() {
               </Button>
               <Button
                 type="submit"
-                disabled={!authorName || certifyMutation.isPending}
+                disabled={!authorName || !wallet.isConnected || certifyMutation.isPending}
                 data-testid="button-certify-submit"
               >
                 {certifyMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Certifying...
+                    Signing & Certifying...
                   </>
                 ) : (
                   <>
                     <Shield className="mr-2 h-4 w-4" />
-                    Certify on Blockchain
+                    Sign & Certify with XPortal
                   </>
                 )}
               </Button>
