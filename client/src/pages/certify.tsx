@@ -1,17 +1,17 @@
 import { useState, useCallback, useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Shield, Upload, File, CheckCircle, Loader2, ArrowLeft, Wallet } from "lucide-react";
-import { computeFileHash } from "@/lib/hashUtils";
+import { Shield, Upload, File, CheckCircle, Loader2, ArrowLeft, Download, ExternalLink } from "lucide-react";
+import { hashFile } from "@/lib/hashFile";
+import { generateProofPDF } from "@/lib/generateProofPDF";
 import { Link, useLocation } from "wouter";
-import { useXPortalWallet } from "@/hooks/useXPortalWallet";
 
 interface CertificationData {
   fileName: string;
@@ -19,100 +19,57 @@ interface CertificationData {
   fileType: string;
   fileSize: number;
   authorName: string;
-  authorSignature?: string;
+  txHash?: string;
+  explorerUrl?: string;
 }
 
 export default function Certify() {
   const { toast } = useToast();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useWalletAuth();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const wallet = useXPortalWallet();
 
   const [file, setFile] = useState<File | null>(null);
   const [fileHash, setFileHash] = useState<string>("");
   const [authorName, setAuthorName] = useState<string>("");
-  const [authorSignature, setAuthorSignature] = useState<string>("");
   const [isHashing, setIsHashing] = useState(false);
   const [hashProgress, setHashProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [certificationResult, setCertificationResult] = useState<CertificationData | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
-      return;
+    if (!isAuthenticated) {
+      setLocation("/");
     }
-  }, [isAuthenticated, authLoading, toast]);
+  }, [isAuthenticated, setLocation]);
 
   useEffect(() => {
     if (user?.firstName && user?.lastName) {
       setAuthorName(`${user.firstName} ${user.lastName}`);
     } else if (user?.email) {
       setAuthorName(user.email);
+    } else if (user?.walletAddress) {
+      setAuthorName(`${user.walletAddress.slice(0, 8)}...${user.walletAddress.slice(-6)}`);
     }
   }, [user]);
 
   const certifyMutation = useMutation({
     mutationFn: async (data: CertificationData) => {
-      if (!wallet.address) {
-        throw new Error("Wallet not connected");
-      }
-
-      // Get account info (nonce) from backend
-      const accountResponse = await apiRequest("GET", `/api/blockchain/account/${wallet.address}`);
-      const accountInfo = await accountResponse.json() as {
-        address: string;
-        nonce: number;
-        balance: string;
-      };
-      
-      // Build MultiversX transaction data
-      const txData = `certify:${data.fileHash}:${data.fileName}:${data.authorName}`;
-      
-      // Encode to base64 (browser-safe)
-      const encoder = new TextEncoder();
-      const dataBytes = encoder.encode(txData);
-      const base64Data = btoa(String.fromCharCode(...Array.from(dataBytes)));
-      
-      // Build complete transaction object for XPortal
-      const transaction = {
-        nonce: accountInfo.nonce,
-        value: "0",
-        receiver: wallet.address, // Send to self
-        sender: wallet.address,
-        gasPrice: 1000000000, // 1 Gwei
-        gasLimit: 500000,
-        data: base64Data,
-        chainID: import.meta.env.VITE_MULTIVERSX_CHAIN_ID || "D",
-        version: 1,
-      };
-
-      // Sign transaction with XPortal
-      const signedTx = await wallet.signTransaction(transaction);
-
-      // Broadcast to backend
-      const response = await apiRequest("POST", "/api/blockchain/broadcast", {
-        signedTransaction: signedTx,
-        certificationData: data,
-      });
-
-      return response;
+      const response = await apiRequest("POST", "/api/certifications", data);
+      return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/certifications"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      setCertificationResult({
+        ...data,
+        txHash: data.transactionHash,
+        explorerUrl: data.transactionUrl,
+      });
       toast({
         title: "Success!",
         description: "Your file has been certified on the blockchain",
       });
-      setLocation("/dashboard");
     },
     onError: (error: Error) => {
       toast({
@@ -129,12 +86,11 @@ export default function Certify() {
     setHashProgress(0);
 
     try {
-      // Simulate progress for better UX
       const progressInterval = setInterval(() => {
         setHashProgress((prev) => Math.min(prev + 10, 90));
       }, 100);
 
-      const hash = await computeFileHash(selectedFile);
+      const hash = await hashFile(selectedFile);
       
       clearInterval(progressInterval);
       setHashProgress(100);
@@ -172,22 +128,6 @@ export default function Certify() {
     setIsDragging(false);
   }, []);
 
-  const handleWalletConnect = async () => {
-    try {
-      await wallet.connect();
-      toast({
-        title: "Wallet Connected",
-        description: "XPortal wallet connected successfully",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Connection Failed",
-        description: error.message || "Failed to connect XPortal wallet",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -200,36 +140,145 @@ export default function Certify() {
       return;
     }
 
-    if (!wallet.isConnected) {
-      toast({
-        title: "Wallet Not Connected",
-        description: "Please connect your XPortal wallet first",
-        variant: "destructive",
-      });
-      return;
-    }
-
     certifyMutation.mutate({
       fileName: file.name,
       fileHash,
       fileType: file.type || "unknown",
       fileSize: file.size,
       authorName,
-      authorSignature: authorSignature || undefined,
     });
   };
 
-  if (authLoading) {
+  const handleDownloadPDF = async () => {
+    if (!certificationResult || !file) return;
+
+    await generateProofPDF({
+      fileName: file.name,
+      fileHash: certificationResult.fileHash,
+      txHash: certificationResult.txHash || "",
+      explorerUrl: certificationResult.explorerUrl || "",
+      authorName: certificationResult.authorName,
+      certificationDate: new Date().toLocaleDateString(),
+    });
+
+    toast({
+      title: "PDF Downloaded",
+      description: "Your certificate has been saved",
+    });
+  };
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  if (certificationResult) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="min-h-screen bg-background">
+        <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="container flex h-16 items-center justify-between px-6">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
+                <Shield className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <span className="text-xl font-bold tracking-tight">ProofMint</span>
+            </div>
+          </div>
+        </header>
+
+        <div className="container mx-auto max-w-3xl px-6 py-12">
+          <div className="text-center">
+            <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+              <CheckCircle className="h-10 w-10 text-primary" />
+            </div>
+            <h1 className="mb-4 text-3xl font-bold tracking-tight">Certification Successful!</h1>
+            <p className="mb-8 text-muted-foreground">
+              Your file has been certified on the MultiversX blockchain
+            </p>
+          </div>
+
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Certification Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground">File Name</p>
+                <p className="font-medium" data-testid="text-cert-filename">{certificationResult.fileName}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">SHA-256 Hash</p>
+                <p className="break-all font-mono text-sm" data-testid="text-cert-hash">
+                  {certificationResult.fileHash}
+                </p>
+              </div>
+              {certificationResult.txHash && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Transaction Hash</p>
+                  <p className="break-all font-mono text-sm" data-testid="text-cert-txhash">
+                    {certificationResult.txHash}
+                  </p>
+                </div>
+              )}
+              {certificationResult.explorerUrl && (
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    data-testid="link-explorer"
+                  >
+                    <a
+                      href={certificationResult.explorerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      View on Explorer
+                    </a>
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="flex gap-3">
+            <Button
+              onClick={handleDownloadPDF}
+              className="flex-1"
+              data-testid="button-download-pdf"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download Certificate PDF
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCertificationResult(null);
+                setFile(null);
+                setFileHash("");
+                setHashProgress(0);
+              }}
+              data-testid="button-certify-another"
+            >
+              Certify Another File
+            </Button>
+          </div>
+
+          <div className="mt-6 text-center">
+            <Button asChild variant="ghost" size="sm" data-testid="button-back-dashboard">
+              <Link href="/dashboard">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Dashboard
+              </Link>
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between px-6">
           <div className="flex items-center gap-2">
@@ -256,7 +305,6 @@ export default function Certify() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* File Upload */}
           <Card>
             <CardHeader>
               <CardTitle>Upload File</CardTitle>
@@ -346,7 +394,6 @@ export default function Certify() {
             </CardContent>
           </Card>
 
-          {/* Author Information */}
           {file && fileHash && (
             <Card>
               <CardHeader>
@@ -363,16 +410,6 @@ export default function Certify() {
                     required
                     data-testid="input-author-name"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="authorSignature">Digital Signature (Optional)</Label>
-                  <Input
-                    id="authorSignature"
-                    value={authorSignature}
-                    onChange={(e) => setAuthorSignature(e.target.value)}
-                    placeholder="e.g., © 2024 Your Name"
-                    data-testid="input-author-signature"
-                  />
                   <p className="text-xs text-muted-foreground">
                     This will appear on your certificate
                   </p>
@@ -381,88 +418,6 @@ export default function Certify() {
             </Card>
           )}
 
-          {/* XPortal Wallet Connection */}
-          {file && fileHash && (
-            <Card>
-              <CardHeader>
-                <CardTitle>XPortal Wallet</CardTitle>
-                <CardDescription>
-                  Connect your XPortal wallet to sign the blockchain transaction
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {!wallet.isAvailable ? (
-                  <div className="rounded-lg border-2 border-dashed border-border p-6 text-center">
-                    <Wallet className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-                    <p className="mb-2 text-sm font-medium">XPortal Extension Not Found</p>
-                    <p className="mb-4 text-xs text-muted-foreground">
-                      Please install the XPortal browser extension to continue
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      asChild
-                      data-testid="link-install-xportal"
-                    >
-                      <a
-                        href="https://chrome.google.com/webstore/detail/xportal/dngmlblcodfobpdpecaadgfbcggfjfnm"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Install XPortal Extension
-                      </a>
-                    </Button>
-                  </div>
-                ) : wallet.isConnected ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between rounded-lg bg-primary/5 p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary">
-                          <CheckCircle className="h-5 w-5 text-primary-foreground" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">Wallet Connected</p>
-                          <p className="font-mono text-xs text-muted-foreground" data-testid="text-wallet-address">
-                            {wallet.address?.slice(0, 10)}...{wallet.address?.slice(-8)}
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => wallet.disconnect()}
-                        data-testid="button-disconnect-wallet"
-                      >
-                        Disconnect
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      You'll be asked to sign the transaction in your XPortal wallet
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <Button
-                      type="button"
-                      onClick={handleWalletConnect}
-                      className="w-full"
-                      data-testid="button-connect-wallet"
-                    >
-                      <Wallet className="mr-2 h-4 w-4" />
-                      Connect XPortal Wallet
-                    </Button>
-                    <p className="text-xs text-muted-foreground text-center">
-                      Your wallet will sign the certification transaction
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Submit */}
           {file && fileHash && (
             <div className="flex justify-end gap-3">
               <Button
@@ -475,18 +430,18 @@ export default function Certify() {
               </Button>
               <Button
                 type="submit"
-                disabled={!authorName || !wallet.isConnected || certifyMutation.isPending}
+                disabled={!authorName || certifyMutation.isPending}
                 data-testid="button-certify-submit"
               >
                 {certifyMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing & Certifying...
+                    Certifying on Blockchain...
                   </>
                 ) : (
                   <>
                     <Shield className="mr-2 h-4 w-4" />
-                    Sign & Certify with XPortal
+                    Certify on Blockchain
                   </>
                 )}
               </Button>
