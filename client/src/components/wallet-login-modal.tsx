@@ -62,12 +62,26 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   const handleWalletConnectLogin = async () => {
     setLoading('walletconnect');
     try {
+      console.log('🚀 Starting WalletConnect login...');
+      console.log('📱 WalletConnect Project ID available:', !!import.meta.env.VITE_WALLETCONNECT_PROJECT_ID);
+      
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.walletConnect 
       });
+      
+      console.log('✅ WalletConnect provider created successfully');
+      
       await provider.login();
+      console.log('✅ WalletConnect login completed');
       onOpenChange(false);
     } catch (error: any) {
+      console.error('❌ WalletConnect error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        type: error.constructor.name
+      });
+      
       toast({
         title: "WalletConnect Failed",
         description: error.message || "Failed to connect via WalletConnect",

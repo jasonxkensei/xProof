@@ -7,6 +7,10 @@ import App from "./App";
 import "./index.css";
 
 // Configure MultiversX SDK for devnet with Native Auth
+const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
+
+console.log('🔍 WalletConnect Project ID:', walletConnectProjectId ? 'Configured ✅' : 'Missing ❌');
+
 const config: InitAppType = {
   storage: {
     getStorageCallback: () => sessionStorage
@@ -17,13 +21,15 @@ const config: InitAppType = {
       expirySeconds: 86400, // 24 hours
       tokenExpirationToastWarningSeconds: 300 // warn 5 min before expiration
     },
-    ...(import.meta.env.VITE_WALLETCONNECT_PROJECT_ID && {
-      customNetworkConfig: {
-        walletConnectV2ProjectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
+    ...(walletConnectProjectId && {
+      network: {
+        walletConnectV2ProjectId: walletConnectProjectId
       }
     })
   }
 };
+
+console.log('📋 MultiversX Config:', JSON.stringify(config, null, 2));
 
 initApp(config);
 
