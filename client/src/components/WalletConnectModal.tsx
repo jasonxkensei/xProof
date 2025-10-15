@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Wallet, Loader2, ExternalLink, Shield, CheckCircle2 } from "lucide-react";
+import { Wallet, Loader2, ExternalLink, Shield, CheckCircle2, Smartphone } from "lucide-react";
 import { useSecureWalletAuth } from "@/hooks/useSecureWalletAuth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -17,44 +17,24 @@ interface WalletConnectModalProps {
 }
 
 export function WalletConnectModal({ open, onOpenChange }: WalletConnectModalProps) {
-  const { connectWallet, isConnecting, isXPortalAvailable, checkXPortalAvailability } = useSecureWalletAuth();
-  const [connectionStep, setConnectionStep] = useState<
-    'idle' | 'requesting' | 'signing' | 'verifying' | 'success'
-  >('idle');
+  const { 
+    connectExtension, 
+    connectWalletConnect, 
+    isConnecting, 
+    isExtensionAvailable 
+  } = useSecureWalletAuth();
 
-  useEffect(() => {
-    if (open) {
-      checkXPortalAvailability();
-      setConnectionStep('idle');
-    }
-  }, [open]);
-
-  const handleConnect = async () => {
-    setConnectionStep('requesting');
-    const success = await connectWallet();
-    
+  const handleExtensionConnect = async () => {
+    const success = await connectExtension();
     if (success) {
-      setConnectionStep('success');
-      setTimeout(() => {
-        onOpenChange(false);
-      }, 1000);
-    } else {
-      setConnectionStep('idle');
+      setTimeout(() => onOpenChange(false), 1000);
     }
   };
 
-  const getStepMessage = () => {
-    switch (connectionStep) {
-      case 'requesting':
-        return 'Requesting wallet access...';
-      case 'signing':
-        return 'Please sign the message in your wallet...';
-      case 'verifying':
-        return 'Verifying signature...';
-      case 'success':
-        return 'Authentication successful!';
-      default:
-        return '';
+  const handleMobileConnect = async () => {
+    const success = await connectWalletConnect();
+    if (success) {
+      setTimeout(() => onOpenChange(false), 1000);
     }
   };
 
@@ -74,14 +54,14 @@ export function WalletConnectModal({ open, onOpenChange }: WalletConnectModalPro
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* XPortal Option */}
+          {/* Browser Extension Option */}
           <div className="space-y-3">
             <Button
-              onClick={handleConnect}
-              disabled={isConnecting || !isXPortalAvailable}
+              onClick={handleExtensionConnect}
+              disabled={isConnecting || !isExtensionAvailable}
               className="w-full justify-start h-auto py-4"
-              variant={isXPortalAvailable ? "default" : "outline"}
-              data-testid="button-connect-xportal"
+              variant={isExtensionAvailable ? "default" : "outline"}
+              data-testid="button-connect-extension"
             >
               <div className="flex items-center gap-3 w-full">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-background/10">
@@ -92,21 +72,21 @@ export function WalletConnectModal({ open, onOpenChange }: WalletConnectModalPro
                   )}
                 </div>
                 <div className="flex-1 text-left">
-                  <div className="font-semibold">XPortal Extension</div>
+                  <div className="font-semibold">Browser Extension</div>
                   <div className="text-xs opacity-90">
-                    {isXPortalAvailable ? 'Detected' : 'Not installed'}
+                    {isExtensionAvailable ? 'MultiversX DeFi Wallet detected' : 'Not installed'}
                   </div>
                 </div>
-                {isXPortalAvailable && (
+                {isExtensionAvailable && (
                   <CheckCircle2 className="h-5 w-5 text-green-500" />
                 )}
               </div>
             </Button>
 
-            {!isXPortalAvailable && (
+            {!isExtensionAvailable && (
               <Alert>
                 <AlertDescription className="text-sm">
-                  Install the XPortal browser extension to continue.
+                  Install the MultiversX DeFi Wallet extension to continue.
                   <a
                     href="https://chrome.google.com/webstore/detail/dngmlblcodfobpdpecaadgfbcggfjfnm"
                     target="_blank"
@@ -121,28 +101,38 @@ export function WalletConnectModal({ open, onOpenChange }: WalletConnectModalPro
             )}
           </div>
 
-          {/* Connection Steps */}
-          {isConnecting && (
-            <div className="rounded-lg border bg-muted/50 p-4">
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <div className="text-sm text-muted-foreground">
-                  {getStepMessage()}
+          {/* Mobile WalletConnect Option */}
+          <div className="space-y-3">
+            <Button
+              onClick={handleMobileConnect}
+              disabled={isConnecting}
+              className="w-full justify-start h-auto py-4"
+              variant="outline"
+              data-testid="button-connect-mobile"
+            >
+              <div className="flex items-center gap-3 w-full">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  {isConnecting ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  ) : (
+                    <Smartphone className="h-5 w-5 text-primary" />
+                  )}
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="font-semibold">xPortal Mobile</div>
+                  <div className="text-xs opacity-90">
+                    Scan QR code with your phone
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            </Button>
 
-          {connectionStep === 'success' && (
-            <div className="rounded-lg border border-green-500/20 bg-green-500/10 p-4">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <div className="text-sm text-green-700 dark:text-green-400">
-                  Wallet connected successfully!
-                </div>
-              </div>
-            </div>
-          )}
+            <Alert>
+              <AlertDescription className="text-sm">
+                Use the xPortal app on your phone to scan the QR code and connect.
+              </AlertDescription>
+            </Alert>
+          </div>
 
           {/* Security Info */}
           <div className="rounded-lg border bg-muted/30 p-4">
