@@ -67,6 +67,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Sync wallet state with backend (used by sdk-dapp integration)
+  app.post("/api/auth/wallet/sync", async (req, res) => {
+    try {
+      const { walletAddress } = req.body;
+
+      if (!walletAddress || !walletAddress.startsWith("erd1")) {
+        return res.status(400).json({ message: "Invalid MultiversX wallet address" });
+      }
+
+      // Check if user exists, create if not
+      let [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+
+      if (!user) {
+        // Create new user with free tier
+        [user] = await db
+          .insert(users)
+          .values({
+            walletAddress,
+            subscriptionTier: "free",
+            subscriptionStatus: "active",
+            monthlyUsage: 0,
+            usageResetDate: new Date(),
+          })
+          .returning();
+      }
+
+      // Create wallet session
+      await createWalletSession(req, walletAddress);
+
+      res.json(user);
+    } catch (error: any) {
+      console.error("Error during wallet sync:", error);
+      res.status(500).json({ message: "Failed to sync wallet" });
+    }
+  });
+
   // Get current user endpoint (for checking authentication status)
   app.get('/api/auth/me', isWalletAuthenticated, async (req: any, res) => {
     try {

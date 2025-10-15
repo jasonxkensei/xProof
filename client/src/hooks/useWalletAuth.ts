@@ -1,6 +1,9 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { apiRequest, queryClient } from '@/lib/queryClient';
+import { queryClient } from '@/lib/queryClient';
+import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
+import { useGetIsLoggedIn } from '@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn';
+import { getAccountProvider } from '@multiversx/sdk-dapp/out/providers/helpers/accountProvider';
 
 interface User {
   id: number;
@@ -19,18 +22,36 @@ interface User {
 
 export function useWalletAuth() {
   const [, navigate] = useLocation();
+  
+  // Get wallet state from sdk-dapp
+  const { address } = useGetAccount();
+  const isLoggedInSdk = useGetIsLoggedIn();
 
-  // Check if user is authenticated - handle 401 as "not logged in" not error
+  // Fetch user data from backend when wallet is connected
   const { data: user, isLoading } = useQuery<User | null>({
     queryKey: ['/api/auth/me'],
     queryFn: async () => {
+      if (!address || !isLoggedInSdk) {
+        return null;
+      }
+
       try {
         const response = await fetch('/api/auth/me', {
-          credentials: 'include', // Important: include cookies
+          credentials: 'include',
         });
         
         if (response.status === 401) {
-          // Not authenticated is not an error - just return null
+          // If backend session doesn't exist, create it
+          const syncResponse = await fetch('/api/auth/wallet/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ walletAddress: address }),
+          });
+
+          if (syncResponse.ok) {
+            return syncResponse.json();
+          }
           return null;
         }
         
@@ -44,47 +65,22 @@ export function useWalletAuth() {
         return null;
       }
     },
+    enabled: isLoggedInSdk && !!address, // Only run query when wallet is connected
     retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
-  });
-
-  // Login mutation
-  const loginMutation = useMutation({
-    mutationFn: async ({ address, signature, loginToken }: { 
-      address: string; 
-      signature: string; 
-      loginToken: string;
-    }) => {
-      const response = await fetch('/api/auth/wallet/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Important: include cookies
-        body: JSON.stringify({
-          walletAddress: address,
-          signature,
-          loginToken
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Login failed');
-      }
-
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
-      navigate('/dashboard');
-    },
   });
 
   // Logout mutation
   const logoutMutation = useMutation({
     mutationFn: async () => {
+      // Logout from sdk-dapp (clears wallet connection)
+      const provider = getAccountProvider();
+      await provider.logout();
+      
+      // Logout from backend (clears session)
       const response = await fetch('/api/auth/logout', {
         method: 'POST',
-        credentials: 'include', // Important: include cookies
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -101,10 +97,10 @@ export function useWalletAuth() {
 
   return {
     user,
-    isAuthenticated: !!user && user !== null,
-    isLoading,
-    loginAsync: loginMutation.mutateAsync, // Use mutateAsync for promise-based calls
+    walletAddress: address,
+    isAuthenticated: isLoggedInSdk && !!user,
+    isLoading: isLoading || (isLoggedInSdk && !user), // Loading if sdk says logged in but no user data yet
     logout: logoutMutation.mutate,
-    isLoggingIn: loginMutation.isPending,
+    isLoggingOut: logoutMutation.isPending,
   };
 }
