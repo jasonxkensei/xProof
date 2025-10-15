@@ -42,15 +42,37 @@ Preferred communication style: Simple, everyday language.
 - Production build uses esbuild for server bundling
 
 **Authentication & Session Management**
-- **MultiversX Web Wallet Authentication** via official webhook integration (NO SDK dependencies)
-- Simple redirect-based flow using MultiversX's `/hook/login` endpoint
-- Users click "Connect Wallet" → redirect to devnet-wallet.multiversx.com → authenticate with any wallet type (Extension, Mobile, Web)
-- Web Wallet redirects back with wallet address as URL parameter
-- **No signature verification required** - Web Wallet handles authentication securely
-- Session storage in PostgreSQL using `connect-pg-simple` with wallet addresses as identifiers
-- HTTP-only cookies for secure session management
-- Session TTL: 7 days with automatic refresh
-- **Architecture Decision**: Avoided MultiversX SDKs due to Node.js polyfill issues in browser (global, events, util modules incompatible)
+- **MultiversX SDK-dApp Integration** with Native Auth for cryptographically secure authentication
+- Client-side wallet authentication using `@multiversx/sdk-dapp` v5+ with signature-based verification
+- **Native Auth Implementation**:
+  - Enabled in initApp() config (24h token expiry, 5min warning before expiration)
+  - Generates JWT-like token with cryptographic signature, block hash, and origin validation
+  - Token stored in sessionStorage and sent to backend via Authorization header
+  - Backend verification using `@multiversx/sdk-native-auth-server`
+- **Polyfills Required**: Custom polyfills.ts defines `global` and `process` for browser compatibility (imported before SDK initialization)
+- **Multiple Wallet Support**:
+  - **Extension Wallet**: MultiversX DeFi Wallet browser extension via ProviderFactory.extension
+  - **Web Wallet**: Cross-window authentication via ProviderFactory.crossWindow  
+  - **WalletConnect**: xPortal mobile app via ProviderFactory.walletConnect
+- **Secure Authentication Flow**:
+  1. User clicks "Connect Wallet" → WalletLoginModal opens
+  2. User selects wallet type → SDK-dApp handles cryptographic signature challenge
+  3. SDK-dApp generates Native Auth token (signed with user's private key)
+  4. Frontend receives wallet address + Native Auth token → POST to `/api/auth/wallet/sync` with Bearer token
+  5. Backend verifies token cryptographically (signature + expiration + origin + block hash)
+  6. Backend creates/fetches user record and establishes PostgreSQL session only after successful verification
+- **Session Management**:
+  - Hybrid approach: SDK-dApp manages client-side wallet state, backend maintains session for data persistence
+  - Session storage in PostgreSQL using `connect-pg-simple` with wallet addresses as identifiers
+  - HTTP-only cookies for secure session management
+  - Session TTL: 7 days with automatic refresh
+- **Security Guarantees**:
+  - Cryptographic proof of wallet ownership (private key signature verification)
+  - Prevents wallet impersonation attacks (cannot forge signatures)
+  - Origin validation (prevents cross-site token theft)
+  - Block hash validation (prevents replay attacks)
+  - Token expiration enforcement (24h validity)
+  - Legacy insecure endpoint `/api/auth/wallet/login` disabled (returns 410 Gone)
 
 **API Architecture**
 - RESTful endpoints under `/api/*` prefix
@@ -58,11 +80,9 @@ Preferred communication style: Simple, everyday language.
 - JSON request/response handling with centralized error handling
 - Protected routes using `isWalletAuthenticated` middleware
 - **Wallet Auth Endpoints:**
-  - `POST /api/auth/wallet/login`: Process Web Wallet callback, create user session
-  - `GET /api/auth/me`: Get current authenticated user
-  - `POST /api/auth/logout`: Destroy wallet session
-- **Client Routes:**
-  - `/wallet-callback`: Landing page for Web Wallet redirect, processes auth and navigates to dashboard
+  - `POST /api/auth/wallet/sync`: Sync SDK-dApp wallet state with backend, create user session (used by useWalletAuth hook)
+  - `GET /api/auth/me`: Get current authenticated user (requires valid session)
+  - `POST /api/auth/logout`: Destroy wallet session (backend) + SDK-dApp logout (frontend)
 
 **File Processing**
 - Client-side SHA-256 hashing using Web Crypto API (no file uploads to server)

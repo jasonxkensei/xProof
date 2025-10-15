@@ -41,10 +41,20 @@ export function useWalletAuth() {
         });
         
         if (response.status === 401) {
-          // If backend session doesn't exist, create it
+          // If backend session doesn't exist, create it with Native Auth token
+          const nativeAuthToken = sessionStorage.getItem('nativeAuthToken');
+          
+          if (!nativeAuthToken) {
+            console.error('No native auth token found - authentication failed');
+            return null;
+          }
+
           const syncResponse = await fetch('/api/auth/wallet/sync', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${nativeAuthToken}`
+            },
             credentials: 'include',
             body: JSON.stringify({ walletAddress: address }),
           });

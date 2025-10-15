@@ -16,6 +16,7 @@
     "@multiversx/sdk-core": "^15.2.1",
     "@multiversx/sdk-dapp": "^5.2.8",
     "@multiversx/sdk-dapp-ui": "^0.0.35",
+    "@multiversx/sdk-native-auth-server": "^2.1.0",
     "@multiversx/sdk-network-providers": "^2.9.3",
     "@multiversx/sdk-wallet": "^4.6.0",
     "@multiversx/sdk-wallet-connect-provider": "^6.1.2",

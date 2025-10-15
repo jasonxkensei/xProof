@@ -31,49 +31,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Apply session middleware
   app.use(getSession());
   
-  // Simple Web Wallet redirect-based login
+  // DEPRECATED: Legacy endpoint - SECURITY VULNERABILITY
+  // This endpoint allows wallet impersonation (accepts any wallet address without signature)
+  // Use /api/auth/wallet/sync with Native Auth token instead
+  // Disabled for security - returns 410 Gone
   app.post("/api/auth/wallet/login", async (req, res) => {
-    try {
-      const { walletAddress } = req.body;
-
-      if (!walletAddress || !walletAddress.startsWith("erd1")) {
-        return res.status(400).json({ message: "Invalid MultiversX wallet address" });
-      }
-
-      // Check if user exists, create if not
-      let [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
-
-      if (!user) {
-        // Create new user with free tier
-        [user] = await db
-          .insert(users)
-          .values({
-            walletAddress,
-            subscriptionTier: "free",
-            subscriptionStatus: "active",
-            monthlyUsage: 0,
-            usageResetDate: new Date(),
-          })
-          .returning();
-      }
-
-      // Create wallet session
-      await createWalletSession(req, walletAddress);
-
-      res.json({ user, message: "Authentication successful" });
-    } catch (error: any) {
-      console.error("Error during wallet login:", error);
-      res.status(500).json({ message: "Failed to authenticate" });
-    }
+    res.status(410).json({ 
+      message: "This endpoint is deprecated due to security vulnerabilities. Use Native Auth with /api/auth/wallet/sync instead.",
+      error: "ENDPOINT_DEPRECATED" 
+    });
   });
 
   // Sync wallet state with backend (used by sdk-dapp integration)
+  // REQUIRES Native Auth token verification for security
   app.post("/api/auth/wallet/sync", async (req, res) => {
     try {
-      const { walletAddress } = req.body;
+      const { verifyNativeAuthToken, extractBearerToken } = await import("./nativeAuth");
+      
+      // Extract and verify Native Auth token
+      const token = extractBearerToken(req.headers.authorization);
+      
+      if (!token) {
+        return res.status(401).json({ 
+          message: "Missing Native Auth token. Authentication requires cryptographic proof." 
+        });
+      }
+
+      // Verify token cryptographically (signature + expiration + origin)
+      const decoded = await verifyNativeAuthToken(token);
+      const walletAddress = decoded.address;
 
       if (!walletAddress || !walletAddress.startsWith("erd1")) {
-        return res.status(400).json({ message: "Invalid MultiversX wallet address" });
+        return res.status(400).json({ message: "Invalid MultiversX wallet address in token" });
+      }
+
+      // Verify wallet address in request body matches token
+      if (req.body.walletAddress && req.body.walletAddress !== walletAddress) {
+        return res.status(403).json({ 
+          message: "Wallet address mismatch - token address does not match request" 
+        });
       }
 
       // Check if user exists, create if not
@@ -93,13 +89,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .returning();
       }
 
-      // Create wallet session
+      // Create wallet session (now cryptographically verified)
       await createWalletSession(req, walletAddress);
 
       res.json(user);
     } catch (error: any) {
       console.error("Error during wallet sync:", error);
-      res.status(500).json({ message: "Failed to sync wallet" });
+      res.status(401).json({ 
+        message: error.message || "Failed to verify authentication token" 
+      });
     }
   });
 
