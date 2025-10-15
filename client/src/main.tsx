@@ -1,4 +1,3 @@
-import "./polyfills"; // Must be first - fixes MultiversX SDK browser compatibility
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
