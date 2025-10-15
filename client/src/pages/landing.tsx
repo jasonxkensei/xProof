@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Shield, Zap, FileCheck, Lock, Globe, Award, Wallet } from "lucide-react";
-import { loginWithWallet } from "@/lib/walletAuth";
+import { WalletLoginModal } from "@/components/wallet-login-modal";
 
 export default function Landing() {
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
   const handleConnect = () => {
-    loginWithWallet();
+    setIsLoginModalOpen(true);
   };
 
   return (
@@ -372,6 +375,11 @@ export default function Landing() {
           </div>
         </div>
       </footer>
+
+      <WalletLoginModal 
+        open={isLoginModalOpen} 
+        onOpenChange={setIsLoginModalOpen} 
+      />
     </div>
   );
 }
