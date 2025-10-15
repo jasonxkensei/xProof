@@ -31,14 +31,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Apply session middleware
   app.use(getSession());
   
-  // DEPRECATED: Insecure webhook-based login (no proper signature verification)
-  // This endpoint is disabled for security reasons. Use /api/auth/verify instead.
+  // Simple Web Wallet redirect-based login
   app.post("/api/auth/wallet/login", async (req, res) => {
-    console.warn("⚠️  Attempt to use deprecated insecure auth endpoint");
-    return res.status(410).json({ 
-      message: "This authentication method is deprecated for security reasons. Please use the secure signature-based authentication via /api/auth/challenge and /api/auth/verify.",
-      error: "INSECURE_AUTH_METHOD_DISABLED"
-    });
+    try {
+      const { walletAddress } = req.body;
+
+      if (!walletAddress || !walletAddress.startsWith("erd1")) {
+        return res.status(400).json({ message: "Invalid MultiversX wallet address" });
+      }
+
+      // Check if user exists, create if not
+      let [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+
+      if (!user) {
+        // Create new user with free tier
+        [user] = await db
+          .insert(users)
+          .values({
+            walletAddress,
+            subscriptionTier: "free",
+            subscriptionStatus: "active",
+            monthlyUsage: 0,
+            usageResetDate: new Date(),
+          })
+          .returning();
+      }
+
+      // Create wallet session
+      await createWalletSession(req, walletAddress);
+
+      res.json({ user, message: "Authentication successful" });
+    } catch (error: any) {
+      console.error("Error during wallet login:", error);
+      res.status(500).json({ message: "Failed to authenticate" });
+    }
   });
 
   // Get current user endpoint (for checking authentication status)
