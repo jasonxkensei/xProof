@@ -7,7 +7,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
-import WalletCallback from "@/pages/wallet-callback";
 import Dashboard from "@/pages/dashboard";
 import Certify from "@/pages/certify";
 import ProofPage from "@/pages/proof";
@@ -33,7 +32,6 @@ function Router() {
       {!isAuthenticated ? (
         <>
           <Route path="/" component={Landing} />
-          <Route path="/wallet-callback" component={WalletCallback} />
         </>
       ) : (
         <>

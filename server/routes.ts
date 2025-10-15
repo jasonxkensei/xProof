@@ -120,68 +120,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Generate authentication challenge for wallet
-  app.post("/api/auth/challenge", (req, res) => {
-    try {
-      const { walletAddress } = req.body;
-
-      if (!walletAddress || !walletAddress.startsWith("erd1")) {
-        return res.status(400).json({ message: "Invalid MultiversX wallet address" });
-      }
-
-      const nonce = generateChallenge(walletAddress);
-      const message = `ProofMint Login\n\nSign this message to authenticate.\n\nNonce: ${nonce}`;
-      
-      res.json({ nonce, message });
-    } catch (error: any) {
-      console.error("Error generating challenge:", error);
-      res.status(500).json({ message: "Failed to generate challenge" });
-    }
-  });
-
-  // Verify wallet signature and create session
-  app.post("/api/auth/verify", async (req, res) => {
-    try {
-      const { walletAddress, signature, nonce } = req.body;
-
-      if (!walletAddress || !signature || !nonce) {
-        return res.status(400).json({ message: "Missing required fields" });
-      }
-
-      // Verify signature
-      const isValid = verifyWalletSignature(walletAddress, signature, nonce);
-      
-      if (!isValid) {
-        return res.status(401).json({ message: "Invalid signature" });
-      }
-
-      // Check if user exists, create if not
-      let [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
-
-      if (!user) {
-        // Create new user
-        [user] = await db
-          .insert(users)
-          .values({
-            walletAddress,
-            subscriptionTier: "free",
-            subscriptionStatus: "active",
-            monthlyUsage: 0,
-            usageResetDate: new Date(),
-          })
-          .returning();
-      }
-
-      // Create wallet session
-      await createWalletSession(req, walletAddress);
-
-      res.json({ user, message: "Authentication successful" });
-    } catch (error: any) {
-      console.error("Error verifying signature:", error);
-      res.status(500).json({ message: "Failed to verify signature" });
-    }
-  });
-
   // Logout endpoint
   app.post("/api/auth/logout", async (req, res) => {
     try {
@@ -190,23 +128,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error logging out:", error);
       res.status(500).json({ message: "Failed to log out" });
-    }
-  });
-
-  // Get current user endpoint
-  app.get('/api/auth/user', isWalletAuthenticated, async (req: any, res) => {
-    try {
-      const walletAddress = req.walletAddress;
-      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      res.json(user);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
     }
   });
 
