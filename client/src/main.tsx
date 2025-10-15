@@ -21,10 +21,9 @@ const config: InitAppType = {
       expirySeconds: 86400, // 24 hours
       tokenExpirationToastWarningSeconds: 300 // warn 5 min before expiration
     },
+    // WalletConnect Project ID must be directly in dAppConfig for sdk-dapp v5+
     ...(walletConnectProjectId && {
-      network: {
-        walletConnectV2ProjectId: walletConnectProjectId
-      }
+      walletConnectV2ProjectId: walletConnectProjectId
     })
   }
 };
