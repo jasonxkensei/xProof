@@ -6,17 +6,18 @@ import { EnvironmentsEnum } from '@multiversx/sdk-dapp/out/types/enums.types';
 import App from "./App";
 import "./index.css";
 
-// Configure MultiversX SDK for devnet with Native Auth
+// Configure MultiversX SDK for MAINNET with Native Auth
 const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 
 console.log('🔍 WalletConnect Project ID:', walletConnectProjectId ? 'Configured ✅' : 'Missing ❌');
+console.log('🌐 MultiversX Network: MAINNET');
 
 const config: InitAppType = {
   storage: {
     getStorageCallback: () => sessionStorage
   },
   dAppConfig: {
-    environment: EnvironmentsEnum.devnet,
+    environment: EnvironmentsEnum.mainnet, // MAINNET for real transactions
     nativeAuth: {
       expirySeconds: 86400, // 24 hours
       tokenExpirationToastWarningSeconds: 300 // warn 5 min before expiration
