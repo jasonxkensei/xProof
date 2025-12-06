@@ -108,9 +108,55 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
     
     const signedTx = signedTransactions[0];
     console.log("✅ Transaction signed successfully");
+    console.log("📋 Signed transaction type:", typeof signedTx);
+    console.log("📋 Signed transaction keys:", signedTx ? Object.keys(signedTx) : "null");
+    console.log("📋 Signed transaction:", JSON.stringify(signedTx, (key, value) => 
+      typeof value === 'bigint' ? value.toString() : 
+      value instanceof Uint8Array ? Buffer.from(value).toString('hex') : value
+    , 2));
     
-    // Convert to gateway format
-    const gatewayPayload = transactionToGatewayFormat(signedTx);
+    // The provider may return a plain object, not a Transaction instance
+    // Extract signature from the signed transaction object
+    const rawSig = (signedTx as any).signature;
+    let signature: string = "";
+    
+    if (rawSig) {
+      if (typeof rawSig === 'string') {
+        signature = rawSig;
+        console.log("📝 Signature (string):", signature.slice(0, 40) + "...");
+      } else if (rawSig instanceof Uint8Array || ArrayBuffer.isView(rawSig)) {
+        signature = Buffer.from(rawSig as Uint8Array).toString('hex');
+        console.log("📝 Signature (Uint8Array):", signature.slice(0, 40) + "...");
+      } else {
+        signature = String(rawSig);
+        console.log("📝 Signature (other):", signature.slice(0, 40) + "...");
+      }
+    }
+    
+    if (!signature) {
+      console.error("❌ No signature found in signed transaction");
+      throw new Error("Transaction was signed but no signature was returned");
+    }
+    
+    // Build gateway payload manually to handle different transaction formats
+    const dataField = transaction.data && transaction.data.length > 0 
+      ? Buffer.from(transaction.data).toString('base64') 
+      : undefined;
+    
+    const gatewayPayload = {
+      nonce: Number(transaction.nonce),
+      value: transaction.value.toString(),
+      receiver: transaction.receiver.toBech32(),
+      sender: transaction.sender.toBech32(),
+      gasPrice: Number(transaction.gasPrice),
+      gasLimit: Number(transaction.gasLimit),
+      data: dataField,
+      chainID: transaction.chainID,
+      version: transaction.version,
+      signature: signature,
+    };
+    
+    console.log("📤 Gateway payload:", JSON.stringify(gatewayPayload, null, 2));
     console.log("📤 Sending to gateway...");
     
     const response = await fetch(`${MAINNET_GATEWAY}/transaction/send`, {
