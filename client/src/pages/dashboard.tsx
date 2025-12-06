@@ -83,19 +83,19 @@ export default function Dashboard() {
             </div>
             <span className="text-xl font-bold tracking-tight">ProofMint</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <Badge variant={tierInfo.variant as any} className="hidden sm:inline-flex" data-testid="badge-subscription-tier">
               {tierInfo.label}
             </Badge>
             <Button asChild variant="ghost" size="sm" data-testid="button-settings">
               <Link href="/settings">
-                <SettingsIcon className="mr-2 h-4 w-4" />
-                Settings
+                <SettingsIcon className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Settings</span>
               </Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={() => logout()} data-testid="button-logout">
-              <LogOut className="mr-2 h-4 w-4" />
-              Disconnect
+              <LogOut className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Disconnect</span>
             </Button>
           </div>
         </div>

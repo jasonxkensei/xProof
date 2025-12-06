@@ -52,16 +52,30 @@ export async function createCertificationTransaction(params: TransactionParams):
 }
 
 export async function signAndSendTransaction(transaction: Transaction): Promise<MultiversXTransactionResult> {
-  const provider = getAccountProvider();
+  let provider = getAccountProvider();
   
   if (!provider) {
-    throw new Error("No wallet provider found. Please connect your wallet first.");
+    console.log("🔌 No provider found, creating new Extension provider...");
+    const { ProviderFactory } = await import('@multiversx/sdk-dapp/out/providers/ProviderFactory');
+    const { ProviderTypeEnum } = await import('@multiversx/sdk-dapp/out/providers/types/providerFactory.types');
+    
+    provider = await ProviderFactory.create({ 
+      type: ProviderTypeEnum.extension 
+    });
+    
+    if (!provider) {
+      throw new Error("No wallet provider found. Please connect your wallet first.");
+    }
   }
   
   try {
-    if (typeof provider.init === 'function' && !provider.isInitialized?.()) {
+    if (typeof provider.init === 'function') {
+      console.log("🔧 Initializing provider for transaction signing...");
       await provider.init();
     }
+    
+    console.log("✍️ Requesting signature from wallet extension...");
+    console.log("📝 Please check your wallet extension and complete any 2FA verification");
     
     const signedTransactions = await provider.signTransactions([transaction]);
     
