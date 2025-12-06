@@ -32,12 +32,11 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       console.log('✅ Wallet connected via SDK hooks:', address);
       console.log('💾 Saving wallet address to localStorage');
       localStorage.setItem('walletAddress', address);
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
-      onOpenChange(false);
-      setLoading(null);
-      setLoginAttempted(false);
+      
+      console.log('🔄 Reloading page to update app state...');
+      window.location.reload();
     }
-  }, [isLoggedIn, address, open, onOpenChange, loginAttempted]);
+  }, [isLoggedIn, address, open, loginAttempted]);
 
   useEffect(() => {
     if (!open) {
