@@ -36,7 +36,9 @@ export async function createCertificationTransaction(params: TransactionParams):
   
   const nonce = await getAccountNonce(userAddress);
   
-  const gasLimit = BigInt(50000 + dataPayload.length * 1500);
+  // MultiversX requires minimum 50000 gas + gas per byte of data
+  // Using higher base gas to ensure transaction succeeds
+  const gasLimit = BigInt(100000 + dataPayload.length * 1500);
   
   const transaction = new Transaction({
     nonce: BigInt(nonce),
