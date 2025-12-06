@@ -31,7 +31,8 @@ export async function createCertificationTransaction(params: TransactionParams):
   const { userAddress, fileHash, fileName, authorName } = params;
   
   const payloadText = `certify:${fileHash}|filename:${fileName}${authorName ? `|author:${authorName}` : ""}`;
-  const dataPayload = new Uint8Array(Buffer.from(payloadText));
+  const encoder = new TextEncoder();
+  const dataPayload = encoder.encode(payloadText);
   
   const nonce = await getAccountNonce(userAddress);
   
@@ -58,6 +59,10 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
   }
   
   try {
+    if (typeof provider.init === 'function' && !provider.isInitialized?.()) {
+      await provider.init();
+    }
+    
     const signedTransactions = await provider.signTransactions([transaction]);
     
     if (!signedTransactions || signedTransactions.length === 0) {

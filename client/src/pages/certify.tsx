@@ -8,9 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Shield, Upload, File, CheckCircle, Loader2, ArrowLeft, Download, ExternalLink } from "lucide-react";
+import { Shield, Upload, File, CheckCircle, Loader2, ArrowLeft, Download, ExternalLink, Wallet } from "lucide-react";
 import { hashFile } from "@/lib/hashFile";
 import { generateProofPDF } from "@/lib/generateProofPDF";
+import { sendCertificationTransaction } from "@/lib/multiversxTransaction";
 import { Link, useLocation } from "wouter";
 
 interface CertificationData {
@@ -36,6 +37,8 @@ export default function Certify() {
   const [hashProgress, setHashProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [certificationResult, setCertificationResult] = useState<CertificationData | null>(null);
+  const [isSigning, setIsSigning] = useState(false);
+  const [signatureStep, setSignatureStep] = useState<string>("");
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -128,7 +131,7 @@ export default function Certify() {
     setIsDragging(false);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!file || !fileHash || !authorName) {
@@ -140,13 +143,70 @@ export default function Certify() {
       return;
     }
 
-    certifyMutation.mutate({
-      fileName: file.name,
-      fileHash,
-      fileType: file.type || "unknown",
-      fileSize: file.size,
-      authorName,
-    });
+    if (!user?.walletAddress) {
+      toast({
+        title: "Wallet Required",
+        description: "Please connect your wallet to certify files",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSigning(true);
+    setSignatureStep("Creating transaction...");
+
+    try {
+      setSignatureStep("Waiting for wallet signature...");
+      
+      const txResult = await sendCertificationTransaction({
+        userAddress: user.walletAddress,
+        fileHash,
+        fileName: file.name,
+        authorName,
+      });
+
+      setSignatureStep("Saving certification...");
+
+      const response = await apiRequest("POST", "/api/certifications", {
+        fileName: file.name,
+        fileHash,
+        fileType: file.type || "unknown",
+        fileSize: file.size,
+        authorName,
+        transactionHash: txResult.txHash,
+        transactionUrl: txResult.explorerUrl,
+      });
+
+      const data = await response.json();
+
+      queryClient.invalidateQueries({ queryKey: ["/api/certifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      
+      setCertificationResult({
+        fileName: file.name,
+        fileHash,
+        fileType: file.type || "unknown",
+        fileSize: file.size,
+        authorName,
+        txHash: txResult.txHash,
+        explorerUrl: txResult.explorerUrl,
+      });
+
+      toast({
+        title: "Success!",
+        description: "Your file has been certified on the MultiversX Mainnet blockchain",
+      });
+    } catch (error: any) {
+      console.error("Certification error:", error);
+      toast({
+        title: "Certification Failed",
+        description: error.message || "An error occurred while certifying your file",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSigning(false);
+      setSignatureStep("");
+    }
   };
 
   const handleDownloadPDF = async () => {
@@ -430,18 +490,18 @@ export default function Certify() {
               </Button>
               <Button
                 type="submit"
-                disabled={!authorName || certifyMutation.isPending}
+                disabled={!authorName || isSigning}
                 data-testid="button-certify-submit"
               >
-                {certifyMutation.isPending ? (
+                {isSigning ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Certifying on Blockchain...
+                    {signatureStep || "Processing..."}
                   </>
                 ) : (
                   <>
-                    <Shield className="mr-2 h-4 w-4" />
-                    Certify on Blockchain
+                    <Wallet className="mr-2 h-4 w-4" />
+                    Sign & Certify on Mainnet
                   </>
                 )}
               </Button>

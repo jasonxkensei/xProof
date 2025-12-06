@@ -222,6 +222,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileSize: z.number().optional(),
         authorName: z.string().min(1),
         authorSignature: z.string().optional(),
+        transactionHash: z.string().optional(),
+        transactionUrl: z.string().optional(),
       });
 
       const data = schema.parse(req.body);
@@ -239,12 +241,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Record on blockchain with file metadata
-      const { transactionHash, transactionUrl } = await recordOnBlockchain(
-        data.fileHash,
-        data.fileName,
-        data.authorName
-      );
+      // Use transaction from frontend (Extension Wallet signature) or fallback to server mode
+      let transactionHash: string;
+      let transactionUrl: string;
+      
+      if (data.transactionHash && data.transactionUrl) {
+        // Transaction already signed and broadcast by user's Extension Wallet
+        transactionHash = data.transactionHash;
+        transactionUrl = data.transactionUrl;
+        console.log("✅ Using client-signed transaction:", transactionHash);
+      } else {
+        // Fallback to server-side blockchain recording (simulation mode)
+        const result = await recordOnBlockchain(
+          data.fileHash,
+          data.fileName,
+          data.authorName
+        );
+        transactionHash = result.transactionHash;
+        transactionUrl = result.transactionUrl;
+      }
 
       // Create certification
       const [certification] = await db
