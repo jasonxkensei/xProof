@@ -45,22 +45,33 @@ export function useWalletAuth() {
   const prevLoggedIn = useRef(false);
   
   // Get wallet state from sdk-dapp
-  const { address } = useGetAccount();
+  const { address: sdkAddress } = useGetAccount();
   const isLoggedInSdk = useGetIsLoggedIn();
+  
+  // Fallback: check sessionStorage for saved wallet address
+  const savedAddress = sessionStorage.getItem('walletAddress');
+  const address = sdkAddress || savedAddress || '';
+  const isLoggedIn = isLoggedInSdk || !!savedAddress;
 
-  console.log('👀 useWalletAuth state:', { isLoggedInSdk, address: address?.slice(0, 20), prevLoggedIn: prevLoggedIn.current });
+  console.log('👀 useWalletAuth state:', { 
+    isLoggedInSdk, 
+    sdkAddress: sdkAddress?.slice(0, 20), 
+    savedAddress: savedAddress?.slice(0, 20),
+    effectiveAddress: address?.slice(0, 20),
+    isLoggedIn
+  });
 
   useEffect(() => {
-    console.log('🔍 useWalletAuth useEffect triggered:', { isLoggedInSdk, address: address?.slice(0, 20), prevLoggedIn: prevLoggedIn.current });
-    if (isLoggedInSdk && address && !prevLoggedIn.current) {
+    if (isLoggedIn && address && !prevLoggedIn.current) {
       console.log('🔄 Wallet login detected, invalidating auth query...');
       prevLoggedIn.current = true;
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
-    } else if (!isLoggedInSdk && prevLoggedIn.current) {
+    } else if (!isLoggedIn && prevLoggedIn.current) {
       console.log('🔌 Wallet disconnected');
       prevLoggedIn.current = false;
+      sessionStorage.removeItem('walletAddress');
     }
-  }, [isLoggedInSdk, address]);
+  }, [isLoggedIn, address]);
 
   // Fetch user data from backend when wallet is connected
   const { data: user, isLoading, refetch } = useQuery<User | null>({
@@ -125,7 +136,7 @@ export function useWalletAuth() {
         return null;
       }
     },
-    enabled: isLoggedInSdk && !!address, // Only run query when wallet is connected
+    enabled: isLoggedIn && !!address, // Only run query when wallet is connected
     retry: 2,
     retryDelay: 1000,
     staleTime: 1000 * 60 * 5, // 5 minutes

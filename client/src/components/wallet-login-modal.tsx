@@ -29,7 +29,9 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
 
   useEffect(() => {
     if (isLoggedIn && address && open && loginAttempted) {
-      console.log('✅ Wallet connected:', address);
+      console.log('✅ Wallet connected via SDK hooks:', address);
+      console.log('💾 Saving wallet address to sessionStorage');
+      sessionStorage.setItem('walletAddress', address);
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       onOpenChange(false);
       setLoading(null);
@@ -59,12 +61,29 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       }
       
       console.log('🔐 Calling provider.login()...');
-      await provider.login();
-      console.log('✅ Login call completed');
+      const loginResult = await provider.login();
+      console.log('✅ Login call completed, result:', loginResult);
+      console.log('⏳ Waiting for SDK hooks to update...');
       
-      await new Promise(resolve => setTimeout(resolve, 500));
-      console.log('🔄 Refreshing page to sync wallet state...');
-      window.location.reload();
+      // Poll for address since SDK hooks may not update immediately
+      for (let i = 0; i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        // Check if useEffect has closed the modal
+        if (!document.querySelector('[data-testid="modal-wallet-login"]')) {
+          console.log('✅ Modal closed by useEffect, login successful');
+          return;
+        }
+      }
+      
+      // If we get here, the SDK didn't update - try to get address manually
+      console.log('⚠️ SDK hooks did not update, trying manual save...');
+      const manualAddress = (provider as any).account?.address || 
+                           sessionStorage.getItem('sdk-dapp-account-address') ||
+                           sessionStorage.getItem('loginData');
+      if (manualAddress) {
+        sessionStorage.setItem('walletAddress', manualAddress);
+        window.location.reload();
+      }
     } catch (error: any) {
       console.error('❌ Extension login error:', error);
       toast({
@@ -92,9 +111,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       
       await provider.login();
       console.log('✅ Web Wallet login call completed');
-      
-      await new Promise(resolve => setTimeout(resolve, 500));
-      window.location.reload();
+      console.log('⏳ Waiting for SDK hooks to update...');
     } catch (error: any) {
       console.error('❌ Web Wallet login error:', error);
       toast({
@@ -126,9 +143,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       
       await provider.login();
       console.log('✅ WalletConnect login completed');
-      
-      await new Promise(resolve => setTimeout(resolve, 500));
-      window.location.reload();
+      console.log('⏳ Waiting for SDK hooks to update...');
     } catch (error: any) {
       console.error('❌ WalletConnect error:', error);
       console.error('Error details:', {
