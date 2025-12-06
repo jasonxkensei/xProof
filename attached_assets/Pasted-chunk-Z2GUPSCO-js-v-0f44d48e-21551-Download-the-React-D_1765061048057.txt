@@ -1,0 +1,95 @@
+chunk-Z2GUPSCO.js?v=0f44d48e:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.debuglog" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.inspect" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+chunk-36ZC4ETK.js?v=0f44d48e:27112 Module "stream" has been externalized for browser compatibility. Cannot access "stream.Transform" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:27112
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.debuglog" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.inspect" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+main.tsx:12 🔍 WalletConnect Project ID: Configured ✅
+main.tsx:13 🌐 MultiversX Network: MAINNET
+main.tsx:32 📋 MultiversX Config: {
+  "storage": {},
+  "dAppConfig": {
+    "environment": "mainnet",
+    "nativeAuth": {
+      "expirySeconds": 86400,
+      "tokenExpirationToastWarningSeconds": 300
+    },
+    "walletConnectV2ProjectId": "b4c11c7335da6e3e77753a17d466e4e2"
+  }
+}
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:68 🔄 Wallet login detected, invalidating auth query...
+useWalletAuth.ts:86 📡 Checking auth status for wallet: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+chunk-YOJKAXE7.js?v=0f44d48e:11676 Websocket connected.
+useWalletAuth.ts:134 ✅ User authenticated from existing session
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:68 🔄 Wallet login detected, invalidating auth query...
+useWalletAuth.ts:86 📡 Checking auth status for wallet: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:134 ✅ User authenticated from existing session
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:68 🔄 Wallet login detected, invalidating auth query...
+useWalletAuth.ts:86 📡 Checking auth status for wallet: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:134 ✅ User authenticated from existing session
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+multiversxTransaction.ts:157 🔐 Creating certification transaction for Mainnet...
+multiversxTransaction.ts:158 📄 File hash: 28ee6c1ba450b25ba902b86732c13cafd7b6c2d500ce9865c9c627a2478c0806
+multiversxTransaction.ts:159 👤 User: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+multiversxTransaction.ts:162 📝 Transaction created, requesting signature from wallet...
+multiversxTransaction.ts:96 🔧 Initializing provider for transaction signing...
+multiversxTransaction.ts:100 ✍️ Requesting signature from wallet extension...
+multiversxTransaction.ts:101 📝 Please check your wallet extension and complete any 2FA verification
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+multiversxTransaction.ts:110 ✅ Transaction signed successfully
+multiversxTransaction.ts:114 📤 Sending to gateway...
+gateway.multiversx.com/transaction/send:1  Failed to load resource: the server responded with a status of 400 (Bad Request)
+multiversxTransaction.ts:125 Gateway response: {"data":null,"error":"transaction generation failed: ed25519: invalid signature","code":"internal_issue"}
+multiversxTransaction.ts:148 Transaction error: Error: Gateway error: Bad Request - {"data":null,"error":"transaction generation failed: ed25519: invalid signature","code":"internal_issue"}
+    at signAndSendTransaction (multiversxTransaction.ts:128:13)
+    at async sendCertificationTransaction (multiversxTransaction.ts:164:18)
+    at async handleSubmit (certify.tsx:164:24)
+signAndSendTransaction @ multiversxTransaction.ts:148
+certify.tsx:203 Certification error: Error: Gateway error: Bad Request - {"data":null,"error":"transaction generation failed: ed25519: invalid signature","code":"internal_issue"}
+    at signAndSendTransaction (multiversxTransaction.ts:128:13)
+    at async sendCertificationTransaction (multiversxTransaction.ts:164:18)
+    at async handleSubmit (certify.tsx:164:24)
+handleSubmit @ certify.tsx:203
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
