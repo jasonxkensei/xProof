@@ -1,0 +1,35 @@
+
+﻿
+chunk-Z2GUPSCO.js?v=0f44d48e:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.debuglog" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.inspect" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+chunk-36ZC4ETK.js?v=0f44d48e:27112 Module "stream" has been externalized for browser compatibility. Cannot access "stream.Transform" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.debuglog" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.inspect" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+main.tsx:12 🔍 WalletConnect Project ID: Configured ✅
+main.tsx:13 🌐 MultiversX Network: MAINNET
+main.tsx:32 📋 MultiversX Config: {
+  "storage": {},
+  "dAppConfig": {
+    "environment": "mainnet",
+    "nativeAuth": {
+      "expirySeconds": 86400,
+      "tokenExpirationToastWarningSeconds": 300
+    },
+    "walletConnectV2ProjectId": "b4c11c7335da6e3e77753a17d466e4e2"
+  }
+}
+useWalletAuth.ts:56 👀 useWalletAuth state: 
+Object
+stripe.js:1 Uncaught (in promise) IntegrationError: You should not use your secret key with Stripe.js.
+          Please pass a publishable key instead.
+wallet-login-modal.tsx:53 🔌 Creating Extension provider...
+wallet-login-modal.tsx:59 🔧 Initializing provider...
+wallet-login-modal.tsx:63 🔐 Calling provider.login()...
+wallet-login-modal.tsx:32 ✅ Wallet connected via SDK hooks: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+wallet-login-modal.tsx:33 💾 Saving wallet address to sessionStorage
+wallet-login-modal.tsx:65 ✅ Login call completed, result: 
+Object
+wallet-login-modal.tsx:66 ⏳ Waiting for SDK hooks to update...
+chunk-YOJKAXE7.js?v=0f44d48e:11676 Websocket connected.
+wallet-login-modal.tsx:73 ✅ Modal closed by useEffect, login successful

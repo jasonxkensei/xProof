@@ -1,0 +1,176 @@
+chunk-Z2GUPSCO.js?v=0f44d48e:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.debuglog" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+node_modules/readable-stream/lib/_stream_readable.js @ chunk-36ZC4ETK.js?v=0f44d48e:9473
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/readable-stream/readable-browser.js @ chunk-36ZC4ETK.js?v=0f44d48e:10389
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/keccak/lib/api/keccak.js @ chunk-36ZC4ETK.js?v=0f44d48e:10404
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/keccak/lib/api/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:10529
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/keccak/js.js @ chunk-36ZC4ETK.js?v=0f44d48e:10834
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/core/address.js @ chunk-36ZC4ETK.js?v=0f44d48e:10876
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/typesystem/address.js @ chunk-36ZC4ETK.js?v=0f44d48e:11138
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/typesystem/typeMapper.js @ chunk-36ZC4ETK.js?v=0f44d48e:12435
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/typesystem/abi.js @ chunk-36ZC4ETK.js?v=0f44d48e:12653
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/typesystem/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:13056
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/codec/binary.js @ chunk-36ZC4ETK.js?v=0f44d48e:14227
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/codec/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:14396
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/argSerializer.js @ chunk-36ZC4ETK.js?v=0f44d48e:14408
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:15082
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:60522
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+(anonymous) @ chunk-YBH4NMHK.js?v=0f44d48e:418
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.inspect" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+node_modules/readable-stream/lib/internal/streams/buffer_list.js @ chunk-36ZC4ETK.js?v=0f44d48e:7846
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/readable-stream/lib/_stream_readable.js @ chunk-36ZC4ETK.js?v=0f44d48e:9479
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/readable-stream/readable-browser.js @ chunk-36ZC4ETK.js?v=0f44d48e:10389
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/keccak/lib/api/keccak.js @ chunk-36ZC4ETK.js?v=0f44d48e:10404
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/keccak/lib/api/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:10529
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/keccak/js.js @ chunk-36ZC4ETK.js?v=0f44d48e:10834
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/core/address.js @ chunk-36ZC4ETK.js?v=0f44d48e:10876
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/typesystem/address.js @ chunk-36ZC4ETK.js?v=0f44d48e:11138
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/typesystem/typeMapper.js @ chunk-36ZC4ETK.js?v=0f44d48e:12435
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/typesystem/abi.js @ chunk-36ZC4ETK.js?v=0f44d48e:12653
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/typesystem/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:13056
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/codec/binary.js @ chunk-36ZC4ETK.js?v=0f44d48e:14227
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/codec/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:14396
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/argSerializer.js @ chunk-36ZC4ETK.js?v=0f44d48e:14408
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/abi/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:15082
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:60522
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+(anonymous) @ chunk-YBH4NMHK.js?v=0f44d48e:418
+chunk-36ZC4ETK.js?v=0f44d48e:27112 Module "stream" has been externalized for browser compatibility. Cannot access "stream.Transform" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:27112
+node_modules/cipher-base/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:28553
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/create-hmac/legacy.js @ chunk-36ZC4ETK.js?v=0f44d48e:28649
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/create-hmac/browser.js @ chunk-36ZC4ETK.js?v=0f44d48e:32195
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/ed25519-hd-key/dist/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:32262
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/wallet/mnemonic.js @ chunk-36ZC4ETK.js?v=0f44d48e:53436
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/wallet/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:54027
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/accounts/account.js @ chunk-36ZC4ETK.js?v=0f44d48e:54071
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/accounts/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:54213
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:60524
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+(anonymous) @ chunk-YBH4NMHK.js?v=0f44d48e:418
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.debuglog" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+node_modules/hash-base/node_modules/readable-stream/lib/_stream_readable.js @ chunk-36ZC4ETK.js?v=0f44d48e:29877
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/hash-base/node_modules/readable-stream/readable-browser.js @ chunk-36ZC4ETK.js?v=0f44d48e:30658
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/hash-base/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:30674
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/md5.js/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:30764
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/create-hash/md5.js @ chunk-36ZC4ETK.js?v=0f44d48e:30891
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/create-hmac/browser.js @ chunk-36ZC4ETK.js?v=0f44d48e:32198
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/ed25519-hd-key/dist/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:32262
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/wallet/mnemonic.js @ chunk-36ZC4ETK.js?v=0f44d48e:53436
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/wallet/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:54027
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/accounts/account.js @ chunk-36ZC4ETK.js?v=0f44d48e:54071
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/accounts/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:54213
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:60524
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+(anonymous) @ chunk-YBH4NMHK.js?v=0f44d48e:418
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.inspect" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+node_modules/hash-base/node_modules/readable-stream/lib/internal/streams/BufferList.js @ chunk-36ZC4ETK.js?v=0f44d48e:28960
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/hash-base/node_modules/readable-stream/lib/_stream_readable.js @ chunk-36ZC4ETK.js?v=0f44d48e:29883
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/hash-base/node_modules/readable-stream/readable-browser.js @ chunk-36ZC4ETK.js?v=0f44d48e:30658
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/hash-base/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:30674
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/md5.js/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:30764
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/create-hash/md5.js @ chunk-36ZC4ETK.js?v=0f44d48e:30891
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/create-hmac/browser.js @ chunk-36ZC4ETK.js?v=0f44d48e:32198
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/ed25519-hd-key/dist/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:32262
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/wallet/mnemonic.js @ chunk-36ZC4ETK.js?v=0f44d48e:53436
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/wallet/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:54027
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/accounts/account.js @ chunk-36ZC4ETK.js?v=0f44d48e:54071
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/accounts/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:54213
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+node_modules/@multiversx/sdk-core/out/index.js @ chunk-36ZC4ETK.js?v=0f44d48e:60524
+__require2 @ chunk-ONY6HBPH.js?v=0f44d48e:26
+(anonymous) @ chunk-YBH4NMHK.js?v=0f44d48e:418
+main.tsx:12 🔍 WalletConnect Project ID: Configured ✅
+main.tsx:13 🌐 MultiversX Network: MAINNET
+main.tsx:32 📋 MultiversX Config: {
+  "storage": {},
+  "dAppConfig": {
+    "environment": "mainnet",
+    "nativeAuth": {
+      "expirySeconds": 86400,
+      "tokenExpirationToastWarningSeconds": 300
+    },
+    "walletConnectV2ProjectId": "b4c11c7335da6e3e77753a17d466e4e2"
+  }
+}
+useWalletAuth.ts:56 👀 useWalletAuth state: Object
+stripe.js:1 Uncaught (in promise) IntegrationError: You should not use your secret key with Stripe.js.
+          Please pass a publishable key instead.
+l @ stripe.js:1
+e @ stripe.js:1
+ig @ stripe.js:1
+initStripe2 @ @stripe_stripe-js.js?v=0f44d48e:121
+(anonymous) @ @stripe_stripe-js.js?v=0f44d48e:151
+wallet-login-modal.tsx:53 🔌 Creating Extension provider...
+wallet-login-modal.tsx:59 🔧 Initializing provider...
+wallet-login-modal.tsx:63 🔐 Calling provider.login()...
+wallet-login-modal.tsx:32 ✅ Wallet connected via SDK hooks: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+wallet-login-modal.tsx:33 💾 Saving wallet address to sessionStorage
+wallet-login-modal.tsx:65 ✅ Login call completed, result: Object
+wallet-login-modal.tsx:66 ⏳ Waiting for SDK hooks to update...
+chunk-YOJKAXE7.js?v=0f44d48e:11676 Websocket connected.
+wallet-login-modal.tsx:73 ✅ Modal closed by useEffect, login successful

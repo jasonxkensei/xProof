@@ -9,10 +9,14 @@ import { Shield, ArrowLeft, Loader2, CreditCard, Coins } from "lucide-react";
 import { Link } from "wouter";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-  throw new Error('Missing required Stripe key: VITE_STRIPE_PUBLIC_KEY');
+const stripePublicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
+const isValidPublicKey = stripePublicKey && stripePublicKey.startsWith('pk_');
+
+if (!isValidPublicKey) {
+  console.error('⚠️ Stripe: Invalid or missing public key. Key must start with "pk_". Current key starts with:', stripePublicKey?.substring(0, 3));
 }
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+
+const stripePromise = isValidPublicKey ? loadStripe(stripePublicKey) : null;
 
 const SubscribeForm = ({ plan }: { plan: string }) => {
   const stripe = useStripe();
