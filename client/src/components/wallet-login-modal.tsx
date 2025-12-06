@@ -22,21 +22,31 @@ interface WalletLoginModalProps {
 
 export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) {
   const [loading, setLoading] = useState<string | null>(null);
+  const [loginAttempted, setLoginAttempted] = useState(false);
   const { toast } = useToast();
   const isLoggedIn = useGetIsLoggedIn();
   const { address } = useGetAccount();
 
   useEffect(() => {
-    if (isLoggedIn && address && open) {
+    if (isLoggedIn && address && open && loginAttempted) {
       console.log('✅ Wallet connected:', address);
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       onOpenChange(false);
       setLoading(null);
+      setLoginAttempted(false);
     }
-  }, [isLoggedIn, address, open, onOpenChange]);
+  }, [isLoggedIn, address, open, onOpenChange, loginAttempted]);
+
+  useEffect(() => {
+    if (!open) {
+      setLoginAttempted(false);
+      setLoading(null);
+    }
+  }, [open]);
 
   const handleExtensionLogin = async () => {
     setLoading('extension');
+    setLoginAttempted(true);
     try {
       console.log('🔌 Creating Extension provider...');
       const provider = await ProviderFactory.create({ 
@@ -59,11 +69,13 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         variant: "destructive"
       });
       setLoading(null);
+      setLoginAttempted(false);
     }
   };
 
   const handleWebWalletLogin = async () => {
     setLoading('webwallet');
+    setLoginAttempted(true);
     try {
       console.log('🌐 Creating Web Wallet provider...');
       const provider = await ProviderFactory.create({ 
@@ -84,11 +96,13 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         variant: "destructive"
       });
       setLoading(null);
+      setLoginAttempted(false);
     }
   };
 
   const handleWalletConnectLogin = async () => {
     setLoading('walletconnect');
+    setLoginAttempted(true);
     try {
       console.log('🚀 Starting WalletConnect login...');
       console.log('📱 WalletConnect Project ID available:', !!import.meta.env.VITE_WALLETCONNECT_PROJECT_ID);
@@ -119,6 +133,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         variant: "destructive"
       });
       setLoading(null);
+      setLoginAttempted(false);
     }
   };
 
