@@ -1,0 +1,38 @@
+chunk-Z2GUPSCO.js?v=0f44d48e:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.debuglog" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.inspect" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+chunk-36ZC4ETK.js?v=0f44d48e:27112 Module "stream" has been externalized for browser compatibility. Cannot access "stream.Transform" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:27112
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.debuglog" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+chunk-36ZC4ETK.js?v=0f44d48e:7768 Module "util" has been externalized for browser compatibility. Cannot access "util.inspect" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ chunk-36ZC4ETK.js?v=0f44d48e:7768
+main.tsx:12 🔍 WalletConnect Project ID: Configured ✅
+main.tsx:13 🌐 MultiversX Network: MAINNET
+main.tsx:32 📋 MultiversX Config: {
+  "storage": {},
+  "dAppConfig": {
+    "environment": "mainnet",
+    "nativeAuth": {
+      "expirySeconds": 86400,
+      "tokenExpirationToastWarningSeconds": 300
+    },
+    "walletConnectV2ProjectId": "b4c11c7335da6e3e77753a17d466e4e2"
+  }
+}
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object
+useWalletAuth.ts:68 🔄 Wallet login detected, invalidating auth query...
+useWalletAuth.ts:86 📡 Checking auth status for wallet: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+/api/auth/me:1  Failed to load resource: the server responded with a status of 401 (Unauthorized)
+useWalletAuth.ts:94 🔐 No backend session, syncing with Native Auth...
+useWalletAuth.ts:97 🔑 Native Auth Token found: false
+useWalletAuth.ts:100 No native auth token found - will retry...
+queryFn @ useWalletAuth.ts:100
+chunk-YOJKAXE7.js?v=0f44d48e:11676 Websocket connected.
+useWalletAuth.ts:104 Still no token after retry
+queryFn @ useWalletAuth.ts:104
+useWalletAuth.ts:56 🔍 localStorage walletAddress: erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
+useWalletAuth.ts:58 👀 useWalletAuth state: Object

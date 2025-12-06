@@ -32,21 +32,45 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       if (isLoggedIn && address && open && loginAttempted) {
         console.log('✅ Wallet connected via SDK hooks:', address);
         
-        // First, get the Native Auth token from sessionStorage
+        // Wait a bit for SDK to store the token
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Log all sessionStorage keys for debugging
+        console.log('📦 SessionStorage keys:', Object.keys(sessionStorage));
+        
+        // Search for Native Auth token in sessionStorage
         const keys = Object.keys(sessionStorage);
         let nativeAuthToken: string | null = null;
+        
         for (const key of keys) {
-          if (key.includes('nativeAuth') || key.includes('token')) {
-            const value = sessionStorage.getItem(key);
-            if (value && value.length > 50) {
+          const value = sessionStorage.getItem(key);
+          // Look for long tokens that could be Native Auth
+          if (value && value.length > 100) {
+            console.log(`🔍 Found potential token at key "${key}" (length: ${value.length})`);
+            // Native Auth tokens are typically base64-encoded and start with specific patterns
+            if (value.includes('.') || key.toLowerCase().includes('auth') || key.toLowerCase().includes('token')) {
               nativeAuthToken = value;
+              console.log(`✅ Selected token from key: ${key}`);
               break;
             }
           }
         }
         
-        if (!nativeAuthToken) {
-          nativeAuthToken = sessionStorage.getItem('nativeAuthToken') || sessionStorage.getItem('loginToken');
+        // Also check for loginInfo which might contain the token
+        const loginInfo = sessionStorage.getItem('loginInfo');
+        if (loginInfo && !nativeAuthToken) {
+          try {
+            const parsed = JSON.parse(loginInfo);
+            if (parsed.nativeAuthToken) {
+              nativeAuthToken = parsed.nativeAuthToken;
+              console.log('✅ Found token in loginInfo');
+            }
+          } catch (e) {
+            // Not JSON, might be the token itself
+            if (loginInfo.length > 100) {
+              nativeAuthToken = loginInfo;
+            }
+          }
         }
         
         console.log('🔑 Native Auth Token found:', !!nativeAuthToken);
@@ -78,8 +102,27 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           }
         }
         
-        // Fallback: just save to localStorage and reload
-        console.log('⚠️ No token, saving address and reloading anyway...');
+        // Fallback: create a simple session without Native Auth (less secure but functional)
+        console.log('⚠️ No Native Auth token found, trying simple wallet sync...');
+        try {
+          const simpleSync = await fetch('/api/auth/wallet/simple-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ walletAddress: address }),
+          });
+          
+          if (simpleSync.ok) {
+            console.log('✅ Simple sync successful');
+            localStorage.setItem('walletAddress', address);
+            window.location.reload();
+            return;
+          }
+        } catch (error) {
+          console.log('Simple sync not available');
+        }
+        
+        // Last resort: just save to localStorage and reload
         localStorage.setItem('walletAddress', address);
         window.location.reload();
       }
