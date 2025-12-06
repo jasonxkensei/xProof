@@ -28,14 +28,64 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   const { address } = useGetAccount();
 
   useEffect(() => {
-    if (isLoggedIn && address && open && loginAttempted) {
-      console.log('✅ Wallet connected via SDK hooks:', address);
-      console.log('💾 Saving wallet address to localStorage');
-      localStorage.setItem('walletAddress', address);
-      
-      console.log('🔄 Reloading page to update app state...');
-      window.location.reload();
-    }
+    const syncAndReload = async () => {
+      if (isLoggedIn && address && open && loginAttempted) {
+        console.log('✅ Wallet connected via SDK hooks:', address);
+        
+        // First, get the Native Auth token from sessionStorage
+        const keys = Object.keys(sessionStorage);
+        let nativeAuthToken: string | null = null;
+        for (const key of keys) {
+          if (key.includes('nativeAuth') || key.includes('token')) {
+            const value = sessionStorage.getItem(key);
+            if (value && value.length > 50) {
+              nativeAuthToken = value;
+              break;
+            }
+          }
+        }
+        
+        if (!nativeAuthToken) {
+          nativeAuthToken = sessionStorage.getItem('nativeAuthToken') || sessionStorage.getItem('loginToken');
+        }
+        
+        console.log('🔑 Native Auth Token found:', !!nativeAuthToken);
+        
+        if (nativeAuthToken) {
+          try {
+            console.log('📡 Syncing with backend...');
+            const syncResponse = await fetch('/api/auth/wallet/sync', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${nativeAuthToken}`
+              },
+              credentials: 'include',
+              body: JSON.stringify({ walletAddress: address }),
+            });
+            
+            if (syncResponse.ok) {
+              console.log('✅ Backend session created successfully');
+              localStorage.setItem('walletAddress', address);
+              console.log('🔄 Reloading page to update app state...');
+              window.location.reload();
+              return;
+            } else {
+              console.error('❌ Sync failed:', await syncResponse.text());
+            }
+          } catch (error) {
+            console.error('❌ Error syncing with backend:', error);
+          }
+        }
+        
+        // Fallback: just save to localStorage and reload
+        console.log('⚠️ No token, saving address and reloading anyway...');
+        localStorage.setItem('walletAddress', address);
+        window.location.reload();
+      }
+    };
+    
+    syncAndReload();
   }, [isLoggedIn, address, open, loginAttempted]);
 
   useEffect(() => {

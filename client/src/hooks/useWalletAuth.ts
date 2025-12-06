@@ -79,7 +79,7 @@ export function useWalletAuth() {
   const { data: user, isLoading, refetch } = useQuery<User | null>({
     queryKey: ['/api/auth/me'],
     queryFn: async () => {
-      if (!address || !isLoggedInSdk) {
+      if (!address) {
         return null;
       }
 
@@ -172,8 +172,8 @@ export function useWalletAuth() {
   return {
     user,
     walletAddress: address,
-    isAuthenticated: isLoggedInSdk && !!user,
-    isLoading: isLoading || (isLoggedInSdk && !user), // Loading if sdk says logged in but no user data yet
+    isAuthenticated: isLoggedIn && !!user,
+    isLoading: isLoading && isLoggedIn, // Loading only when fetching user data
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
   };
