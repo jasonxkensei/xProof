@@ -61,6 +61,10 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       console.log('🔐 Calling provider.login()...');
       await provider.login();
       console.log('✅ Login call completed');
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      console.log('🔄 Refreshing page to sync wallet state...');
+      window.location.reload();
     } catch (error: any) {
       console.error('❌ Extension login error:', error);
       toast({
@@ -88,6 +92,9 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       
       await provider.login();
       console.log('✅ Web Wallet login call completed');
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      window.location.reload();
     } catch (error: any) {
       console.error('❌ Web Wallet login error:', error);
       toast({
@@ -119,6 +126,9 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       
       await provider.login();
       console.log('✅ WalletConnect login completed');
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      window.location.reload();
     } catch (error: any) {
       console.error('❌ WalletConnect error:', error);
       console.error('Error details:', {

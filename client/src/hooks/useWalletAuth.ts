@@ -48,12 +48,16 @@ export function useWalletAuth() {
   const { address } = useGetAccount();
   const isLoggedInSdk = useGetIsLoggedIn();
 
+  console.log('👀 useWalletAuth state:', { isLoggedInSdk, address: address?.slice(0, 20), prevLoggedIn: prevLoggedIn.current });
+
   useEffect(() => {
+    console.log('🔍 useWalletAuth useEffect triggered:', { isLoggedInSdk, address: address?.slice(0, 20), prevLoggedIn: prevLoggedIn.current });
     if (isLoggedInSdk && address && !prevLoggedIn.current) {
       console.log('🔄 Wallet login detected, invalidating auth query...');
       prevLoggedIn.current = true;
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
     } else if (!isLoggedInSdk && prevLoggedIn.current) {
+      console.log('🔌 Wallet disconnected');
       prevLoggedIn.current = false;
     }
   }, [isLoggedInSdk, address]);
