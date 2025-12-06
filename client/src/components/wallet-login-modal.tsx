@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,8 +9,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { ProviderFactory } from '@multiversx/sdk-dapp/out/providers/ProviderFactory';
 import { ProviderTypeEnum } from '@multiversx/sdk-dapp/out/providers/types/providerFactory.types';
+import { useGetIsLoggedIn } from '@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn';
+import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
 import { Shield, Wallet, QrCode, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
 
 interface WalletLoginModalProps {
   open: boolean;
@@ -20,22 +23,41 @@ interface WalletLoginModalProps {
 export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const { toast } = useToast();
+  const isLoggedIn = useGetIsLoggedIn();
+  const { address } = useGetAccount();
+
+  useEffect(() => {
+    if (isLoggedIn && address && open) {
+      console.log('✅ Wallet connected:', address);
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+      onOpenChange(false);
+      setLoading(null);
+    }
+  }, [isLoggedIn, address, open, onOpenChange]);
 
   const handleExtensionLogin = async () => {
     setLoading('extension');
     try {
+      console.log('🔌 Creating Extension provider...');
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.extension 
       });
+      
+      if (typeof provider.init === 'function') {
+        console.log('🔧 Initializing provider...');
+        await provider.init();
+      }
+      
+      console.log('🔐 Calling provider.login()...');
       await provider.login();
-      onOpenChange(false);
+      console.log('✅ Login call completed');
     } catch (error: any) {
+      console.error('❌ Extension login error:', error);
       toast({
         title: "Extension Login Failed",
         description: error.message || "Please install MultiversX DeFi Wallet Extension",
         variant: "destructive"
       });
-    } finally {
       setLoading(null);
     }
   };
@@ -43,18 +65,24 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   const handleWebWalletLogin = async () => {
     setLoading('webwallet');
     try {
+      console.log('🌐 Creating Web Wallet provider...');
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.crossWindow 
       });
+      
+      if (typeof provider.init === 'function') {
+        await provider.init();
+      }
+      
       await provider.login();
-      onOpenChange(false);
+      console.log('✅ Web Wallet login call completed');
     } catch (error: any) {
+      console.error('❌ Web Wallet login error:', error);
       toast({
         title: "Web Wallet Login Failed",
         description: error.message || "Failed to connect to Web Wallet",
         variant: "destructive"
       });
-    } finally {
       setLoading(null);
     }
   };
@@ -71,9 +99,12 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       
       console.log('✅ WalletConnect provider created successfully');
       
+      if (typeof provider.init === 'function') {
+        await provider.init();
+      }
+      
       await provider.login();
       console.log('✅ WalletConnect login completed');
-      onOpenChange(false);
     } catch (error: any) {
       console.error('❌ WalletConnect error:', error);
       console.error('Error details:', {
@@ -87,7 +118,6 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         description: error.message || "Failed to connect via WalletConnect",
         variant: "destructive"
       });
-    } finally {
       setLoading(null);
     }
   };

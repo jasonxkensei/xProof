@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { queryClient } from '@/lib/queryClient';
 import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
@@ -20,20 +21,52 @@ interface User {
   createdAt?: Date | null;
 }
 
+function getNativeAuthTokenFromStorage(): string | null {
+  const keys = Object.keys(sessionStorage);
+  for (const key of keys) {
+    if (key.includes('nativeAuth') || key.includes('token')) {
+      const value = sessionStorage.getItem(key);
+      if (value && value.length > 50) {
+        return value;
+      }
+    }
+  }
+  const directToken = sessionStorage.getItem('nativeAuthToken');
+  if (directToken) return directToken;
+  
+  const loginToken = sessionStorage.getItem('loginToken');
+  if (loginToken) return loginToken;
+  
+  return null;
+}
+
 export function useWalletAuth() {
   const [, navigate] = useLocation();
+  const prevLoggedIn = useRef(false);
   
   // Get wallet state from sdk-dapp
   const { address } = useGetAccount();
   const isLoggedInSdk = useGetIsLoggedIn();
 
+  useEffect(() => {
+    if (isLoggedInSdk && address && !prevLoggedIn.current) {
+      console.log('🔄 Wallet login detected, invalidating auth query...');
+      prevLoggedIn.current = true;
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+    } else if (!isLoggedInSdk && prevLoggedIn.current) {
+      prevLoggedIn.current = false;
+    }
+  }, [isLoggedInSdk, address]);
+
   // Fetch user data from backend when wallet is connected
-  const { data: user, isLoading } = useQuery<User | null>({
+  const { data: user, isLoading, refetch } = useQuery<User | null>({
     queryKey: ['/api/auth/me'],
     queryFn: async () => {
       if (!address || !isLoggedInSdk) {
         return null;
       }
+
+      console.log('📡 Checking auth status for wallet:', address);
 
       try {
         const response = await fetch('/api/auth/me', {
@@ -41,27 +74,39 @@ export function useWalletAuth() {
         });
         
         if (response.status === 401) {
-          // If backend session doesn't exist, create it with Native Auth token
-          const nativeAuthToken = sessionStorage.getItem('nativeAuthToken');
+          console.log('🔐 No backend session, syncing with Native Auth...');
+          const nativeAuthToken = getNativeAuthTokenFromStorage();
+          
+          console.log('🔑 Native Auth Token found:', !!nativeAuthToken);
           
           if (!nativeAuthToken) {
-            console.error('No native auth token found - authentication failed');
-            return null;
+            console.error('No native auth token found - will retry...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const retryToken = getNativeAuthTokenFromStorage();
+            if (!retryToken) {
+              console.error('Still no token after retry');
+              return null;
+            }
           }
+
+          const tokenToUse = nativeAuthToken || getNativeAuthTokenFromStorage();
+          if (!tokenToUse) return null;
 
           const syncResponse = await fetch('/api/auth/wallet/sync', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${nativeAuthToken}`
+              'Authorization': `Bearer ${tokenToUse}`
             },
             credentials: 'include',
             body: JSON.stringify({ walletAddress: address }),
           });
 
           if (syncResponse.ok) {
+            console.log('✅ Backend session created successfully');
             return syncResponse.json();
           }
+          console.error('❌ Failed to sync with backend:', await syncResponse.text());
           return null;
         }
         
@@ -69,6 +114,7 @@ export function useWalletAuth() {
           throw new Error('Failed to fetch user');
         }
         
+        console.log('✅ User authenticated from existing session');
         return response.json();
       } catch (error) {
         console.error('Error checking auth status:', error);
@@ -76,7 +122,8 @@ export function useWalletAuth() {
       }
     },
     enabled: isLoggedInSdk && !!address, // Only run query when wallet is connected
-    retry: false,
+    retry: 2,
+    retryDelay: 1000,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
