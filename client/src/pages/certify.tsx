@@ -8,11 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Shield, Upload, File, CheckCircle, Loader2, ArrowLeft, Download, ExternalLink, Wallet } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Shield, Upload, File, CheckCircle, Loader2, ArrowLeft, Download, ExternalLink, Wallet, AlertTriangle } from "lucide-react";
 import { hashFile } from "@/lib/hashFile";
 import { generateProofPDF } from "@/lib/generateProofPDF";
 import { sendCertificationTransaction } from "@/lib/multiversxTransaction";
 import { Link, useLocation } from "wouter";
+import { WalletLoginModal } from "@/components/wallet-login-modal";
 
 interface CertificationData {
   fileName: string;
@@ -26,7 +28,7 @@ interface CertificationData {
 
 export default function Certify() {
   const { toast } = useToast();
-  const { user, isAuthenticated } = useWalletAuth();
+  const { user, isAuthenticated, isWalletConnected } = useWalletAuth();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
@@ -39,6 +41,7 @@ export default function Certify() {
   const [certificationResult, setCertificationResult] = useState<CertificationData | null>(null);
   const [isSigning, setIsSigning] = useState(false);
   const [signatureStep, setSignatureStep] = useState<string>("");
+  const [showWalletModal, setShowWalletModal] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -364,6 +367,33 @@ export default function Certify() {
           </p>
         </div>
 
+        {!isWalletConnected && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Wallet Disconnected</AlertTitle>
+            <AlertDescription className="flex flex-col gap-3">
+              <span>
+                Your wallet session has expired. You need to reconnect your wallet to sign transactions.
+              </span>
+              <Button 
+                onClick={() => setShowWalletModal(true)}
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                data-testid="button-reconnect-wallet"
+              >
+                <Wallet className="mr-2 h-4 w-4" />
+                Reconnect Wallet
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <WalletLoginModal 
+          open={showWalletModal} 
+          onOpenChange={setShowWalletModal} 
+        />
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <Card>
             <CardHeader>
@@ -490,13 +520,18 @@ export default function Certify() {
               </Button>
               <Button
                 type="submit"
-                disabled={!authorName || isSigning}
+                disabled={!authorName || isSigning || !isWalletConnected}
                 data-testid="button-certify-submit"
               >
                 {isSigning ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {signatureStep || "Processing..."}
+                  </>
+                ) : !isWalletConnected ? (
+                  <>
+                    <AlertTriangle className="mr-2 h-4 w-4" />
+                    Wallet Not Connected
                   </>
                 ) : (
                   <>

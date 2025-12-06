@@ -173,6 +173,7 @@ export function useWalletAuth() {
     user,
     walletAddress: address,
     isAuthenticated: isLoggedIn && !!user,
+    isWalletConnected: isLoggedInSdk, // SDK is actually connected (can sign transactions)
     isLoading: isLoading && isLoggedIn, // Loading only when fetching user data
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
