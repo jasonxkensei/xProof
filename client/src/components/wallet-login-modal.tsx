@@ -30,8 +30,8 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   useEffect(() => {
     if (isLoggedIn && address && open && loginAttempted) {
       console.log('✅ Wallet connected via SDK hooks:', address);
-      console.log('💾 Saving wallet address to sessionStorage');
-      sessionStorage.setItem('walletAddress', address);
+      console.log('💾 Saving wallet address to localStorage');
+      localStorage.setItem('walletAddress', address);
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       onOpenChange(false);
       setLoading(null);
@@ -81,7 +81,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
                            sessionStorage.getItem('sdk-dapp-account-address') ||
                            sessionStorage.getItem('loginData');
       if (manualAddress) {
-        sessionStorage.setItem('walletAddress', manualAddress);
+        localStorage.setItem('walletAddress', manualAddress);
         window.location.reload();
       }
     } catch (error: any) {

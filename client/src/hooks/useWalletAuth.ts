@@ -48,10 +48,12 @@ export function useWalletAuth() {
   const { address: sdkAddress } = useGetAccount();
   const isLoggedInSdk = useGetIsLoggedIn();
   
-  // Fallback: check sessionStorage for saved wallet address
-  const savedAddress = sessionStorage.getItem('walletAddress');
+  // Fallback: check localStorage for saved wallet address (localStorage persists across page reloads)
+  const savedAddress = typeof window !== 'undefined' ? localStorage.getItem('walletAddress') : null;
   const address = sdkAddress || savedAddress || '';
   const isLoggedIn = isLoggedInSdk || !!savedAddress;
+  
+  console.log('🔍 localStorage walletAddress:', savedAddress);
 
   console.log('👀 useWalletAuth state:', { 
     isLoggedInSdk, 
@@ -69,7 +71,7 @@ export function useWalletAuth() {
     } else if (!isLoggedIn && prevLoggedIn.current) {
       console.log('🔌 Wallet disconnected');
       prevLoggedIn.current = false;
-      sessionStorage.removeItem('walletAddress');
+      localStorage.removeItem('walletAddress');
     }
   }, [isLoggedIn, address]);
 
