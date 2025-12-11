@@ -221,32 +221,66 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     setLoginAttempted(true);
     try {
       console.log('🚀 Starting WalletConnect login...');
-      console.log('📱 WalletConnect Project ID available:', !!import.meta.env.VITE_WALLETCONNECT_PROJECT_ID);
+      const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
+      console.log('📱 WalletConnect Project ID:', projectId ? `${projectId.slice(0, 8)}...` : 'MISSING');
       
+      if (!projectId) {
+        throw new Error("WalletConnect Project ID is not configured. Please add VITE_WALLETCONNECT_PROJECT_ID to environment.");
+      }
+      
+      // Detect if we're on mobile
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      console.log('📱 Running on mobile:', isMobile);
+      
+      console.log('🔧 Creating WalletConnect provider...');
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.walletConnect 
       });
       
-      console.log('✅ WalletConnect provider created successfully');
+      console.log('✅ WalletConnect provider created:', provider.constructor.name);
       
       if (typeof provider.init === 'function') {
+        console.log('🔧 Initializing provider...');
         await provider.init();
+        console.log('✅ Provider initialized');
       }
       
-      await provider.login();
-      console.log('✅ WalletConnect login completed');
+      console.log('🔐 Calling provider.login()...');
+      console.log('📱 On mobile, this should open xPortal via deep link');
+      
+      const loginResult = await provider.login();
+      console.log('✅ WalletConnect login completed, result:', loginResult);
       console.log('⏳ Waiting for SDK hooks to update...');
+      
+      // On mobile, xPortal should have opened - wait for response
+      if (isMobile) {
+        toast({
+          title: "Vérifiez xPortal",
+          description: "Approuvez la connexion dans l'application xPortal",
+        });
+      }
     } catch (error: any) {
       console.error('❌ WalletConnect error:', error);
       console.error('Error details:', {
         message: error.message,
         stack: error.stack,
-        type: error.constructor.name
+        type: error.constructor.name,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
       });
       
+      // More specific error messages
+      let errorMessage = error.message || "Failed to connect via WalletConnect";
+      if (error.message?.includes("Project ID")) {
+        errorMessage = "Configuration error - WalletConnect Project ID missing";
+      } else if (error.message?.includes("relay") || error.message?.includes("socket")) {
+        errorMessage = "Connection error - Please check your internet connection";
+      } else if (error.message?.includes("rejected") || error.message?.includes("cancelled")) {
+        errorMessage = "Connection cancelled by user";
+      }
+      
       toast({
-        title: "WalletConnect Failed",
-        description: error.message || "Failed to connect via WalletConnect",
+        title: "xPortal Connection Failed",
+        description: errorMessage,
         variant: "destructive"
       });
       setLoading(null);
