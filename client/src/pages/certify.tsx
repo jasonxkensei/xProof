@@ -159,7 +159,7 @@ export default function Certify() {
     setSignatureStep("Creating transaction...");
 
     try {
-      setSignatureStep("Please sign in your wallet (check 2FA if enabled)...");
+      setSignatureStep("Check your wallet to sign (enter 2FA code if enabled)...");
       
       const txResult = await sendCertificationTransaction({
         userAddress: user.walletAddress,
