@@ -12,6 +12,19 @@ const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 console.log('🔍 WalletConnect Project ID:', walletConnectProjectId ? 'Configured ✅' : 'Missing ❌');
 console.log('🌐 MultiversX Network: MAINNET');
 
+// WalletConnect requires metadata for the dApp
+const walletConnectV2Options = walletConnectProjectId ? {
+  projectId: walletConnectProjectId,
+  metadata: {
+    name: 'ProofMint',
+    description: 'Blockchain Certification Platform - Create immutable proofs of file ownership',
+    url: window.location.origin,
+    icons: [`${window.location.origin}/favicon.ico`]
+  },
+  // WalletConnect relay configuration
+  relayUrl: 'wss://relay.walletconnect.com'
+} : undefined;
+
 const config: InitAppType = {
   storage: {
     getStorageCallback: () => sessionStorage
@@ -22,14 +35,16 @@ const config: InitAppType = {
       expirySeconds: 86400, // 24 hours
       tokenExpirationToastWarningSeconds: 300 // warn 5 min before expiration
     },
-    // WalletConnect Project ID must be directly in dAppConfig for sdk-dapp v5+
+    // WalletConnect configuration with full options
     ...(walletConnectProjectId && {
-      walletConnectV2ProjectId: walletConnectProjectId
+      walletConnectV2ProjectId: walletConnectProjectId,
+      walletConnectV2Options: walletConnectV2Options
     })
   }
 };
 
 console.log('📋 MultiversX Config:', JSON.stringify(config, null, 2));
+console.log('🔗 WalletConnect Options:', JSON.stringify(walletConnectV2Options, null, 2));
 
 initApp(config);
 
