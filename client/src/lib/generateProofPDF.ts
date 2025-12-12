@@ -83,7 +83,15 @@ export async function generateProofPDF(data: ProofPDFData): Promise<void> {
   doc.setFontSize(8);
   doc.setTextColor(150, 150, 150);
   doc.text("This certificate proves the existence of this file at the specified time on MultiversX blockchain.", 20, 200);
-  doc.text(`Explorer URL: ${data.explorerUrl}`, 20, 207);
+  
+  doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+  doc.setFont("helvetica", 'bold');
+  doc.text("Verify on blockchain:", 20, 212);
+  doc.setFont("helvetica", 'normal');
+  
+  const linkY = 219;
+  const linkText = data.explorerUrl;
+  doc.textWithLink(linkText, 20, linkY, { url: data.explorerUrl });
   
   const pdfFileName = `${data.fileName.replace(/\.[^/.]+$/, "")}_proofmint_certificate.pdf`;
   doc.save(pdfFileName);
