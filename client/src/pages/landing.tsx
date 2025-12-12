@@ -4,21 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   Shield, 
-  Zap, 
-  Lock, 
-  Globe, 
   Wallet, 
   CheckCircle,
   Upload,
-  FileCheck,
-  Download,
-  Camera,
-  Palette,
-  Scale,
-  Briefcase,
-  Music,
-  Code,
-  ChevronDown,
   ArrowRight,
   Play
 } from "lucide-react";
@@ -49,14 +37,8 @@ export default function Landing() {
             <span className="text-xl font-bold tracking-tight">ProofMint</span>
           </div>
           <nav className="hidden md:flex items-center gap-6">
-            <a href="#benefits" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-benefits">
-              Avantages
-            </a>
             <a href="#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-how-it-works">
               Comment ça marche
-            </a>
-            <a href="#use-cases" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-use-cases">
-              Cas d'usage
             </a>
             <a href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-pricing">
               Tarifs
@@ -130,91 +112,8 @@ export default function Landing() {
           </div>
           
           <p className="mt-6 text-sm text-muted-foreground">
-            Gratuit • Sans carte bancaire • 1 certification offerte par mois
+            Gratuit • Sans carte bancaire • 3 certifications offertes par mois
           </p>
-        </div>
-      </section>
-
-      {/* Trust Bar */}
-      <section className="border-y bg-muted/30 py-6">
-        <div className="container px-6">
-          <div className="flex flex-wrap items-center justify-center gap-6 md:gap-12 text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <Lock className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium">Chiffrement SHA-256</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Globe className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium">Valide dans 195 pays</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium">Blockchain MultiversX</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium">Certification en 30 sec</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Benefits Grid */}
-      <section id="benefits" className="py-20 md:py-28">
-        <div className="container px-6">
-          <div className="mx-auto max-w-5xl">
-            <div className="mb-16 text-center">
-              <Badge variant="outline" className="mb-4">Avantages</Badge>
-              <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-                Pourquoi choisir ProofMint ?
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Comme un cachet de La Poste, mais impossible à falsifier. 
-                Comme un notaire, mais instantané et 1000× moins cher.
-              </p>
-            </div>
-            
-            <div className="grid gap-6 md:grid-cols-3">
-              <Card className="hover-elevate">
-                <CardContent className="pt-6">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                    <Zap className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="mb-2 text-xl font-semibold">Instantané</h3>
-                  <p className="text-muted-foreground">
-                    Déposez votre fichier, obtenez votre certificat en moins de 30 secondes. 
-                    Pas de rendez-vous, pas d'attente.
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="hover-elevate">
-                <CardContent className="pt-6">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                    <Lock className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="mb-2 text-xl font-semibold">Inviolable</h3>
-                  <p className="text-muted-foreground">
-                    Gravé dans la blockchain, impossible à modifier ou supprimer. 
-                    Même nous ne pouvons pas altérer votre preuve.
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="hover-elevate">
-                <CardContent className="pt-6">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                    <Globe className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="mb-2 text-xl font-semibold">Universel</h3>
-                  <p className="text-muted-foreground">
-                    Vérifiable par n'importe qui, n'importe où dans le monde, 
-                    sans logiciel spécial. Juste un lien.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -288,109 +187,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Use Cases */}
-      <section id="use-cases" className="py-20 md:py-28">
-        <div className="container px-6">
-          <div className="mx-auto max-w-5xl">
-            <div className="mb-16 text-center">
-              <Badge variant="outline" className="mb-4">Cas d'usage</Badge>
-              <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-                Qui utilise ProofMint ?
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Des créateurs aux entreprises, chacun protège ce qui compte.
-              </p>
-            </div>
-            
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Card className="hover-elevate">
-                <CardContent className="flex items-start gap-4 pt-6">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Palette className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Designers & Artistes</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Prouvez l'antériorité de vos créations avant de les partager
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover-elevate">
-                <CardContent className="flex items-start gap-4 pt-6">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Camera className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Photographes</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Protégez vos photos avant de les publier en ligne
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover-elevate">
-                <CardContent className="flex items-start gap-4 pt-6">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Music className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Musiciens</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Horodatez vos compositions avant envoi aux labels
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover-elevate">
-                <CardContent className="flex items-start gap-4 pt-6">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Code className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Développeurs</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Certifiez votre code source et vos innovations
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover-elevate">
-                <CardContent className="flex items-start gap-4 pt-6">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Scale className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Avocats & Juristes</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Horodatez contrats et preuves avec valeur probante
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover-elevate">
-                <CardContent className="flex items-start gap-4 pt-6">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Briefcase className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Entrepreneurs</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Protégez vos idées, business plans et innovations
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Pricing */}
       <section id="pricing" className="border-y bg-muted/30 py-20 md:py-28">
         <div className="container px-6">
@@ -405,37 +201,39 @@ export default function Landing() {
               </p>
             </div>
             
-            <div className="grid gap-6 md:grid-cols-3">
-              <Card>
-                <CardContent className="pt-6">
-                  <h3 className="mb-1 text-lg font-semibold text-muted-foreground">Gratuit</h3>
+            <div className="grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
+              <Card className="border-primary shadow-lg relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 bg-primary text-primary-foreground text-center text-sm font-medium py-1">
+                  Pour commencer
+                </div>
+                <CardContent className="pt-10">
+                  <h3 className="mb-1 text-lg font-semibold">Gratuit</h3>
                   <div className="mb-4">
                     <span className="text-4xl font-bold">0€</span>
                     <span className="text-muted-foreground">/mois</span>
                   </div>
                   <p className="text-sm text-muted-foreground mb-6">
-                    Parfait pour découvrir le service
+                    Parfait pour découvrir et utiliser le service
                   </p>
                   <ul className="mb-6 space-y-3 text-sm">
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>1 certification par mois</span>
+                      <span><strong>3 certifications gratuites</strong> par mois</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Certificat PDF</span>
+                      <span>Certificat PDF téléchargeable</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-primary shrink-0" />
                       <span>Page de vérification publique</span>
                     </li>
-                    <li className="flex items-center gap-2 text-muted-foreground">
-                      <CheckCircle className="h-4 w-4 shrink-0" />
-                      <span>Filigrane ProofMint</span>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+                      <span>QR code de vérification</span>
                     </li>
                   </ul>
                   <Button 
-                    variant="outline" 
                     className="w-full" 
                     onClick={handleConnect}
                     data-testid="button-start-free-tier"
@@ -445,86 +243,49 @@ export default function Landing() {
                 </CardContent>
               </Card>
 
-              <Card className="border-primary shadow-lg relative overflow-hidden">
-                <div className="absolute top-0 left-0 right-0 bg-primary text-primary-foreground text-center text-sm font-medium py-1">
-                  Le plus populaire
-                </div>
-                <CardContent className="pt-10">
-                  <h3 className="mb-1 text-lg font-semibold">Pro</h3>
-                  <div className="mb-4">
-                    <span className="text-4xl font-bold">9,99€</span>
-                    <span className="text-muted-foreground">/mois</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-6">
-                    Pour les créateurs réguliers
-                  </p>
-                  <ul className="mb-6 space-y-3 text-sm">
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span><strong>20</strong> certifications par mois</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Sans filigrane</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Branding personnalisé</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Support prioritaire</span>
-                    </li>
-                  </ul>
-                  <Button 
-                    className="w-full" 
-                    onClick={handleConnect}
-                    data-testid="button-start-pro"
-                  >
-                    Choisir Pro
-                  </Button>
-                </CardContent>
-              </Card>
-
               <Card>
                 <CardContent className="pt-6">
-                  <h3 className="mb-1 text-lg font-semibold text-muted-foreground">Business</h3>
+                  <h3 className="mb-1 text-lg font-semibold text-muted-foreground">Certifications supplémentaires</h3>
                   <div className="mb-4">
-                    <span className="text-4xl font-bold">39€</span>
-                    <span className="text-muted-foreground">/mois</span>
+                    <span className="text-4xl font-bold">1,50€</span>
+                    <span className="text-muted-foreground">/certification</span>
                   </div>
                   <p className="text-sm text-muted-foreground mb-6">
-                    Pour les équipes et entreprises
+                    Payez uniquement ce que vous utilisez
                   </p>
                   <ul className="mb-6 space-y-3 text-sm">
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span><strong>200</strong> certifications par mois</span>
+                      <span>Après vos 3 certifications gratuites</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Accès API</span>
+                      <span>Sans engagement ni abonnement</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Logo entreprise sur certificats</span>
+                      <span>Toutes les fonctionnalités incluses</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Support dédié</span>
+                      <span><strong>Tarifs dégressifs</strong> pour gros volumes</span>
                     </li>
                   </ul>
                   <Button 
                     variant="outline" 
                     className="w-full" 
                     onClick={handleConnect}
-                    data-testid="button-start-business"
+                    data-testid="button-start-payg"
                   >
-                    Choisir Business
+                    Commencer
                   </Button>
                 </CardContent>
               </Card>
             </div>
+            
+            <p className="mt-8 text-center text-sm text-muted-foreground">
+              Besoin de certifier en volume ? <a href="mailto:contact@proofmint.io" className="text-primary hover:underline">Contactez-nous</a> pour un tarif personnalisé.
+            </p>
           </div>
         </div>
       </section>
@@ -659,7 +420,6 @@ export default function Landing() {
               <div>
                 <h4 className="font-semibold mb-4">Produit</h4>
                 <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li><a href="#benefits" className="hover:text-foreground transition-colors">Avantages</a></li>
                   <li><a href="#how-it-works" className="hover:text-foreground transition-colors">Comment ça marche</a></li>
                   <li><a href="#pricing" className="hover:text-foreground transition-colors">Tarifs</a></li>
                   <li><a href="#faq" className="hover:text-foreground transition-colors">FAQ</a></li>
