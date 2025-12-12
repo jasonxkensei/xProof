@@ -126,6 +126,7 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
       
       const certificateNumber = generateCertificateNumber(certification);
       const proofUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://proofmint.com'}/proof/${certification.id}`;
+      const explorerUrl = certification.transactionHash ? `https://explorer.multiversx.com/transactions/${certification.transactionHash}` : null;
       const qrCodeDataUrl = await QRCode.toDataURL(proofUrl, { 
         width: 200, 
         margin: 1,
@@ -288,6 +289,14 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
       doc.text('NETWORK', leftBoxX + 10, yPos + 85);
       doc.fontSize(9).font('Helvetica').fillColor(COLORS.primary);
       doc.text('MultiversX Mainnet', leftBoxX + 10, yPos + 100);
+      
+      if (explorerUrl) {
+        doc.fontSize(8).font('Helvetica').fillColor(COLORS.primary);
+        doc.text('View on Explorer', leftBoxX + 10, yPos + 115, { 
+          link: explorerUrl,
+          underline: true 
+        });
+      }
       
       doc.roundedRect(rightBoxX, yPos, verifyBoxWidth, 130, 3)
          .lineWidth(0.5).strokeColor(COLORS.border).stroke();

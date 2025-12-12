@@ -176,6 +176,8 @@ export function useWalletAuth() {
       return response.json();
     },
     onSuccess: () => {
+      localStorage.removeItem('walletAddress');
+      sessionStorage.clear();
       queryClient.clear();
       navigate('/');
     },
