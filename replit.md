@@ -172,3 +172,29 @@ Preferred communication style: Simple, everyday language.
   - `MULTIVERSX_GATEWAY_URL`: Gateway URL (e.g., "https://devnet-gateway.multiversx.com")
   - **Note**: If not configured, app uses XPortal wallet mode (users sign with their own wallets)
 - `REPL_ID`: Replit environment identifier
+
+## Milestones & Current Status
+
+### First Certification Success (Dec 12, 2025)
+- **MILESTONE ACHIEVED**: First document certified on MultiversX Mainnet!
+- **Transaction**: `f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e`
+- **Document**: PROOFMINT - Genesis.pdf
+- **Author**: Jason Petitfourg  
+- **Cost**: 0.0002935 EGLD (~$0.002)
+- **Method**: DeFi Wallet Extension (browser)
+
+### Working Features
+- ✅ Extension Wallet login + transaction signing (FULLY WORKING)
+- ✅ File hashing (SHA-256 client-side)
+- ✅ Blockchain certification on Mainnet
+- ✅ Transaction data encoding (certify:hash|filename|author)
+- ✅ User session management
+
+### Known Issues
+- ⚠️ **xPortal Mobile**: Connection works in xPortal app, but session not synced back to browser after deep link return. Root cause: JavaScript execution interrupted when navigating to deep link.
+- ⚠️ **Extension Wallet + Guardian 2FA**: Known SDK bug with cross-window communication. Workaround: Use Web Wallet for 2FA accounts.
+
+### Recommended Wallet Methods
+1. **Extension Wallet** (Desktop) - Best experience, fully working
+2. **Web Wallet** (Any device) - Works with Guardian 2FA
+3. **xPortal Mobile** - Connection issues on return from deep link

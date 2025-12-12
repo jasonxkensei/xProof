@@ -273,49 +273,76 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       
       if (uri) {
         if (isMobile) {
+          // Save pending connection state before leaving
+          sessionStorage.setItem('wc_pending_connection', 'true');
+          sessionStorage.setItem('wc_pending_timestamp', Date.now().toString());
+          
           const deepLink = `xportal://wc?uri=${encodeURIComponent(uri)}`;
           console.log('📱 Opening xPortal deep link...');
-          window.location.href = deepLink;
           
           toast({
             title: "Ouverture de xPortal...",
-            description: "Approuvez la connexion dans l'app xPortal",
+            description: "Approuvez la connexion dans l'app xPortal, puis revenez ici",
           });
-        } else {
-          console.log('🖥️ Desktop - showing QR code would go here');
-          toast({
-            title: "Scannez le QR code",
-            description: "Utilisez xPortal pour scanner le code",
-          });
-        }
-        
-        console.log('⏳ Waiting for approval...');
-        const session = await approval();
-        console.log('✅ Session approved:', session);
-        
-        console.log('🔐 Logging in with session...');
-        const account = await wcProvider.login({ approval: () => Promise.resolve(session) });
-        console.log('✅ Login successful:', account);
-        
-        if (account?.address) {
-          localStorage.setItem('walletAddress', account.address);
           
+          // Small delay to show toast before navigating
+          setTimeout(() => {
+            window.location.href = deepLink;
+          }, 500);
+          
+          // Continue waiting for approval in background
+          // This will complete if user returns without closing tab
           try {
-            const syncResponse = await fetch('/api/auth/wallet/simple-sync', {
+            console.log('⏳ Waiting for approval (may complete on return)...');
+            const session = await approval();
+            console.log('✅ Session approved:', session);
+            
+            const account = await wcProvider.login({ approval: () => Promise.resolve(session) });
+            console.log('✅ Login successful:', account);
+            
+            if (account?.address) {
+              sessionStorage.removeItem('wc_pending_connection');
+              localStorage.setItem('walletAddress', account.address);
+              
+              await fetch('/api/auth/wallet/simple-sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ walletAddress: account.address }),
+              }).catch(() => {});
+              
+              window.location.reload();
+            }
+          } catch (approvalError) {
+            console.log('Approval interrupted (expected on mobile redirect):', approvalError);
+          }
+        } else {
+          // Desktop: show instructions to scan QR (URI can be shown as QR)
+          console.log('🖥️ Desktop - URI for QR:', uri);
+          toast({
+            title: "Scannez avec xPortal",
+            description: "Ouvrez xPortal sur votre téléphone et scannez le QR code",
+          });
+          
+          console.log('⏳ Waiting for approval...');
+          const session = await approval();
+          console.log('✅ Session approved:', session);
+          
+          const account = await wcProvider.login({ approval: () => Promise.resolve(session) });
+          console.log('✅ Login successful:', account);
+          
+          if (account?.address) {
+            localStorage.setItem('walletAddress', account.address);
+            
+            await fetch('/api/auth/wallet/simple-sync', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
               body: JSON.stringify({ walletAddress: account.address }),
-            });
+            }).catch(() => {});
             
-            if (syncResponse.ok) {
-              console.log('✅ Backend session created');
-            }
-          } catch (e) {
-            console.log('Backend sync skipped');
+            window.location.reload();
           }
-          
-          window.location.reload();
         }
       }
     } catch (error: any) {
