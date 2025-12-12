@@ -27,7 +27,8 @@ const walletConnectV2Options = walletConnectProjectId ? {
 
 const config: InitAppType = {
   storage: {
-    getStorageCallback: () => sessionStorage
+    // Use localStorage for better persistence on mobile (survives page unload during deep links)
+    getStorageCallback: () => localStorage
   },
   dAppConfig: {
     environment: EnvironmentsEnum.mainnet, // MAINNET for real transactions

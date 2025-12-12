@@ -22,8 +22,25 @@ interface User {
 }
 
 function getNativeAuthTokenFromStorage(): string | null {
-  const keys = Object.keys(sessionStorage);
+  // SDK now uses localStorage for better persistence (mobile deep links)
+  const keys = Object.keys(localStorage);
   for (const key of keys) {
+    if (key.includes('nativeAuth') || key.includes('token')) {
+      const value = localStorage.getItem(key);
+      if (value && value.length > 50) {
+        return value;
+      }
+    }
+  }
+  const directToken = localStorage.getItem('nativeAuthToken');
+  if (directToken) return directToken;
+  
+  const loginToken = localStorage.getItem('loginToken');
+  if (loginToken) return loginToken;
+  
+  // Fallback to sessionStorage for backward compatibility
+  const sessionKeys = Object.keys(sessionStorage);
+  for (const key of sessionKeys) {
     if (key.includes('nativeAuth') || key.includes('token')) {
       const value = sessionStorage.getItem(key);
       if (value && value.length > 50) {
@@ -31,11 +48,6 @@ function getNativeAuthTokenFromStorage(): string | null {
       }
     }
   }
-  const directToken = sessionStorage.getItem('nativeAuthToken');
-  if (directToken) return directToken;
-  
-  const loginToken = sessionStorage.getItem('loginToken');
-  if (loginToken) return loginToken;
   
   return null;
 }

@@ -9,10 +9,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { ProviderFactory } from '@multiversx/sdk-dapp/out/providers/ProviderFactory';
 import { ProviderTypeEnum } from '@multiversx/sdk-dapp/out/providers/types/providerFactory.types';
-import { WalletConnectV2Provider } from '@multiversx/sdk-wallet-connect-provider/out/walletConnectV2Provider';
 import { useGetIsLoggedIn } from '@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn';
 import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
-import { Shield, Wallet, QrCode, Loader2, Smartphone } from "lucide-react";
+import { Shield, Wallet, QrCode, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 
@@ -36,15 +35,15 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         // Wait a bit for SDK to store the token
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        // Log all sessionStorage keys for debugging
-        console.log('📦 SessionStorage keys:', Object.keys(sessionStorage));
+        // Log all localStorage keys for debugging (SDK now uses localStorage)
+        console.log('📦 LocalStorage keys:', Object.keys(localStorage));
         
-        // Search for Native Auth token in sessionStorage
-        const keys = Object.keys(sessionStorage);
+        // Search for Native Auth token in localStorage (SDK configured to use localStorage)
+        const keys = Object.keys(localStorage);
         let nativeAuthToken: string | null = null;
         
         for (const key of keys) {
-          const value = sessionStorage.getItem(key);
+          const value = localStorage.getItem(key);
           // Look for long tokens that could be Native Auth
           if (value && value.length > 100) {
             console.log(`🔍 Found potential token at key "${key}" (length: ${value.length})`);
@@ -58,7 +57,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         }
         
         // Also check for loginInfo which might contain the token
-        const loginInfo = sessionStorage.getItem('loginInfo');
+        const loginInfo = localStorage.getItem('loginInfo');
         if (loginInfo && !nativeAuthToken) {
           try {
             const parsed = JSON.parse(loginInfo);
@@ -221,129 +220,54 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     setLoading('walletconnect');
     setLoginAttempted(true);
     try {
-      console.log('🚀 Starting WalletConnect login (direct provider)...');
-      const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
-      console.log('📱 WalletConnect Project ID:', projectId ? `${projectId.slice(0, 8)}...` : 'MISSING');
-      
-      if (!projectId) {
-        throw new Error("WalletConnect Project ID is not configured.");
-      }
+      console.log('🚀 Starting WalletConnect login via ProviderFactory (SDK-dapp managed)...');
       
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       console.log('📱 Running on mobile:', isMobile);
       
-      const relayUrl = 'wss://relay.walletconnect.com';
-      const chainId = '1'; // Mainnet
+      // Use ProviderFactory.create for WalletConnect - this uses the SDK's managed provider
+      // which automatically handles session persistence and restoration
+      console.log('🔧 Creating WalletConnect provider via ProviderFactory...');
+      const provider = await ProviderFactory.create({ 
+        type: ProviderTypeEnum.walletConnect 
+      });
       
-      const callbacks = {
-        onClientLogin: () => {
-          console.log('✅ WalletConnect: Client logged in');
-        },
-        onClientLogout: () => {
-          console.log('📤 WalletConnect: Client logged out');
-        },
-        onClientEvent: (event: any) => {
-          console.log('📢 WalletConnect event:', event);
+      if (typeof provider.init === 'function') {
+        console.log('🔧 Initializing WalletConnect provider...');
+        await provider.init();
+      }
+      
+      console.log('🔐 Calling provider.login()...');
+      // The SDK-dapp handles the WalletConnect URI, QR code display, and deep linking automatically
+      const loginResult = await provider.login();
+      console.log('✅ WalletConnect login call completed, result:', loginResult);
+      console.log('⏳ Waiting for SDK hooks to update...');
+      
+      // Poll for address since SDK hooks may not update immediately
+      for (let i = 0; i < 30; i++) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        // Check if useEffect has closed the modal (login succeeded)
+        if (!document.querySelector('[data-testid="modal-wallet-login"]')) {
+          console.log('✅ Modal closed by useEffect, WalletConnect login successful');
+          return;
         }
-      };
+      }
       
-      console.log('🔧 Creating WalletConnectV2Provider directly...');
-      const wcProvider = new WalletConnectV2Provider(
-        callbacks,
-        chainId,
-        relayUrl,
-        projectId,
-        {
-          metadata: {
-            name: 'ProofMint',
-            description: 'Blockchain Certification Platform',
-            url: window.location.origin,
-            icons: [`${window.location.origin}/favicon.ico`]
-          }
-        }
-      );
-      
-      console.log('🔧 Initializing WalletConnect provider...');
-      const initialized = await wcProvider.init();
-      console.log('✅ Provider initialized:', initialized);
-      
-      console.log('🔗 Connecting to get pairing URI...');
-      const { uri, approval } = await wcProvider.connect();
-      console.log('📋 Got pairing URI:', uri ? `${uri.slice(0, 50)}...` : 'none');
-      
-      if (uri) {
-        if (isMobile) {
-          // Save pending connection state before leaving
-          sessionStorage.setItem('wc_pending_connection', 'true');
-          sessionStorage.setItem('wc_pending_timestamp', Date.now().toString());
-          
-          const deepLink = `xportal://wc?uri=${encodeURIComponent(uri)}`;
-          console.log('📱 Opening xPortal deep link...');
-          
-          toast({
-            title: "Ouverture de xPortal...",
-            description: "Approuvez la connexion dans l'app xPortal, puis revenez ici",
-          });
-          
-          // Small delay to show toast before navigating
-          setTimeout(() => {
-            window.location.href = deepLink;
-          }, 500);
-          
-          // Continue waiting for approval in background
-          // This will complete if user returns without closing tab
-          try {
-            console.log('⏳ Waiting for approval (may complete on return)...');
-            const session = await approval();
-            console.log('✅ Session approved:', session);
-            
-            const account = await wcProvider.login({ approval: () => Promise.resolve(session) });
-            console.log('✅ Login successful:', account);
-            
-            if (account?.address) {
-              sessionStorage.removeItem('wc_pending_connection');
-              localStorage.setItem('walletAddress', account.address);
-              
-              await fetch('/api/auth/wallet/simple-sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ walletAddress: account.address }),
-              }).catch(() => {});
-              
-              window.location.reload();
-            }
-          } catch (approvalError) {
-            console.log('Approval interrupted (expected on mobile redirect):', approvalError);
-          }
-        } else {
-          // Desktop: show instructions to scan QR (URI can be shown as QR)
-          console.log('🖥️ Desktop - URI for QR:', uri);
-          toast({
-            title: "Scannez avec xPortal",
-            description: "Ouvrez xPortal sur votre téléphone et scannez le QR code",
-          });
-          
-          console.log('⏳ Waiting for approval...');
-          const session = await approval();
-          console.log('✅ Session approved:', session);
-          
-          const account = await wcProvider.login({ approval: () => Promise.resolve(session) });
-          console.log('✅ Login successful:', account);
-          
-          if (account?.address) {
-            localStorage.setItem('walletAddress', account.address);
-            
-            await fetch('/api/auth/wallet/simple-sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({ walletAddress: account.address }),
-            }).catch(() => {});
-            
-            window.location.reload();
-          }
-        }
+      // If we get here and still have loginResult with address, save it manually
+      console.log('⚠️ SDK hooks did not update, checking loginResult...');
+      const resultAddress = typeof loginResult === 'string' ? loginResult : (loginResult as any)?.address;
+      if (resultAddress) {
+        console.log('✅ Got address from loginResult:', resultAddress);
+        localStorage.setItem('walletAddress', resultAddress);
+        
+        await fetch('/api/auth/wallet/simple-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ walletAddress: resultAddress }),
+        }).catch(() => {});
+        
+        window.location.reload();
       }
     } catch (error: any) {
       console.error('❌ WalletConnect error:', error);
