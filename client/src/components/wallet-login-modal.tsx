@@ -11,9 +11,20 @@ import { ProviderFactory } from '@multiversx/sdk-dapp/out/providers/ProviderFact
 import { ProviderTypeEnum } from '@multiversx/sdk-dapp/out/providers/types/providerFactory.types';
 import { useGetIsLoggedIn } from '@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn';
 import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
-import { Shield, Wallet, QrCode, Loader2 } from "lucide-react";
+import { WalletConnectV2Provider } from '@multiversx/sdk-wallet-connect-provider';
+import { Shield, Wallet, QrCode, Loader2, X, Smartphone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+import QRCodeLib from 'qrcode';
+
+const WALLETCONNECT_PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'b4c11c7335da6e3e77753a17d466e4e2';
+const RELAY_URL = 'wss://relay.walletconnect.com';
+const CHAIN_ID = '1';
+
+interface WcAttempt {
+  id: number;
+  provider: WalletConnectV2Provider;
+  abortController: AbortController;
+}
 
 interface WalletLoginModalProps {
   open: boolean;
@@ -23,6 +34,11 @@ interface WalletLoginModalProps {
 export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [loginAttempted, setLoginAttempted] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+  const [wcConnectedAddress, setWcConnectedAddress] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const attemptRef = useRef<WcAttempt | null>(null);
+  const attemptIdCounter = useRef(0);
   const { toast } = useToast();
   const isLoggedIn = useGetIsLoggedIn();
   const { address } = useGetAccount();
@@ -30,54 +46,39 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   useEffect(() => {
     const syncAndReload = async () => {
       if (isLoggedIn && address && open && loginAttempted) {
-        console.log('✅ Wallet connected via SDK hooks:', address);
+        console.log('Wallet connected via SDK hooks:', address);
         
-        // Wait a bit for SDK to store the token
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        // Log all localStorage keys for debugging (SDK now uses localStorage)
-        console.log('📦 LocalStorage keys:', Object.keys(localStorage));
-        
-        // Search for Native Auth token in localStorage (SDK configured to use localStorage)
         const keys = Object.keys(localStorage);
         let nativeAuthToken: string | null = null;
         
         for (const key of keys) {
           const value = localStorage.getItem(key);
-          // Look for long tokens that could be Native Auth
           if (value && value.length > 100) {
-            console.log(`🔍 Found potential token at key "${key}" (length: ${value.length})`);
-            // Native Auth tokens are typically base64-encoded and start with specific patterns
             if (value.includes('.') || key.toLowerCase().includes('auth') || key.toLowerCase().includes('token')) {
               nativeAuthToken = value;
-              console.log(`✅ Selected token from key: ${key}`);
               break;
             }
           }
         }
         
-        // Also check for loginInfo which might contain the token
         const loginInfo = localStorage.getItem('loginInfo');
         if (loginInfo && !nativeAuthToken) {
           try {
             const parsed = JSON.parse(loginInfo);
             if (parsed.nativeAuthToken) {
               nativeAuthToken = parsed.nativeAuthToken;
-              console.log('✅ Found token in loginInfo');
             }
           } catch (e) {
-            // Not JSON, might be the token itself
             if (loginInfo.length > 100) {
               nativeAuthToken = loginInfo;
             }
           }
         }
         
-        console.log('🔑 Native Auth Token found:', !!nativeAuthToken);
-        
         if (nativeAuthToken) {
           try {
-            console.log('📡 Syncing with backend...');
             const syncResponse = await fetch('/api/auth/wallet/sync', {
               method: 'POST',
               headers: { 
@@ -89,21 +90,15 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             });
             
             if (syncResponse.ok) {
-              console.log('✅ Backend session created successfully');
               localStorage.setItem('walletAddress', address);
-              console.log('🔄 Reloading page to update app state...');
               window.location.reload();
               return;
-            } else {
-              console.error('❌ Sync failed:', await syncResponse.text());
             }
           } catch (error) {
-            console.error('❌ Error syncing with backend:', error);
+            console.error('Error syncing with backend:', error);
           }
         }
         
-        // Fallback: create a simple session without Native Auth (less secure but functional)
-        console.log('⚠️ No Native Auth token found, trying simple wallet sync...');
         try {
           const simpleSync = await fetch('/api/auth/wallet/simple-sync', {
             method: 'POST',
@@ -113,7 +108,6 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           });
           
           if (simpleSync.ok) {
-            console.log('✅ Simple sync successful');
             localStorage.setItem('walletAddress', address);
             window.location.reload();
             return;
@@ -122,7 +116,6 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           console.log('Simple sync not available');
         }
         
-        // Last resort: just save to localStorage and reload
         localStorage.setItem('walletAddress', address);
         window.location.reload();
       }
@@ -132,9 +125,44 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   }, [isLoggedIn, address, open, loginAttempted]);
 
   useEffect(() => {
+    if (wcConnectedAddress) {
+      console.log('WalletConnect connected, syncing:', wcConnectedAddress);
+      
+      localStorage.setItem('walletAddress', wcConnectedAddress);
+      
+      fetch('/api/auth/wallet/simple-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ walletAddress: wcConnectedAddress }),
+      })
+        .then(() => {
+          toast({
+            title: "Wallet Connected",
+            description: `Connected: ${wcConnectedAddress.substring(0, 10)}...${wcConnectedAddress.substring(wcConnectedAddress.length - 6)}`,
+          });
+          window.location.reload();
+        })
+        .catch(() => {
+          window.location.reload();
+        });
+    }
+  }, [wcConnectedAddress, toast]);
+
+  useEffect(() => {
     if (!open) {
       setLoginAttempted(false);
       setLoading(null);
+      setQrCodeDataUrl(null);
+      setWcConnectedAddress(null);
+      setIsCancelling(false);
+      
+      const attempt = attemptRef.current;
+      if (attempt) {
+        attempt.abortController.abort();
+        attemptRef.current = null;
+        attempt.provider.logout().catch(() => {});
+      }
     }
   }, [open]);
 
@@ -142,33 +170,24 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     setLoading('extension');
     setLoginAttempted(true);
     try {
-      console.log('🔌 Creating Extension provider...');
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.extension 
       });
       
       if (typeof provider.init === 'function') {
-        console.log('🔧 Initializing provider...');
         await provider.init();
       }
       
-      console.log('🔐 Calling provider.login()...');
       const loginResult = await provider.login();
-      console.log('✅ Login call completed, result:', loginResult);
-      console.log('⏳ Waiting for SDK hooks to update...');
+      console.log('Extension login completed:', loginResult);
       
-      // Poll for address since SDK hooks may not update immediately
       for (let i = 0; i < 20; i++) {
         await new Promise(resolve => setTimeout(resolve, 250));
-        // Check if useEffect has closed the modal
         if (!document.querySelector('[data-testid="modal-wallet-login"]')) {
-          console.log('✅ Modal closed by useEffect, login successful');
           return;
         }
       }
       
-      // If we get here, the SDK didn't update - try to get address manually
-      console.log('⚠️ SDK hooks did not update, trying manual save...');
       const manualAddress = (provider as any).account?.address || 
                            sessionStorage.getItem('sdk-dapp-account-address') ||
                            sessionStorage.getItem('loginData');
@@ -177,7 +196,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         window.location.reload();
       }
     } catch (error: any) {
-      console.error('❌ Extension login error:', error);
+      console.error('Extension login error:', error);
       toast({
         title: "Extension Login Failed",
         description: error.message || "Please install MultiversX DeFi Wallet Extension",
@@ -192,7 +211,6 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     setLoading('webwallet');
     setLoginAttempted(true);
     try {
-      console.log('🌐 Creating Web Wallet provider...');
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.crossWindow 
       });
@@ -202,10 +220,9 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       }
       
       await provider.login();
-      console.log('✅ Web Wallet login call completed');
-      console.log('⏳ Waiting for SDK hooks to update...');
+      console.log('Web Wallet login completed');
     } catch (error: any) {
-      console.error('❌ Web Wallet login error:', error);
+      console.error('Web Wallet login error:', error);
       toast({
         title: "Web Wallet Login Failed",
         description: error.message || "Failed to connect to Web Wallet",
@@ -217,69 +234,118 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   };
 
   const handleWalletConnectLogin = async () => {
+    if (isCancelling) {
+      console.log('Cancel in progress, please wait...');
+      return;
+    }
+    
     setLoading('walletconnect');
     setLoginAttempted(true);
+    
+    const attemptId = ++attemptIdCounter.current;
+    const abortController = new AbortController();
+    
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    console.log(`Starting WalletConnect attempt #${attemptId}, isMobile:`, isMobile);
+    
+    let wcProvider: WalletConnectV2Provider | null = null;
+    
     try {
-      console.log('🚀 Starting WalletConnect login via ProviderFactory (SDK-dapp managed)...');
+      const callbacks = {
+        onClientLogin: async () => {
+          console.log(`WalletConnect attempt #${attemptId}: Client logged in!`);
+          if (attemptRef.current?.id === attemptId && wcProvider) {
+            const addr = wcProvider.address;
+            if (addr) {
+              setWcConnectedAddress(addr);
+              setQrCodeDataUrl(null);
+              setLoading(null);
+            }
+          }
+        },
+        onClientLogout: async () => {
+          console.log(`WalletConnect attempt #${attemptId}: Client logged out`);
+          if (attemptRef.current?.id === attemptId) {
+            setQrCodeDataUrl(null);
+            setLoading(null);
+          }
+        },
+        onClientEvent: async (event: any) => {
+          console.log(`WalletConnect attempt #${attemptId} event:`, event);
+        }
+      };
       
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      console.log('📱 Running on mobile:', isMobile);
+      console.log('Creating WalletConnectV2Provider...');
+      wcProvider = new WalletConnectV2Provider(
+        callbacks,
+        CHAIN_ID,
+        RELAY_URL,
+        WALLETCONNECT_PROJECT_ID
+      );
       
-      // Use ProviderFactory.create for WalletConnect - this uses the SDK's managed provider
-      // which automatically handles session persistence and restoration
-      console.log('🔧 Creating WalletConnect provider via ProviderFactory...');
-      const provider = await ProviderFactory.create({ 
-        type: ProviderTypeEnum.walletConnect 
-      });
+      const attempt: WcAttempt = {
+        id: attemptId,
+        provider: wcProvider,
+        abortController
+      };
+      attemptRef.current = attempt;
       
-      if (typeof provider.init === 'function') {
-        console.log('🔧 Initializing WalletConnect provider...');
-        await provider.init();
+      console.log('Initializing WalletConnect provider...');
+      await wcProvider.init();
+      console.log('WalletConnect initialized');
+      
+      if (abortController.signal.aborted) {
+        console.log(`Attempt #${attemptId} aborted before connect`);
+        return;
       }
       
-      console.log('🔐 Calling provider.login()...');
-      // The SDK-dapp handles the WalletConnect URI, QR code display, and deep linking automatically
-      const loginResult = await provider.login();
-      console.log('✅ WalletConnect login call completed, result:', loginResult);
-      console.log('⏳ Waiting for SDK hooks to update...');
+      console.log('Connecting to get URI...');
+      const { uri, approval } = await wcProvider.connect();
+      console.log('Got WalletConnect URI');
       
-      // Poll for address since SDK hooks may not update immediately
-      for (let i = 0; i < 30; i++) {
-        await new Promise(resolve => setTimeout(resolve, 250));
-        // Check if useEffect has closed the modal (login succeeded)
-        if (!document.querySelector('[data-testid="modal-wallet-login"]')) {
-          console.log('✅ Modal closed by useEffect, WalletConnect login successful');
-          return;
+      if (abortController.signal.aborted) {
+        console.log(`Attempt #${attemptId} aborted after connect`);
+        await wcProvider.logout().catch(() => {});
+        return;
+      }
+      
+      if (uri) {
+        const qrDataUrl = await QRCodeLib.toDataURL(uri, {
+          width: 280,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#ffffff'
+          }
+        });
+        
+        if (attemptRef.current?.id === attemptId) {
+          setQrCodeDataUrl(qrDataUrl);
+          console.log('QR code generated');
+        }
+        
+        if (isMobile) {
+          const xPortalUri = uri.replace('wc:', 'xportal:wc:');
+          console.log('Opening xPortal deep link...');
+          window.location.href = xPortalUri;
         }
       }
       
-      // If we get here and still have loginResult with address, save it manually
-      console.log('⚠️ SDK hooks did not update, checking loginResult...');
-      const resultAddress = typeof loginResult === 'string' ? loginResult : (loginResult as any)?.address;
-      if (resultAddress) {
-        console.log('✅ Got address from loginResult:', resultAddress);
-        localStorage.setItem('walletAddress', resultAddress);
-        
-        await fetch('/api/auth/wallet/simple-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ walletAddress: resultAddress }),
-        }).catch(() => {});
-        
-        window.location.reload();
-      }
+      console.log('Waiting for user approval and login...');
+      await wcProvider.login({ approval });
+      console.log(`WalletConnect attempt #${attemptId} login() completed`);
+      
     } catch (error: any) {
-      console.error('❌ WalletConnect error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        type: error.constructor?.name
-      });
+      if (abortController.signal.aborted) {
+        console.log(`WalletConnect attempt #${attemptId} was cancelled`);
+        return;
+      }
+      
+      console.error(`WalletConnect attempt #${attemptId} error:`, error);
       
       let errorMessage = error.message || "Failed to connect via WalletConnect";
-      if (error.message?.includes("rejected") || error.message?.includes("cancelled")) {
-        errorMessage = "Connection cancelled";
+      if (error.message?.includes("rejected") || error.message?.includes("cancelled") || error.message?.includes("Proposal")) {
+        errorMessage = "Connection cancelled or rejected by wallet";
       }
       
       toast({
@@ -287,10 +353,100 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         description: errorMessage,
         variant: "destructive"
       });
-      setLoading(null);
-      setLoginAttempted(false);
+      
+      if (attemptRef.current?.id === attemptId) {
+        setLoading(null);
+        setQrCodeDataUrl(null);
+        setLoginAttempted(false);
+        attemptRef.current = null;
+      }
     }
   };
+
+  const handleCancelWalletConnect = async () => {
+    const attempt = attemptRef.current;
+    if (!attempt) {
+      setQrCodeDataUrl(null);
+      setLoading(null);
+      setLoginAttempted(false);
+      return;
+    }
+    
+    console.log(`Cancelling WalletConnect attempt #${attempt.id}...`);
+    setIsCancelling(true);
+    
+    attempt.abortController.abort();
+    
+    setQrCodeDataUrl(null);
+    setLoading(null);
+    setLoginAttempted(false);
+    
+    if (attemptRef.current?.id === attempt.id) {
+      attemptRef.current = null;
+    }
+    
+    try {
+      await attempt.provider.logout();
+      console.log(`WalletConnect attempt #${attempt.id} logged out`);
+    } catch (e) {
+      console.log(`Logout cleanup error for attempt #${attempt.id} (expected):`, e);
+    }
+    
+    setIsCancelling(false);
+  };
+
+  if (qrCodeDataUrl) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md" data-testid="modal-wallet-login">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-primary" />
+              Scan with xPortal
+            </DialogTitle>
+            <DialogDescription>
+              Scan this QR code with your xPortal mobile app to connect your wallet
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col items-center py-4 space-y-4">
+            <div className="bg-white p-4 rounded-lg shadow-sm">
+              <img 
+                src={qrCodeDataUrl} 
+                alt="WalletConnect QR Code"
+                className="w-[280px] h-[280px]"
+                data-testid="img-walletconnect-qr"
+              />
+            </div>
+            
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Waiting for connection...</span>
+            </div>
+            
+            <Button
+              variant="outline"
+              onClick={handleCancelWalletConnect}
+              disabled={isCancelling}
+              className="w-full"
+              data-testid="button-cancel-walletconnect"
+            >
+              {isCancelling ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <X className="h-4 w-4 mr-2" />
+              )}
+              {isCancelling ? 'Cancelling...' : 'Cancel'}
+            </Button>
+          </div>
+
+          <p className="text-xs text-muted-foreground text-center">
+            Open xPortal app, tap the scan icon, and scan this code
+          </p>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -308,7 +464,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         <div className="space-y-3 py-4">
           <Button
             onClick={handleExtensionLogin}
-            disabled={loading !== null}
+            disabled={loading !== null || isCancelling}
             className="w-full justify-start gap-3"
             variant="default"
             data-testid="button-extension-login"
@@ -323,7 +479,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
 
           <Button
             onClick={handleWebWalletLogin}
-            disabled={loading !== null}
+            disabled={loading !== null || isCancelling}
             className="w-full justify-start gap-3"
             variant="outline"
             data-testid="button-webwallet-login"
@@ -338,7 +494,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
 
           <Button
             onClick={handleWalletConnectLogin}
-            disabled={loading !== null}
+            disabled={loading !== null || isCancelling}
             className="w-full justify-start gap-3"
             variant="outline"
             data-testid="button-walletconnect-login"
@@ -353,7 +509,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         </div>
 
         <p className="text-xs text-muted-foreground text-center">
-          🔒 All authentication methods use cryptographic signatures to prevent wallet impersonation
+          All authentication methods use cryptographic signatures to prevent wallet impersonation
         </p>
       </DialogContent>
     </Dialog>
