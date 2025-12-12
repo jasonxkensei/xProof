@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,9 +9,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { ProviderFactory } from '@multiversx/sdk-dapp/out/providers/ProviderFactory';
 import { ProviderTypeEnum } from '@multiversx/sdk-dapp/out/providers/types/providerFactory.types';
+import { WalletConnectV2Provider } from '@multiversx/sdk-wallet-connect-provider/out/walletConnectV2Provider';
 import { useGetIsLoggedIn } from '@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn';
 import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
-import { Shield, Wallet, QrCode, Loader2 } from "lucide-react";
+import { Shield, Wallet, QrCode, Loader2, Smartphone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 
@@ -220,62 +221,114 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     setLoading('walletconnect');
     setLoginAttempted(true);
     try {
-      console.log('🚀 Starting WalletConnect login...');
+      console.log('🚀 Starting WalletConnect login (direct provider)...');
       const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
       console.log('📱 WalletConnect Project ID:', projectId ? `${projectId.slice(0, 8)}...` : 'MISSING');
       
       if (!projectId) {
-        throw new Error("WalletConnect Project ID is not configured. Please add VITE_WALLETCONNECT_PROJECT_ID to environment.");
+        throw new Error("WalletConnect Project ID is not configured.");
       }
       
-      // Detect if we're on mobile
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       console.log('📱 Running on mobile:', isMobile);
       
-      console.log('🔧 Creating WalletConnect provider...');
-      const provider = await ProviderFactory.create({ 
-        type: ProviderTypeEnum.walletConnect 
-      });
+      const relayUrl = 'wss://relay.walletconnect.com';
+      const chainId = '1'; // Mainnet
       
-      console.log('✅ WalletConnect provider created:', provider.constructor.name);
+      const callbacks = {
+        onClientLogin: () => {
+          console.log('✅ WalletConnect: Client logged in');
+        },
+        onClientLogout: () => {
+          console.log('📤 WalletConnect: Client logged out');
+        },
+        onClientEvent: (event: any) => {
+          console.log('📢 WalletConnect event:', event);
+        }
+      };
       
-      if (typeof provider.init === 'function') {
-        console.log('🔧 Initializing provider...');
-        await provider.init();
-        console.log('✅ Provider initialized');
-      }
+      console.log('🔧 Creating WalletConnectV2Provider directly...');
+      const wcProvider = new WalletConnectV2Provider(
+        callbacks,
+        chainId,
+        relayUrl,
+        projectId,
+        {
+          metadata: {
+            name: 'ProofMint',
+            description: 'Blockchain Certification Platform',
+            url: window.location.origin,
+            icons: [`${window.location.origin}/favicon.ico`]
+          }
+        }
+      );
       
-      console.log('🔐 Calling provider.login()...');
-      console.log('📱 On mobile, this should open xPortal via deep link');
+      console.log('🔧 Initializing WalletConnect provider...');
+      const initialized = await wcProvider.init();
+      console.log('✅ Provider initialized:', initialized);
       
-      const loginResult = await provider.login();
-      console.log('✅ WalletConnect login completed, result:', loginResult);
-      console.log('⏳ Waiting for SDK hooks to update...');
+      console.log('🔗 Connecting to get pairing URI...');
+      const { uri, approval } = await wcProvider.connect();
+      console.log('📋 Got pairing URI:', uri ? `${uri.slice(0, 50)}...` : 'none');
       
-      // On mobile, xPortal should have opened - wait for response
-      if (isMobile) {
-        toast({
-          title: "Vérifiez xPortal",
-          description: "Approuvez la connexion dans l'application xPortal",
-        });
+      if (uri) {
+        if (isMobile) {
+          const deepLink = `xportal://wc?uri=${encodeURIComponent(uri)}`;
+          console.log('📱 Opening xPortal deep link...');
+          window.location.href = deepLink;
+          
+          toast({
+            title: "Ouverture de xPortal...",
+            description: "Approuvez la connexion dans l'app xPortal",
+          });
+        } else {
+          console.log('🖥️ Desktop - showing QR code would go here');
+          toast({
+            title: "Scannez le QR code",
+            description: "Utilisez xPortal pour scanner le code",
+          });
+        }
+        
+        console.log('⏳ Waiting for approval...');
+        const session = await approval();
+        console.log('✅ Session approved:', session);
+        
+        console.log('🔐 Logging in with session...');
+        const account = await wcProvider.login({ approval: () => Promise.resolve(session) });
+        console.log('✅ Login successful:', account);
+        
+        if (account?.address) {
+          localStorage.setItem('walletAddress', account.address);
+          
+          try {
+            const syncResponse = await fetch('/api/auth/wallet/simple-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ walletAddress: account.address }),
+            });
+            
+            if (syncResponse.ok) {
+              console.log('✅ Backend session created');
+            }
+          } catch (e) {
+            console.log('Backend sync skipped');
+          }
+          
+          window.location.reload();
+        }
       }
     } catch (error: any) {
       console.error('❌ WalletConnect error:', error);
       console.error('Error details:', {
         message: error.message,
         stack: error.stack,
-        type: error.constructor.name,
-        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
+        type: error.constructor?.name
       });
       
-      // More specific error messages
       let errorMessage = error.message || "Failed to connect via WalletConnect";
-      if (error.message?.includes("Project ID")) {
-        errorMessage = "Configuration error - WalletConnect Project ID missing";
-      } else if (error.message?.includes("relay") || error.message?.includes("socket")) {
-        errorMessage = "Connection error - Please check your internet connection";
-      } else if (error.message?.includes("rejected") || error.message?.includes("cancelled")) {
-        errorMessage = "Connection cancelled by user";
+      if (error.message?.includes("rejected") || error.message?.includes("cancelled")) {
+        errorMessage = "Connection cancelled";
       }
       
       toast({
