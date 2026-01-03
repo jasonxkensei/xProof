@@ -181,19 +181,46 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       const loginResult = await provider.login();
       console.log('Extension login completed:', loginResult);
       
-      for (let i = 0; i < 20; i++) {
-        await new Promise(resolve => setTimeout(resolve, 250));
-        if (!document.querySelector('[data-testid="modal-wallet-login"]')) {
-          return;
+      // Wait for SDK hooks to detect the connection (they poll the provider state)
+      // Don't navigate until we have a verified address from the SDK
+      let verifiedAddress = '';
+      for (let i = 0; i < 30; i++) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Try to get address from provider
+        try {
+          if (typeof (provider as any).getAddress === 'function') {
+            const addr = await (provider as any).getAddress();
+            if (addr && addr.startsWith('erd1')) {
+              verifiedAddress = addr;
+              break;
+            }
+          }
+          if ((provider as any).account?.address) {
+            const addr = (provider as any).account.address;
+            if (addr && addr.startsWith('erd1')) {
+              verifiedAddress = addr;
+              break;
+            }
+          }
+        } catch (e) {
+          console.log('Waiting for address...', e);
         }
       }
       
-      const manualAddress = (provider as any).account?.address || 
-                           sessionStorage.getItem('sdk-dapp-account-address') ||
-                           sessionStorage.getItem('loginData');
-      if (manualAddress) {
-        localStorage.setItem('walletAddress', manualAddress);
+      if (verifiedAddress) {
+        console.log('Extension login verified with address:', verifiedAddress);
+        localStorage.setItem('walletAddress', verifiedAddress);
         window.location.reload();
+      } else {
+        // Fallback: check if SDK hooks detected the login
+        const sdkAddress = sessionStorage.getItem('sdk-dapp-account-address');
+        if (sdkAddress) {
+          localStorage.setItem('walletAddress', sdkAddress);
+          window.location.reload();
+        } else {
+          throw new Error('Could not verify wallet connection');
+        }
       }
     } catch (error: any) {
       console.error('Extension login error:', error);
@@ -255,7 +282,17 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         onClientLogin: async () => {
           console.log(`WalletConnect attempt #${attemptId}: Client logged in!`);
           if (attemptRef.current?.id === attemptId && wcProvider) {
-            const addr = wcProvider.address;
+            // Get address from provider's account or getAddress method
+            let addr = '';
+            try {
+              if (typeof (wcProvider as any).getAddress === 'function') {
+                addr = await (wcProvider as any).getAddress();
+              } else if ((wcProvider as any).account?.address) {
+                addr = (wcProvider as any).account.address;
+              }
+            } catch (e) {
+              console.log('Could not get address from provider:', e);
+            }
             if (addr) {
               setWcConnectedAddress(addr);
               setQrCodeDataUrl(null);
