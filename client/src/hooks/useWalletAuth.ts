@@ -160,26 +160,57 @@ export function useWalletAuth() {
   const logoutMutation = useMutation({
     mutationFn: async () => {
       // Logout from sdk-dapp (clears wallet connection)
-      const provider = getAccountProvider();
-      await provider.logout();
+      try {
+        const provider = getAccountProvider();
+        if (provider && typeof provider.logout === 'function') {
+          await provider.logout();
+        }
+      } catch (e) {
+        console.log('Provider logout error (non-fatal):', e);
+      }
       
       // Logout from backend (clears session)
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Logout failed');
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'include',
+        });
+      } catch (e) {
+        console.log('Backend logout error (non-fatal):', e);
       }
 
-      return response.json();
+      return { success: true };
     },
     onSuccess: () => {
+      // Clear all storage
       localStorage.removeItem('walletAddress');
+      localStorage.removeItem('loginInfo');
+      localStorage.removeItem('nativeAuthToken');
+      localStorage.removeItem('loginToken');
+      
+      // Clear all SDK-related keys
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('sdk') || key.includes('wallet') || key.includes('auth') || key.includes('dapp'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
       sessionStorage.clear();
       queryClient.clear();
-      navigate('/');
+      
+      // Force navigation with page reload to reset SDK state
+      window.location.href = '/';
+    },
+    onError: (error) => {
+      console.error('Logout error:', error);
+      // Still clear everything and redirect on error
+      localStorage.clear();
+      sessionStorage.clear();
+      queryClient.clear();
+      window.location.href = '/';
     },
   });
 

@@ -26,7 +26,7 @@ export async function createCertificationTransaction(params: TransactionParams):
   // Refresh account to get latest nonce
   await refreshAccount();
   
-  const payloadText = `certify:${fileHash}|filename:${fileName}${authorName ? `|author:${authorName}` : ""}`;
+  const payloadText = `ProofMint:certify:${fileHash}|filename:${fileName}${authorName ? `|author:${authorName}` : ""}`;
   
   // Get current nonce from SDK store or API
   const { getAccount } = await import('@multiversx/sdk-dapp/out/methods/account/getAccount');
