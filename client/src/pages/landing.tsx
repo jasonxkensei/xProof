@@ -83,7 +83,7 @@ export default function Landing() {
           </h1>
           
           <p className="mx-auto mb-8 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">
-            Horodatez vos créations en 30 secondes. Une preuve irréfutable, 
+            Une preuve irréfutable, 
             reconnue mondialement, impossible à falsifier ou supprimer.
           </p>
           
