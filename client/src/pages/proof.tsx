@@ -64,7 +64,7 @@ export default function ProofPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between px-6">
+        <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
@@ -77,7 +77,7 @@ export default function ProofPage() {
         </div>
       </header>
 
-      <div className="container mx-auto max-w-4xl px-6 py-16">
+      <div className="container mx-auto max-w-4xl py-16">
         {/* Verification Badge */}
         <div className="mb-12 flex flex-col items-center text-center">
           <div className={`mb-6 flex h-24 w-24 items-center justify-center rounded-full ${
@@ -148,7 +148,7 @@ export default function ProofPage() {
                   <div className="flex-1">
                     <p className="mb-1 text-sm font-medium text-muted-foreground">Certification Date</p>
                     <p className="font-semibold" data-testid="text-proof-date">
-                      {format(new Date(certification.createdAt), "PPP 'at' p")}
+                      {certification.createdAt ? format(new Date(certification.createdAt), "PPP 'at' p") : "Unknown date"}
                     </p>
                   </div>
                 </div>

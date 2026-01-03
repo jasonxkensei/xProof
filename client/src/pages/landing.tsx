@@ -29,7 +29,7 @@ export default function Landing() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between px-6">
+        <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
@@ -69,7 +69,7 @@ export default function Landing() {
       </header>
 
       {/* Hero Section */}
-      <section className="container px-6 py-20 md:py-28">
+      <section className="container py-20 md:py-28">
         <div className="mx-auto max-w-5xl text-center">
           <Badge variant="secondary" className="mb-6 px-4 py-1.5">
             <Shield className="mr-2 h-3.5 w-3.5" />
@@ -119,7 +119,7 @@ export default function Landing() {
 
       {/* How It Works */}
       <section id="how-it-works" className="border-y bg-muted/30 py-20 md:py-28">
-        <div className="container px-6">
+        <div className="container">
           <div className="mx-auto max-w-5xl">
             <div className="mb-16 text-center">
               <Badge variant="outline" className="mb-4">Comment ça marche</Badge>
@@ -189,7 +189,7 @@ export default function Landing() {
 
       {/* Pricing */}
       <section id="pricing" className="border-y bg-muted/30 py-20 md:py-28">
-        <div className="container px-6">
+        <div className="container">
           <div className="mx-auto max-w-5xl">
             <div className="mb-16 text-center">
               <Badge variant="outline" className="mb-4">Tarifs</Badge>
@@ -292,7 +292,7 @@ export default function Landing() {
 
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">
-        <div className="container px-6">
+        <div className="container">
           <div className="mx-auto max-w-3xl">
             <div className="mb-12 text-center">
               <Badge variant="outline" className="mb-4">FAQ</Badge>
@@ -374,7 +374,7 @@ export default function Landing() {
 
       {/* Final CTA */}
       <section className="border-t bg-primary/5 py-20 md:py-28">
-        <div className="container px-6">
+        <div className="container">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="mb-4 text-3xl md:text-4xl font-bold">
               Protégez votre première création
@@ -401,7 +401,7 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="border-t py-12">
-        <div className="container px-6">
+        <div className="container">
           <div className="mx-auto max-w-5xl">
             <div className="grid gap-8 md:grid-cols-4 mb-12">
               <div className="md:col-span-2">

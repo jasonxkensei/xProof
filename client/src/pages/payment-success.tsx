@@ -64,7 +64,7 @@ export default function PaymentSuccess() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between px-6">
+        <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
@@ -74,7 +74,7 @@ export default function PaymentSuccess() {
         </div>
       </header>
 
-      <div className="container mx-auto max-w-2xl px-6 py-16">
+      <div className="container mx-auto max-w-2xl py-16">
         <div className="flex flex-col items-center text-center">
           {status === "success" ? (
             <>
