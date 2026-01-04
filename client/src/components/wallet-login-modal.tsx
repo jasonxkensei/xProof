@@ -35,6 +35,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   const [loading, setLoading] = useState<string | null>(null);
   const [loginAttempted, setLoginAttempted] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+  const [wcUri, setWcUri] = useState<string | null>(null);
   const [wcConnectedAddress, setWcConnectedAddress] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const attemptRef = useRef<WcAttempt | null>(null);
@@ -154,6 +155,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       setLoginAttempted(false);
       setLoading(null);
       setQrCodeDataUrl(null);
+      setWcUri(null);
       setWcConnectedAddress(null);
       setIsCancelling(false);
       
@@ -296,6 +298,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             if (addr) {
               setWcConnectedAddress(addr);
               setQrCodeDataUrl(null);
+              setWcUri(null);
               setLoading(null);
             }
           }
@@ -304,6 +307,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           console.log(`WalletConnect attempt #${attemptId}: Client logged out`);
           if (attemptRef.current?.id === attemptId) {
             setQrCodeDataUrl(null);
+            setWcUri(null);
             setLoading(null);
           }
         },
@@ -358,13 +362,8 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         
         if (attemptRef.current?.id === attemptId) {
           setQrCodeDataUrl(qrDataUrl);
-          console.log('QR code generated');
-        }
-        
-        if (isMobile) {
-          const xPortalUri = uri.replace('wc:', 'xportal:wc:');
-          console.log('Opening xPortal deep link...');
-          window.location.href = xPortalUri;
+          setWcUri(uri);
+          console.log('QR code generated, URI stored');
         }
       }
       
@@ -394,6 +393,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       if (attemptRef.current?.id === attemptId) {
         setLoading(null);
         setQrCodeDataUrl(null);
+        setWcUri(null);
         setLoginAttempted(false);
         attemptRef.current = null;
       }
@@ -404,6 +404,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     const attempt = attemptRef.current;
     if (!attempt) {
       setQrCodeDataUrl(null);
+      setWcUri(null);
       setLoading(null);
       setLoginAttempted(false);
       return;
@@ -415,6 +416,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     attempt.abortController.abort();
     
     setQrCodeDataUrl(null);
+    setWcUri(null);
     setLoading(null);
     setLoginAttempted(false);
     
@@ -432,6 +434,10 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     setIsCancelling(false);
   };
 
+  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  );
+
   if (qrCodeDataUrl) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -439,27 +445,62 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Smartphone className="h-5 w-5 text-primary" />
-              Scanner avec xPortal
+              {isMobileDevice ? "Connexion xPortal" : "Scanner avec xPortal"}
             </DialogTitle>
             <DialogDescription>
-              Scannez ce QR code avec l'application xPortal pour connecter votre wallet
+              {isMobileDevice 
+                ? "Cliquez sur le bouton ci-dessous pour ouvrir xPortal et autoriser la connexion"
+                : "Scannez ce QR code avec l'application xPortal pour connecter votre wallet"
+              }
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col items-center py-4 space-y-4">
-            <div className="bg-white p-4 rounded-lg shadow-sm">
-              <img 
-                src={qrCodeDataUrl} 
-                alt="QR Code WalletConnect"
-                className="w-[280px] h-[280px]"
-                data-testid="img-walletconnect-qr"
-              />
-            </div>
-            
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>En attente de connexion...</span>
-            </div>
+            {isMobileDevice ? (
+              <>
+                <Button
+                  onClick={() => {
+                    if (wcUri) {
+                      const xPortalUri = wcUri.replace('wc:', 'xportal:wc:');
+                      console.log('Opening xPortal deep link:', xPortalUri);
+                      window.location.href = xPortalUri;
+                    }
+                  }}
+                  className="w-full"
+                  size="lg"
+                  data-testid="button-open-xportal"
+                >
+                  <Smartphone className="h-5 w-5 mr-2" />
+                  Ouvrir xPortal
+                </Button>
+                
+                <div className="text-center text-sm text-muted-foreground space-y-2">
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>En attente de connexion...</span>
+                  </div>
+                  <p className="text-xs">
+                    Après avoir autorisé dans xPortal, revenez ici. La connexion sera automatique.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <img 
+                    src={qrCodeDataUrl} 
+                    alt="QR Code WalletConnect"
+                    className="w-[280px] h-[280px]"
+                    data-testid="img-walletconnect-qr"
+                  />
+                </div>
+                
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>En attente de connexion...</span>
+                </div>
+              </>
+            )}
             
             <Button
               variant="outline"
@@ -478,7 +519,10 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           </div>
 
           <p className="text-xs text-muted-foreground text-center">
-            Ouvrez l'app xPortal, appuyez sur l'icône scan et scannez ce code
+            {isMobileDevice 
+              ? "Assurez-vous que xPortal est installé sur votre appareil"
+              : "Ouvrez l'app xPortal, appuyez sur l'icône scan et scannez ce code"
+            }
           </p>
         </DialogContent>
       </Dialog>
@@ -500,10 +544,25 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
 
         <div className="space-y-3 py-4">
           <Button
-            onClick={handleExtensionLogin}
+            onClick={handleWalletConnectLogin}
             disabled={loading !== null || isCancelling}
             className="w-full justify-start gap-3"
             variant="default"
+            data-testid="button-walletconnect-login"
+          >
+            {loading === 'walletconnect' ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Smartphone className="h-5 w-5" />
+            )}
+            <span>xPortal App</span>
+          </Button>
+
+          <Button
+            onClick={handleExtensionLogin}
+            disabled={loading !== null || isCancelling}
+            className="w-full justify-start gap-3"
+            variant="outline"
             data-testid="button-extension-login"
           >
             {loading === 'extension' ? (
@@ -511,7 +570,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             ) : (
               <Wallet className="h-5 w-5" />
             )}
-            <span>Extension MultiversX DeFi Wallet</span>
+            <span>MultiversX Wallet Extension</span>
           </Button>
 
           <Button
@@ -526,22 +585,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             ) : (
               <Wallet className="h-5 w-5" />
             )}
-            <span>MultiversX Web Wallet</span>
-          </Button>
-
-          <Button
-            onClick={handleWalletConnectLogin}
-            disabled={loading !== null || isCancelling}
-            className="w-full justify-start gap-3"
-            variant="outline"
-            data-testid="button-walletconnect-login"
-          >
-            {loading === 'walletconnect' ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <QrCode className="h-5 w-5" />
-            )}
-            <span>xPortal Mobile (WalletConnect)</span>
+            <span>MultiversX Wallet</span>
           </Button>
         </div>
 
