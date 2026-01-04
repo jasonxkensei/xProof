@@ -17,6 +17,7 @@ import { Link, useLocation } from "wouter";
 import { WalletLoginModal } from "@/components/wallet-login-modal";
 
 interface CertificationData {
+  id?: string;
   fileName: string;
   fileHash: string;
   fileType: string;
@@ -186,6 +187,7 @@ export default function Certify() {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       
       setCertificationResult({
+        id: data.id,
         fileName: file.name,
         fileHash,
         fileType: file.type || "unknown",
@@ -213,21 +215,46 @@ export default function Certify() {
   };
 
   const handleDownloadPDF = async () => {
-    if (!certificationResult || !file) return;
+    if (!certificationResult) return;
 
-    await generateProofPDF({
-      fileName: file.name,
-      fileHash: certificationResult.fileHash,
-      txHash: certificationResult.txHash || "",
-      explorerUrl: certificationResult.explorerUrl || "",
-      authorName: certificationResult.authorName,
-      certificationDate: new Date().toLocaleDateString(),
-    });
+    if (certificationResult.id) {
+      // Download professional PDF from server
+      const response = await fetch(`/api/certificates/${certificationResult.id}.pdf`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${certificationResult.fileName.replace(/\.[^/.]+$/, "")}_proofmint_certificate.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        toast({
+          title: "PDF Downloaded",
+          description: "Your certificate has been saved",
+        });
+        return;
+      }
+    }
 
-    toast({
-      title: "PDF Downloaded",
-      description: "Your certificate has been saved",
-    });
+    // Fallback to client-side PDF if server fails
+    if (file) {
+      await generateProofPDF({
+        fileName: file.name,
+        fileHash: certificationResult.fileHash,
+        txHash: certificationResult.txHash || "",
+        explorerUrl: certificationResult.explorerUrl || "",
+        authorName: certificationResult.authorName,
+        certificationDate: new Date().toLocaleDateString(),
+      });
+
+      toast({
+        title: "PDF Downloaded",
+        description: "Your certificate has been saved",
+      });
+    }
   };
 
   if (!isAuthenticated) {
