@@ -460,18 +460,26 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
               <>
                 <Button
                   onClick={() => {
+                    console.log('Ouvrir xPortal clicked, wcUri:', wcUri ? 'present' : 'null');
                     if (wcUri) {
                       const xPortalUri = wcUri.replace('wc:', 'xportal:wc:');
                       console.log('Opening xPortal deep link:', xPortalUri);
                       window.location.href = xPortalUri;
+                    } else {
+                      console.log('wcUri not available yet');
                     }
                   }}
                   className="w-full"
                   size="lg"
+                  disabled={!wcUri}
                   data-testid="button-open-xportal"
                 >
-                  <Smartphone className="h-5 w-5 mr-2" />
-                  Ouvrir xPortal
+                  {!wcUri ? (
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  ) : (
+                    <Smartphone className="h-5 w-5 mr-2" />
+                  )}
+                  {!wcUri ? 'Préparation...' : 'Ouvrir xPortal'}
                 </Button>
                 
                 <div className="text-center text-sm text-muted-foreground space-y-2">
