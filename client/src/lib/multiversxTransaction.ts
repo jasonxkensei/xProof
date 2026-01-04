@@ -20,13 +20,24 @@ const CHAIN_ID = "1"; // Mainnet
 const GAS_PRICE = 1000000000; // 1 Gwei
 const SIGNATURE_TIMEOUT_MS = 120000; // 120 seconds for guardian flows
 
+function normalizeForBlockchain(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, "_");
+}
+
 export async function createCertificationTransaction(params: TransactionParams): Promise<Transaction> {
   const { userAddress, fileHash, fileName, authorName } = params;
   
   // Refresh account to get latest nonce
   await refreshAccount();
   
-  const payloadText = `ProofMint:certify:${fileHash}|filename:${fileName}${authorName ? `|author:${authorName}` : ""}`;
+  // Normalize filename and author for blockchain compatibility (ASCII only)
+  const safeFileName = normalizeForBlockchain(fileName);
+  const safeAuthorName = authorName ? normalizeForBlockchain(authorName) : undefined;
+  
+  const payloadText = `ProofMint:certify:${fileHash}|filename:${safeFileName}${safeAuthorName ? `|author:${safeAuthorName}` : ""}`;
   
   // Get current nonce from SDK store or API
   const { getAccount } = await import('@multiversx/sdk-dapp/out/methods/account/getAccount');
