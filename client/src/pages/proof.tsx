@@ -22,8 +22,8 @@ export default function ProofPage() {
     const success = await copyToClipboard(text);
     if (success) {
       toast({
-        title: "Copied!",
-        description: "Hash copied to clipboard",
+        title: "Copié !",
+        description: "Hash copié dans le presse-papiers",
       });
     }
   };
@@ -33,7 +33,7 @@ export default function ProofPage() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">Loading proof...</p>
+          <p className="text-sm text-muted-foreground">Chargement de la preuve...</p>
         </div>
       </div>
     );
@@ -45,12 +45,12 @@ export default function ProofPage() {
         <Card className="w-full max-w-md">
           <CardContent className="flex flex-col items-center py-16 text-center">
             <Shield className="mb-4 h-16 w-16 text-muted-foreground/50" />
-            <h2 className="mb-2 text-2xl font-bold">Proof Not Found</h2>
+            <h2 className="mb-2 text-2xl font-bold">Preuve non trouvée</h2>
             <p className="mb-6 text-muted-foreground">
-              The certification proof you're looking for doesn't exist or is not public.
+              La preuve de certification que vous recherchez n'existe pas ou n'est pas publique.
             </p>
             <Button asChild data-testid="button-home">
-              <a href="/">Go to Homepage</a>
+              <a href="/">Retour à l'accueil</a>
             </Button>
           </CardContent>
         </Card>
@@ -72,7 +72,7 @@ export default function ProofPage() {
             <span className="text-xl font-bold tracking-tight">ProofMint</span>
           </div>
           <Button asChild variant="outline" size="sm" data-testid="button-home-header">
-            <a href="/">Home</a>
+            <a href="/">Accueil</a>
           </Button>
         </div>
       </header>
@@ -90,10 +90,10 @@ export default function ProofPage() {
             )}
           </div>
           <h1 className="mb-3 text-3xl md:text-4xl font-bold tracking-tight">
-            {isVerified ? "Blockchain Verified" : "Certification Pending"}
+            {isVerified ? "Vérifié sur la blockchain" : "Certification en cours"}
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl">
-            This document's authenticity has been {isVerified ? "verified" : "recorded"} on the MultiversX blockchain
+            L'authenticité de ce document a été {isVerified ? "vérifiée" : "enregistrée"} sur la blockchain MultiversX
           </p>
         </div>
 
@@ -103,11 +103,11 @@ export default function ProofPage() {
             {/* File Information */}
             <div>
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold">File Information</h2>
+                <h2 className="text-xl font-semibold">Informations du fichier</h2>
                 {isVerified && (
                   <Badge className="bg-chart-2 hover:bg-chart-2" data-testid="badge-verified">
                     <CheckCircle className="mr-1 h-3 w-3" />
-                    Verified
+                    Vérifié
                   </Badge>
                 )}
               </div>
@@ -115,7 +115,7 @@ export default function ProofPage() {
                 <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
                   <Shield className="mt-0.5 h-5 w-5 text-primary" />
                   <div className="flex-1 min-w-0">
-                    <p className="mb-1 text-sm font-medium text-muted-foreground">File Name</p>
+                    <p className="mb-1 text-sm font-medium text-muted-foreground">Nom du fichier</p>
                     <p className="font-semibold break-all" data-testid="text-proof-filename">
                       {certification.fileName}
                     </p>
@@ -125,7 +125,7 @@ export default function ProofPage() {
                 <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
                   <Hash className="mt-0.5 h-5 w-5 text-primary" />
                   <div className="flex-1 min-w-0">
-                    <p className="mb-1 text-sm font-medium text-muted-foreground">SHA-256 Hash</p>
+                    <p className="mb-1 text-sm font-medium text-muted-foreground">Empreinte SHA-256</p>
                     <div className="flex items-center gap-2">
                       <p className="flex-1 break-all font-mono text-sm" data-testid="text-proof-hash">
                         {certification.fileHash}
@@ -146,9 +146,9 @@ export default function ProofPage() {
                 <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
                   <Calendar className="mt-0.5 h-5 w-5 text-primary" />
                   <div className="flex-1">
-                    <p className="mb-1 text-sm font-medium text-muted-foreground">Certification Date</p>
+                    <p className="mb-1 text-sm font-medium text-muted-foreground">Date de certification</p>
                     <p className="font-semibold" data-testid="text-proof-date">
-                      {certification.createdAt ? format(new Date(certification.createdAt), "PPP 'at' p") : "Unknown date"}
+                      {certification.createdAt ? format(new Date(certification.createdAt), "dd/MM/yyyy 'à' HH:mm") : "Date inconnue"}
                     </p>
                   </div>
                 </div>
@@ -157,7 +157,7 @@ export default function ProofPage() {
                   <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
                     <User className="mt-0.5 h-5 w-5 text-primary" />
                     <div className="flex-1">
-                      <p className="mb-1 text-sm font-medium text-muted-foreground">Certified By</p>
+                      <p className="mb-1 text-sm font-medium text-muted-foreground">Certifié par</p>
                       <p className="font-semibold" data-testid="text-proof-author">
                         {certification.authorName}
                       </p>
@@ -175,10 +175,10 @@ export default function ProofPage() {
             {/* Blockchain Information */}
             {certification.transactionHash && (
               <div className="border-t pt-6">
-                <h3 className="mb-4 text-lg font-semibold">Blockchain Details</h3>
+                <h3 className="mb-4 text-lg font-semibold">Détails blockchain</h3>
                 <div className="space-y-3">
                   <div className="rounded-lg bg-muted/30 p-4">
-                    <p className="mb-1 text-sm font-medium text-muted-foreground">Transaction Hash</p>
+                    <p className="mb-1 text-sm font-medium text-muted-foreground">Hash de la transaction</p>
                     <p className="break-all font-mono text-sm" data-testid="text-transaction-hash">
                       {certification.transactionHash}
                     </p>
@@ -192,7 +192,7 @@ export default function ProofPage() {
                     >
                       <a href={certification.transactionUrl} target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="mr-2 h-4 w-4" />
-                        View on MultiversX Explorer
+                        Voir sur l'explorateur MultiversX
                       </a>
                     </Button>
                   )}
@@ -207,11 +207,11 @@ export default function ProofPage() {
           <Button asChild variant="default" size="lg" data-testid="button-download-certificate">
             <a href={`/api/certificates/${certification.id}.pdf`} download>
               <Download className="mr-2 h-5 w-5" />
-              Download Certificate
+              Télécharger le certificat
             </a>
           </Button>
           <Button asChild variant="outline" size="lg" data-testid="button-certify-yours">
-            <a href="/">Certify Your Files</a>
+            <a href="/">Certifiez vos fichiers</a>
           </Button>
         </div>
 

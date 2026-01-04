@@ -138,8 +138,8 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       })
         .then(() => {
           toast({
-            title: "Wallet Connected",
-            description: `Connected: ${wcConnectedAddress.substring(0, 10)}...${wcConnectedAddress.substring(wcConnectedAddress.length - 6)}`,
+            title: "Wallet connecté",
+            description: `Connecté : ${wcConnectedAddress.substring(0, 10)}...${wcConnectedAddress.substring(wcConnectedAddress.length - 6)}`,
           });
           window.location.reload();
         })
@@ -225,8 +225,8 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     } catch (error: any) {
       console.error('Extension login error:', error);
       toast({
-        title: "Extension Login Failed",
-        description: error.message || "Please install MultiversX DeFi Wallet Extension",
+        title: "Échec de connexion Extension",
+        description: error.message || "Veuillez installer l'extension MultiversX DeFi Wallet",
         variant: "destructive"
       });
       setLoading(null);
@@ -251,8 +251,8 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     } catch (error: any) {
       console.error('Web Wallet login error:', error);
       toast({
-        title: "Web Wallet Login Failed",
-        description: error.message || "Failed to connect to Web Wallet",
+        title: "Échec de connexion Web Wallet",
+        description: error.message || "Impossible de se connecter au Web Wallet",
         variant: "destructive"
       });
       setLoading(null);
@@ -380,13 +380,13 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       
       console.error(`WalletConnect attempt #${attemptId} error:`, error);
       
-      let errorMessage = error.message || "Failed to connect via WalletConnect";
+      let errorMessage = error.message || "Impossible de se connecter via WalletConnect";
       if (error.message?.includes("rejected") || error.message?.includes("cancelled") || error.message?.includes("Proposal")) {
-        errorMessage = "Connection cancelled or rejected by wallet";
+        errorMessage = "Connexion annulée ou refusée par le wallet";
       }
       
       toast({
-        title: "xPortal Connection Failed",
+        title: "Échec de connexion xPortal",
         description: errorMessage,
         variant: "destructive"
       });
@@ -439,10 +439,10 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Smartphone className="h-5 w-5 text-primary" />
-              Scan with xPortal
+              Scanner avec xPortal
             </DialogTitle>
             <DialogDescription>
-              Scan this QR code with your xPortal mobile app to connect your wallet
+              Scannez ce QR code avec l'application xPortal pour connecter votre wallet
             </DialogDescription>
           </DialogHeader>
 
@@ -450,7 +450,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             <div className="bg-white p-4 rounded-lg shadow-sm">
               <img 
                 src={qrCodeDataUrl} 
-                alt="WalletConnect QR Code"
+                alt="QR Code WalletConnect"
                 className="w-[280px] h-[280px]"
                 data-testid="img-walletconnect-qr"
               />
@@ -458,7 +458,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Waiting for connection...</span>
+              <span>En attente de connexion...</span>
             </div>
             
             <Button
@@ -473,12 +473,12 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
               ) : (
                 <X className="h-4 w-4 mr-2" />
               )}
-              {isCancelling ? 'Cancelling...' : 'Cancel'}
+              {isCancelling ? 'Annulation...' : 'Annuler'}
             </Button>
           </div>
 
           <p className="text-xs text-muted-foreground text-center">
-            Open xPortal app, tap the scan icon, and scan this code
+            Ouvrez l'app xPortal, appuyez sur l'icône scan et scannez ce code
           </p>
         </DialogContent>
       </Dialog>
@@ -491,10 +491,10 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            Connect Your Wallet
+            Connectez votre wallet
           </DialogTitle>
           <DialogDescription>
-            Choose your preferred wallet to authenticate securely with cryptographic signatures
+            Choisissez votre méthode de connexion préférée pour vous authentifier de manière sécurisée
           </DialogDescription>
         </DialogHeader>
 
@@ -511,7 +511,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             ) : (
               <Wallet className="h-5 w-5" />
             )}
-            <span>MultiversX DeFi Wallet Extension</span>
+            <span>Extension MultiversX DeFi Wallet</span>
           </Button>
 
           <Button
@@ -546,7 +546,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         </div>
 
         <p className="text-xs text-muted-foreground text-center">
-          All authentication methods use cryptographic signatures to prevent wallet impersonation
+          Authentification sécurisée par signature cryptographique
         </p>
       </DialogContent>
     </Dialog>
