@@ -41,7 +41,7 @@ export default function Landing() {
               Comment ça marche
             </a>
             <a href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-pricing">
-              Gratuit
+              Tarifs
             </a>
             <a href="#faq" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-faq">
               FAQ
@@ -382,7 +382,7 @@ export default function Landing() {
                 <h4 className="font-semibold mb-4">Produit</h4>
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li><a href="#how-it-works" className="hover:text-foreground transition-colors">Comment ça marche</a></li>
-                  <li><a href="#pricing" className="hover:text-foreground transition-colors">Gratuit</a></li>
+                  <li><a href="#pricing" className="hover:text-foreground transition-colors">Tarifs</a></li>
                   <li><a href="#faq" className="hover:text-foreground transition-colors">FAQ</a></li>
                 </ul>
               </div>
