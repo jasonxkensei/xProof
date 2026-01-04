@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Upload, FileText, ExternalLink, Download, Copy, LogOut, CreditCard, Settings as SettingsIcon } from "lucide-react";
+import { Shield, Upload, FileText, ExternalLink, Download, Copy, LogOut, Settings as SettingsIcon } from "lucide-react";
 import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { format } from "date-fns";
 import { Link } from "wouter";
@@ -61,17 +61,6 @@ export default function Dashboard() {
     }
   };
 
-  const getTierDisplay = (tier: string) => {
-    const tierMap: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
-      free: { label: "Free", variant: "outline" },
-      pro: { label: "Pro", variant: "default" },
-      business: { label: "Business", variant: "default" },
-    };
-    return tierMap[tier] || { label: tier, variant: "secondary" };
-  };
-
-  const tierInfo = getTierDisplay(user?.subscriptionTier || "free");
-
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -84,9 +73,6 @@ export default function Dashboard() {
             <span className="text-xl font-bold tracking-tight">ProofMint</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            <Badge variant={tierInfo.variant as any} className="hidden sm:inline-flex" data-testid="badge-subscription-tier">
-              {tierInfo.label}
-            </Badge>
             <Button asChild variant="ghost" size="sm" data-testid="button-settings">
               <Link href="/settings">
                 <SettingsIcon className="h-4 w-4 sm:mr-2" />
@@ -112,10 +98,10 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="mb-8 grid gap-6 md:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        {/* Stats Card */}
+        <div className="mb-8">
+          <Card className="max-w-xs">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Certifications</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -123,38 +109,6 @@ export default function Dashboard() {
               <div className="text-2xl font-bold" data-testid="text-total-certifications">
                 {certifications?.length || 0}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">This Month</CardTitle>
-              <Upload className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-monthly-usage">
-                {user?.monthlyUsage || 0}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {user?.subscriptionTier === "free" ? "of 1" : user?.subscriptionTier === "pro" ? "of 20" : "of 200"}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Subscription</CardTitle>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold capitalize" data-testid="text-subscription-plan">
-                {user?.subscriptionTier || "Free"}
-              </div>
-              <Button asChild variant="ghost" className="h-auto p-0 text-xs text-primary hover:text-primary/80" data-testid="link-upgrade">
-                <Link href="/pricing">
-                  {user?.subscriptionTier === "free" ? "Upgrade plan" : "Manage subscription"}
-                </Link>
-              </Button>
             </CardContent>
           </Card>
         </div>

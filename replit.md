@@ -4,7 +4,7 @@
 
 ProofMint is a Web3 certification platform that enables users to create immutable, verifiable proofs of file ownership by recording digital fingerprints (SHA-256 hashes) on the MultiversX blockchain. The application provides a professional, trust-focused interface for non-technical users to certify documents, designs, code, or any digital asset without requiring blockchain expertise.
 
-The platform operates on a freemium subscription model with tiered access (Free, Pro, Business), integrating Stripe for payment processing and offering features like public proof pages, certificate generation, and blockchain verification.
+The platform is 100% free with unlimited certifications, offering features like public proof pages, certificate generation, and blockchain verification. Users only pay the minimal blockchain gas fees (~0.002€) when signing transactions.
 
 ## User Preferences
 
@@ -65,7 +65,7 @@ Preferred communication style: Simple, everyday language.
   - Hybrid approach: SDK-dApp manages client-side wallet state, backend maintains session for data persistence
   - Session storage in PostgreSQL using `connect-pg-simple` with wallet addresses as identifiers
   - HTTP-only cookies for secure session management
-  - Session TTL: 7 days with automatic refresh
+  - Session expires when browser closes (session cookie without maxAge)
 - **Security Guarantees**:
   - Cryptographic proof of wallet ownership (private key signature verification)
   - Prevents wallet impersonation attacks (cannot forge signatures)

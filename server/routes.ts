@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "./db";
 import { storage } from "./storage";
-import { certifications, users, SUBSCRIPTION_TIERS } from "@shared/schema";
+import { certifications, users } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import Stripe from "stripe";
@@ -169,89 +169,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update user branding (Business tier only)
-  app.patch('/api/user/branding', isWalletAuthenticated, async (req: any, res) => {
-    try {
-      const walletAddress = req.walletAddress;
-      const { companyName, companyLogoUrl } = req.body;
-
-      // Get user to check subscription tier
-      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Check if user has Business tier
-      if (user.subscriptionTier !== 'business') {
-        return res.status(403).json({ 
-          message: "Custom branding is only available for Business tier. Please upgrade your subscription.",
-          requiredTier: "business",
-          currentTier: user.subscriptionTier
-        });
-      }
-
-      // Validate input
-      const schema = z.object({
-        companyName: z.string().min(1).max(100),
-        companyLogoUrl: z.string().url().optional().or(z.literal("")),
-      });
-
-      const validatedData = schema.parse({ companyName, companyLogoUrl });
-
-      // Update user branding
-      await db
-        .update(users)
-        .set({
-          companyName: validatedData.companyName,
-          companyLogoUrl: validatedData.companyLogoUrl || null,
-        })
-        .where(eq(users.walletAddress, walletAddress));
-
-      res.json({ message: "Branding updated successfully" });
-    } catch (error) {
-      console.error("Error updating branding:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
-      }
-      res.status(500).json({ message: "Failed to update branding" });
-    }
-  });
-
-  // Create certification
+  // Create certification (unlimited, free service)
   app.post("/api/certifications", isWalletAuthenticated, async (req: any, res) => {
     try {
       const walletAddress = req.walletAddress;
 
-      // Get user to check subscription limits
+      // Get user for certification ownership
       const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
       
       if (!user) {
         return res.status(404).json({ message: "User not found" });
-      }
-
-      // Check if usage needs to be reset (monthly)
-      const now = new Date();
-      const resetDate = new Date(user.usageResetDate!);
-      if (now.getMonth() !== resetDate.getMonth() || now.getFullYear() !== resetDate.getFullYear()) {
-        // Reset monthly usage
-        await db
-          .update(users)
-          .set({ monthlyUsage: 0, usageResetDate: now })
-          .where(eq(users.walletAddress, walletAddress));
-        user.monthlyUsage = 0;
-      }
-
-      // Check subscription limits
-      const tier = user.subscriptionTier as keyof typeof SUBSCRIPTION_TIERS;
-      const limit = SUBSCRIPTION_TIERS[tier].monthlyLimit;
-      
-      if ((user.monthlyUsage || 0) >= limit) {
-        return res.status(403).json({
-          message: `Monthly limit reached. Upgrade your plan to certify more files.`,
-          limit,
-          usage: user.monthlyUsage,
-        });
       }
 
       // Validate request body
@@ -321,12 +248,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Certificate will be generated on-demand when downloaded
       const certificateUrl = `/api/certificates/${certification.id}.pdf`;
-
-      // Increment monthly usage
-      await db
-        .update(users)
-        .set({ monthlyUsage: (user.monthlyUsage || 0) + 1 })
-        .where(eq(users.walletAddress, walletAddress));
 
       res.status(201).json({
         ...certification,
@@ -414,35 +335,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (certificationData) {
         const walletAddress = req.walletAddress;
         
-        // Get user to check subscription limits
+        // Get user
         const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
 
         if (!user) {
           return res.status(404).json({ message: "User not found" });
-        }
-
-        // Check if usage needs to be reset (monthly)
-        const now = new Date();
-        const resetDate = new Date(user.usageResetDate!);
-        if (now.getMonth() !== resetDate.getMonth() || now.getFullYear() !== resetDate.getFullYear()) {
-          // Reset monthly usage
-          await db
-            .update(users)
-            .set({ monthlyUsage: 0, usageResetDate: now })
-            .where(eq(users.walletAddress, walletAddress));
-          user.monthlyUsage = 0;
-        }
-
-        // Check subscription limits
-        const tier = user.subscriptionTier as keyof typeof SUBSCRIPTION_TIERS;
-        const limit = SUBSCRIPTION_TIERS[tier].monthlyLimit;
-        
-        if ((user.monthlyUsage || 0) >= limit) {
-          return res.status(403).json({
-            message: `Monthly limit reached. Upgrade your plan to certify more files.`,
-            limit,
-            usage: user.monthlyUsage,
-          });
         }
 
         // Validate certification data
@@ -490,12 +387,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isPublic: true,
           })
           .returning();
-
-        // Increment monthly usage
-        await db
-          .update(users)
-          .set({ monthlyUsage: (user.monthlyUsage || 0) + 1 })
-          .where(eq(users.walletAddress, walletAddress));
 
         res.json({
           success: true,
@@ -570,12 +461,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Generate PDF
+      // Generate PDF (free service - standard branding)
       const pdfBuffer = await generateCertificatePDF({
         certification,
-        subscriptionTier: user.subscriptionTier || 'free',
-        companyName: user.companyName || undefined,
-        companyLogoUrl: user.companyLogoUrl || undefined,
+        subscriptionTier: 'free',
+        companyName: undefined,
+        companyLogoUrl: undefined,
       });
 
       // Set headers for PDF download

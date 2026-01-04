@@ -41,7 +41,7 @@ export default function Landing() {
               Comment ça marche
             </a>
             <a href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-pricing">
-              Tarifs
+              Gratuit
             </a>
             <a href="#faq" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-faq">
               FAQ
@@ -112,7 +112,7 @@ export default function Landing() {
           </div>
           
           <p className="mt-6 text-sm text-muted-foreground">
-            Gratuit • Sans carte bancaire • 3 certifications offertes par mois
+            100% Gratuit • Sans carte bancaire • Certifications illimitées
           </p>
         </div>
       </section>
@@ -190,101 +190,62 @@ export default function Landing() {
       {/* Pricing */}
       <section id="pricing" className="border-y bg-muted/30 py-20 md:py-28">
         <div className="container">
-          <div className="mx-auto max-w-5xl">
-            <div className="mb-16 text-center">
-              <Badge variant="outline" className="mb-4">Tarifs</Badge>
+          <div className="mx-auto max-w-3xl">
+            <div className="mb-12 text-center">
+              <Badge variant="outline" className="mb-4">100% Gratuit</Badge>
               <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-                Simple et transparent
+                Gratuit pour tous. Pour toujours.
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Commencez gratuitement. Évoluez selon vos besoins.
+                La preuve numérique est un droit fondamental. ProofMint est gratuit et le restera.
               </p>
             </div>
             
-            <div className="grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
-              <Card className="border-primary shadow-lg relative overflow-hidden">
-                <div className="absolute top-0 left-0 right-0 bg-primary text-primary-foreground text-center text-sm font-medium py-1">
-                  Pour commencer
+            <Card className="border-primary shadow-lg max-w-md mx-auto">
+              <CardContent className="pt-8 pb-8">
+                <div className="text-center mb-6">
+                  <div className="mb-2">
+                    <span className="text-5xl font-bold">0€</span>
+                  </div>
+                  <p className="text-muted-foreground">
+                    Certifications illimitées
+                  </p>
                 </div>
-                <CardContent className="pt-10">
-                  <h3 className="mb-1 text-lg font-semibold">Gratuit</h3>
-                  <div className="mb-4">
-                    <span className="text-4xl font-bold">0€</span>
-                    <span className="text-muted-foreground">/mois</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-6">
-                    Parfait pour découvrir et utiliser le service
-                  </p>
-                  <ul className="mb-6 space-y-3 text-sm">
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span><strong>3 certifications gratuites</strong> par mois</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Certificat PDF téléchargeable</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Page de vérification publique</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>QR code de vérification</span>
-                    </li>
-                  </ul>
-                  <Button 
-                    className="w-full" 
-                    onClick={handleConnect}
-                    data-testid="button-start-free-tier"
-                  >
-                    Commencer gratuitement
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <h3 className="mb-1 text-lg font-semibold text-muted-foreground">Certifications supplémentaires</h3>
-                  <div className="mb-4">
-                    <span className="text-4xl font-bold">1,50€</span>
-                    <span className="text-muted-foreground">/certification</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-6">
-                    Payez uniquement ce que vous utilisez
-                  </p>
-                  <ul className="mb-6 space-y-3 text-sm">
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Après vos 3 certifications gratuites</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Sans engagement ni abonnement</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span>Toutes les fonctionnalités incluses</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                      <span><strong>Tarifs dégressifs</strong> pour gros volumes</span>
-                    </li>
-                  </ul>
-                  <Button 
-                    variant="outline" 
-                    className="w-full" 
-                    onClick={handleConnect}
-                    data-testid="button-start-payg"
-                  >
-                    Commencer
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
+                <ul className="mb-8 space-y-3 text-sm">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+                    <span><strong>Certifications illimitées</strong></span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+                    <span>Certificat PDF téléchargeable</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+                    <span>Page de vérification publique</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+                    <span>QR code de vérification</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-primary shrink-0" />
+                    <span>Blockchain MultiversX</span>
+                  </li>
+                </ul>
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={handleConnect}
+                  data-testid="button-start-free"
+                >
+                  Commencer maintenant
+                </Button>
+              </CardContent>
+            </Card>
             
             <p className="mt-8 text-center text-sm text-muted-foreground">
-              Besoin de certifier en volume ? <a href="mailto:contact@proofmint.io" className="text-primary hover:underline">Contactez-nous</a> pour un tarif personnalisé.
+              Seuls les frais blockchain (~0.002€) sont à votre charge lors de la signature.
             </p>
           </div>
         </div>
@@ -381,7 +342,7 @@ export default function Landing() {
             </h2>
             <p className="mb-8 text-lg text-muted-foreground">
               Rejoignez les créateurs qui sécurisent leur travail. 
-              Votre première certification est gratuite.
+              Service 100% gratuit et illimité.
             </p>
             <Button 
               size="lg" 
@@ -421,7 +382,7 @@ export default function Landing() {
                 <h4 className="font-semibold mb-4">Produit</h4>
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li><a href="#how-it-works" className="hover:text-foreground transition-colors">Comment ça marche</a></li>
-                  <li><a href="#pricing" className="hover:text-foreground transition-colors">Tarifs</a></li>
+                  <li><a href="#pricing" className="hover:text-foreground transition-colors">Gratuit</a></li>
                   <li><a href="#faq" className="hover:text-foreground transition-colors">FAQ</a></li>
                 </ul>
               </div>
