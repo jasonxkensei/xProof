@@ -155,7 +155,7 @@ export default function Dashboard() {
                             </Button>
                           </div>
                           <p data-testid={`text-date-${cert.id}`}>
-                            {cert.createdAt ? format(new Date(cert.createdAt), "PPP 'at' p") : "Unknown date"}
+                            {cert.createdAt ? format(new Date(cert.createdAt), "dd/MM/yyyy 'à' HH:mm") : "Date inconnue"}
                           </p>
                         </div>
                       </div>
