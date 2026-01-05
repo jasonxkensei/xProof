@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,56 +14,47 @@ import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAcco
 import { WalletConnectV2Provider } from '@multiversx/sdk-wallet-connect-provider';
 import { Shield, Wallet, Loader2, X, Smartphone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
+import { queryClient } from "@/lib/queryClient";
 import QRCodeLib from 'qrcode';
 
 const WALLETCONNECT_PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'b4c11c7335da6e3e77753a17d466e4e2';
 const RELAY_URL = 'wss://relay.walletconnect.com';
 const CHAIN_ID = '1';
 
+const WALLETCONNECT_SESSION_KEY = 'walletconnect_session';
+
 interface WalletLoginModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
+const isMobileDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
+const isIOS = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+};
 
 export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
   const [wcUri, setWcUri] = useState<string | null>(null);
-  const providerRef = useRef<any>(null);
+  const [waitingForMobileReturn, setWaitingForMobileReturn] = useState(false);
+  const providerRef = useRef<WalletConnectV2Provider | null>(null);
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const isLoggedIn = useGetIsLoggedIn();
   const { address } = useGetAccount();
 
-  // Handle successful login detection
-  useEffect(() => {
-    if (isLoggedIn && address && open) {
-      console.log('Login detected via SDK:', address);
-      syncAndRedirect(address);
-    }
-  }, [isLoggedIn, address, open]);
-
-  // Cleanup on modal close
-  useEffect(() => {
-    if (!open) {
-      setLoading(null);
-      setError(null);
-      setQrCodeDataUrl(null);
-      setWcUri(null);
-      if (providerRef.current) {
-        try {
-          providerRef.current.logout?.();
-        } catch (e) {
-          // Ignore cleanup errors
-        }
-        providerRef.current = null;
-      }
-    }
-  }, [open]);
-
-  const syncAndRedirect = async (walletAddress: string) => {
+  const syncAndRedirect = useCallback(async (walletAddress: string): Promise<boolean> => {
     try {
-      // Try to sync with backend
+      console.log('🔄 Syncing wallet with backend:', walletAddress);
+      
       const response = await fetch('/api/auth/wallet/simple-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,20 +63,138 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       });
       
       if (response.ok) {
+        const userData = await response.json();
+        console.log('✅ Backend sync successful:', userData);
+        
         localStorage.setItem('walletAddress', walletAddress);
+        
+        queryClient.setQueryData(['/api/auth/me'], userData);
+        await queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+        
         toast({
           title: "Wallet connecté",
           description: `Connecté : ${walletAddress.substring(0, 10)}...${walletAddress.slice(-6)}`,
         });
-        window.location.reload();
+        
+        onOpenChange(false);
+        
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 100);
+        
+        return true;
       } else {
-        // Still save and reload even if sync fails
-        localStorage.setItem('walletAddress', walletAddress);
-        window.location.reload();
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('Backend sync failed:', response.status, errorText);
+        
+        setError('Échec de la synchronisation avec le serveur. Veuillez réessayer.');
+        setLoading(null);
+        setWaitingForMobileReturn(false);
+        
+        toast({
+          title: "Erreur de connexion",
+          description: "Impossible de créer votre session. Veuillez réessayer.",
+          variant: "destructive"
+        });
+        
+        return false;
       }
     } catch (err) {
-      localStorage.setItem('walletAddress', walletAddress);
-      window.location.reload();
+      console.error('Sync error:', err);
+      
+      setError('Erreur de connexion au serveur. Veuillez réessayer.');
+      setLoading(null);
+      setWaitingForMobileReturn(false);
+      
+      toast({
+        title: "Erreur de connexion",
+        description: "Une erreur est survenue. Veuillez réessayer.",
+        variant: "destructive"
+      });
+      
+      return false;
+    }
+  }, [toast, onOpenChange, navigate]);
+
+  useEffect(() => {
+    if (isLoggedIn && address && open) {
+      console.log('Login detected via SDK:', address);
+      syncAndRedirect(address);
+    }
+  }, [isLoggedIn, address, open, syncAndRedirect]);
+
+  useEffect(() => {
+    if (!open) {
+      setLoading(null);
+      setError(null);
+      setQrCodeDataUrl(null);
+      setWcUri(null);
+      setWaitingForMobileReturn(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!waitingForMobileReturn || !providerRef.current) return;
+
+    const checkConnection = async () => {
+      try {
+        const provider = providerRef.current;
+        if (!provider) return;
+
+        let addr = '';
+        try {
+          if (typeof provider.getAddress === 'function') {
+            addr = await provider.getAddress();
+          }
+        } catch (e) {
+          console.log('Checking address...', e);
+        }
+
+        if (addr && addr.startsWith('erd1')) {
+          console.log('✅ Mobile return - wallet connected:', addr);
+          setWaitingForMobileReturn(false);
+          await syncAndRedirect(addr);
+        }
+      } catch (e) {
+        console.log('Connection check error:', e);
+      }
+    };
+
+    const interval = setInterval(checkConnection, 1000);
+    const timeout = setTimeout(() => {
+      setWaitingForMobileReturn(false);
+      setLoading(null);
+    }, 120000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [waitingForMobileReturn, syncAndRedirect]);
+
+  const cleanupExistingSessions = async () => {
+    try {
+      localStorage.removeItem(WALLETCONNECT_SESSION_KEY);
+      
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('wc@') || key.includes('walletconnect'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
+      if (providerRef.current) {
+        try {
+          await providerRef.current.logout();
+        } catch (e) {
+          console.log('Provider cleanup (non-fatal):', e);
+        }
+        providerRef.current = null;
+      }
+    } catch (e) {
+      console.log('Session cleanup error (non-fatal):', e);
     }
   };
 
@@ -98,7 +207,6 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.extension 
       });
-      providerRef.current = provider;
       
       console.log('Initializing extension provider...');
       if (typeof provider.init === 'function') {
@@ -109,10 +217,8 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       await provider.login();
       console.log('Extension login call completed');
       
-      // Wait a moment for SDK to update
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Try to get address from provider
       let walletAddress = '';
       try {
         if (typeof (provider as any).getAddress === 'function') {
@@ -128,12 +234,9 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         console.log('Got address from extension:', walletAddress);
         await syncAndRedirect(walletAddress);
       } else {
-        // If no address yet, wait for SDK hooks to detect it (handled by useEffect)
         console.log('Waiting for SDK to detect login...');
-        // Give SDK more time
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // If still not logged in, throw error
         if (!isLoggedIn) {
           throw new Error('La connexion a échoué. Veuillez réessayer.');
         }
@@ -160,7 +263,6 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.crossWindow 
       });
-      providerRef.current = provider;
       
       console.log('Initializing web wallet provider...');
       if (typeof provider.init === 'function') {
@@ -191,7 +293,10 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     setWcUri(null);
     
     try {
-      console.log('Creating WalletConnectV2Provider directly...');
+      console.log('Cleaning up existing WalletConnect sessions...');
+      await cleanupExistingSessions();
+      
+      console.log('Creating WalletConnectV2Provider...');
       
       if (!WALLETCONNECT_PROJECT_ID) {
         throw new Error('WalletConnect Project ID non configuré');
@@ -200,14 +305,11 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       const callbacks = {
         onClientLogin: async () => {
           console.log('WalletConnect: Client logged in!');
-          // Get address from provider
           if (providerRef.current) {
             let addr = '';
             try {
-              if (typeof (providerRef.current as any).getAddress === 'function') {
-                addr = await (providerRef.current as any).getAddress();
-              } else if ((providerRef.current as any).account?.address) {
-                addr = (providerRef.current as any).account.address;
+              if (typeof providerRef.current.getAddress === 'function') {
+                addr = await providerRef.current.getAddress();
               }
             } catch (e) {
               console.log('Could not get address from provider:', e);
@@ -222,13 +324,13 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           setQrCodeDataUrl(null);
           setWcUri(null);
           setLoading(null);
+          setWaitingForMobileReturn(false);
         },
         onClientEvent: async (event: any) => {
           console.log('WalletConnect event:', event);
         }
       };
       
-      // Create WalletConnectV2Provider directly
       const wcProvider = new WalletConnectV2Provider(
         callbacks,
         CHAIN_ID,
@@ -246,13 +348,27 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       console.log('Got WalletConnect URI:', uri ? 'yes' : 'no');
       
       if (uri) {
-        const qrDataUrl = await QRCodeLib.toDataURL(uri, {
-          width: 280,
-          margin: 2,
-          color: { dark: '#000000', light: '#ffffff' }
-        });
-        setQrCodeDataUrl(qrDataUrl);
         setWcUri(uri);
+        
+        if (isMobileDevice()) {
+          console.log('📱 Mobile device detected - opening xPortal directly');
+          setWaitingForMobileReturn(true);
+          
+          const encodedUri = encodeURIComponent(uri);
+          
+          if (isIOS()) {
+            window.location.href = `https://maiar.page.link/?apn=com.elrond.maiar.wallet&isi=1519405832&ibi=com.elrond.maiar.wallet&link=https://maiar.com/?wallet-connect=${encodedUri}`;
+          } else {
+            window.location.href = `intent://wc?uri=${encodedUri}#Intent;scheme=xportal;package=com.elrond.maiar.wallet;end`;
+          }
+        } else {
+          const qrDataUrl = await QRCodeLib.toDataURL(uri, {
+            width: 280,
+            margin: 2,
+            color: { dark: '#000000', light: '#ffffff' }
+          });
+          setQrCodeDataUrl(qrDataUrl);
+        }
       }
       
       console.log('Waiting for user approval...');
@@ -262,11 +378,11 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     } catch (err: any) {
       console.error('WalletConnect login error:', err);
       
-      // Don't show error for user cancellation
       if (err.message?.includes('rejected') || err.message?.includes('cancelled') || err.message?.includes('Proposal')) {
         setLoading(null);
         setQrCodeDataUrl(null);
         setWcUri(null);
+        setWaitingForMobileReturn(false);
         return;
       }
       
@@ -280,28 +396,76 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       setLoading(null);
       setQrCodeDataUrl(null);
       setWcUri(null);
+      setWaitingForMobileReturn(false);
     }
   };
 
-  const handleCancelWalletConnect = () => {
-    if (providerRef.current) {
-      try {
-        providerRef.current.logout?.();
-      } catch (e) {
-        // Ignore
-      }
-      providerRef.current = null;
-    }
+  const handleCancelWalletConnect = async () => {
+    await cleanupExistingSessions();
     setLoading(null);
     setQrCodeDataUrl(null);
     setWcUri(null);
+    setWaitingForMobileReturn(false);
   };
 
-  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    typeof navigator !== 'undefined' ? navigator.userAgent : ''
-  );
+  if (waitingForMobileReturn) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md" data-testid="modal-wallet-login">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-primary" />
+              Connexion en cours...
+            </DialogTitle>
+            <DialogDescription>
+              Validez la connexion dans xPortal puis revenez ici
+            </DialogDescription>
+          </DialogHeader>
 
-  // QR Code view for WalletConnect
+          <div className="flex flex-col items-center py-6 space-y-4">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <p className="text-center text-muted-foreground">
+              En attente de validation dans xPortal...
+            </p>
+            <p className="text-center text-sm text-muted-foreground">
+              Si xPortal ne s'est pas ouvert, cliquez ci-dessous
+            </p>
+            
+            <Button
+              onClick={() => {
+                if (wcUri) {
+                  const encodedUri = encodeURIComponent(wcUri);
+                  if (isIOS()) {
+                    window.location.href = `https://maiar.page.link/?apn=com.elrond.maiar.wallet&isi=1519405832&ibi=com.elrond.maiar.wallet&link=https://maiar.com/?wallet-connect=${encodedUri}`;
+                  } else {
+                    window.location.href = `intent://wc?uri=${encodedUri}#Intent;scheme=xportal;package=com.elrond.maiar.wallet;end`;
+                  }
+                }
+              }}
+              className="w-full"
+              variant="outline"
+              disabled={!wcUri}
+              data-testid="button-retry-xportal"
+            >
+              <Smartphone className="h-5 w-5 mr-2" />
+              Ouvrir xPortal
+            </Button>
+            
+            <Button
+              variant="ghost"
+              onClick={handleCancelWalletConnect}
+              className="w-full"
+              data-testid="button-cancel-walletconnect"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Annuler
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   if (qrCodeDataUrl) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -309,63 +473,27 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Smartphone className="h-5 w-5 text-primary" />
-              {isMobileDevice ? "Connexion xPortal" : "Scanner avec xPortal"}
+              Scanner avec xPortal
             </DialogTitle>
             <DialogDescription>
-              {isMobileDevice 
-                ? "Cliquez sur le bouton ci-dessous pour ouvrir xPortal"
-                : "Scannez ce QR code avec l'application xPortal"
-              }
+              Scannez ce QR code avec l'application xPortal
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col items-center py-4 space-y-4">
-            {isMobileDevice ? (
-              <>
-                <Button
-                  onClick={() => {
-                    if (wcUri) {
-                      const encodedUri = encodeURIComponent(wcUri);
-                      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-                      
-                      if (isIOS) {
-                        window.location.href = `https://maiar.page.link/?apn=com.elrond.maiar.wallet&isi=1519405832&ibi=com.elrond.maiar.wallet&link=https://maiar.com/?wallet-connect=${encodedUri}`;
-                      } else {
-                        window.location.href = `intent://wc?uri=${encodedUri}#Intent;scheme=xportal;package=com.elrond.maiar.wallet;end`;
-                      }
-                    }
-                  }}
-                  className="w-full"
-                  size="lg"
-                  disabled={!wcUri}
-                  data-testid="button-open-xportal"
-                >
-                  <Smartphone className="h-5 w-5 mr-2" />
-                  Ouvrir xPortal
-                </Button>
-                
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>En attente de connexion...</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="bg-white p-4 rounded-lg shadow-sm">
-                  <img 
-                    src={qrCodeDataUrl} 
-                    alt="QR Code WalletConnect"
-                    className="w-[280px] h-[280px]"
-                    data-testid="img-walletconnect-qr"
-                  />
-                </div>
-                
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>En attente de connexion...</span>
-                </div>
-              </>
-            )}
+            <div className="bg-white p-4 rounded-lg shadow-sm">
+              <img 
+                src={qrCodeDataUrl} 
+                alt="QR Code WalletConnect"
+                className="w-[280px] h-[280px]"
+                data-testid="img-walletconnect-qr"
+              />
+            </div>
+            
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>En attente de connexion...</span>
+            </div>
             
             <Button
               variant="outline"
@@ -382,7 +510,6 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     );
   }
 
-  // Main login options view
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md" data-testid="modal-wallet-login">

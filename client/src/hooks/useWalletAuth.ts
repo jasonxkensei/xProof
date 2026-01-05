@@ -22,7 +22,6 @@ interface User {
 }
 
 function getNativeAuthTokenFromStorage(): string | null {
-  // SDK now uses localStorage for better persistence (mobile deep links)
   const keys = Object.keys(localStorage);
   for (const key of keys) {
     if (key.includes('nativeAuth') || key.includes('token')) {
@@ -38,7 +37,6 @@ function getNativeAuthTokenFromStorage(): string | null {
   const loginToken = localStorage.getItem('loginToken');
   if (loginToken) return loginToken;
   
-  // Fallback to sessionStorage for backward compatibility
   const sessionKeys = Object.keys(sessionStorage);
   for (const key of sessionKeys) {
     if (key.includes('nativeAuth') || key.includes('token')) {
@@ -55,18 +53,15 @@ function getNativeAuthTokenFromStorage(): string | null {
 export function useWalletAuth() {
   const [, navigate] = useLocation();
   const prevLoggedIn = useRef(false);
+  const initialCheckDone = useRef(false);
   
-  // Get wallet state from sdk-dapp
   const { address: sdkAddress } = useGetAccount();
   const isLoggedInSdk = useGetIsLoggedIn();
   
-  // Fallback: check localStorage for saved wallet address (localStorage persists across page reloads)
   const savedAddress = typeof window !== 'undefined' ? localStorage.getItem('walletAddress') : null;
   const address = sdkAddress || savedAddress || '';
   const isLoggedIn = isLoggedInSdk || !!savedAddress;
   
-  console.log('🔍 localStorage walletAddress:', savedAddress);
-
   console.log('👀 useWalletAuth state:', { 
     isLoggedInSdk, 
     sdkAddress: sdkAddress?.slice(0, 20), 
@@ -87,77 +82,89 @@ export function useWalletAuth() {
     }
   }, [isLoggedIn, address]);
 
-  // Fetch user data from backend when wallet is connected
-  const { data: user, isLoading, refetch } = useQuery<User | null>({
+  const { data: user, isLoading } = useQuery<User | null>({
     queryKey: ['/api/auth/me'],
     queryFn: async () => {
-      if (!address) {
-        return null;
-      }
-
-      console.log('📡 Checking auth status for wallet:', address);
-
+      console.log('📡 Checking auth status...');
+      
       try {
         const response = await fetch('/api/auth/me', {
           credentials: 'include',
         });
         
-        if (response.status === 401) {
-          console.log('🔐 No backend session, syncing with Native Auth...');
-          const nativeAuthToken = getNativeAuthTokenFromStorage();
+        if (response.ok) {
+          const userData = await response.json();
+          console.log('✅ User authenticated from existing session:', userData.walletAddress?.slice(0, 15));
           
-          if (!nativeAuthToken) {
-            console.error('No native auth token found - will retry...');
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const retryToken = getNativeAuthTokenFromStorage();
-            if (!retryToken) {
-              console.error('Still no token after retry');
-              return null;
+          if (userData.walletAddress && !localStorage.getItem('walletAddress')) {
+            localStorage.setItem('walletAddress', userData.walletAddress);
+          }
+          
+          initialCheckDone.current = true;
+          return userData;
+        }
+        
+        if (response.status === 401) {
+          console.log('🔐 No backend session...');
+          
+          if (address) {
+            console.log('📤 Attempting to sync wallet:', address.slice(0, 15));
+            const nativeAuthToken = getNativeAuthTokenFromStorage();
+            
+            if (nativeAuthToken) {
+              const syncResponse = await fetch('/api/auth/wallet/sync', {
+                method: 'POST',
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${nativeAuthToken}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({ walletAddress: address }),
+              });
+
+              if (syncResponse.ok) {
+                console.log('✅ Backend session created via native auth');
+                initialCheckDone.current = true;
+                return syncResponse.json();
+              }
             }
+            
+            const simpleSyncResponse = await fetch('/api/auth/wallet/simple-sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ walletAddress: address }),
+            });
+
+            if (simpleSyncResponse.ok) {
+              console.log('✅ Backend session created via simple sync');
+              initialCheckDone.current = true;
+              return simpleSyncResponse.json();
+            }
+            
+            console.log('❌ Could not establish backend session');
           }
-
-          const tokenToUse = nativeAuthToken || getNativeAuthTokenFromStorage();
-          if (!tokenToUse) return null;
-
-          const syncResponse = await fetch('/api/auth/wallet/sync', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${tokenToUse}`
-            },
-            credentials: 'include',
-            body: JSON.stringify({ walletAddress: address }),
-          });
-
-          if (syncResponse.ok) {
-            console.log('✅ Backend session created successfully');
-            return syncResponse.json();
-          }
-          console.error('❌ Failed to sync with backend:', await syncResponse.text());
+          
+          initialCheckDone.current = true;
           return null;
         }
         
-        if (!response.ok) {
-          throw new Error('Failed to fetch user');
-        }
-        
-        console.log('✅ User authenticated from existing session');
-        return response.json();
+        initialCheckDone.current = true;
+        return null;
       } catch (error) {
         console.error('Error checking auth status:', error);
+        initialCheckDone.current = true;
         return null;
       }
     },
-    enabled: isLoggedIn && !!address, // Only run query when wallet is connected
-    retry: 2,
-    retryDelay: 1000,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    enabled: true,
+    retry: 1,
+    retryDelay: 500,
+    staleTime: 1000 * 60 * 5,
   });
 
-  // Logout mutation
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      // Logout from sdk-dapp (clears wallet connection)
       try {
         const provider = getAccountProvider();
         if (provider && typeof provider.logout === 'function') {
@@ -167,7 +174,6 @@ export function useWalletAuth() {
         console.log('Provider logout error (non-fatal):', e);
       }
       
-      // Logout from backend (clears session)
       try {
         await fetch('/api/auth/logout', {
           method: 'POST',
@@ -180,17 +186,15 @@ export function useWalletAuth() {
       return { success: true };
     },
     onSuccess: () => {
-      // Clear all storage
       localStorage.removeItem('walletAddress');
       localStorage.removeItem('loginInfo');
       localStorage.removeItem('nativeAuthToken');
       localStorage.removeItem('loginToken');
       
-      // Clear all SDK-related keys
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && (key.includes('sdk') || key.includes('wallet') || key.includes('auth') || key.includes('dapp'))) {
+        if (key && (key.includes('sdk') || key.includes('wallet') || key.includes('auth') || key.includes('dapp') || key.includes('wc@'))) {
           keysToRemove.push(key);
         }
       }
@@ -199,12 +203,10 @@ export function useWalletAuth() {
       sessionStorage.clear();
       queryClient.clear();
       
-      // Force navigation with page reload to reset SDK state
       window.location.href = '/';
     },
     onError: (error) => {
       console.error('Logout error:', error);
-      // Still clear everything and redirect on error
       localStorage.clear();
       sessionStorage.clear();
       queryClient.clear();
@@ -212,12 +214,14 @@ export function useWalletAuth() {
     },
   });
 
+  const isAuthenticated = !!user;
+
   return {
     user,
-    walletAddress: address,
-    isAuthenticated: isLoggedIn && !!user,
-    isWalletConnected: isLoggedInSdk, // SDK is actually connected (can sign transactions)
-    isLoading: isLoading && isLoggedIn, // Loading only when fetching user data
+    walletAddress: user?.walletAddress || address,
+    isAuthenticated,
+    isWalletConnected: isLoggedInSdk,
+    isLoading,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
   };
