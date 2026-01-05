@@ -7,7 +7,8 @@ import App from "./App";
 import "./index.css";
 
 // Configure MultiversX SDK for MAINNET with Native Auth
-const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
+// Use environment variable with fallback to ensure WalletConnect works in all environments
+const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'b4c11c7335da6e3e77753a17d466e4e2';
 
 console.log('🔍 WalletConnect Project ID:', walletConnectProjectId ? 'Configured ✅' : 'Missing ❌');
 console.log('🌐 MultiversX Network: MAINNET');

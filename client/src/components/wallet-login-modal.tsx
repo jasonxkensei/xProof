@@ -316,7 +316,16 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         }
       };
       
-      console.log('Creating WalletConnectV2Provider...');
+      console.log('Creating WalletConnectV2Provider with:', {
+        chainId: CHAIN_ID,
+        relayUrl: RELAY_URL,
+        projectId: WALLETCONNECT_PROJECT_ID ? 'configured' : 'MISSING'
+      });
+      
+      if (!WALLETCONNECT_PROJECT_ID) {
+        throw new Error('WalletConnect Project ID is not configured');
+      }
+      
       wcProvider = new WalletConnectV2Provider(
         callbacks,
         CHAIN_ID,
@@ -332,17 +341,31 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       attemptRef.current = attempt;
       
       console.log('Initializing WalletConnect provider...');
-      await wcProvider.init();
-      console.log('WalletConnect initialized');
+      try {
+        await wcProvider.init();
+        console.log('WalletConnect initialized successfully');
+      } catch (initError: any) {
+        console.error('WalletConnect init failed:', initError);
+        throw new Error(`Initialization failed: ${initError.message || 'Unknown error'}`);
+      }
       
       if (abortController.signal.aborted) {
         console.log(`Attempt #${attemptId} aborted before connect`);
         return;
       }
       
-      console.log('Connecting to get URI...');
-      const { uri, approval } = await wcProvider.connect();
-      console.log('Got WalletConnect URI');
+      console.log('Connecting to WalletConnect relay...');
+      let connectResult;
+      try {
+        connectResult = await wcProvider.connect();
+        console.log('WalletConnect connect() succeeded, uri:', connectResult.uri ? 'present' : 'missing');
+      } catch (connectError: any) {
+        console.error('WalletConnect connect failed:', connectError);
+        throw new Error(`Connection failed: ${connectError.message || 'Unknown error'}`);
+      }
+      
+      const { uri, approval } = connectResult;
+      console.log('Got WalletConnect URI:', uri ? 'yes' : 'no');
       
       if (abortController.signal.aborted) {
         console.log(`Attempt #${attemptId} aborted after connect`);

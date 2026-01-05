@@ -44,3 +44,8 @@ integrations = [
   "javascript_database:1.0.0",
   "javascript_stripe:1.0.0",
 ]
+
+[userenv]
+
+[userenv.shared]
+VITE_WALLETCONNECT_PROJECT_ID = "b4c11c7335da6e3e77753a17d466e4e2"
