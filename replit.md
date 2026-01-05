@@ -184,17 +184,20 @@ Preferred communication style: Simple, everyday language.
 - **Method**: DeFi Wallet Extension (browser)
 
 ### Working Features
-- ✅ Extension Wallet login + transaction signing (FULLY WORKING)
+- ✅ Extension Wallet login + transaction signing (FULLY WORKING with polling mechanism)
+- ✅ Web Wallet login (FULLY WORKING - recommended for Guardian 2FA users)
 - ✅ File hashing (SHA-256 client-side)
 - ✅ Blockchain certification on Mainnet
 - ✅ Transaction data encoding (certify:hash|filename|author)
-- ✅ User session management
+- ✅ User session management with PostgreSQL persistence
+- ✅ Automatic redirect to landing page for unauthenticated users
+- ✅ Branded loading screen during wallet connection
 
 ### Known Issues
-- ⚠️ **xPortal Mobile**: Connection works in xPortal app, but session not synced back to browser after deep link return. Root cause: JavaScript execution interrupted when navigating to deep link.
+- ⚠️ **xPortal Mobile (Deep Link)**: Connection works in xPortal app, but session may not sync back to browser after deep link return. Root cause: JavaScript execution interrupted when browser navigates to xPortal app. The SDK's ProviderFactory handles WalletConnect sessions, but mobile browsers may kill/reload the tab.
 - ⚠️ **Extension Wallet + Guardian 2FA**: Known SDK bug with cross-window communication. Workaround: Use Web Wallet for 2FA accounts.
 
 ### Recommended Wallet Methods
-1. **Extension Wallet** (Desktop) - Best experience, fully working
-2. **Web Wallet** (Any device) - Works with Guardian 2FA
-3. **xPortal Mobile** - Connection issues on return from deep link
+1. **Extension Wallet** (Desktop) - Best experience, fully working with polling
+2. **Web Wallet** (Any device) - Works with Guardian 2FA, reliable cross-window flow
+3. **xPortal Mobile** - Use QR code on desktop browser for best results; deep link on mobile may have issues
