@@ -462,9 +462,9 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
                   onClick={() => {
                     console.log('Ouvrir xPortal clicked, wcUri:', wcUri ? 'present' : 'null');
                     if (wcUri) {
-                      const xPortalUri = wcUri.replace('wc:', 'xportal:wc:');
-                      console.log('Opening xPortal deep link:', xPortalUri);
-                      window.location.href = xPortalUri;
+                      const xPortalDeepLink = `xportal://wc?uri=${encodeURIComponent(wcUri)}`;
+                      console.log('Opening xPortal deep link:', xPortalDeepLink);
+                      window.location.href = xPortalDeepLink;
                     } else {
                       console.log('wcUri not available yet');
                     }
