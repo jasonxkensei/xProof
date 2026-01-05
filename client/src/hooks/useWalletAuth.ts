@@ -106,8 +106,6 @@ export function useWalletAuth() {
           console.log('🔐 No backend session, syncing with Native Auth...');
           const nativeAuthToken = getNativeAuthTokenFromStorage();
           
-          console.log('🔑 Native Auth Token found:', !!nativeAuthToken);
-          
           if (!nativeAuthToken) {
             console.error('No native auth token found - will retry...');
             await new Promise(resolve => setTimeout(resolve, 1000));
