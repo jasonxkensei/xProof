@@ -460,13 +460,36 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
               <>
                 <Button
                   onClick={() => {
-                    console.log('Ouvrir xPortal clicked, wcUri:', wcUri ? 'present' : 'null');
                     if (wcUri) {
-                      const xPortalDeepLink = `xportal://wc?uri=${encodeURIComponent(wcUri)}`;
-                      console.log('Opening xPortal deep link:', xPortalDeepLink);
-                      window.location.href = xPortalDeepLink;
-                    } else {
-                      console.log('wcUri not available yet');
+                      const encodedUri = encodeURIComponent(wcUri);
+                      
+                      // Try multiple deep link formats for better compatibility
+                      const isAndroid = /Android/i.test(navigator.userAgent);
+                      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+                      
+                      // Universal link format (works best for xPortal)
+                      const universalLink = `https://maiar.page.link/?apn=com.elrond.maiar.wallet&isi=1519405832&ibi=com.elrond.maiar.wallet&link=https://maiar.com/?wallet-connect=${encodedUri}`;
+                      
+                      // Alternative: direct xPortal web link
+                      const xPortalWebLink = `https://xportal.com/wc?uri=${encodedUri}`;
+                      
+                      // Try to open the app
+                      if (isIOS) {
+                        // iOS: Use universal link first
+                        window.location.href = universalLink;
+                      } else if (isAndroid) {
+                        // Android: Try intent URL for better app opening
+                        const intentUrl = `intent://wc?uri=${encodedUri}#Intent;scheme=xportal;package=com.elrond.maiar.wallet;end`;
+                        window.location.href = intentUrl;
+                        
+                        // Fallback to universal link after short delay
+                        setTimeout(() => {
+                          window.location.href = universalLink;
+                        }, 2000);
+                      } else {
+                        // Fallback for other devices
+                        window.location.href = xPortalWebLink;
+                      }
                     }
                   }}
                   className="w-full"
@@ -489,6 +512,9 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
                   </div>
                   <p className="text-xs">
                     Après avoir autorisé dans xPortal, revenez ici. La connexion sera automatique.
+                  </p>
+                  <p className="text-xs text-muted-foreground/70">
+                    Si l'app ne s'ouvre pas, assurez-vous que xPortal est installé depuis l'App Store ou Google Play
                   </p>
                 </div>
               </>
