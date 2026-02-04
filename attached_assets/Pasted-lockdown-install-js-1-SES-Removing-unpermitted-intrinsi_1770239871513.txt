@@ -1,0 +1,87 @@
+lockdown-install.js:1 SES Removing unpermitted intrinsics
+index-CHRgRpA9.js:601 🔍 WalletConnect Project ID: Configured ✅
+index-CHRgRpA9.js:601 🌐 MultiversX Network: MAINNET
+index-CHRgRpA9.js:601 📋 MultiversX Config: {
+  "storage": {},
+  "dAppConfig": {
+    "environment": "mainnet",
+    "nativeAuth": {
+      "expirySeconds": 86400,
+      "tokenExpirationToastWarningSeconds": 300
+    },
+    "walletConnectV2ProjectId": "b4c11c7335da6e3e77753a17d466e4e2",
+    "walletConnectV2Options": {
+      "projectId": "b4c11c7335da6e3e77753a17d466e4e2",
+      "metadata": {
+        "name": "ProofMint",
+        "description": "Blockchain Certification Platform - Create immutable proofs of file ownership",
+        "url": "https://proofmint.org",
+        "icons": [
+          "https://proofmint.org/favicon.ico"
+        ]
+      },
+      "relayUrl": "wss://relay.walletconnect.com"
+    }
+  }
+}
+index-CHRgRpA9.js:601 🔗 WalletConnect Options: {
+  "projectId": "b4c11c7335da6e3e77753a17d466e4e2",
+  "metadata": {
+    "name": "ProofMint",
+    "description": "Blockchain Certification Platform - Create immutable proofs of file ownership",
+    "url": "https://proofmint.org",
+    "icons": [
+      "https://proofmint.org/favicon.ico"
+    ]
+  },
+  "relayUrl": "wss://relay.walletconnect.com"
+}
+index-CHRgRpA9.js:384 👀 useWalletAuth state: Object
+index-CHRgRpA9.js:384 👀 useWalletAuth state: Object
+index-CHRgRpA9.js:384 📡 Checking auth status...
+/api/auth/me:1  Failed to load resource: the server responded with a status of 401 ()
+index-CHRgRpA9.js:384 🔐 No backend session, waiting for sync...
+index-CHRgRpA9.js:384 👀 useWalletAuth state: Object
+index-CHRgRpA9.js:384 👀 useWalletAuth state: Object
+index-CHRgRpA9.js:428 📱 Creating WalletConnect provider via SDK...
+index-CHRgRpA9.js:428 🌐 Current origin: https://proofmint.org
+index-CHRgRpA9.js:428 🔗 Current hostname: proofmint.org
+index-CHRgRpA9.js:428 WalletConnect error: Error: Invalid WalletConnect setup
+    at E$1.create (index-CHRgRpA9.js:225:224127)
+    at Zl (index-CHRgRpA9.js:428:8789)
+    at Object.Nb (index-CHRgRpA9.js:37:10560)
+    at Tb (index-CHRgRpA9.js:37:10729)
+    at Ub (index-CHRgRpA9.js:37:10795)
+    at nf$1 (index-CHRgRpA9.js:37:34172)
+    at se$2 (index-CHRgRpA9.js:37:34651)
+    at index-CHRgRpA9.js:37:40183
+    at Qk (index-CHRgRpA9.js:40:41047)
+    at Jb (index-CHRgRpA9.js:37:9648)
+Zl @ index-CHRgRpA9.js:428
+index-CHRgRpA9.js:428 📱 Creating WalletConnect provider via SDK...
+index-CHRgRpA9.js:428 🌐 Current origin: https://proofmint.org
+index-CHRgRpA9.js:428 🔗 Current hostname: proofmint.org
+index-CHRgRpA9.js:428 WalletConnect error: Error: Invalid WalletConnect setup
+    at E$1.create (index-CHRgRpA9.js:225:224127)
+    at Zl (index-CHRgRpA9.js:428:8789)
+    at Object.Nb (index-CHRgRpA9.js:37:10560)
+    at Tb (index-CHRgRpA9.js:37:10729)
+    at Ub (index-CHRgRpA9.js:37:10795)
+    at nf$1 (index-CHRgRpA9.js:37:34172)
+    at se$2 (index-CHRgRpA9.js:37:34651)
+    at index-CHRgRpA9.js:37:40183
+    at Qk (index-CHRgRpA9.js:40:41047)
+    at Jb (index-CHRgRpA9.js:37:9648)
+Zl @ index-CHRgRpA9.js:428
+await in Zl
+Nb @ index-CHRgRpA9.js:37
+Tb @ index-CHRgRpA9.js:37
+Ub @ index-CHRgRpA9.js:37
+nf$1 @ index-CHRgRpA9.js:37
+se$2 @ index-CHRgRpA9.js:37
+(anonymous) @ index-CHRgRpA9.js:37
+Qk @ index-CHRgRpA9.js:40
+Jb @ index-CHRgRpA9.js:37
+hd @ index-CHRgRpA9.js:37
+fd @ index-CHRgRpA9.js:37
+ed @ index-CHRgRpA9.js:37
