@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'wouter';
 import { queryClient } from '@/lib/queryClient';
 import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
@@ -50,10 +50,16 @@ function getNativeAuthTokenFromStorage(): string | null {
   return null;
 }
 
+// Global sync state - shared promise ensures all hook instances wait for the same sync
+let syncPromise: Promise<User | null> | null = null;
+let lastSyncedAddress: string | null = null;
+
 export function useWalletAuth() {
   const [, navigate] = useLocation();
   const prevLoggedIn = useRef(false);
-  const initialCheckDone = useRef(false);
+  const prevAddress = useRef<string | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [syncFailed, setSyncFailed] = useState(false);
   
   const { address: sdkAddress } = useGetAccount();
   const isLoggedInSdk = useGetIsLoggedIn();
@@ -62,25 +68,123 @@ export function useWalletAuth() {
   const address = sdkAddress || savedAddress || '';
   const isLoggedIn = isLoggedInSdk || !!savedAddress;
   
+  // Query should only run when:
+  // 1. No wallet connected (check for existing session)
+  // 2. Wallet connected AND sync completed successfully
+  const shouldQueryAuth = !isLoggedIn || (sessionReady && !syncFailed);
+  
   console.log('👀 useWalletAuth state:', { 
     isLoggedInSdk, 
     sdkAddress: sdkAddress?.slice(0, 20), 
     savedAddress: savedAddress?.slice(0, 20),
     effectiveAddress: address?.slice(0, 20),
-    isLoggedIn
+    isLoggedIn,
+    sessionReady,
+    syncFailed,
+    shouldQueryAuth
   });
 
+  // Sync wallet with backend when wallet is connected
+  // Uses shared promise so all hook instances wait for the same sync
+  const syncWalletSession = useCallback(async (walletAddress: string): Promise<User | null> => {
+    // If sync already in progress for this address, await the existing promise
+    if (syncPromise && lastSyncedAddress === walletAddress) {
+      console.log('⏳ Sync already in progress, waiting...');
+      return syncPromise;
+    }
+    
+    // Start new sync
+    console.log('📤 Syncing wallet session:', walletAddress.slice(0, 15));
+    lastSyncedAddress = walletAddress;
+    
+    syncPromise = (async () => {
+      try {
+        // Try native auth first
+        const nativeAuthToken = getNativeAuthTokenFromStorage();
+        if (nativeAuthToken) {
+          const syncResponse = await fetch('/api/auth/wallet/sync', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${nativeAuthToken}`
+            },
+            credentials: 'include',
+            body: JSON.stringify({ walletAddress }),
+          });
+          
+          if (syncResponse.ok) {
+            console.log('✅ Backend session created via native auth');
+            const userData = await syncResponse.json();
+            return userData;
+          }
+        }
+        
+        // Fallback to simple sync
+        const simpleSyncResponse = await fetch('/api/auth/wallet/simple-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ walletAddress }),
+        });
+        
+        if (simpleSyncResponse.ok) {
+          console.log('✅ Backend session created via simple sync');
+          const userData = await simpleSyncResponse.json();
+          return userData;
+        }
+        
+        console.log('❌ Could not establish backend session');
+        return null;
+      } catch (error) {
+        console.error('Sync error:', error);
+        return null;
+      } finally {
+        syncPromise = null;
+      }
+    })();
+    
+    return syncPromise;
+  }, []);
+
   useEffect(() => {
-    if (isLoggedIn && address && !prevLoggedIn.current) {
-      console.log('🔄 Wallet login detected, invalidating auth query...');
+    // Handle wallet connection - sync with backend
+    const addressChanged = address && address !== prevAddress.current;
+    const needsSync = isLoggedIn && address && (!sessionReady || addressChanged);
+    
+    if (needsSync) {
+      console.log('🔄 Wallet detected, syncing session...', addressChanged ? '(address changed)' : '');
       prevLoggedIn.current = true;
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+      prevAddress.current = address;
+      setSyncFailed(false);
+      
+      // Sync first, then enable queries
+      syncWalletSession(address).then((user) => {
+        if (user) {
+          console.log('✅ Session ready, enabling queries');
+          setSessionReady(true);
+          setSyncFailed(false);
+          localStorage.setItem('walletAddress', address);
+          // Invalidate queries so they refetch with the new session
+          queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/certifications'] });
+        } else {
+          // Sync failed - enable queries anyway to check existing session
+          // This prevents permanent stall on transient failures
+          console.log('⚠️ Sync failed, enabling queries anyway for fallback');
+          setSessionReady(true);
+          setSyncFailed(false); // Allow queries to run
+        }
+      });
     } else if (!isLoggedIn && prevLoggedIn.current) {
       console.log('🔌 Wallet disconnected');
       prevLoggedIn.current = false;
+      prevAddress.current = null;
+      lastSyncedAddress = null;
+      setSessionReady(false);
+      setSyncFailed(false);
       localStorage.removeItem('walletAddress');
     }
-  }, [isLoggedIn, address]);
+  }, [isLoggedIn, address, sessionReady, syncWalletSession]);
 
   const { data: user, isLoading } = useQuery<User | null>({
     queryKey: ['/api/auth/me'],
@@ -100,64 +204,22 @@ export function useWalletAuth() {
             localStorage.setItem('walletAddress', userData.walletAddress);
           }
           
-          initialCheckDone.current = true;
           return userData;
         }
         
         if (response.status === 401) {
-          console.log('🔐 No backend session...');
-          
-          if (address) {
-            console.log('📤 Attempting to sync wallet:', address.slice(0, 15));
-            const nativeAuthToken = getNativeAuthTokenFromStorage();
-            
-            if (nativeAuthToken) {
-              const syncResponse = await fetch('/api/auth/wallet/sync', {
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${nativeAuthToken}`
-                },
-                credentials: 'include',
-                body: JSON.stringify({ walletAddress: address }),
-              });
-
-              if (syncResponse.ok) {
-                console.log('✅ Backend session created via native auth');
-                initialCheckDone.current = true;
-                return syncResponse.json();
-              }
-            }
-            
-            const simpleSyncResponse = await fetch('/api/auth/wallet/simple-sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({ walletAddress: address }),
-            });
-
-            if (simpleSyncResponse.ok) {
-              console.log('✅ Backend session created via simple sync');
-              initialCheckDone.current = true;
-              return simpleSyncResponse.json();
-            }
-            
-            console.log('❌ Could not establish backend session');
-          }
-          
-          initialCheckDone.current = true;
+          console.log('🔐 No backend session, waiting for sync...');
           return null;
         }
         
-        initialCheckDone.current = true;
         return null;
       } catch (error) {
         console.error('Error checking auth status:', error);
-        initialCheckDone.current = true;
         return null;
       }
     },
-    enabled: true,
+    // Only query when no wallet OR when sync is complete
+    enabled: shouldQueryAuth,
     retry: 1,
     retryDelay: 500,
     staleTime: 1000 * 60 * 5,
