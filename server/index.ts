@@ -4,6 +4,27 @@ import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
 
+// Trust proxy for production (Replit uses reverse proxy)
+app.set('trust proxy', 1);
+
+// Custom CSP header to allow MultiversX SDK to work properly
+// The SDK uses some dynamic code that requires 'unsafe-eval'
+const CSP_HEADER = 
+  "default-src 'self'; " +
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://fonts.googleapis.com; " +
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+  "font-src 'self' https://fonts.gstatic.com; " +
+  "img-src 'self' data: blob: https:; " +
+  "connect-src 'self' https://api.multiversx.com https://gateway.multiversx.com https://devnet-gateway.multiversx.com https://testnet-gateway.multiversx.com wss://relay.walletconnect.com https://*.walletconnect.com https://*.walletconnect.org https://explorer-api.walletconnect.com https://verify.walletconnect.com https://verify.walletconnect.org; " +
+  "frame-src 'self' https://wallet.multiversx.com https://devnet-wallet.multiversx.com https://testnet-wallet.multiversx.com; " +
+  "worker-src 'self' blob:;";
+
+app.use((req, res, next) => {
+  // Set CSP for all responses (will be overridden by static file handler in dev)
+  res.setHeader('Content-Security-Policy', CSP_HEADER);
+  next();
+});
+
 // Skip JSON parsing for webhooks to preserve raw body for signature verification
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/webhooks/')) {
