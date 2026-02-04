@@ -201,3 +201,38 @@ Preferred communication style: Simple, everyday language.
 1. **Extension Wallet** (Desktop) - Best experience, fully working with polling
 2. **Web Wallet** (Any device) - Works with Guardian 2FA, reliable cross-window flow
 3. **xPortal Mobile** - Use QR code on desktop browser for best results; deep link on mobile may have issues
+
+## ACP (Agent Commerce Protocol) - Proof-as-a-Service
+
+ProofMint implements the Agent Commerce Protocol, enabling AI agents to automatically discover and use certification services without human UI interaction.
+
+### ACP Endpoints
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/acp/products` | Public | Discover available products |
+| `GET /api/acp/openapi.json` | Public | OpenAPI 3.0 specification |
+| `POST /api/acp/checkout` | API Key | Create checkout session |
+| `POST /api/acp/confirm` | API Key | Confirm transaction |
+| `GET /api/acp/checkout/:id` | API Key | Check checkout status |
+
+### Pricing Model
+- **Certification price**: 0.03€ per certification
+- **Payment**: EGLD (converted at checkout via CoinGecko real-time rate)
+- **Recipient**: ProofMint wallet (`PROOFMINT_WALLET_ADDRESS`)
+
+### API Key Management
+- Users generate API keys via `POST /api/keys` (requires wallet auth)
+- Keys are prefixed with `pm_` (e.g., `pm_abc123...`)
+- Rate limit: 1000 requests/minute per key
+- Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+
+### ACP Flow
+1. Agent calls `GET /api/acp/products` to discover services
+2. Agent calls `POST /api/acp/checkout` with file hash → receives tx_payload
+3. Agent/User signs and broadcasts transaction on MultiversX
+4. Agent calls `POST /api/acp/confirm` with tx_hash → receives certification ID
+
+### Database Tables
+- `api_keys`: API key storage with hashed keys, usage tracking
+- `acp_checkouts`: Checkout session tracking with expiry (1 hour)
