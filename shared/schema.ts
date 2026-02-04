@@ -109,3 +109,100 @@ export const SUBSCRIPTION_TIERS = {
 } as const;
 
 export type SubscriptionTier = keyof typeof SUBSCRIPTION_TIERS;
+
+// ============================================
+// ACP (Agent Commerce Protocol) Types
+// ============================================
+
+// ACP Product - describes a purchasable service for AI agents
+export interface ACPProduct {
+  id: string;
+  name: string;
+  description: string;
+  pricing: {
+    type: "fixed" | "variable";
+    amount: string;
+    currency: string;
+  };
+  inputs: Record<string, string>;
+  outputs: Record<string, string>;
+}
+
+// ACP Checkout Request - what an agent sends to start certification
+export const acpCheckoutRequestSchema = z.object({
+  product_id: z.string(),
+  inputs: z.object({
+    file_hash: z.string().min(1, "SHA-256 hash is required"),
+    filename: z.string().min(1, "Filename is required"),
+    author_name: z.string().optional(),
+    metadata: z.record(z.any()).optional(),
+  }),
+  buyer: z.object({
+    type: z.enum(["agent", "user"]),
+    id: z.string().optional(),
+  }).optional(),
+});
+
+export type ACPCheckoutRequest = z.infer<typeof acpCheckoutRequestSchema>;
+
+// ACP Checkout Response - transaction payload for agent to execute
+export interface ACPCheckoutResponse {
+  checkout_id: string;
+  product_id: string;
+  amount: string;
+  currency: string;
+  status: "pending" | "ready";
+  execution: {
+    type: "multiversx";
+    mode: "direct" | "relayed_v3";
+    chain_id: string;
+    tx_payload: {
+      receiver: string;
+      data: string;
+      value: string;
+      gas_limit: number;
+    };
+  };
+  expires_at: string;
+}
+
+// ACP Confirmation Request - agent confirms transaction was executed
+export const acpConfirmRequestSchema = z.object({
+  checkout_id: z.string(),
+  tx_hash: z.string().min(1, "Transaction hash is required"),
+});
+
+export type ACPConfirmRequest = z.infer<typeof acpConfirmRequestSchema>;
+
+// ACP Confirmation Response - includes certificate URL
+export interface ACPConfirmResponse {
+  status: "confirmed" | "pending" | "failed";
+  checkout_id: string;
+  tx_hash: string;
+  certification_id?: string;
+  certificate_url?: string;
+  proof_url?: string;
+  blockchain_explorer_url?: string;
+  message?: string;
+}
+
+// ACP Checkouts table for tracking agent checkout sessions
+export const acpCheckouts = pgTable("acp_checkouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: varchar("product_id").notNull(),
+  fileHash: text("file_hash").notNull(),
+  fileName: text("file_name").notNull(),
+  authorName: text("author_name"),
+  metadata: jsonb("metadata"),
+  buyerType: varchar("buyer_type").default("agent"),
+  buyerId: varchar("buyer_id"),
+  status: varchar("status").default("pending"), // pending, confirmed, expired, failed
+  txHash: text("tx_hash"),
+  certificationId: varchar("certification_id").references(() => certifications.id),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  confirmedAt: timestamp("confirmed_at"),
+});
+
+export type ACPCheckout = typeof acpCheckouts.$inferSelect;
+export type InsertACPCheckout = typeof acpCheckouts.$inferInsert;

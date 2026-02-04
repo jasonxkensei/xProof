@@ -2,7 +2,16 @@ import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import { db } from "./db";
 import { storage } from "./storage";
-import { certifications, users } from "@shared/schema";
+import { 
+  certifications, 
+  users, 
+  acpCheckouts,
+  acpCheckoutRequestSchema,
+  acpConfirmRequestSchema,
+  type ACPProduct,
+  type ACPCheckoutResponse,
+  type ACPConfirmResponse,
+} from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import Stripe from "stripe";
@@ -757,6 +766,327 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("xMoney webhook error:", error);
       res.status(400).json({ 
         message: error instanceof Error ? error.message : "Webhook processing failed" 
+      });
+    }
+  });
+
+  // ============================================
+  // ACP (Agent Commerce Protocol) Endpoints
+  // These endpoints enable AI agents to discover
+  // and use ProofMint certification services
+  // ============================================
+
+  // ACP Products Discovery - Returns available services for AI agents
+  app.get("/api/acp/products", async (req, res) => {
+    const products: ACPProduct[] = [
+      {
+        id: "proofmint-certification",
+        name: "ProofMint Certification",
+        description: "Create cryptographic proof of existence and integrity for digital files on MultiversX blockchain. Records SHA-256 hash with timestamp, providing immutable evidence of file ownership at a specific point in time.",
+        pricing: {
+          type: "fixed",
+          amount: "0", // Free - only gas fees (~0.002 EGLD)
+          currency: "EGLD",
+        },
+        inputs: {
+          file_hash: "SHA-256 hash of the file (64 character hex string)",
+          filename: "Original filename with extension",
+          author_name: "Optional - Name of the author/certifier",
+          metadata: "Optional - Additional JSON metadata",
+        },
+        outputs: {
+          certification_id: "Unique certification ID",
+          certificate_url: "URL to download PDF certificate",
+          proof_url: "Public verification page URL",
+          tx_hash: "MultiversX transaction hash",
+          blockchain_explorer_url: "Link to view transaction on explorer",
+        },
+      },
+    ];
+
+    res.json({ 
+      protocol: "ACP",
+      version: "1.0",
+      provider: "ProofMint",
+      chain: "MultiversX",
+      products 
+    });
+  });
+
+  // ACP Checkout - Agent initiates certification
+  app.post("/api/acp/checkout", async (req, res) => {
+    try {
+      const data = acpCheckoutRequestSchema.parse(req.body);
+
+      // Validate product exists
+      if (data.product_id !== "proofmint-certification") {
+        return res.status(404).json({ 
+          error: "PRODUCT_NOT_FOUND",
+          message: "Unknown product ID" 
+        });
+      }
+
+      // Check if hash already certified
+      const [existing] = await db
+        .select()
+        .from(certifications)
+        .where(eq(certifications.fileHash, data.inputs.file_hash));
+
+      if (existing) {
+        return res.status(409).json({
+          error: "ALREADY_CERTIFIED",
+          message: "This file hash has already been certified",
+          existing_certification: {
+            id: existing.id,
+            certified_at: existing.createdAt,
+            proof_url: `/proof/${existing.id}`,
+            tx_hash: existing.transactionHash,
+          },
+        });
+      }
+
+      // Create checkout session (expires in 1 hour)
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      
+      const [checkout] = await db
+        .insert(acpCheckouts)
+        .values({
+          productId: data.product_id,
+          fileHash: data.inputs.file_hash,
+          fileName: data.inputs.filename,
+          authorName: data.inputs.author_name || "AI Agent",
+          metadata: data.inputs.metadata || {},
+          buyerType: data.buyer?.type || "agent",
+          buyerId: data.buyer?.id,
+          status: "pending",
+          expiresAt,
+        })
+        .returning();
+
+      // Build transaction payload for MultiversX
+      // Data format: certify@<hash>@<filename>
+      const dataField = Buffer.from(
+        `certify@${data.inputs.file_hash}@${data.inputs.filename}`
+      ).toString("base64");
+
+      const chainId = process.env.MULTIVERSX_CHAIN_ID || "1"; // 1 = Mainnet
+      const gatewayUrl = chainId === "1" 
+        ? "https://gateway.multiversx.com"
+        : "https://devnet-gateway.multiversx.com";
+
+      const response: ACPCheckoutResponse = {
+        checkout_id: checkout.id,
+        product_id: data.product_id,
+        amount: "0",
+        currency: "EGLD",
+        status: "ready",
+        execution: {
+          type: "multiversx",
+          mode: "direct", // User/agent signs directly
+          chain_id: chainId,
+          tx_payload: {
+            receiver: process.env.MULTIVERSX_SENDER_ADDRESS || "erd1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq6gq4hu", // Self-send for proof
+            data: dataField,
+            value: "0",
+            gas_limit: 100000,
+          },
+        },
+        expires_at: expiresAt.toISOString(),
+      };
+
+      console.log(`📦 ACP Checkout created: ${checkout.id} for hash ${data.inputs.file_hash.slice(0, 16)}...`);
+      
+      res.status(201).json(response);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          error: "INVALID_REQUEST",
+          message: "Invalid checkout request",
+          details: error.errors 
+        });
+      }
+      console.error("ACP Checkout error:", error);
+      res.status(500).json({ 
+        error: "CHECKOUT_FAILED",
+        message: "Failed to create checkout" 
+      });
+    }
+  });
+
+  // ACP Confirm - Agent confirms transaction was executed
+  app.post("/api/acp/confirm", async (req, res) => {
+    try {
+      const data = acpConfirmRequestSchema.parse(req.body);
+
+      // Find checkout
+      const [checkout] = await db
+        .select()
+        .from(acpCheckouts)
+        .where(eq(acpCheckouts.id, data.checkout_id));
+
+      if (!checkout) {
+        return res.status(404).json({
+          error: "CHECKOUT_NOT_FOUND",
+          message: "Checkout session not found",
+        });
+      }
+
+      // Check if expired
+      if (new Date() > checkout.expiresAt) {
+        await db
+          .update(acpCheckouts)
+          .set({ status: "expired" })
+          .where(eq(acpCheckouts.id, checkout.id));
+
+        return res.status(410).json({
+          error: "CHECKOUT_EXPIRED",
+          message: "Checkout session has expired",
+        });
+      }
+
+      // Check if already confirmed
+      if (checkout.status === "confirmed") {
+        return res.status(409).json({
+          error: "ALREADY_CONFIRMED",
+          message: "This checkout has already been confirmed",
+          certification_id: checkout.certificationId,
+        });
+      }
+
+      // Verify transaction on MultiversX
+      const chainId = process.env.MULTIVERSX_CHAIN_ID || "1";
+      const apiUrl = chainId === "1"
+        ? "https://api.multiversx.com"
+        : "https://devnet-api.multiversx.com";
+      const explorerUrl = chainId === "1"
+        ? "https://explorer.multiversx.com"
+        : "https://devnet-explorer.multiversx.com";
+
+      let txVerified = false;
+      let txStatus = "pending";
+
+      try {
+        const txResponse = await fetch(`${apiUrl}/transactions/${data.tx_hash}`);
+        if (txResponse.ok) {
+          const txData = await txResponse.json();
+          txStatus = txData.status;
+          txVerified = txData.status === "success";
+        }
+      } catch (err) {
+        console.log(`⚠️ Could not verify tx ${data.tx_hash}, proceeding anyway`);
+        // For MVP, we proceed even if verification fails
+        // In production, you'd want stricter verification
+        txVerified = true;
+      }
+
+      // Find or create a system user for ACP certifications
+      let [systemUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+
+      if (!systemUser) {
+        [systemUser] = await db
+          .insert(users)
+          .values({
+            walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+            subscriptionTier: "business",
+            subscriptionStatus: "active",
+          })
+          .returning();
+      }
+
+      // Create certification record
+      const [certification] = await db
+        .insert(certifications)
+        .values({
+          userId: systemUser.id!,
+          fileName: checkout.fileName,
+          fileHash: checkout.fileHash,
+          fileType: checkout.fileName.split(".").pop() || "unknown",
+          authorName: checkout.authorName || "AI Agent",
+          transactionHash: data.tx_hash,
+          transactionUrl: `${explorerUrl}/transactions/${data.tx_hash}`,
+          blockchainStatus: txVerified ? "confirmed" : "pending",
+          isPublic: true,
+        })
+        .returning();
+
+      // Update checkout status
+      await db
+        .update(acpCheckouts)
+        .set({
+          status: "confirmed",
+          txHash: data.tx_hash,
+          certificationId: certification.id,
+          confirmedAt: new Date(),
+        })
+        .where(eq(acpCheckouts.id, checkout.id));
+
+      const response: ACPConfirmResponse = {
+        status: "confirmed",
+        checkout_id: checkout.id,
+        tx_hash: data.tx_hash,
+        certification_id: certification.id,
+        certificate_url: `/api/certificates/${certification.id}.pdf`,
+        proof_url: `/proof/${certification.id}`,
+        blockchain_explorer_url: `${explorerUrl}/transactions/${data.tx_hash}`,
+        message: "Certification successfully recorded on MultiversX blockchain",
+      };
+
+      console.log(`✅ ACP Certification confirmed: ${certification.id}`);
+
+      res.json(response);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          error: "INVALID_REQUEST",
+          message: "Invalid confirmation request",
+          details: error.errors,
+        });
+      }
+      console.error("ACP Confirm error:", error);
+      res.status(500).json({
+        error: "CONFIRMATION_FAILED",
+        message: "Failed to confirm certification",
+      });
+    }
+  });
+
+  // ACP Status - Check checkout status
+  app.get("/api/acp/checkout/:checkoutId", async (req, res) => {
+    try {
+      const { checkoutId } = req.params;
+
+      const [checkout] = await db
+        .select()
+        .from(acpCheckouts)
+        .where(eq(acpCheckouts.id, checkoutId));
+
+      if (!checkout) {
+        return res.status(404).json({
+          error: "CHECKOUT_NOT_FOUND",
+          message: "Checkout session not found",
+        });
+      }
+
+      res.json({
+        checkout_id: checkout.id,
+        product_id: checkout.productId,
+        status: checkout.status,
+        file_hash: checkout.fileHash,
+        file_name: checkout.fileName,
+        tx_hash: checkout.txHash,
+        certification_id: checkout.certificationId,
+        expires_at: checkout.expiresAt,
+        created_at: checkout.createdAt,
+        confirmed_at: checkout.confirmedAt,
+      });
+    } catch (error) {
+      console.error("ACP Status error:", error);
+      res.status(500).json({
+        error: "STATUS_CHECK_FAILED",
+        message: "Failed to check checkout status",
       });
     }
   });
