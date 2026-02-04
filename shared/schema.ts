@@ -123,6 +123,7 @@ export interface ACPProduct {
     type: "fixed" | "variable";
     amount: string;
     currency: string;
+    note?: string;
   };
   inputs: Record<string, string>;
   outputs: Record<string, string>;
@@ -206,3 +207,26 @@ export const acpCheckouts = pgTable("acp_checkouts", {
 
 export type ACPCheckout = typeof acpCheckouts.$inferSelect;
 export type InsertACPCheckout = typeof acpCheckouts.$inferInsert;
+
+// API Keys table for agent authentication
+export const apiKeys = pgTable("api_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  keyHash: varchar("key_hash").notNull().unique(),
+  keyPrefix: varchar("key_prefix").notNull(), // First 8 chars for display (pm_xxx...)
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar("name").notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  requestCount: integer("request_count").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
+  user: one(users, {
+    fields: [apiKeys.userId],
+    references: [users.id],
+  }),
+}));
+
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type InsertApiKey = typeof apiKeys.$inferInsert;

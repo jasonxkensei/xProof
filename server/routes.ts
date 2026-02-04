@@ -1,17 +1,20 @@
 import express, { type Express } from "express";
 import { createServer, type Server } from "http";
+import crypto from "crypto";
 import { db } from "./db";
 import { storage } from "./storage";
 import { 
   certifications, 
   users, 
   acpCheckouts,
+  apiKeys,
   acpCheckoutRequestSchema,
   acpConfirmRequestSchema,
   type ACPProduct,
   type ACPCheckoutResponse,
   type ACPConfirmResponse,
 } from "@shared/schema";
+import { getCertificationPriceEgld, getCertificationPriceEur } from "./pricing";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import Stripe from "stripe";
@@ -771,6 +774,201 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================
+  // API Keys Management Endpoints
+  // ============================================
+
+  // Generate new API key (requires wallet auth)
+  app.post("/api/keys", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const { name } = req.body;
+      if (!name || typeof name !== "string") {
+        return res.status(400).json({ error: "API key name is required" });
+      }
+
+      const walletAddress = req.session?.walletAddress;
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Generate a secure random API key
+      const rawKey = `pm_${crypto.randomBytes(32).toString("hex")}`;
+      const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+      const keyPrefix = rawKey.slice(0, 10) + "...";
+
+      const [apiKey] = await db
+        .insert(apiKeys)
+        .values({
+          keyHash,
+          keyPrefix,
+          userId: user.id!,
+          name,
+        })
+        .returning();
+
+      console.log(`🔑 API key created: ${keyPrefix} for user ${walletAddress.slice(0, 12)}...`);
+
+      res.status(201).json({
+        id: apiKey.id,
+        key: rawKey, // Only returned once at creation
+        prefix: keyPrefix,
+        name: apiKey.name,
+        created_at: apiKey.createdAt,
+        message: "Save this key securely - it won't be shown again",
+      });
+    } catch (error) {
+      console.error("API key creation error:", error);
+      res.status(500).json({ error: "Failed to create API key" });
+    }
+  });
+
+  // List user's API keys (requires wallet auth)
+  app.get("/api/keys", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const walletAddress = req.session?.walletAddress;
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const keys = await db
+        .select({
+          id: apiKeys.id,
+          prefix: apiKeys.keyPrefix,
+          name: apiKeys.name,
+          requestCount: apiKeys.requestCount,
+          lastUsedAt: apiKeys.lastUsedAt,
+          isActive: apiKeys.isActive,
+          createdAt: apiKeys.createdAt,
+        })
+        .from(apiKeys)
+        .where(eq(apiKeys.userId, user.id!));
+
+      res.json({ keys });
+    } catch (error) {
+      console.error("API keys list error:", error);
+      res.status(500).json({ error: "Failed to list API keys" });
+    }
+  });
+
+  // Delete API key (requires wallet auth)
+  app.delete("/api/keys/:keyId", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const { keyId } = req.params;
+      const walletAddress = req.session?.walletAddress;
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const [key] = await db.select().from(apiKeys).where(eq(apiKeys.id, keyId));
+      if (!key || key.userId !== user.id) {
+        return res.status(404).json({ error: "API key not found" });
+      }
+
+      await db.delete(apiKeys).where(eq(apiKeys.id, keyId));
+      console.log(`🗑️ API key deleted: ${key.keyPrefix}`);
+
+      res.json({ message: "API key deleted" });
+    } catch (error) {
+      console.error("API key deletion error:", error);
+      res.status(500).json({ error: "Failed to delete API key" });
+    }
+  });
+
+  // ============================================
+  // Rate Limiting for ACP (anti-abuse)
+  // ============================================
+  const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+  const RATE_LIMIT_MAX = 1000; // 1000 requests per minute
+  const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+
+  function checkRateLimit(identifier: string): { allowed: boolean; remaining: number; resetAt: number } {
+    const now = Date.now();
+    const entry = rateLimitMap.get(identifier);
+
+    if (!entry || now > entry.resetAt) {
+      rateLimitMap.set(identifier, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+      return { allowed: true, remaining: RATE_LIMIT_MAX - 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
+    }
+
+    if (entry.count >= RATE_LIMIT_MAX) {
+      return { allowed: false, remaining: 0, resetAt: entry.resetAt };
+    }
+
+    entry.count++;
+    return { allowed: true, remaining: RATE_LIMIT_MAX - entry.count, resetAt: entry.resetAt };
+  }
+
+  // API Key validation middleware for ACP endpoints
+  async function validateApiKey(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const authHeader = req.headers.authorization;
+    
+    // Allow unauthenticated access to /products and /openapi.json (discovery)
+    // Note: req.path is relative to mount point, so /api/acp/products becomes /products
+    if (req.path === "/products" || req.path === "/openapi.json") {
+      return next();
+    }
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "API key required. Include 'Authorization: Bearer pm_xxx' header",
+      });
+    }
+
+    const rawKey = authHeader.slice(7);
+    const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+
+    const [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+
+    if (!apiKey) {
+      return res.status(401).json({
+        error: "INVALID_API_KEY",
+        message: "Invalid or expired API key",
+      });
+    }
+
+    if (!apiKey.isActive) {
+      return res.status(403).json({
+        error: "API_KEY_DISABLED",
+        message: "This API key has been disabled",
+      });
+    }
+
+    // Rate limiting check
+    const rateLimit = checkRateLimit(apiKey.id);
+    res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
+    res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
+    res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
+
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        error: "RATE_LIMIT_EXCEEDED",
+        message: "Too many requests. Please slow down.",
+        retry_after: Math.ceil((rateLimit.resetAt - Date.now()) / 1000),
+      });
+    }
+
+    // Update usage stats (async, don't block response)
+    db.update(apiKeys)
+      .set({
+        lastUsedAt: new Date(),
+        requestCount: (apiKey.requestCount || 0) + 1,
+      })
+      .where(eq(apiKeys.id, apiKey.id))
+      .execute()
+      .catch((err) => console.error("Failed to update API key stats:", err));
+
+    // Attach API key info to request
+    (req as any).apiKey = apiKey;
+    next();
+  }
+
+  // Apply API key validation to ACP endpoints
+  app.use("/api/acp", validateApiKey);
+
+  // ============================================
   // ACP (Agent Commerce Protocol) Endpoints
   // These endpoints enable AI agents to discover
   // and use ProofMint certification services
@@ -778,6 +976,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ACP Products Discovery - Returns available services for AI agents
   app.get("/api/acp/products", async (req, res) => {
+    const priceEur = getCertificationPriceEur();
+    
     const products: ACPProduct[] = [
       {
         id: "proofmint-certification",
@@ -785,8 +985,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: "Create cryptographic proof of existence and integrity for digital files on MultiversX blockchain. Records SHA-256 hash with timestamp, providing immutable evidence of file ownership at a specific point in time.",
         pricing: {
           type: "fixed",
-          amount: "0", // Free - only gas fees (~0.002 EGLD)
-          currency: "EGLD",
+          amount: priceEur.toString(),
+          currency: "EUR",
+          note: "Price converted to EGLD at checkout based on current exchange rate",
         },
         inputs: {
           file_hash: "SHA-256 hash of the file (64 character hex string)",
@@ -845,6 +1046,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Get current EGLD price and calculate payment
+      const pricing = await getCertificationPriceEgld();
+      
       // Create checkout session (expires in 1 hour)
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
       
@@ -870,29 +1074,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ).toString("base64");
 
       const chainId = process.env.MULTIVERSX_CHAIN_ID || "1"; // 1 = Mainnet
-      const gatewayUrl = chainId === "1" 
-        ? "https://gateway.multiversx.com"
-        : "https://devnet-gateway.multiversx.com";
+      
+      // ProofMint wallet address (receives certification fees)
+      const proofmintWallet = process.env.PROOFMINT_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS;
+      if (!proofmintWallet) {
+        console.error("⚠️ No PROOFMINT_WALLET_ADDRESS configured");
+        return res.status(500).json({
+          error: "CONFIGURATION_ERROR",
+          message: "ProofMint wallet not configured",
+        });
+      }
 
       const response: ACPCheckoutResponse = {
         checkout_id: checkout.id,
         product_id: data.product_id,
-        amount: "0",
-        currency: "EGLD",
+        amount: pricing.priceEur.toFixed(2),
+        currency: "EUR",
         status: "ready",
         execution: {
           type: "multiversx",
           mode: "direct", // User/agent signs directly
           chain_id: chainId,
           tx_payload: {
-            receiver: process.env.MULTIVERSX_SENDER_ADDRESS || "erd1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq6gq4hu", // Self-send for proof
+            receiver: proofmintWallet,
             data: dataField,
-            value: "0",
+            value: pricing.priceEgld, // Dynamic EGLD amount based on EUR rate
             gas_limit: 100000,
           },
         },
         expires_at: expiresAt.toISOString(),
       };
+
+      console.log(`💰 ACP Checkout: ${pricing.priceEur}€ = ${pricing.priceEgld} atomic EGLD (rate: ${pricing.egldEurRate}€/EGLD)`);
 
       console.log(`📦 ACP Checkout created: ${checkout.id} for hash ${data.inputs.file_hash.slice(0, 16)}...`);
       
@@ -1089,6 +1302,216 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Failed to check checkout status",
       });
     }
+  });
+
+  // OpenAPI 3.0 Specification for ACP
+  app.get("/api/acp/openapi.json", (req, res) => {
+    const baseUrl = `https://${req.get("host")}`;
+    const priceEur = getCertificationPriceEur();
+
+    const openApiSpec = {
+      openapi: "3.0.3",
+      info: {
+        title: "ProofMint ACP - Agent Commerce Protocol",
+        description: "API for AI agents to certify files on MultiversX blockchain. Create immutable proofs of file ownership with a simple API call.",
+        version: "1.0.0",
+        contact: {
+          name: "ProofMint Support",
+          url: baseUrl,
+        },
+      },
+      servers: [{ url: baseUrl, description: "Production server" }],
+      security: [{ apiKey: [] }],
+      components: {
+        securitySchemes: {
+          apiKey: {
+            type: "http",
+            scheme: "bearer",
+            description: "API key in format: pm_xxx... Obtain from /api/keys endpoint",
+          },
+        },
+        schemas: {
+          Product: {
+            type: "object",
+            properties: {
+              id: { type: "string", example: "proofmint-certification" },
+              name: { type: "string", example: "ProofMint Certification" },
+              description: { type: "string" },
+              pricing: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["fixed", "variable"] },
+                  amount: { type: "string", example: priceEur.toString() },
+                  currency: { type: "string", example: "EUR" },
+                },
+              },
+              inputs: { type: "object", additionalProperties: { type: "string" } },
+              outputs: { type: "object", additionalProperties: { type: "string" } },
+            },
+          },
+          CheckoutRequest: {
+            type: "object",
+            required: ["product_id", "inputs"],
+            properties: {
+              product_id: { type: "string", example: "proofmint-certification" },
+              inputs: {
+                type: "object",
+                required: ["file_hash", "filename"],
+                properties: {
+                  file_hash: { type: "string", description: "SHA-256 hash of the file (64 hex chars)", example: "a1b2c3d4e5f678901234567890123456789012345678901234567890123456ab" },
+                  filename: { type: "string", example: "document.pdf" },
+                  author_name: { type: "string", example: "AI Agent" },
+                  metadata: { type: "object", description: "Optional JSON metadata" },
+                },
+              },
+              buyer: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["agent", "user"] },
+                  id: { type: "string" },
+                },
+              },
+            },
+          },
+          CheckoutResponse: {
+            type: "object",
+            properties: {
+              checkout_id: { type: "string", format: "uuid" },
+              product_id: { type: "string" },
+              amount: { type: "string", description: "Price in EUR" },
+              currency: { type: "string" },
+              status: { type: "string", enum: ["pending", "ready"] },
+              execution: {
+                type: "object",
+                properties: {
+                  type: { type: "string", example: "multiversx" },
+                  mode: { type: "string", enum: ["direct", "relayed_v3"] },
+                  chain_id: { type: "string", example: "1" },
+                  tx_payload: {
+                    type: "object",
+                    properties: {
+                      receiver: { type: "string", description: "ProofMint wallet address" },
+                      data: { type: "string", description: "Base64 encoded transaction data" },
+                      value: { type: "string", description: "EGLD amount in atomic units (1 EGLD = 10^18)" },
+                      gas_limit: { type: "integer", example: 100000 },
+                    },
+                  },
+                },
+              },
+              expires_at: { type: "string", format: "date-time" },
+            },
+          },
+          ConfirmRequest: {
+            type: "object",
+            required: ["checkout_id", "tx_hash"],
+            properties: {
+              checkout_id: { type: "string", format: "uuid" },
+              tx_hash: { type: "string", description: "MultiversX transaction hash" },
+            },
+          },
+          ConfirmResponse: {
+            type: "object",
+            properties: {
+              status: { type: "string", enum: ["confirmed", "pending", "failed"] },
+              checkout_id: { type: "string" },
+              tx_hash: { type: "string" },
+              certification_id: { type: "string" },
+              certificate_url: { type: "string", format: "uri" },
+              proof_url: { type: "string", format: "uri" },
+              blockchain_explorer_url: { type: "string", format: "uri" },
+              message: { type: "string" },
+            },
+          },
+          Error: {
+            type: "object",
+            properties: {
+              error: { type: "string" },
+              message: { type: "string" },
+            },
+          },
+        },
+      },
+      paths: {
+        "/api/acp/products": {
+          get: {
+            summary: "Discover available products",
+            description: "Returns list of certification products available for purchase. No authentication required.",
+            security: [],
+            responses: {
+              "200": {
+                description: "List of products",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        protocol: { type: "string", example: "ACP" },
+                        version: { type: "string", example: "1.0" },
+                        provider: { type: "string", example: "ProofMint" },
+                        chain: { type: "string", example: "MultiversX" },
+                        products: { type: "array", items: { $ref: "#/components/schemas/Product" } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        "/api/acp/checkout": {
+          post: {
+            summary: "Create checkout session",
+            description: "Initiate certification by providing file hash. Returns transaction payload for MultiversX signing.",
+            requestBody: {
+              required: true,
+              content: { "application/json": { schema: { $ref: "#/components/schemas/CheckoutRequest" } } },
+            },
+            responses: {
+              "201": {
+                description: "Checkout created",
+                content: { "application/json": { schema: { $ref: "#/components/schemas/CheckoutResponse" } } },
+              },
+              "401": { description: "API key required" },
+              "409": { description: "File already certified" },
+            },
+          },
+        },
+        "/api/acp/confirm": {
+          post: {
+            summary: "Confirm transaction",
+            description: "After signing and broadcasting transaction, confirm to receive certification ID and URLs.",
+            requestBody: {
+              required: true,
+              content: { "application/json": { schema: { $ref: "#/components/schemas/ConfirmRequest" } } },
+            },
+            responses: {
+              "200": {
+                description: "Certification confirmed",
+                content: { "application/json": { schema: { $ref: "#/components/schemas/ConfirmResponse" } } },
+              },
+              "401": { description: "API key required" },
+              "404": { description: "Checkout not found" },
+              "410": { description: "Checkout expired" },
+            },
+          },
+        },
+        "/api/acp/checkout/{checkoutId}": {
+          get: {
+            summary: "Get checkout status",
+            description: "Check the status of an existing checkout session.",
+            parameters: [
+              { name: "checkoutId", in: "path", required: true, schema: { type: "string" } },
+            ],
+            responses: {
+              "200": { description: "Checkout status" },
+              "404": { description: "Checkout not found" },
+            },
+          },
+        },
+      },
+    };
+
+    res.json(openApiSpec);
   });
 
   const httpServer = createServer(app);
