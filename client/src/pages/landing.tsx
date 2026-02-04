@@ -89,7 +89,7 @@ export default function Landing() {
               size="lg" 
               className="text-base h-12 px-8" 
               onClick={handleConnect}
-              data-testid="button-start-free"
+              data-testid="button-certify-file"
             >
               <Upload className="mr-2 h-5 w-5" />
               Certifier un fichier
@@ -109,7 +109,7 @@ export default function Landing() {
           </div>
           
           <p className="mt-6 text-sm text-muted-foreground">
-            100% Gratuit • Sans carte bancaire • Certifications illimitées
+            0.03€ par certification • Paiement crypto uniquement • Illimité
           </p>
         </div>
       </section>
@@ -189,12 +189,12 @@ export default function Landing() {
         <div className="container">
           <div className="mx-auto max-w-3xl">
             <div className="mb-12 text-center">
-              <Badge variant="outline" className="mb-4">100% Gratuit</Badge>
+              <Badge variant="outline" className="mb-4">Tarif simple</Badge>
               <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-                Gratuit pour tous. Pour toujours.
+                Un prix unique. Sans abonnement.
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                La preuve numérique est un droit fondamental. ProofMint est gratuit et le restera.
+                Payez uniquement ce que vous utilisez. Pas de frais cachés, pas d'engagement.
               </p>
             </div>
             
@@ -202,10 +202,10 @@ export default function Landing() {
               <CardContent className="pt-8 pb-8">
                 <div className="text-center mb-6">
                   <div className="mb-2">
-                    <span className="text-5xl font-bold">0€</span>
+                    <span className="text-5xl font-bold">0.03€</span>
                   </div>
                   <p className="text-muted-foreground">
-                    Certifications illimitées
+                    par certification
                   </p>
                 </div>
                 <ul className="mb-8 space-y-3 text-sm">
@@ -234,7 +234,7 @@ export default function Landing() {
                   className="w-full" 
                   size="lg"
                   onClick={handleConnect}
-                  data-testid="button-start-free"
+                  data-testid="button-start-now"
                 >
                   Commencer maintenant
                 </Button>
@@ -242,7 +242,7 @@ export default function Landing() {
             </Card>
             
             <p className="mt-8 text-center text-sm text-muted-foreground">
-              Seuls les frais blockchain (~0.002€) sont à votre charge lors de la signature.
+              Paiement en EGLD (crypto MultiversX) lors de la signature de la transaction.
             </p>
           </div>
         </div>
@@ -322,7 +322,7 @@ export default function Landing() {
                 <AccordionContent className="text-muted-foreground">
                   Le portefeuille (wallet) sert à vous identifier de manière sécurisée et à signer 
                   vos certifications. C'est comme une signature électronique ultra-sécurisée. 
-                  Vous pouvez utiliser l'extension navigateur MultiversX DeFi Wallet (gratuite).
+                  Vous pouvez utiliser l'extension navigateur MultiversX DeFi Wallet ou l'app xPortal.
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -339,7 +339,7 @@ export default function Landing() {
             </h2>
             <p className="mb-8 text-lg text-muted-foreground">
               Rejoignez les créateurs qui sécurisent leur travail. 
-              Service 100% gratuit et illimité.
+              Seulement 0.03€ par certification.
             </p>
             <Button 
               size="lg" 
@@ -351,7 +351,7 @@ export default function Landing() {
               Commencer maintenant
             </Button>
             <p className="mt-4 text-sm text-muted-foreground">
-              Aucune carte bancaire requise
+              Paiement crypto uniquement
             </p>
           </div>
         </div>
