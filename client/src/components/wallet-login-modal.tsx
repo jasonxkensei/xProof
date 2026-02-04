@@ -126,18 +126,24 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     
     try {
       console.log('🔌 Creating extension provider...');
+      console.log('🌐 Current origin:', window.location.origin);
+      console.log('🔗 Current hostname:', window.location.hostname);
+      
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.extension 
       });
       providerRef.current = provider;
+      console.log('✅ Extension provider created:', provider);
       
       if (typeof provider.init === 'function') {
+        console.log('📡 Initializing provider...');
         await provider.init();
+        console.log('✅ Provider initialized');
       }
       
       console.log('🔐 Calling extension login...');
       const loginResult = await provider.login();
-      console.log('📋 Extension login result:', loginResult);
+      console.log('📋 Extension login result:', JSON.stringify(loginResult, null, 2));
       
       let walletAddress = '';
       
@@ -192,11 +198,16 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         }, 500);
       }
     } catch (err: any) {
-      console.error('Extension login error:', err);
-      setError(err.message || "Veuillez installer l'extension MultiversX");
+      console.error('❌ Extension login error:', err);
+      console.error('❌ Error name:', err?.name);
+      console.error('❌ Error message:', err?.message);
+      console.error('❌ Error stack:', err?.stack);
+      
+      const errorMsg = err.message || "Veuillez installer l'extension MultiversX";
+      setError(`Erreur: ${errorMsg}`);
       toast({
         title: "Échec de connexion",
-        description: err.message || "Extension non détectée",
+        description: errorMsg,
         variant: "destructive"
       });
       setLoading(null);
@@ -242,11 +253,14 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     
     try {
       console.log('📱 Creating WalletConnect provider via SDK...');
+      console.log('🌐 Current origin:', window.location.origin);
+      console.log('🔗 Current hostname:', window.location.hostname);
       
       const provider = await ProviderFactory.create({
         type: ProviderTypeEnum.walletConnect
       });
       providerRef.current = provider;
+      console.log('✅ WalletConnect provider created:', provider);
       
       if (typeof provider.init === 'function') {
         await provider.init();
