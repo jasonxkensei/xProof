@@ -194,13 +194,19 @@ Preferred communication style: Simple, everyday language.
 - ✅ Branded loading screen during wallet connection
 
 ### Known Issues
-- ⚠️ **xPortal Mobile (Deep Link)**: Connection works in xPortal app, but session may not sync back to browser after deep link return. Root cause: JavaScript execution interrupted when browser navigates to xPortal app. The SDK's ProviderFactory handles WalletConnect sessions, but mobile browsers may kill/reload the tab.
 - ⚠️ **Extension Wallet + Guardian 2FA**: Known SDK bug with cross-window communication. Workaround: Use Web Wallet for 2FA accounts.
+
+### xPortal Mobile Recovery System
+The app includes automatic recovery for xPortal mobile connections:
+- **Before deep link**: Connection state is saved to localStorage (`xportal_pending_connection`)
+- **On page reload**: `useXPortalRecovery` hook detects pending connections (valid for 5 minutes)
+- **Auto-recovery**: Modal reopens automatically and retries WalletConnect connection
+- **Files**: `client/src/hooks/useXPortalRecovery.ts`, `client/src/components/wallet-login-modal.tsx`
 
 ### Recommended Wallet Methods
 1. **Extension Wallet** (Desktop) - Best experience, fully working with polling
 2. **Web Wallet** (Any device) - Works with Guardian 2FA, reliable cross-window flow
-3. **xPortal Mobile** - Use QR code on desktop browser for best results; deep link on mobile may have issues
+3. **xPortal Mobile** - Improved with auto-recovery; QR code on desktop still recommended for best results
 
 ## ACP (Agent Commerce Protocol) - Proof-as-a-Service
 

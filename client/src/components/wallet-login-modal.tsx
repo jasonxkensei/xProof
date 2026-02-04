@@ -15,6 +15,7 @@ import { Shield, Wallet, Loader2, X, Smartphone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
+import { useXPortalRecovery, savePendingXPortalConnection, clearPendingXPortalConnection } from "@/hooks/useXPortalRecovery";
 
 interface WalletLoginModalProps {
   open: boolean;
@@ -32,10 +33,33 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   const [waitingForConnection, setWaitingForConnection] = useState(false);
   const providerRef = useRef<any>(null);
   const syncAttempted = useRef(false);
+  const pollingIntervalsRef = useRef<Set<NodeJS.Timeout>>(new Set());
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const isLoggedIn = useGetIsLoggedIn();
   const { address } = useGetAccount();
+  
+  // Helper to track and manage polling intervals
+  const addPollingInterval = (intervalId: NodeJS.Timeout) => {
+    pollingIntervalsRef.current.add(intervalId);
+  };
+  
+  const removePollingInterval = (intervalId: NodeJS.Timeout) => {
+    clearInterval(intervalId);
+    pollingIntervalsRef.current.delete(intervalId);
+  };
+  
+  const clearAllPollingIntervals = () => {
+    pollingIntervalsRef.current.forEach(id => clearInterval(id));
+    pollingIntervalsRef.current.clear();
+  };
+  
+  // Cleanup polling intervals on unmount
+  useEffect(() => {
+    return () => {
+      clearAllPollingIntervals();
+    };
+  }, []);
 
   const syncAndRedirect = useCallback(async (walletAddress: string): Promise<boolean> => {
     if (syncAttempted.current) return false;
@@ -116,6 +140,8 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       setError(null);
       setWaitingForConnection(false);
       syncAttempted.current = false;
+      // Clear any active polling intervals when modal closes
+      clearAllPollingIntervals();
     }
   }, [open]);
 
@@ -175,7 +201,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         
         let attempts = 0;
         const maxAttempts = 10;
-        const checkInterval = setInterval(async () => {
+        const intervalId = setInterval(async () => {
           attempts++;
           
           let addr = '';
@@ -186,16 +212,17 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           } catch (e) { }
           
           if (addr && addr.startsWith('erd1')) {
-            clearInterval(checkInterval);
+            removePollingInterval(intervalId);
             setWaitingForConnection(false);
             await syncAndRedirect(addr);
           } else if (attempts >= maxAttempts) {
-            clearInterval(checkInterval);
+            removePollingInterval(intervalId);
             setWaitingForConnection(false);
             setLoading(null);
             setError('Connexion expirée. Veuillez réessayer.');
           }
         }, 500);
+        addPollingInterval(intervalId);
       }
     } catch (err: any) {
       console.error('❌ Extension login error:', err);
@@ -268,7 +295,12 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       
       console.log('🔐 Calling WalletConnect login...');
       
+      // Save pending connection state before potential deep link navigation
+      // This helps recover if the browser tab is killed on mobile
       if (isMobileDevice()) {
+        savePendingXPortalConnection();
+        console.log('📱 Saved pending xPortal connection state for recovery');
+        
         toast({
           title: "xPortal",
           description: "Validez la connexion dans xPortal puis revenez sur cette page.",
@@ -299,12 +331,14 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       console.log('📍 Got wallet address from WalletConnect:', walletAddress);
       
       if (walletAddress && walletAddress.startsWith('erd1')) {
+        // Clear pending state on successful connection
+        clearPendingXPortalConnection();
         setWaitingForConnection(false);
         await syncAndRedirect(walletAddress);
       } else {
         let attempts = 0;
         const maxAttempts = 60;
-        const checkInterval = setInterval(async () => {
+        const intervalId = setInterval(async () => {
           attempts++;
           
           let addr = '';
@@ -315,20 +349,24 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           } catch (e) { }
           
           if (addr && addr.startsWith('erd1')) {
-            clearInterval(checkInterval);
+            removePollingInterval(intervalId);
+            clearPendingXPortalConnection();
             setWaitingForConnection(false);
             await syncAndRedirect(addr);
           } else if (attempts >= maxAttempts) {
-            clearInterval(checkInterval);
+            removePollingInterval(intervalId);
+            clearPendingXPortalConnection();
             setWaitingForConnection(false);
             setLoading(null);
             setError('Connexion expirée. Veuillez réessayer.');
           }
         }, 1000);
+        addPollingInterval(intervalId);
       }
       
     } catch (err: any) {
       console.error('WalletConnect error:', err);
+      clearPendingXPortalConnection();
       
       if (err.message?.includes('rejected') || err.message?.includes('cancelled') || err.message?.includes('Proposal')) {
         setLoading(null);
@@ -346,6 +384,52 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       setWaitingForConnection(false);
     }
   };
+
+  // Use xPortal recovery hook  
+  const { needsRecovery, clearRecovery, pendingConnection } = useXPortalRecovery();
+  const recoveryAttemptedRef = useRef(false);
+  const shouldAutoStartRef = useRef(false);
+  
+  // Clear recovery state when user is successfully logged in
+  useEffect(() => {
+    if (isLoggedIn && address && needsRecovery) {
+      console.log('📱 xPortal recovery: User logged in, clearing recovery state');
+      clearRecovery();
+    }
+  }, [isLoggedIn, address, needsRecovery, clearRecovery]);
+  
+  // Check for pending xPortal connection on component mount (recovery after deep link return)
+  useEffect(() => {
+    if (needsRecovery && !open && !recoveryAttemptedRef.current) {
+      recoveryAttemptedRef.current = true;
+      shouldAutoStartRef.current = true;
+      console.log('📱 xPortal recovery: Auto-opening modal for reconnection...');
+      // Don't clear recovery until connection succeeds - it's cleared when isLoggedIn becomes true
+      onOpenChange(true);
+    }
+  }, [needsRecovery, open, onOpenChange]);
+  
+  // Auto-start WalletConnect when modal opens for recovery (reuse existing handler)
+  useEffect(() => {
+    if (open && shouldAutoStartRef.current && !loading && !waitingForConnection) {
+      shouldAutoStartRef.current = false;
+      console.log('📱 xPortal recovery: Starting WalletConnect login...');
+      
+      // Small delay to let modal fully render, then call the existing handler
+      const timer = setTimeout(() => {
+        handleWalletConnectLogin();
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [open, loading, waitingForConnection]);
+  
+  // Reset recovery state when modal closes
+  useEffect(() => {
+    if (!open) {
+      recoveryAttemptedRef.current = false;
+    }
+  }, [open]);
 
   const handleCancel = () => {
     if (providerRef.current && typeof providerRef.current.logout === 'function') {

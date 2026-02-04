@@ -1,10 +1,12 @@
-import { Switch, Route, Redirect } from "wouter";
-import { useEffect } from "react";
+import { Switch, Route, Redirect, useLocation } from "wouter";
+import { useEffect, useState } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
+import { useXPortalRecovery } from "@/hooks/useXPortalRecovery";
+import { WalletLoginModal } from "@/components/wallet-login-modal";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
@@ -54,6 +56,56 @@ function Router() {
   );
 }
 
+// Global xPortal recovery handler - ensures recovery works on any route
+function XPortalRecoveryHandler() {
+  const { needsRecovery, clearRecovery, pendingConnection } = useXPortalRecovery();
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const { isAuthenticated } = useWalletAuth();
+  const [, navigate] = useLocation();
+  const [location] = useLocation();
+  
+  useEffect(() => {
+    // Only trigger recovery if user is not already authenticated
+    // and we're not on a page that already has a wallet modal
+    if (needsRecovery && !isAuthenticated) {
+      // Check if we're on landing or certify which have their own modals
+      const pagesWithModals = ['/', '/certify'];
+      if (!pagesWithModals.includes(location)) {
+        console.log('📱 Global xPortal recovery: Detected pending connection on non-modal page');
+        setShowRecoveryModal(true);
+      }
+    }
+  }, [needsRecovery, isAuthenticated, location]);
+  
+  // If authenticated, clear recovery state
+  useEffect(() => {
+    if (isAuthenticated && needsRecovery) {
+      clearRecovery();
+    }
+  }, [isAuthenticated, needsRecovery, clearRecovery]);
+  
+  if (!showRecoveryModal) return null;
+  
+  return (
+    <WalletLoginModal 
+      open={showRecoveryModal} 
+      onOpenChange={(open) => {
+        setShowRecoveryModal(open);
+        if (!open) {
+          clearRecovery();
+          // Navigate to original URL or landing if closed
+          const returnUrl = pendingConnection?.returnUrl;
+          if (returnUrl && returnUrl !== window.location.href) {
+            navigate(new URL(returnUrl).pathname);
+          } else {
+            navigate('/');
+          }
+        }
+      }} 
+    />
+  );
+}
+
 function App() {
   useEffect(() => {
     document.documentElement.classList.add("dark");
@@ -63,6 +115,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        <XPortalRecoveryHandler />
         <Router />
       </TooltipProvider>
     </QueryClientProvider>
