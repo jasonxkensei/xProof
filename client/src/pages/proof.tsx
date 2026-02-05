@@ -69,7 +69,7 @@ export default function ProofPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold tracking-tight">ProofMint</span>
+            <span className="text-xl font-bold tracking-tight">xproof</span>
           </div>
           <Button asChild variant="outline" size="sm" data-testid="button-home-header">
             <a href="/">Accueil</a>

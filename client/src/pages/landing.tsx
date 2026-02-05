@@ -34,7 +34,7 @@ export default function Landing() {
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold tracking-tight">ProofMint</span>
+            <span className="text-xl font-bold tracking-tight">xproof</span>
           </div>
           <nav className="hidden md:flex items-center gap-6">
             <a href="#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-how-it-works">
@@ -125,7 +125,7 @@ export default function Landing() {
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
                 Aucune connaissance technique requise. 
-                Si vous savez envoyer un email, vous savez utiliser ProofMint.
+                Si vous savez envoyer un email, vous savez utiliser xproof.
               </p>
             </div>
             
@@ -367,7 +367,7 @@ export default function Landing() {
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
                     <Shield className="h-5 w-5 text-primary-foreground" />
                   </div>
-                  <span className="text-xl font-bold">ProofMint</span>
+                  <span className="text-xl font-bold">xproof</span>
                 </div>
                 <p className="text-sm text-muted-foreground max-w-xs">
                   Certification blockchain pour créateurs et entreprises. 
@@ -395,7 +395,7 @@ export default function Landing() {
             
             <div className="border-t pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
-                © {new Date().getFullYear()} ProofMint. Tous droits réservés.
+                © {new Date().getFullYear()} xproof. Tous droits réservés.
               </p>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>Propulsé par</span>

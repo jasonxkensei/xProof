@@ -1,7 +1,9 @@
-# ProofMint - Blockchain Certification Platform
+# xproof - Blockchain Certification Platform
 
 ## Overview
-ProofMint is a Web3 certification platform designed to provide immutable and verifiable proof of digital file ownership. It achieves this by recording SHA-256 hashes of files on the MultiversX blockchain. The platform aims to offer a professional and accessible interface for non-technical users to certify various digital assets, positioning itself as a "truth primitive" for both human and AI agents. It offers features like public proof pages, certificate generation, and blockchain verification.
+xproof is a Web3 certification platform designed to provide immutable and verifiable proof of digital file ownership. It achieves this by recording SHA-256 hashes of files on the MultiversX blockchain. The platform aims to offer a professional and accessible interface for non-technical users to certify various digital assets, positioning itself as a "truth primitive" for both human and AI agents. It offers features like public proof pages, certificate generation, and blockchain verification.
+
+**Rebranding Note (Feb 2026):** Previously known as "ProofMint", the service was rebranded to "xproof" to better align with the MultiversX ecosystem ("x" prefix).
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -18,19 +20,19 @@ The backend utilizes Express.js with TypeScript and Node.js. It integrates Multi
 RESTful APIs are provided under `/api/*`, with middleware for logging and error handling. Protected routes enforce wallet authentication. Key API endpoints include wallet synchronization, user data retrieval, and session logout. File processing involves client-side SHA-256 hashing for privacy and performance, sending only metadata to the server.
 
 ### Blockchain Integration
-ProofMint integrates with the MultiversX blockchain for immutable proof storage. It supports both XPortal (user-signed transactions with their own gas fees) and an optional server-side signing mode. The system handles transaction signing, broadcasting, and generation of explorer URLs. It supports Mainnet, Devnet, and Testnet.
+xproof integrates with the MultiversX blockchain for immutable proof storage. It supports both XPortal (user-signed transactions with their own gas fees) and an optional server-side signing mode. The system handles transaction signing, broadcasting, and generation of explorer URLs. It supports Mainnet, Devnet, and Testnet.
 
 ### Data Storage
 PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides type-safe database operations with a schema-first approach. Key tables include `users` (wallet-based profiles with Stripe integration), `certifications` (file certification records), and `sessions` (Express session storage). Drizzle Kit manages database migrations.
 
 ### Agent Commerce Protocol (ACP)
-ProofMint implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is 0.03€ per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
+xproof implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is 0.03€ per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
 
 ### LLM-Ready Routes & AI Agent Discovery
 The platform offers comprehensive machine-readable documentation for AI agent discovery:
 
 **Discovery Endpoints:**
-- `/.well-known/proofmint.md` - Canonical specification v1.0
+- `/.well-known/xproof.md` - Canonical specification v1.0 (also available at `/.well-known/proofmint.md` for backwards compatibility)
 - `/.well-known/ai-plugin.json` - OpenAI ChatGPT plugin manifest
 - `/.well-known/mcp.json` - Model Context Protocol manifest
 - `/api/acp/health` - Health check (public)

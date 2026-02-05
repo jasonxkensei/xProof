@@ -18,7 +18,7 @@ logger.log('🌐 MultiversX Network: MAINNET');
 const walletConnectV2Options = walletConnectProjectId ? {
   projectId: walletConnectProjectId,
   metadata: {
-    name: 'ProofMint',
+    name: 'xproof',
     description: 'Blockchain Certification Platform - Create immutable proofs of file ownership',
     url: window.location.origin,
     icons: [`${window.location.origin}/favicon.ico`]

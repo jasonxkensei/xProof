@@ -30,7 +30,7 @@ export default function Settings() {
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold tracking-tight">ProofMint</span>
+            <span className="text-xl font-bold tracking-tight">xproof</span>
           </div>
           <Button asChild variant="ghost" size="sm" data-testid="button-back-dashboard">
             <Link href="/dashboard">
@@ -45,7 +45,7 @@ export default function Settings() {
         <div className="mb-8">
           <h1 className="mb-2 text-3xl font-bold tracking-tight">Paramètres</h1>
           <p className="text-muted-foreground">
-            Détails de votre compte ProofMint
+            Détails de votre compte xproof
           </p>
         </div>
 

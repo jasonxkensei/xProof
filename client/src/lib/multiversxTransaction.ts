@@ -38,7 +38,7 @@ export async function createCertificationTransaction(params: TransactionParams):
   const safeFileName = normalizeForBlockchain(fileName);
   const safeAuthorName = authorName ? normalizeForBlockchain(authorName) : undefined;
   
-  const payloadText = `ProofMint:certify:${fileHash}|filename:${safeFileName}${safeAuthorName ? `|author:${safeAuthorName}` : ""}`;
+  const payloadText = `xproof:certify:${fileHash}|filename:${safeFileName}${safeAuthorName ? `|author:${safeAuthorName}` : ""}`;
   
   // Get current nonce from SDK store or API
   const { getAccount } = await import('@multiversx/sdk-dapp/out/methods/account/getAccount');

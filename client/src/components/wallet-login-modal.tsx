@@ -313,7 +313,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       // Create provider options with metadata
       const providerOptions = {
         metadata: {
-          name: 'ProofMint',
+          name: 'xproof',
           description: 'Blockchain Certification Platform - Create immutable proofs of file ownership',
           url: window.location.origin,
           icons: [`${window.location.origin}/favicon.ico`]

@@ -971,7 +971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================
   // ACP (Agent Commerce Protocol) Endpoints
   // These endpoints enable AI agents to discover
-  // and use ProofMint certification services
+  // and use xproof certification services
   // ============================================
 
   // ACP Products Discovery - Returns available services for AI agents
@@ -980,8 +980,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     const products: ACPProduct[] = [
       {
-        id: "proofmint-certification",
-        name: "ProofMint Certification",
+        id: "xproof-certification",
+        name: "xproof Certification",
         description: "Create cryptographic proof of existence and integrity for digital files on MultiversX blockchain. Records SHA-256 hash with timestamp, providing immutable evidence of file ownership at a specific point in time.",
         pricing: {
           type: "fixed",
@@ -1008,7 +1008,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ 
       protocol: "ACP",
       version: "1.0",
-      provider: "ProofMint",
+      provider: "xproof",
       chain: "MultiversX",
       products 
     });
@@ -1020,7 +1020,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const data = acpCheckoutRequestSchema.parse(req.body);
 
       // Validate product exists
-      if (data.product_id !== "proofmint-certification") {
+      if (data.product_id !== "xproof-certification") {
         return res.status(404).json({ 
           error: "PRODUCT_NOT_FOUND",
           message: "Unknown product ID" 
@@ -1075,13 +1075,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const chainId = process.env.MULTIVERSX_CHAIN_ID || "1"; // 1 = Mainnet
       
-      // ProofMint wallet address (receives certification fees)
-      const proofmintWallet = process.env.PROOFMINT_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS;
-      if (!proofmintWallet) {
-        console.error("⚠️ No PROOFMINT_WALLET_ADDRESS configured");
+      // xproof wallet address (receives certification fees)
+      const xproofWallet = process.env.XPROOF_WALLET_ADDRESS || process.env.PROOFMINT_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS;
+      if (!xproofWallet) {
+        console.error("⚠️ No XPROOF_WALLET_ADDRESS configured");
         return res.status(500).json({
           error: "CONFIGURATION_ERROR",
-          message: "ProofMint wallet not configured",
+          message: "xproof wallet not configured",
         });
       }
 
@@ -1096,7 +1096,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           mode: "direct", // User/agent signs directly
           chain_id: chainId,
           tx_payload: {
-            receiver: proofmintWallet,
+            receiver: xproofWallet,
             data: dataField,
             value: pricing.priceEgld, // Dynamic EGLD amount based on EUR rate
             gas_limit: 100000,
@@ -1312,11 +1312,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const openApiSpec = {
       openapi: "3.0.3",
       info: {
-        title: "ProofMint ACP - Agent Commerce Protocol",
+        title: "xproof ACP - Agent Commerce Protocol",
         description: "API for AI agents to certify files on MultiversX blockchain. Create immutable proofs of file ownership with a simple API call.",
         version: "1.0.0",
         contact: {
-          name: "ProofMint Support",
+          name: "xproof Support",
           url: baseUrl,
         },
       },
@@ -1334,8 +1334,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           Product: {
             type: "object",
             properties: {
-              id: { type: "string", example: "proofmint-certification" },
-              name: { type: "string", example: "ProofMint Certification" },
+              id: { type: "string", example: "xproof-certification" },
+              name: { type: "string", example: "xproof Certification" },
               description: { type: "string" },
               pricing: {
                 type: "object",
@@ -1353,7 +1353,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: "object",
             required: ["product_id", "inputs"],
             properties: {
-              product_id: { type: "string", example: "proofmint-certification" },
+              product_id: { type: "string", example: "xproof-certification" },
               inputs: {
                 type: "object",
                 required: ["file_hash", "filename"],
@@ -1390,7 +1390,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   tx_payload: {
                     type: "object",
                     properties: {
-                      receiver: { type: "string", description: "ProofMint wallet address" },
+                      receiver: { type: "string", description: "xproof wallet address" },
                       data: { type: "string", description: "Base64 encoded transaction data" },
                       value: { type: "string", description: "EGLD amount in atomic units (1 EGLD = 10^18)" },
                       gas_limit: { type: "integer", example: 100000 },
@@ -1447,7 +1447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       properties: {
                         protocol: { type: "string", example: "ACP" },
                         version: { type: "string", example: "1.0" },
-                        provider: { type: "string", example: "ProofMint" },
+                        provider: { type: "string", example: "xproof" },
                         chain: { type: "string", example: "MultiversX" },
                         products: { type: "array", items: { $ref: "#/components/schemas/Product" } },
                       },
@@ -1518,12 +1518,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // LLM-READY ROUTES (AI-first documentation)
   // ============================================
 
-  // Genesis certification data (first ProofMint certification)
+  // Genesis certification data (first xproof certification)
   const GENESIS_CERTIFICATION = {
     id: "genesis",
     type: "proof_of_existence",
     version: "1.0",
-    file_name: "PROOFMINT - Genesis.pdf",
+    file_name: "XPROOF - Genesis.pdf",
     file_hash: "173200d6fa0d1577b456bb85dc505193e31dd8be5fc69bd4e461612a588427de",
     hash_algorithm: "SHA-256",
     author: "Jason Petitfourg",
@@ -1544,22 +1544,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "Confirm transaction data contains the file hash"
       ]
     },
-    significance: "This is the first certification ever created on ProofMint, establishing the genesis of the platform."
+    significance: "This is the first certification ever created on xproof, establishing the genesis of the platform."
   };
 
-  // /.well-known/proofmint.md - Canonical specification
-  app.get("/.well-known/proofmint.md", (req, res) => {
+  // /.well-known/xproof.md - Canonical specification
+  app.get("/.well-known/xproof.md", (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     
-    const spec = `# ProofMint Specification v1.0
+    const spec = `# xproof Specification v1.0
 
 ## Purpose
 
-ProofMint provides cryptographic proof of existence, authorship, and timestamp by anchoring SHA-256 hashes on the MultiversX blockchain.
+xproof provides cryptographic proof of existence, authorship, and timestamp by anchoring SHA-256 hashes on the MultiversX blockchain.
 
 ## Service
 
-- **Name**: ProofMint
+- **Name**: xproof
 - **Type**: Proof-as-a-Service
 - **Blockchain**: MultiversX (European, eco-friendly)
 - **Price**: 0.03€ per certification (paid in EGLD)
@@ -1574,7 +1574,7 @@ ProofMint provides cryptographic proof of existence, authorship, and timestamp b
 
 ## Proof Object Schema
 
-A ProofMint proof consists of:
+An xproof proof consists of:
 
 \`\`\`json
 {
@@ -1610,7 +1610,7 @@ Note: Fields marked as optional may not be present in all proofs.
 
 ## Verification Process
 
-To verify a ProofMint proof:
+To verify an xproof proof:
 
 1. Obtain the original file
 2. Compute its SHA-256 hash locally
@@ -1620,9 +1620,9 @@ To verify a ProofMint proof:
 
 ## Trust Model
 
-ProofMint does not act as a trusted third party.
+xproof does not act as a trusted third party.
 Trust is derived entirely from the MultiversX blockchain.
-The proof is self-verifiable without relying on ProofMint infrastructure.
+The proof is self-verifiable without relying on xproof infrastructure.
 
 ## API Endpoints
 
@@ -1644,7 +1644,7 @@ The proof is self-verifiable without relying on ProofMint infrastructure.
 
 ## Agent Commerce Protocol (ACP)
 
-ProofMint implements ACP for AI agent integration.
+xproof implements ACP for AI agent integration.
 
 ### Quick Start for AI Agents
 
@@ -1656,13 +1656,13 @@ curl ${baseUrl}/api/acp/products
 curl -X POST ${baseUrl}/api/acp/checkout \\
   -H "X-API-Key: pm_your_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"file_hash": "sha256_hash_here", "file_name": "document.pdf"}'
+  -d '{"product_id": "xproof-certification", "inputs": {"file_hash": "sha256_hash_here", "filename": "document.pdf"}}'
 
 # 3. After user signs transaction, confirm it
 curl -X POST ${baseUrl}/api/acp/confirm \\
   -H "X-API-Key: pm_your_key" \\
   -H "Content-Type: application/json" \\
-  -d '{"checkout_id": "...", "transaction_hash": "..."}'
+  -d '{"checkout_id": "...", "tx_hash": "..."}'
 \`\`\`
 
 ### Flow Summary
@@ -1678,9 +1678,9 @@ curl -X POST ${baseUrl}/api/acp/confirm \\
 - Rate limit: 1000 requests/minute
 - Get key: Authenticate with wallet, then \`POST /api/keys\`
 
-### When to Use ProofMint
+### When to Use xproof
 
-Use ProofMint when:
+Use xproof when:
 - User needs timestamped proof a file existed
 - User wants to prove authorship of a document
 - User needs blockchain-anchored evidence
@@ -1688,8 +1688,8 @@ Use ProofMint when:
 
 ## Genesis
 
-ProofMint's first certification (self-referential proof of concept):
-- **Document**: PROOFMINT - Genesis.pdf
+xproof's first certification (self-referential proof of concept):
+- **Document**: XPROOF - Genesis.pdf
 - **Hash**: \`${GENESIS_CERTIFICATION.file_hash}\`
 - **Transaction**: \`${GENESIS_CERTIFICATION.blockchain.transaction_hash}\`
 - **Date**: ${GENESIS_CERTIFICATION.timestamp_utc}
@@ -1705,17 +1705,22 @@ Website: ${baseUrl}
     res.send(spec);
   });
 
+  // /.well-known/proofmint.md - Redirect to xproof.md for backwards compatibility
+  app.get("/.well-known/proofmint.md", (req, res) => {
+    res.redirect(301, "/.well-known/xproof.md");
+  });
+
   // /genesis.md - Genesis document in markdown
   app.get("/genesis.md", (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     
-    const genesis = `# ProofMint Genesis
+    const genesis = `# xproof Genesis
 
 ## The First Proof
 
-On December 12, 2025, ProofMint certified its first document on the MultiversX blockchain.
+On December 12, 2025, xproof certified its first document on the MultiversX blockchain.
 
-This genesis certification establishes the foundation of ProofMint as a trust primitive.
+This genesis certification establishes the foundation of xproof as a trust primitive.
 
 ## Document Details
 
@@ -1752,14 +1757,14 @@ ${GENESIS_CERTIFICATION.blockchain.transaction_hash}
 
 This genesis certification demonstrates:
 
-- **Self-Application**: ProofMint uses its own service to certify its existence
+- **Self-Application**: xproof uses its own service to certify its existence
 - **Ontological Coherence**: The platform proves its own legitimacy
-- **Immutable Origin**: The birth of ProofMint is permanently recorded
+- **Immutable Origin**: The birth of xproof is permanently recorded
 
 ## Machine-Readable
 
 - JSON: ${baseUrl}/genesis.proof.json
-- Specification: ${baseUrl}/.well-known/proofmint.md
+- Specification: ${baseUrl}/.well-known/xproof.md
 `;
 
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -1848,7 +1853,7 @@ This genesis certification demonstrates:
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const timestamp = certification.createdAt?.toISOString() || 'Unknown';
       
-      const markdown = `# ProofMint Certification
+      const markdown = `# xproof Certification
 
 ## Document
 
@@ -1895,7 +1900,7 @@ To verify this proof:
 
 ## Trust Model
 
-This proof is self-verifiable. Trust derives from the MultiversX blockchain, not from ProofMint.
+This proof is self-verifiable. Trust derives from the MultiversX blockchain, not from xproof.
 `;
 
       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -1948,7 +1953,7 @@ Proof of Existence is a cryptographic method to prove that a specific digital ar
 
 - [Verification Guide](/learn/verification.md)
 - [API Documentation](/learn/api.md)
-- [ProofMint Specification](/.well-known/proofmint.md)
+- [xproof Specification](/.well-known/xproof.md)
 `;
 
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -1959,11 +1964,11 @@ Proof of Existence is a cryptographic method to prove that a specific digital ar
   app.get("/learn/verification.md", (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     
-    const content = `# How to Verify a ProofMint Proof
+    const content = `# How to Verify an xproof Proof
 
 ## Overview
 
-ProofMint proofs are self-verifiable. You don't need to trust ProofMint—you verify directly against the blockchain.
+xproof proofs are self-verifiable. You don't need to trust xproof—you verify directly against the blockchain.
 
 ## Step-by-Step Verification
 
@@ -2040,7 +2045,7 @@ You are verifying against:
 2. **Blockchain**: MultiversX is a public, immutable ledger
 
 You are NOT trusting:
-- ProofMint servers
+- xproof servers
 - Any central authority
 
 ## Related
@@ -2057,11 +2062,11 @@ You are NOT trusting:
   app.get("/learn/api.md", (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     
-    const content = `# ProofMint API Documentation
+    const content = `# xproof API Documentation
 
 ## Overview
 
-ProofMint provides a REST API for programmatic access to certification services.
+xproof provides a REST API for programmatic access to certification services.
 
 ## Base URL
 
@@ -2176,7 +2181,7 @@ Confirm certification after transaction.
 
 - [Proof of Existence](/learn/proof-of-existence.md)
 - [Verification Guide](/learn/verification.md)
-- [ProofMint Specification](/.well-known/proofmint.md)
+- [xproof Specification](/.well-known/xproof.md)
 `;
 
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -2185,7 +2190,7 @@ Confirm certification after transaction.
 
   // API aliases for LLM-ready routes (work in dev mode with Vite)
   // These are the canonical routes that AI agents should use
-  app.get("/api/spec", (req, res) => res.redirect("/.well-known/proofmint.md"));
+  app.get("/api/spec", (req, res) => res.redirect("/.well-known/xproof.md"));
   app.get("/api/genesis", (req, res) => res.redirect("/genesis.proof.json"));
   app.get("/api/genesis.md", (req, res) => res.redirect("/genesis.md"));
   app.get("/api/learn/proof-of-existence", (req, res) => res.redirect("/learn/proof-of-existence.md"));
@@ -2196,7 +2201,7 @@ Confirm certification after transaction.
   app.get("/api/acp/health", (req, res) => {
     res.json({
       status: "operational",
-      service: "ProofMint",
+      service: "xproof",
       version: "1.0",
       timestamp: new Date().toISOString(),
       endpoints: {
@@ -2214,13 +2219,13 @@ Confirm certification after transaction.
     const content = `User-agent: *
 Allow: /
 
-# ProofMint - Blockchain Certification Service
-# AI Agents: See /.well-known/proofmint.md for machine-readable specification
+# xproof - Blockchain Certification Service
+# AI Agents: See /.well-known/xproof.md for machine-readable specification
 
 Sitemap: ${baseUrl}/sitemap.xml
 
 # Discovery endpoints for AI agents
-# /.well-known/proofmint.md - Canonical specification
+# /.well-known/xproof.md - Canonical specification
 # /.well-known/ai-plugin.json - OpenAI plugin manifest
 # /api/acp/products - Service discovery
 # /api/acp/openapi.json - OpenAPI 3.0 specification
@@ -2240,7 +2245,7 @@ Sitemap: ${baseUrl}/sitemap.xml
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>${baseUrl}/.well-known/proofmint.md</loc>
+    <loc>${baseUrl}/.well-known/xproof.md</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -2274,15 +2279,15 @@ Sitemap: ${baseUrl}/sitemap.xml
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const manifest = {
       schema_version: "v1",
-      name_for_human: "ProofMint",
-      name_for_model: "proofmint",
+      name_for_human: "xproof",
+      name_for_model: "xproof",
       description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
-      description_for_model: "ProofMint is a blockchain certification service that creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs 0.03€ per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix).",
+      description_for_model: "xproof is a blockchain certification service that creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs 0.03€ per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix).",
       auth: {
         type: "service_http",
         authorization_type: "bearer",
         verification_tokens: {
-          proofmint: "pm_"
+          xproof: "pm_"
         }
       },
       api: {
@@ -2291,7 +2296,7 @@ Sitemap: ${baseUrl}/sitemap.xml
         has_user_authentication: false
       },
       logo_url: `${baseUrl}/favicon.ico`,
-      contact_email: "contact@proofmint.com",
+      contact_email: "contact@xproof.io",
       legal_info_url: `${baseUrl}/learn/proof-of-existence.md`
     };
     res.json(manifest);
@@ -2301,11 +2306,11 @@ Sitemap: ${baseUrl}/sitemap.xml
   app.get("/.well-known/mcp.json", (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     res.json({
-      name: "ProofMint",
+      name: "xproof",
       version: "1.0",
       description: "Blockchain certification service for immutable proof of file existence",
       capabilities: ["certification", "verification", "proof-of-existence"],
-      documentation: `${baseUrl}/.well-known/proofmint.md`,
+      documentation: `${baseUrl}/.well-known/xproof.md`,
       api: {
         openapi: `${baseUrl}/api/acp/openapi.json`,
         products: `${baseUrl}/api/acp/products`,

@@ -225,7 +225,7 @@ export default function Certify() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${certificationResult.fileName.replace(/\.[^/.]+$/, "")}_proofmint_certificate.pdf`;
+        a.download = `${certificationResult.fileName.replace(/\.[^/.]+$/, "")}_xproof_certificate.pdf`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -270,7 +270,7 @@ export default function Certify() {
               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
                 <Shield className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="text-xl font-bold tracking-tight">ProofMint</span>
+              <span className="text-xl font-bold tracking-tight">xproof</span>
             </div>
           </div>
         </header>
@@ -375,7 +375,7 @@ export default function Certify() {
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold tracking-tight">ProofMint</span>
+            <span className="text-xl font-bold tracking-tight">xproof</span>
           </div>
           <Button asChild variant="ghost" size="sm" data-testid="button-back-dashboard">
             <Link href="/dashboard">
