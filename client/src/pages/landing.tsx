@@ -64,7 +64,6 @@ export default function Landing() {
           </div>
         </div>
       </header>
-
       {/* Hero Section */}
       <section className="container py-20 md:py-28">
         <div className="mx-auto max-w-5xl text-center">
@@ -113,7 +112,6 @@ export default function Landing() {
           </p>
         </div>
       </section>
-
       {/* How It Works */}
       <section id="how-it-works" className="border-y bg-muted/30 py-20 md:py-28">
         <div className="container">
@@ -183,7 +181,6 @@ export default function Landing() {
           </div>
         </div>
       </section>
-
       {/* Pricing */}
       <section id="pricing" className="border-y bg-muted/30 py-20 md:py-28">
         <div className="container">
@@ -241,13 +238,10 @@ export default function Landing() {
               </CardContent>
             </Card>
             
-            <p className="mt-8 text-center text-sm text-muted-foreground">
-              Paiement en EGLD (crypto MultiversX) lors de la signature de la transaction.
-            </p>
+            <p className="mt-8 text-center text-sm text-muted-foreground">Paiement en $EGLD lors de la signature de la transaction.</p>
           </div>
         </div>
       </section>
-
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">
         <div className="container">
@@ -329,7 +323,6 @@ export default function Landing() {
           </div>
         </div>
       </section>
-
       {/* Final CTA */}
       <section className="border-t bg-primary/5 py-20 md:py-28">
         <div className="container">
@@ -356,7 +349,6 @@ export default function Landing() {
           </div>
         </div>
       </section>
-
       {/* Footer */}
       <footer className="border-t py-12">
         <div className="container">
@@ -412,7 +404,6 @@ export default function Landing() {
           </div>
         </div>
       </footer>
-
       <WalletLoginModal 
         open={isLoginModalOpen} 
         onOpenChange={setIsLoginModalOpen} 
