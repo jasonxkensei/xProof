@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { logger } from "@/lib/logger";
 import {
   Dialog,
   DialogContent,
@@ -76,7 +77,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     syncAttempted.current = true;
     
     try {
-      console.log('🔄 Syncing wallet with backend:', walletAddress);
+      logger.log('🔄 Syncing wallet with backend:', walletAddress);
       
       const response = await fetch('/api/auth/wallet/simple-sync', {
         method: 'POST',
@@ -87,7 +88,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       
       if (response.ok) {
         const userData = await response.json();
-        console.log('✅ Backend sync successful:', userData);
+        logger.log('✅ Backend sync successful:', userData);
         
         localStorage.setItem('walletAddress', walletAddress);
         
@@ -139,7 +140,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
 
   useEffect(() => {
     if (isLoggedIn && address && open && !syncAttempted.current) {
-      console.log('✅ SDK detected login:', address);
+      logger.log('✅ SDK detected login:', address);
       syncAndRedirect(address);
     }
   }, [isLoggedIn, address, open, syncAndRedirect]);
@@ -161,25 +162,25 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     syncAttempted.current = false;
     
     try {
-      console.log('🔌 Creating extension provider...');
-      console.log('🌐 Current origin:', window.location.origin);
-      console.log('🔗 Current hostname:', window.location.hostname);
+      logger.log('🔌 Creating extension provider...');
+      logger.log('🌐 Current origin:', window.location.origin);
+      logger.log('🔗 Current hostname:', window.location.hostname);
       
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.extension 
       });
       providerRef.current = provider;
-      console.log('✅ Extension provider created:', provider);
+      logger.log('✅ Extension provider created:', provider);
       
       if (typeof provider.init === 'function') {
-        console.log('📡 Initializing provider...');
+        logger.log('📡 Initializing provider...');
         await provider.init();
-        console.log('✅ Provider initialized');
+        logger.log('✅ Provider initialized');
       }
       
-      console.log('🔐 Calling extension login...');
+      logger.log('🔐 Calling extension login...');
       const loginResult = await provider.login();
-      console.log('📋 Extension login result:', JSON.stringify(loginResult, null, 2));
+      logger.log('📋 Extension login result:', JSON.stringify(loginResult, null, 2));
       
       let walletAddress = '';
       
@@ -193,7 +194,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             walletAddress = await (provider as any).getAddress();
           }
         } catch (e) {
-          console.log('getAddress failed:', e);
+          logger.log('getAddress failed:', e);
         }
       }
       
@@ -201,12 +202,12 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         walletAddress = (provider as any).account.address;
       }
       
-      console.log('📍 Got wallet address:', walletAddress);
+      logger.log('📍 Got wallet address:', walletAddress);
       
       if (walletAddress && walletAddress.startsWith('erd1')) {
         await syncAndRedirect(walletAddress);
       } else {
-        console.log('⏳ Address not immediately available, waiting for SDK...');
+        logger.log('⏳ Address not immediately available, waiting for SDK...');
         setWaitingForConnection(true);
         
         let attempts = 0;
@@ -258,7 +259,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     syncAttempted.current = false;
     
     try {
-      console.log('🌐 Creating web wallet provider...');
+      logger.log('🌐 Creating web wallet provider...');
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.crossWindow 
       });
@@ -267,9 +268,9 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         await provider.init();
       }
       
-      console.log('🔐 Calling web wallet login...');
+      logger.log('🔐 Calling web wallet login...');
       await provider.login();
-      console.log('✅ Web Wallet login completed');
+      logger.log('✅ Web Wallet login completed');
       
     } catch (err: any) {
       console.error('Web Wallet login error:', err);
@@ -291,21 +292,21 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     syncAttempted.current = false;
     
     try {
-      console.log('📱 Creating WalletConnect provider directly...');
-      console.log('🌐 Current origin:', window.location.origin);
-      console.log('🔗 Current hostname:', window.location.hostname);
-      console.log('🔑 WalletConnect Project ID:', WALLETCONNECT_PROJECT_ID);
+      logger.log('📱 Creating WalletConnect provider directly...');
+      logger.log('🌐 Current origin:', window.location.origin);
+      logger.log('🔗 Current hostname:', window.location.hostname);
+      logger.log('🔑 WalletConnect Project ID:', WALLETCONNECT_PROJECT_ID);
       
       // Create callbacks for the WalletConnect provider
       const callbacks = {
         onClientLogin: () => {
-          console.log('✅ WalletConnect: Client logged in');
+          logger.log('✅ WalletConnect: Client logged in');
         },
         onClientLogout: () => {
-          console.log('🚪 WalletConnect: Client logged out');
+          logger.log('🚪 WalletConnect: Client logged out');
         },
         onClientEvent: (event: any) => {
-          console.log('📡 WalletConnect event:', event);
+          logger.log('📡 WalletConnect event:', event);
         }
       };
       
@@ -319,7 +320,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         }
       };
       
-      console.log('📋 WalletConnect options:', JSON.stringify(providerOptions, null, 2));
+      logger.log('📋 WalletConnect options:', JSON.stringify(providerOptions, null, 2));
       
       // Create WalletConnect provider directly with explicit configuration
       const wcProvider = new WalletConnectV2Provider(
@@ -331,19 +332,19 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       );
       
       wcProviderRef.current = wcProvider;
-      console.log('✅ WalletConnect provider created directly');
+      logger.log('✅ WalletConnect provider created directly');
       
       // Initialize the provider
-      console.log('🔄 Initializing WalletConnect provider...');
+      logger.log('🔄 Initializing WalletConnect provider...');
       await wcProvider.init();
-      console.log('✅ WalletConnect provider initialized');
+      logger.log('✅ WalletConnect provider initialized');
       
       // Connect and get URI for QR code
-      console.log('🔗 Connecting to get pairing URI...');
+      logger.log('🔗 Connecting to get pairing URI...');
       const { uri, approval } = await wcProvider.connect();
       
       if (uri) {
-        console.log('📱 WalletConnect URI obtained:', uri.substring(0, 50) + '...');
+        logger.log('📱 WalletConnect URI obtained:', uri.substring(0, 50) + '...');
         setWcUri(uri);
         
         // Generate QR code
@@ -356,12 +357,12 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           }
         });
         setQrCodeDataUrl(qrDataUrl);
-        console.log('📸 QR code generated');
+        logger.log('📸 QR code generated');
         
         // For mobile, open xPortal deep link
         if (isMobileDevice()) {
           savePendingXPortalConnection();
-          console.log('📱 Saved pending xPortal connection state for recovery');
+          logger.log('📱 Saved pending xPortal connection state for recovery');
           
           // Create xPortal deep link
           const encodedUri = encodeURIComponent(uri);
@@ -380,12 +381,12 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       setWaitingForConnection(true);
       
       // Login with the approval callback - the provider handles the flow
-      console.log('⏳ Calling login with approval callback...');
+      logger.log('⏳ Calling login with approval callback...');
       const loginResult = await wcProvider.login({ approval });
-      console.log('📋 WalletConnect login result:', loginResult);
+      logger.log('📋 WalletConnect login result:', loginResult);
       
       let walletAddress = wcProvider.getAddress();
-      console.log('📍 Got wallet address from WalletConnect:', walletAddress);
+      logger.log('📍 Got wallet address from WalletConnect:', walletAddress);
       
       if (walletAddress && walletAddress.startsWith('erd1')) {
         // Clear pending state on successful connection
@@ -454,7 +455,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   // Clear recovery state when user is successfully logged in
   useEffect(() => {
     if (isLoggedIn && address && needsRecovery) {
-      console.log('📱 xPortal recovery: User logged in, clearing recovery state');
+      logger.log('📱 xPortal recovery: User logged in, clearing recovery state');
       clearRecovery();
     }
   }, [isLoggedIn, address, needsRecovery, clearRecovery]);
@@ -464,7 +465,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     if (needsRecovery && !open && !recoveryAttemptedRef.current) {
       recoveryAttemptedRef.current = true;
       shouldAutoStartRef.current = true;
-      console.log('📱 xPortal recovery: Auto-opening modal for reconnection...');
+      logger.log('📱 xPortal recovery: Auto-opening modal for reconnection...');
       // Don't clear recovery until connection succeeds - it's cleared when isLoggedIn becomes true
       onOpenChange(true);
     }
@@ -474,7 +475,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
   useEffect(() => {
     if (open && shouldAutoStartRef.current && !loading && !waitingForConnection) {
       shouldAutoStartRef.current = false;
-      console.log('📱 xPortal recovery: Starting WalletConnect login...');
+      logger.log('📱 xPortal recovery: Starting WalletConnect login...');
       
       // Small delay to let modal fully render, then call the existing handler
       const timer = setTimeout(() => {

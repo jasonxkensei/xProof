@@ -1,4 +1,5 @@
 import { Transaction, Address } from "@multiversx/sdk-core";
+import { logger } from "@/lib/logger";
 import { getAccountProvider } from "@multiversx/sdk-dapp/out/providers/helpers/accountProvider";
 import { TransactionManager } from "@multiversx/sdk-dapp/out/managers/TransactionManager";
 import { refreshAccount } from "@multiversx/sdk-dapp/out/utils/account/refreshAccount";
@@ -80,9 +81,9 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
     throw new Error("No wallet provider found. Please connect your wallet first.");
   }
   
-  console.log("🔧 Provider type:", provider.constructor.name);
-  console.log("✍️ Requesting signature from wallet...");
-  console.log("📝 If you have 2FA enabled, complete the verification in your wallet");
+  logger.log("🔧 Provider type:", provider.constructor.name);
+  logger.log("✍️ Requesting signature from wallet...");
+  logger.log("📝 If you have 2FA enabled, complete the verification in your wallet");
   
   try {
     // Initialize provider if needed
@@ -108,18 +109,18 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
       throw new Error("Transaction signing was cancelled or failed");
     }
     
-    console.log("✅ Transaction signed successfully");
+    logger.log("✅ Transaction signed successfully");
     
     // Log for debugging
-    console.log("📋 Signed transactions:", signedTransactions.length);
+    logger.log("📋 Signed transactions:", signedTransactions.length);
     
     // Use TransactionManager to send (this is the official SDK approach)
     const txManager = TransactionManager.getInstance();
     
-    console.log("📤 Sending via TransactionManager...");
+    logger.log("📤 Sending via TransactionManager...");
     const sentTransactions = await txManager.send(signedTransactions);
     
-    console.log("📋 Sent transactions response:", sentTransactions);
+    logger.log("📋 Sent transactions response:", sentTransactions);
     
     // Extract transaction hash
     let txHash = "";
@@ -146,7 +147,7 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
           }
         });
       } catch (trackError) {
-        console.log("⚠️ Track error (non-fatal):", trackError);
+        logger.log("⚠️ Track error (non-fatal):", trackError);
       }
       
       throw new Error(
@@ -155,7 +156,7 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
       );
     }
     
-    console.log("✅ Transaction sent! Hash:", txHash);
+    logger.log("✅ Transaction sent! Hash:", txHash);
     
     // Optionally track for toast notifications
     try {
@@ -167,7 +168,7 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
         }
       });
     } catch (trackError) {
-      console.log("⚠️ Track error (non-fatal):", trackError);
+      logger.log("⚠️ Track error (non-fatal):", trackError);
     }
     
     return {
@@ -186,16 +187,16 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
 }
 
 export async function sendCertificationTransaction(params: TransactionParams): Promise<MultiversXTransactionResult> {
-  console.log("🔐 Creating certification transaction for Mainnet...");
-  console.log("📄 File hash:", params.fileHash);
-  console.log("👤 User:", params.userAddress);
+  logger.log("🔐 Creating certification transaction for Mainnet...");
+  logger.log("📄 File hash:", params.fileHash);
+  logger.log("👤 User:", params.userAddress);
   
   const transaction = await createCertificationTransaction(params);
-  console.log("📝 Transaction created, requesting signature from wallet...");
+  logger.log("📝 Transaction created, requesting signature from wallet...");
   
   const result = await signAndSendTransaction(transaction);
-  console.log("✅ Transaction sent successfully!");
-  console.log("🔗 Explorer:", result.explorerUrl);
+  logger.log("✅ Transaction sent successfully!");
+  logger.log("🔗 Explorer:", result.explorerUrl);
   
   return result;
 }

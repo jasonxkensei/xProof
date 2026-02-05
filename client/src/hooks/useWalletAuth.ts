@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { logger } from '@/lib/logger';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'wouter';
 import { queryClient } from '@/lib/queryClient';
@@ -73,7 +74,7 @@ export function useWalletAuth() {
   // 2. Wallet connected AND sync completed successfully
   const shouldQueryAuth = !isLoggedIn || (sessionReady && !syncFailed);
   
-  console.log('👀 useWalletAuth state:', { 
+  logger.log('👀 useWalletAuth state:', { 
     isLoggedInSdk, 
     sdkAddress: sdkAddress?.slice(0, 20), 
     savedAddress: savedAddress?.slice(0, 20),
@@ -89,12 +90,12 @@ export function useWalletAuth() {
   const syncWalletSession = useCallback(async (walletAddress: string): Promise<User | null> => {
     // If sync already in progress for this address, await the existing promise
     if (syncPromise && lastSyncedAddress === walletAddress) {
-      console.log('⏳ Sync already in progress, waiting...');
+      logger.log('⏳ Sync already in progress, waiting...');
       return syncPromise;
     }
     
     // Start new sync
-    console.log('📤 Syncing wallet session:', walletAddress.slice(0, 15));
+    logger.log('📤 Syncing wallet session:', walletAddress.slice(0, 15));
     lastSyncedAddress = walletAddress;
     
     syncPromise = (async () => {
@@ -113,7 +114,7 @@ export function useWalletAuth() {
           });
           
           if (syncResponse.ok) {
-            console.log('✅ Backend session created via native auth');
+            logger.log('✅ Backend session created via native auth');
             const userData = await syncResponse.json();
             return userData;
           }
@@ -128,12 +129,12 @@ export function useWalletAuth() {
         });
         
         if (simpleSyncResponse.ok) {
-          console.log('✅ Backend session created via simple sync');
+          logger.log('✅ Backend session created via simple sync');
           const userData = await simpleSyncResponse.json();
           return userData;
         }
         
-        console.log('❌ Could not establish backend session');
+        logger.log('❌ Could not establish backend session');
         return null;
       } catch (error) {
         console.error('Sync error:', error);
@@ -152,7 +153,7 @@ export function useWalletAuth() {
     const needsSync = isLoggedIn && address && (!sessionReady || addressChanged);
     
     if (needsSync) {
-      console.log('🔄 Wallet detected, syncing session...', addressChanged ? '(address changed)' : '');
+      logger.log('🔄 Wallet detected, syncing session...', addressChanged ? '(address changed)' : '');
       prevLoggedIn.current = true;
       prevAddress.current = address;
       setSyncFailed(false);
@@ -160,7 +161,7 @@ export function useWalletAuth() {
       // Sync first, then enable queries
       syncWalletSession(address).then((user) => {
         if (user) {
-          console.log('✅ Session ready, enabling queries');
+          logger.log('✅ Session ready, enabling queries');
           setSessionReady(true);
           setSyncFailed(false);
           localStorage.setItem('walletAddress', address);
@@ -170,13 +171,13 @@ export function useWalletAuth() {
         } else {
           // Sync failed - enable queries anyway to check existing session
           // This prevents permanent stall on transient failures
-          console.log('⚠️ Sync failed, enabling queries anyway for fallback');
+          logger.log('⚠️ Sync failed, enabling queries anyway for fallback');
           setSessionReady(true);
           setSyncFailed(false); // Allow queries to run
         }
       });
     } else if (!isLoggedIn && prevLoggedIn.current) {
-      console.log('🔌 Wallet disconnected');
+      logger.log('🔌 Wallet disconnected');
       prevLoggedIn.current = false;
       prevAddress.current = null;
       lastSyncedAddress = null;
@@ -189,7 +190,7 @@ export function useWalletAuth() {
   const { data: user, isLoading } = useQuery<User | null>({
     queryKey: ['/api/auth/me'],
     queryFn: async () => {
-      console.log('📡 Checking auth status...');
+      logger.log('📡 Checking auth status...');
       
       try {
         const response = await fetch('/api/auth/me', {
@@ -198,7 +199,7 @@ export function useWalletAuth() {
         
         if (response.ok) {
           const userData = await response.json();
-          console.log('✅ User authenticated from existing session:', userData.walletAddress?.slice(0, 15));
+          logger.log('✅ User authenticated from existing session:', userData.walletAddress?.slice(0, 15));
           
           if (userData.walletAddress && !localStorage.getItem('walletAddress')) {
             localStorage.setItem('walletAddress', userData.walletAddress);
@@ -208,7 +209,7 @@ export function useWalletAuth() {
         }
         
         if (response.status === 401) {
-          console.log('🔐 No backend session, waiting for sync...');
+          logger.log('🔐 No backend session, waiting for sync...');
           return null;
         }
         
@@ -233,7 +234,7 @@ export function useWalletAuth() {
           await provider.logout();
         }
       } catch (e) {
-        console.log('Provider logout error (non-fatal):', e);
+        logger.log('Provider logout error (non-fatal):', e);
       }
       
       try {
@@ -242,7 +243,7 @@ export function useWalletAuth() {
           credentials: 'include',
         });
       } catch (e) {
-        console.log('Backend logout error (non-fatal):', e);
+        logger.log('Backend logout error (non-fatal):', e);
       }
 
       return { success: true };

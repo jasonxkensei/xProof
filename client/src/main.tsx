@@ -5,13 +5,14 @@ import type { InitAppType } from '@multiversx/sdk-dapp/out/methods/initApp/initA
 import { EnvironmentsEnum } from '@multiversx/sdk-dapp/out/types/enums.types';
 import App from "./App";
 import "./index.css";
+import { logger } from './lib/logger';
 
 // Configure MultiversX SDK for MAINNET with Native Auth
 // Use environment variable with fallback to ensure WalletConnect works in all environments
 const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'b4c11c7335da6e3e77753a17d466e4e2';
 
-console.log('🔍 WalletConnect Project ID:', walletConnectProjectId ? 'Configured ✅' : 'Missing ❌');
-console.log('🌐 MultiversX Network: MAINNET');
+logger.log('🔍 WalletConnect Project ID:', walletConnectProjectId ? 'Configured ✅' : 'Missing ❌');
+logger.log('🌐 MultiversX Network: MAINNET');
 
 // WalletConnect requires metadata for the dApp
 const walletConnectV2Options = walletConnectProjectId ? {
@@ -45,8 +46,8 @@ const config: InitAppType = {
   }
 };
 
-console.log('📋 MultiversX Config:', JSON.stringify(config, null, 2));
-console.log('🔗 WalletConnect Options:', JSON.stringify(walletConnectV2Options, null, 2));
+logger.log('📋 MultiversX Config:', JSON.stringify(config, null, 2));
+logger.log('🔗 WalletConnect Options:', JSON.stringify(walletConnectV2Options, null, 2));
 
 initApp(config);
 

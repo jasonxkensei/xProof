@@ -1,4 +1,5 @@
 import { Switch, Route, Redirect, useLocation } from "wouter";
+import { logger } from "@/lib/logger";
 import { useEffect, useState } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -71,7 +72,7 @@ function XPortalRecoveryHandler() {
       // Check if we're on landing or certify which have their own modals
       const pagesWithModals = ['/', '/certify'];
       if (!pagesWithModals.includes(location)) {
-        console.log('📱 Global xPortal recovery: Detected pending connection on non-modal page');
+        logger.log('📱 Global xPortal recovery: Detected pending connection on non-modal page');
         setShowRecoveryModal(true);
       }
     }

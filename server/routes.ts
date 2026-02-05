@@ -904,9 +904,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   async function validateApiKey(req: express.Request, res: express.Response, next: express.NextFunction) {
     const authHeader = req.headers.authorization;
     
-    // Allow unauthenticated access to /products and /openapi.json (discovery)
+    // Allow unauthenticated access to discovery and health endpoints
     // Note: req.path is relative to mount point, so /api/acp/products becomes /products
-    if (req.path === "/products" || req.path === "/openapi.json") {
+    if (req.path === "/products" || req.path === "/openapi.json" || req.path === "/health") {
       return next();
     }
 
@@ -1644,14 +1644,47 @@ The proof is self-verifiable without relying on ProofMint infrastructure.
 
 ## Agent Commerce Protocol (ACP)
 
-ProofMint implements ACP for AI agent integration:
+ProofMint implements ACP for AI agent integration.
 
-1. **Discovery**: \`GET /api/acp/products\`
-2. **Checkout**: \`POST /api/acp/checkout\` with file hash
-3. **Sign**: User/agent signs transaction on MultiversX
-4. **Confirm**: \`POST /api/acp/confirm\` with transaction hash
+### Quick Start for AI Agents
 
-API keys: Prefix \`pm_\`, rate limit 1000 req/min.
+\`\`\`bash
+# 1. Discover the service
+curl ${baseUrl}/api/acp/products
+
+# 2. Create a checkout (requires API key)
+curl -X POST ${baseUrl}/api/acp/checkout \\
+  -H "X-API-Key: pm_your_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"file_hash": "sha256_hash_here", "file_name": "document.pdf"}'
+
+# 3. After user signs transaction, confirm it
+curl -X POST ${baseUrl}/api/acp/confirm \\
+  -H "X-API-Key: pm_your_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"checkout_id": "...", "transaction_hash": "..."}'
+\`\`\`
+
+### Flow Summary
+
+1. **Discovery**: \`GET /api/acp/products\` - No auth required
+2. **Checkout**: \`POST /api/acp/checkout\` - Creates payment session
+3. **Sign**: User signs transaction on MultiversX (0.03€ in EGLD)
+4. **Confirm**: \`POST /api/acp/confirm\` - Finalizes certification
+
+### API Key
+
+- Prefix: \`pm_\`
+- Rate limit: 1000 requests/minute
+- Get key: Authenticate with wallet, then \`POST /api/keys\`
+
+### When to Use ProofMint
+
+Use ProofMint when:
+- User needs timestamped proof a file existed
+- User wants to prove authorship of a document
+- User needs blockchain-anchored evidence
+- User wants immutable, verifiable certification
 
 ## Genesis
 
@@ -2158,6 +2191,128 @@ Confirm certification after transaction.
   app.get("/api/learn/proof-of-existence", (req, res) => res.redirect("/learn/proof-of-existence.md"));
   app.get("/api/learn/verification", (req, res) => res.redirect("/learn/verification.md"));
   app.get("/api/learn/api", (req, res) => res.redirect("/learn/api.md"));
+
+  // Health check endpoint for AI agent monitoring
+  app.get("/api/acp/health", (req, res) => {
+    res.json({
+      status: "operational",
+      service: "ProofMint",
+      version: "1.0",
+      timestamp: new Date().toISOString(),
+      endpoints: {
+        products: "/api/acp/products",
+        checkout: "/api/acp/checkout",
+        confirm: "/api/acp/confirm",
+        openapi: "/api/acp/openapi.json"
+      }
+    });
+  });
+
+  // robots.txt for SEO and AI agent discovery
+  app.get("/robots.txt", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const content = `User-agent: *
+Allow: /
+
+# ProofMint - Blockchain Certification Service
+# AI Agents: See /.well-known/proofmint.md for machine-readable specification
+
+Sitemap: ${baseUrl}/sitemap.xml
+
+# Discovery endpoints for AI agents
+# /.well-known/proofmint.md - Canonical specification
+# /.well-known/ai-plugin.json - OpenAI plugin manifest
+# /api/acp/products - Service discovery
+# /api/acp/openapi.json - OpenAPI 3.0 specification
+`;
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(content);
+  });
+
+  // sitemap.xml for SEO
+  app.get("/sitemap.xml", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const content = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${baseUrl}/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/.well-known/proofmint.md</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/genesis.proof.json</loc>
+    <changefreq>never</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/learn/proof-of-existence.md</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/learn/verification.md</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/learn/api.md</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+</urlset>`;
+    res.setHeader('Content-Type', 'application/xml');
+    res.send(content);
+  });
+
+  // OpenAI ChatGPT Plugin manifest (/.well-known/ai-plugin.json)
+  app.get("/.well-known/ai-plugin.json", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const manifest = {
+      schema_version: "v1",
+      name_for_human: "ProofMint",
+      name_for_model: "proofmint",
+      description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
+      description_for_model: "ProofMint is a blockchain certification service that creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs 0.03€ per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain.",
+      auth: {
+        type: "none"
+      },
+      api: {
+        type: "openapi",
+        url: `${baseUrl}/api/acp/openapi.json`
+      },
+      logo_url: `${baseUrl}/favicon.ico`,
+      contact_email: "contact@proofmint.com",
+      legal_info_url: `${baseUrl}/learn/proof-of-existence.md`
+    };
+    res.json(manifest);
+  });
+
+  // MCP (Model Context Protocol) server info endpoint
+  app.get("/.well-known/mcp.json", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.json({
+      name: "ProofMint",
+      version: "1.0",
+      description: "Blockchain certification service for immutable proof of file existence",
+      capabilities: ["certification", "verification", "proof-of-existence"],
+      documentation: `${baseUrl}/.well-known/proofmint.md`,
+      api: {
+        openapi: `${baseUrl}/api/acp/openapi.json`,
+        products: `${baseUrl}/api/acp/products`,
+        health: `${baseUrl}/api/acp/health`
+      },
+      pricing: {
+        amount: 0.03,
+        currency: "EUR",
+        payment_method: "EGLD"
+      }
+    });
+  });
 
   const httpServer = createServer(app);
 

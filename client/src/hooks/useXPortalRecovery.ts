@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { logger } from '@/lib/logger';
 
 const PENDING_CONNECTION_KEY = 'xportal_pending_connection';
 const RECOVERY_EVENT = 'xportal:recovery:needed';
@@ -47,7 +48,7 @@ export function useXPortalRecovery() {
   useEffect(() => {
     const pending = checkPendingXPortalConnection();
     if (pending) {
-      console.log('📱 xPortal recovery: Detected pending connection from', new Date(pending.timestamp).toLocaleTimeString());
+      logger.log('📱 xPortal recovery: Detected pending connection from', new Date(pending.timestamp).toLocaleTimeString());
       setPendingConnection(pending);
       setNeedsRecovery(true);
     }
