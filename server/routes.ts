@@ -1514,6 +1514,651 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(openApiSpec);
   });
 
+  // ============================================
+  // LLM-READY ROUTES (AI-first documentation)
+  // ============================================
+
+  // Genesis certification data (first ProofMint certification)
+  const GENESIS_CERTIFICATION = {
+    id: "genesis",
+    type: "proof_of_existence",
+    version: "1.0",
+    file_name: "PROOFMINT - Genesis.pdf",
+    file_hash: "173200d6fa0d1577b456bb85dc505193e31dd8be5fc69bd4e461612a588427de",
+    hash_algorithm: "SHA-256",
+    author: "Jason Petitfourg",
+    timestamp_utc: "2025-12-12T20:28:00Z",
+    blockchain: {
+      network: "MultiversX Mainnet",
+      chain_id: "1",
+      transaction_hash: "f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e",
+      explorer_url: "https://explorer.multiversx.com/transactions/f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e",
+      gas_cost_egld: "0.0002935",
+    },
+    verification: {
+      method: "SHA-256 hash comparison",
+      instructions: [
+        "Compute SHA-256 hash of the original file",
+        "Compare with file_hash in this proof",
+        "Verify transaction on MultiversX explorer",
+        "Confirm transaction data contains the file hash"
+      ]
+    },
+    significance: "This is the first certification ever created on ProofMint, establishing the genesis of the platform."
+  };
+
+  // /.well-known/proofmint.md - Canonical specification
+  app.get("/.well-known/proofmint.md", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    
+    const spec = `# ProofMint Specification v1.0
+
+## Purpose
+
+ProofMint provides cryptographic proof of existence, authorship, and timestamp by anchoring SHA-256 hashes on the MultiversX blockchain.
+
+## Service
+
+- **Name**: ProofMint
+- **Type**: Proof-as-a-Service
+- **Blockchain**: MultiversX (European, eco-friendly)
+- **Price**: 0.03€ per certification (paid in EGLD)
+- **Website**: ${baseUrl}
+
+## Guarantees
+
+- **Immutability**: Blockchain anchored, cannot be modified or deleted
+- **Public Verifiability**: Anyone can verify proofs independently
+- **Privacy**: No file storage, hash-only (file never leaves user's device)
+- **Deterministic Verification**: Same input always produces same hash
+
+## Proof Object Schema
+
+A ProofMint proof consists of:
+
+\`\`\`json
+{
+  "id": "string (UUID)",
+  "type": "proof_of_existence",
+  "version": "1.0",
+  "file_name": "string",
+  "file_hash": "string (SHA-256, 64 hex characters)",
+  "hash_algorithm": "SHA-256",
+  "author": "string | null (optional)",
+  "timestamp_utc": "ISO 8601 datetime",
+  "blockchain": {
+    "network": "MultiversX Mainnet",
+    "chain_id": "1",
+    "transaction_hash": "string (64 hex characters) | null",
+    "explorer_url": "string (URL) | null",
+    "status": "pending | confirmed | failed (optional)"
+  },
+  "verification": {
+    "method": "SHA-256 hash comparison",
+    "proof_url": "string (URL, optional)",
+    "instructions": ["array of steps"]
+  },
+  "metadata": {
+    "file_type": "string | null (optional)",
+    "file_size_bytes": "number | null (optional)",
+    "is_public": "boolean (optional)"
+  }
+}
+\`\`\`
+
+Note: Fields marked as optional may not be present in all proofs.
+
+## Verification Process
+
+To verify a ProofMint proof:
+
+1. Obtain the original file
+2. Compute its SHA-256 hash locally
+3. Compare with the \`file_hash\` in the proof
+4. Visit the \`explorer_url\` to verify the transaction exists
+5. Confirm the transaction data contains the file hash
+
+## Trust Model
+
+ProofMint does not act as a trusted third party.
+Trust is derived entirely from the MultiversX blockchain.
+The proof is self-verifiable without relying on ProofMint infrastructure.
+
+## API Endpoints
+
+### Human Interfaces
+- \`/proof/{id}\` - HTML proof page (for humans)
+
+### Machine Interfaces
+- \`/proof/{id}.json\` - Structured JSON proof
+- \`/proof/{id}.md\` - Markdown proof (for LLMs)
+- \`/genesis.md\` - Genesis document
+- \`/genesis.proof.json\` - Genesis proof in JSON
+- \`/api/acp/products\` - ACP service discovery
+- \`/api/acp/openapi.json\` - OpenAPI 3.0 specification
+
+### Documentation
+- \`/learn/proof-of-existence.md\` - What is proof of existence
+- \`/learn/verification.md\` - How to verify proofs
+- \`/learn/api.md\` - API documentation
+
+## Agent Commerce Protocol (ACP)
+
+ProofMint implements ACP for AI agent integration:
+
+1. **Discovery**: \`GET /api/acp/products\`
+2. **Checkout**: \`POST /api/acp/checkout\` with file hash
+3. **Sign**: User/agent signs transaction on MultiversX
+4. **Confirm**: \`POST /api/acp/confirm\` with transaction hash
+
+API keys: Prefix \`pm_\`, rate limit 1000 req/min.
+
+## Genesis
+
+ProofMint's first certification (self-referential proof of concept):
+- **Document**: PROOFMINT - Genesis.pdf
+- **Hash**: \`${GENESIS_CERTIFICATION.file_hash}\`
+- **Transaction**: \`${GENESIS_CERTIFICATION.blockchain.transaction_hash}\`
+- **Date**: ${GENESIS_CERTIFICATION.timestamp_utc}
+
+View: ${baseUrl}/genesis.proof.json
+
+## Contact
+
+Website: ${baseUrl}
+`;
+
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.send(spec);
+  });
+
+  // /genesis.md - Genesis document in markdown
+  app.get("/genesis.md", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    
+    const genesis = `# ProofMint Genesis
+
+## The First Proof
+
+On December 12, 2025, ProofMint certified its first document on the MultiversX blockchain.
+
+This genesis certification establishes the foundation of ProofMint as a trust primitive.
+
+## Document Details
+
+| Property | Value |
+|----------|-------|
+| **File Name** | ${GENESIS_CERTIFICATION.file_name} |
+| **Author** | ${GENESIS_CERTIFICATION.author} |
+| **Timestamp** | ${GENESIS_CERTIFICATION.timestamp_utc} |
+| **Hash Algorithm** | ${GENESIS_CERTIFICATION.hash_algorithm} |
+
+## Cryptographic Proof
+
+**SHA-256 Hash**:
+\`\`\`
+${GENESIS_CERTIFICATION.file_hash}
+\`\`\`
+
+**Transaction Hash**:
+\`\`\`
+${GENESIS_CERTIFICATION.blockchain.transaction_hash}
+\`\`\`
+
+**Network**: ${GENESIS_CERTIFICATION.blockchain.network}
+
+**Gas Cost**: ${GENESIS_CERTIFICATION.blockchain.gas_cost_egld} EGLD (~0.002€)
+
+## Verification
+
+1. View transaction: ${GENESIS_CERTIFICATION.blockchain.explorer_url}
+2. Confirm the transaction data contains the file hash
+3. The hash proves the document existed at this exact timestamp
+
+## Significance
+
+This genesis certification demonstrates:
+
+- **Self-Application**: ProofMint uses its own service to certify its existence
+- **Ontological Coherence**: The platform proves its own legitimacy
+- **Immutable Origin**: The birth of ProofMint is permanently recorded
+
+## Machine-Readable
+
+- JSON: ${baseUrl}/genesis.proof.json
+- Specification: ${baseUrl}/.well-known/proofmint.md
+`;
+
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.send(genesis);
+  });
+
+  // /genesis.proof.json - Genesis proof in JSON
+  app.get("/genesis.proof.json", (req, res) => {
+    res.json(GENESIS_CERTIFICATION);
+  });
+
+  // /proof/:id.json - Proof in structured JSON
+  app.get("/proof/:id.json", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const [certification] = await db
+        .select()
+        .from(certifications)
+        .where(eq(certifications.id, id));
+
+      if (!certification || !certification.isPublic) {
+        return res.status(404).json({ 
+          error: "not_found",
+          message: "Proof not found or not public" 
+        });
+      }
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      
+      const proof = {
+        id: certification.id,
+        type: "proof_of_existence",
+        version: "1.0",
+        file_name: certification.fileName,
+        file_hash: certification.fileHash,
+        hash_algorithm: "SHA-256",
+        author: certification.authorName || null,
+        timestamp_utc: certification.createdAt?.toISOString() || null,
+        blockchain: {
+          network: "MultiversX Mainnet",
+          chain_id: "1",
+          transaction_hash: certification.transactionHash || null,
+          explorer_url: certification.transactionUrl || null,
+          status: certification.blockchainStatus
+        },
+        verification: {
+          method: "SHA-256 hash comparison",
+          proof_url: `${baseUrl}/proof/${certification.id}`,
+          instructions: [
+            "Compute SHA-256 hash of the original file",
+            "Compare with file_hash in this proof",
+            "Verify transaction on MultiversX explorer",
+            "Confirm transaction data contains the file hash"
+          ]
+        },
+        metadata: {
+          file_type: certification.fileType || null,
+          file_size_bytes: certification.fileSize || null,
+          is_public: certification.isPublic
+        }
+      };
+
+      res.json(proof);
+    } catch (error) {
+      console.error("Error fetching proof JSON:", error);
+      res.status(500).json({ error: "internal_error", message: "Failed to fetch proof" });
+    }
+  });
+
+  // /proof/:id.md - Proof in markdown for LLMs
+  app.get("/proof/:id.md", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const [certification] = await db
+        .select()
+        .from(certifications)
+        .where(eq(certifications.id, id));
+
+      if (!certification || !certification.isPublic) {
+        res.status(404).setHeader('Content-Type', 'text/markdown; charset=utf-8');
+        return res.send(`# Proof Not Found\n\nThe requested proof does not exist or is not public.`);
+      }
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const timestamp = certification.createdAt?.toISOString() || 'Unknown';
+      
+      const markdown = `# ProofMint Certification
+
+## Document
+
+| Property | Value |
+|----------|-------|
+| **File Name** | ${certification.fileName} |
+| **Author** | ${certification.authorName || 'Not specified'} |
+| **Timestamp** | ${timestamp} |
+| **Status** | ${certification.blockchainStatus} |
+
+## Cryptographic Proof
+
+**Hash Algorithm**: SHA-256
+
+**File Hash**:
+\`\`\`
+${certification.fileHash}
+\`\`\`
+
+## Blockchain Anchor
+
+**Network**: MultiversX Mainnet
+
+**Transaction Hash**:
+\`\`\`
+${certification.transactionHash || 'Pending'}
+\`\`\`
+
+**Explorer**: ${certification.transactionUrl || 'Not yet available'}
+
+## Verification
+
+To verify this proof:
+
+1. Obtain the original file: \`${certification.fileName}\`
+2. Compute its SHA-256 hash
+3. Compare with: \`${certification.fileHash}\`
+4. Verify transaction on MultiversX explorer
+
+## Machine-Readable
+
+- JSON: ${baseUrl}/proof/${certification.id}.json
+- HTML: ${baseUrl}/proof/${certification.id}
+
+## Trust Model
+
+This proof is self-verifiable. Trust derives from the MultiversX blockchain, not from ProofMint.
+`;
+
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.send(markdown);
+    } catch (error) {
+      console.error("Error fetching proof markdown:", error);
+      res.status(500).setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.send(`# Error\n\nFailed to fetch proof.`);
+    }
+  });
+
+  // /learn/proof-of-existence.md
+  app.get("/learn/proof-of-existence.md", (req, res) => {
+    const content = `# Proof of Existence
+
+## Definition
+
+Proof of Existence is a cryptographic method to prove that a specific digital artifact existed at a particular point in time, without revealing its contents.
+
+## How It Works
+
+1. **Hash Generation**: A SHA-256 hash is computed from the file. This hash is unique to the file's exact contents.
+
+2. **Blockchain Anchoring**: The hash is recorded in a blockchain transaction, creating an immutable timestamp.
+
+3. **Verification**: Anyone can later verify by recomputing the hash and comparing it to the on-chain record.
+
+## Properties
+
+- **Immutability**: Once recorded, the proof cannot be altered or deleted
+- **Privacy**: Only the hash is stored, not the file contents
+- **Independence**: Verification doesn't require trusting any central authority
+- **Determinism**: Same file always produces same hash
+
+## Use Cases
+
+- **Intellectual Property**: Prove you created something before a specific date
+- **Legal Documents**: Timestamp contracts and agreements
+- **Research**: Prove research existed before publication
+- **Code**: Timestamp software versions
+
+## Why MultiversX?
+
+- European blockchain with strong regulatory compliance
+- Extremely low transaction costs (~0.002€)
+- Fast finality (seconds, not minutes)
+- Eco-friendly (low energy consumption)
+
+## Related
+
+- [Verification Guide](/learn/verification.md)
+- [API Documentation](/learn/api.md)
+- [ProofMint Specification](/.well-known/proofmint.md)
+`;
+
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.send(content);
+  });
+
+  // /learn/verification.md
+  app.get("/learn/verification.md", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    
+    const content = `# How to Verify a ProofMint Proof
+
+## Overview
+
+ProofMint proofs are self-verifiable. You don't need to trust ProofMint—you verify directly against the blockchain.
+
+## Step-by-Step Verification
+
+### Step 1: Obtain the Proof
+
+Get the proof data from:
+- JSON: \`/proof/{id}.json\`
+- Markdown: \`/proof/{id}.md\`
+
+### Step 2: Compute the File Hash
+
+Using the original file, compute its SHA-256 hash.
+
+**Command Line (Linux/Mac)**:
+\`\`\`bash
+shasum -a 256 yourfile.pdf
+\`\`\`
+
+**Command Line (Windows PowerShell)**:
+\`\`\`powershell
+Get-FileHash yourfile.pdf -Algorithm SHA256
+\`\`\`
+
+**JavaScript**:
+\`\`\`javascript
+async function hashFile(file) {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+\`\`\`
+
+### Step 3: Compare Hashes
+
+The computed hash must exactly match the \`file_hash\` in the proof.
+
+If they match → The file is authentic and unchanged.
+If they differ → The file has been modified.
+
+### Step 4: Verify on Blockchain
+
+Visit the \`explorer_url\` in the proof to verify:
+1. The transaction exists
+2. The transaction timestamp matches
+3. The transaction data contains the file hash
+
+## Automated Verification (for Agents)
+
+\`\`\`javascript
+async function verifyProof(proofId, originalFile) {
+  // 1. Fetch proof
+  const proof = await fetch(\`${baseUrl}/proof/\${proofId}.json\`).then(r => r.json());
+  
+  // 2. Compute hash
+  const computedHash = await hashFile(originalFile);
+  
+  // 3. Compare
+  if (computedHash !== proof.file_hash) {
+    return { valid: false, reason: "Hash mismatch" };
+  }
+  
+  // 4. Verify on blockchain (optional, requires MultiversX API)
+  // ...
+  
+  return { valid: true, proof };
+}
+\`\`\`
+
+## Trust Model
+
+You are verifying against:
+1. **Mathematics**: SHA-256 is a one-way function
+2. **Blockchain**: MultiversX is a public, immutable ledger
+
+You are NOT trusting:
+- ProofMint servers
+- Any central authority
+
+## Related
+
+- [Proof of Existence](/learn/proof-of-existence.md)
+- [API Documentation](/learn/api.md)
+`;
+
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.send(content);
+  });
+
+  // /learn/api.md
+  app.get("/learn/api.md", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    
+    const content = `# ProofMint API Documentation
+
+## Overview
+
+ProofMint provides a REST API for programmatic access to certification services.
+
+## Base URL
+
+\`\`\`
+${baseUrl}
+\`\`\`
+
+## Authentication
+
+API requests require an API key with prefix \`pm_\`.
+
+**Header**:
+\`\`\`
+X-API-Key: pm_your_api_key_here
+\`\`\`
+
+**Rate Limit**: 1000 requests/minute per key
+
+## Endpoints
+
+### Public Endpoints (No Auth)
+
+#### GET /api/acp/products
+Discover available services.
+
+\`\`\`bash
+curl ${baseUrl}/api/acp/products
+\`\`\`
+
+#### GET /api/acp/openapi.json
+OpenAPI 3.0 specification.
+
+#### GET /proof/{id}.json
+Get proof in JSON format.
+
+#### GET /proof/{id}.md
+Get proof in Markdown format.
+
+### Authenticated Endpoints
+
+#### POST /api/acp/checkout
+Create a certification checkout session.
+
+**Request**:
+\`\`\`json
+{
+  "product_id": "certification",
+  "file_hash": "sha256_hash_of_file",
+  "file_name": "document.pdf",
+  "author_name": "Author Name"
+}
+\`\`\`
+
+**Response**:
+\`\`\`json
+{
+  "checkout_id": "uuid",
+  "status": "pending_payment",
+  "amount_egld": "0.00123",
+  "amount_eur": "0.03",
+  "recipient": "erd1...",
+  "tx_payload": {
+    "receiver": "erd1...",
+    "value": "1230000000000000",
+    "data": "base64_encoded_data"
+  },
+  "expires_at": "2025-01-01T00:00:00Z"
+}
+\`\`\`
+
+#### POST /api/acp/confirm
+Confirm certification after transaction.
+
+**Request**:
+\`\`\`json
+{
+  "checkout_id": "uuid",
+  "tx_hash": "transaction_hash_from_blockchain"
+}
+\`\`\`
+
+**Response**:
+\`\`\`json
+{
+  "certification_id": "uuid",
+  "status": "confirmed",
+  "proof_url": "${baseUrl}/proof/uuid"
+}
+\`\`\`
+
+## Flow for AI Agents
+
+1. **Discover**: \`GET /api/acp/products\`
+2. **Checkout**: \`POST /api/acp/checkout\` with file hash
+3. **Sign**: Sign \`tx_payload\` with MultiversX wallet
+4. **Broadcast**: Send signed transaction to MultiversX network
+5. **Confirm**: \`POST /api/acp/confirm\` with transaction hash
+6. **Verify**: Access proof at returned \`proof_url\`
+
+## Error Codes
+
+| Code | Meaning |
+|------|---------|
+| 400 | Bad request (invalid parameters) |
+| 401 | Missing or invalid API key |
+| 404 | Resource not found |
+| 410 | Checkout expired (1 hour validity) |
+| 429 | Rate limit exceeded |
+| 500 | Internal server error |
+
+## Related
+
+- [Proof of Existence](/learn/proof-of-existence.md)
+- [Verification Guide](/learn/verification.md)
+- [ProofMint Specification](/.well-known/proofmint.md)
+`;
+
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.send(content);
+  });
+
+  // API aliases for LLM-ready routes (work in dev mode with Vite)
+  // These are the canonical routes that AI agents should use
+  app.get("/api/spec", (req, res) => res.redirect("/.well-known/proofmint.md"));
+  app.get("/api/genesis", (req, res) => res.redirect("/genesis.proof.json"));
+  app.get("/api/genesis.md", (req, res) => res.redirect("/genesis.md"));
+  app.get("/api/learn/proof-of-existence", (req, res) => res.redirect("/learn/proof-of-existence.md"));
+  app.get("/api/learn/verification", (req, res) => res.redirect("/learn/verification.md"));
+  app.get("/api/learn/api", (req, res) => res.redirect("/learn/api.md"));
+
   const httpServer = createServer(app);
 
   return httpServer;
