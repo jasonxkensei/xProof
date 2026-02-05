@@ -1,10 +1,10 @@
-# ProofMint Design Guidelines - MultiversX Explorer Style
+# xproof Design Guidelines - MultiversX Explorer Style
 
 ## Design Approach
 
 **Selected Approach:** Exact MultiversX Explorer Design Replication
 
-**Justification:** ProofMint is a blockchain certification platform built on MultiversX. The interface must mirror the MultiversX Explorer's exact visual identity to create instant brand recognition and trust for MultiversX ecosystem users.
+**Justification:** xproof is a blockchain certification platform built on MultiversX. The interface must mirror the MultiversX Explorer's exact visual identity to create instant brand recognition and trust for MultiversX ecosystem users.
 
 **Core Principle:** "Dark elegance with vibrant green accents" - Ultra-dark backgrounds with brilliant green/cyan highlights, exactly like exploring the MultiversX blockchain.
 
@@ -21,7 +21,7 @@
 - **Border Accent:** #14F195 with 20% opacity for hover states
 
 ### Light Mode
-Not used - MultiversX Explorer is dark-only, ProofMint should match this approach.
+Not used - MultiversX Explorer is dark-only, xproof should match this approach.
 
 **Accent Usage:** Bright green-cyan (#14F195) ONLY for:
 - Primary CTAs and buttons
@@ -68,7 +68,7 @@ Not used - MultiversX Explorer is dark-only, ProofMint should match this approac
 
 ### Navigation
 - **Top Bar:** Sticky header, black background (#0B0C10), border-b border-gray-800
-- **Logo:** "ProofMint" with shield icon, no glow effects
+- **Logo:** "xproof" with shield icon, no glow effects
 - **Nav Links:** Text white, hover:text-green-400
 - **CTA Button:** bg-green-400 text-black hover:bg-green-300
 
@@ -134,7 +134,7 @@ Not used - MultiversX Explorer is dark-only, ProofMint should match this approac
 
 **Hero Section:**
 - Full-width dark background (#0B0C10)
-- Large heading with ProofMint branding
+- Large heading with xproof branding
 - Subheading explaining blockchain certification
 - Primary CTA: "Start Certifying" button (green)
 - Minimal decoration, focus on clarity

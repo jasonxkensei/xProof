@@ -75,7 +75,7 @@ export function verifyWalletSignature(
     }
     
     // Construct the exact message that was signed
-    const messageToSign = `ProofMint Login\n\nSign this message to authenticate.\n\nNonce: ${nonce}`;
+    const messageToSign = `xproof Login\n\nSign this message to authenticate.\n\nNonce: ${nonce}`;
     
     // In development mode with simulated wallet, skip signature verification
     if (process.env.NODE_ENV === 'development') {

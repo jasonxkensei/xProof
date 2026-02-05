@@ -106,11 +106,11 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
         size: 'A4', 
         margin: 0,
         info: {
-          Title: `ProofMint Certificate - ${certification.fileName}`,
-          Author: 'ProofMint',
+          Title: `xproof Certificate - ${certification.fileName}`,
+          Author: 'xproof',
           Subject: 'Blockchain Proof of Ownership Certificate',
           Keywords: 'blockchain, certificate, proof, ownership, multiversx',
-          Creator: 'ProofMint Certification Platform'
+          Creator: 'xproof Certification Platform'
         }
       });
       
@@ -125,7 +125,7 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
       const contentWidth = pageWidth - (margin * 2);
       
       const certificateNumber = generateCertificateNumber(certification);
-      const proofUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://proofmint.com'}/proof/${certification.id}`;
+      const proofUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://xproof.io'}/proof/${certification.id}`;
       const explorerUrl = certification.transactionHash ? `https://explorer.multiversx.com/transactions/${certification.transactionHash}` : null;
       const qrCodeDataUrl = await QRCode.toDataURL(proofUrl, { 
         width: 200, 
@@ -165,7 +165,7 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
       yPos += 30;
 
       doc.fontSize(32).font('Helvetica-Bold').fillColor(COLORS.primary);
-      doc.text('PROOFMINT', margin, yPos, { width: contentWidth, align: 'center' });
+      doc.text('XPROOF', margin, yPos, { width: contentWidth, align: 'center' });
       
       yPos += 38;
       
@@ -334,7 +334,7 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
                margin, footerY + 12, { width: contentWidth, align: 'center' });
       
       doc.fontSize(7).fillColor(COLORS.textMuted);
-      doc.text('ProofMint © ' + new Date().getFullYear() + ' — Blockchain Certification Platform — proofmint.com',
+      doc.text('xproof © ' + new Date().getFullYear() + ' — Blockchain Certification Platform — xproof.io',
                margin, footerY + 30, { width: contentWidth, align: 'center' });
 
       if (subscriptionTier === 'free') {

@@ -92,7 +92,7 @@ export const SUBSCRIPTION_TIERS = {
     name: "Free",
     price: 0,
     monthlyLimit: 1,
-    features: ["1 certification per month", "ProofMint watermark on certificates", "Public verification page"],
+    features: ["1 certification per month", "xproof watermark on certificates", "Public verification page"],
   },
   pro: {
     name: "Pro",
