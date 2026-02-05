@@ -54,13 +54,6 @@ export default function Landing() {
               <Wallet className="mr-2 h-4 w-4" />
               Connexion
             </Button>
-            <Button 
-              size="sm" 
-              onClick={handleConnect}
-              data-testid="button-get-started"
-            >
-              Commencer
-            </Button>
           </div>
         </div>
       </header>
