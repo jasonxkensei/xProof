@@ -2277,13 +2277,18 @@ Sitemap: ${baseUrl}/sitemap.xml
       name_for_human: "ProofMint",
       name_for_model: "proofmint",
       description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
-      description_for_model: "ProofMint is a blockchain certification service that creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs 0.03€ per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain.",
+      description_for_model: "ProofMint is a blockchain certification service that creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs 0.03€ per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix).",
       auth: {
-        type: "none"
+        type: "service_http",
+        authorization_type: "bearer",
+        verification_tokens: {
+          proofmint: "pm_"
+        }
       },
       api: {
         type: "openapi",
-        url: `${baseUrl}/api/acp/openapi.json`
+        url: `${baseUrl}/api/acp/openapi.json`,
+        has_user_authentication: false
       },
       logo_url: `${baseUrl}/favicon.ico`,
       contact_email: "contact@proofmint.com",
@@ -2305,6 +2310,13 @@ Sitemap: ${baseUrl}/sitemap.xml
         openapi: `${baseUrl}/api/acp/openapi.json`,
         products: `${baseUrl}/api/acp/products`,
         health: `${baseUrl}/api/acp/health`
+      },
+      auth: {
+        type: "bearer",
+        header: "Authorization",
+        prefix: "Bearer pm_",
+        public_endpoints: ["/api/acp/products", "/api/acp/openapi.json", "/api/acp/health"],
+        authenticated_endpoints: ["/api/acp/checkout", "/api/acp/confirm"]
       },
       pricing: {
         amount: 0.03,

@@ -26,8 +26,30 @@ PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides t
 ### Agent Commerce Protocol (ACP)
 ProofMint implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is 0.03€ per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
 
-### LLM-Ready Routes
-The platform offers machine-readable documentation and proof access via specific routes (e.g., `/.well-known/proofmint.md`, `/proof/{id}.json`, `/learn/api.md`) to facilitate AI agent discovery and understanding. Proofs adhere to a standardized JSON schema (v1.0).
+### LLM-Ready Routes & AI Agent Discovery
+The platform offers comprehensive machine-readable documentation for AI agent discovery:
+
+**Discovery Endpoints:**
+- `/.well-known/proofmint.md` - Canonical specification v1.0
+- `/.well-known/ai-plugin.json` - OpenAI ChatGPT plugin manifest
+- `/.well-known/mcp.json` - Model Context Protocol manifest
+- `/api/acp/health` - Health check (public)
+- `/robots.txt` - SEO with AI agent discovery hints
+- `/sitemap.xml` - SEO sitemap
+
+**Proof Access:**
+- `/proof/{id}.json` - Structured JSON proof
+- `/proof/{id}.md` - Markdown proof for LLMs
+- `/genesis.proof.json` - Genesis certification
+
+**Documentation:**
+- `/learn/proof-of-existence.md` - Concept explanation
+- `/learn/verification.md` - Verification guide
+- `/learn/api.md` - API documentation
+
+**Authentication:**
+- Public endpoints: `/api/acp/products`, `/api/acp/openapi.json`, `/api/acp/health`
+- Authenticated endpoints: `/api/acp/checkout`, `/api/acp/confirm` (require `pm_` API key)
 
 ## External Dependencies
 
