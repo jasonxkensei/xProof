@@ -87,14 +87,14 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="container mx-auto max-w-6xl py-12">
+      <div className="container mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-12">
         {/* Welcome Section */}
-        <div className="mb-8">
-          <h1 className="mb-2 text-3xl font-bold tracking-tight">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="mb-2 text-2xl sm:text-3xl font-bold tracking-tight">
             Bon retour{user?.firstName ? `, ${user.firstName}` : ""} !
           </h1>
-          <p className="text-muted-foreground">
-            Gérez vos certifications blockchain • Service 100% gratuit et illimité
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Gérez vos certifications blockchain
           </p>
         </div>
 
@@ -130,24 +130,24 @@ export default function Dashboard() {
             <div className="space-y-4">
               {certifications.map((cert) => (
                 <Card key={cert.id} className="hover-elevate">
-                  <CardContent className="p-6">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="flex flex-col gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="mb-2 flex items-center gap-3 flex-wrap">
-                          <h3 className="font-semibold truncate" data-testid={`text-filename-${cert.id}`}>
+                          <h3 className="font-semibold truncate max-w-[200px] sm:max-w-none" data-testid={`text-filename-${cert.id}`}>
                             {cert.fileName}
                           </h3>
                           {getStatusBadge(cert.blockchainStatus || "pending")}
                         </div>
                         <div className="space-y-1 text-sm text-muted-foreground">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono" data-testid={`text-hash-${cert.id}`}>
+                            <span className="font-mono text-xs sm:text-sm truncate max-w-[180px] sm:max-w-none" data-testid={`text-hash-${cert.id}`}>
                               {formatHash(cert.fileHash, 24)}
                             </span>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 w-6 p-0"
+                              className="h-6 w-6 p-0 shrink-0"
                               onClick={() => handleCopy(cert.fileHash)}
                               data-testid={`button-copy-hash-${cert.id}`}
                             >
@@ -159,7 +159,7 @@ export default function Dashboard() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         {cert.transactionUrl && (
                           <Button
                             asChild
@@ -168,8 +168,9 @@ export default function Dashboard() {
                             data-testid={`button-view-transaction-${cert.id}`}
                           >
                             <a href={cert.transactionUrl} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="mr-2 h-4 w-4" />
-                              Voir sur la blockchain
+                              <ExternalLink className="h-4 w-4 sm:mr-2" />
+                              <span className="hidden sm:inline">Voir sur la blockchain</span>
+                              <span className="sm:hidden">Blockchain</span>
                             </a>
                           </Button>
                         )}
@@ -181,8 +182,9 @@ export default function Dashboard() {
                             data-testid={`button-view-proof-${cert.id}`}
                           >
                             <Link href={`/proof/${cert.id}`}>
-                              <Shield className="mr-2 h-4 w-4" />
-                              Voir la preuve
+                              <Shield className="h-4 w-4 sm:mr-2" />
+                              <span className="hidden sm:inline">Voir la preuve</span>
+                              <span className="sm:hidden">Preuve</span>
                             </Link>
                           </Button>
                         )}
@@ -193,8 +195,9 @@ export default function Dashboard() {
                           data-testid={`button-download-cert-${cert.id}`}
                         >
                           <a href={`/api/certificates/${cert.id}.pdf`} download>
-                            <Download className="mr-2 h-4 w-4" />
-                            Certificat
+                            <Download className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Certificat</span>
+                            <span className="sm:hidden">PDF</span>
                           </a>
                         </Button>
                       </div>

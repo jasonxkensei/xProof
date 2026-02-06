@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { useXPortalRecovery, savePendingXPortalConnection, clearPendingXPortalConnection } from "@/hooks/useXPortalRecovery";
+import { setActiveWcProvider } from "@/lib/walletConnectStore";
 import QRCode from 'qrcode';
 
 // WalletConnect configuration
@@ -332,6 +333,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       );
       
       wcProviderRef.current = wcProvider;
+      setActiveWcProvider(wcProvider);
       logger.log('✅ WalletConnect provider created directly');
       
       // Initialize the provider
@@ -493,13 +495,14 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       // Clean up WalletConnect state on modal close
       setWcUri(null);
       setQrCodeDataUrl(null);
-      // Cleanup WalletConnect provider if still active
-      if (wcProviderRef.current) {
+      // Cleanup WalletConnect provider if still active (but not if user is logged in - keep session alive)
+      if (wcProviderRef.current && !isLoggedIn) {
         try { wcProviderRef.current.logout(); } catch (e) { }
         wcProviderRef.current = null;
+        setActiveWcProvider(null);
       }
     }
-  }, [open]);
+  }, [open, isLoggedIn]);
 
   const handleCancel = () => {
     // Clean up extension/web wallet provider
@@ -510,6 +513,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
     if (wcProviderRef.current && typeof wcProviderRef.current.logout === 'function') {
       try { wcProviderRef.current.logout(); } catch (e) { }
       wcProviderRef.current = null;
+      setActiveWcProvider(null);
     }
     // Clear all state
     setLoading(null);
