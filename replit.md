@@ -32,12 +32,20 @@ xproof implements the ACP to allow AI agents to programmatically interact with i
 The platform offers comprehensive machine-readable documentation for AI agent discovery:
 
 **Discovery Endpoints:**
-- `/.well-known/xproof.md` - Canonical specification v1.0 (also available at `/.well-known/proofmint.md` for backwards compatibility)
+- `/.well-known/xproof.md` - Canonical specification v1.0 (also at `/.well-known/proofmint.md` for backwards compatibility)
 - `/.well-known/ai-plugin.json` - OpenAI ChatGPT plugin manifest
-- `/.well-known/mcp.json` - Model Context Protocol manifest
+- `/.well-known/mcp.json` - Model Context Protocol manifest with tool schemas
+- `/.well-known/agent.json` - Agent Protocol manifest
+- `/llms.txt` - LLM-friendly summary (llms.txt standard)
+- `/llms-full.txt` - Extended LLM documentation with full API details
 - `/api/acp/health` - Health check (public)
 - `/robots.txt` - SEO with AI agent discovery hints
 - `/sitemap.xml` - SEO sitemap
+
+**Agent Tool Integrations:**
+- `/agent-tools/langchain.py` - LangChain tool definitions (Python)
+- `/agent-tools/crewai.py` - CrewAI tool definitions (Python)
+- `/agent-tools/openapi-actions.json` - GPT Actions / Custom GPTs OpenAPI spec
 
 **Proof Access:**
 - `/proof/{id}.json` - Structured JSON proof
@@ -50,8 +58,10 @@ The platform offers comprehensive machine-readable documentation for AI agent di
 - `/learn/api.md` - API documentation
 
 **Authentication:**
-- Public endpoints: `/api/acp/products`, `/api/acp/openapi.json`, `/api/acp/health`
+- Public endpoints: `/api/acp/products`, `/api/acp/openapi.json`, `/api/acp/health`, `/llms.txt`, `/llms-full.txt`
 - Authenticated endpoints: `/api/acp/checkout`, `/api/acp/confirm` (require `pm_` API key)
+
+**Domain:** xproof.app (all references updated from xproof.io)
 
 ## External Dependencies
 

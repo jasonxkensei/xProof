@@ -2220,15 +2220,23 @@ Confirm certification after transaction.
 Allow: /
 
 # xproof - Blockchain Certification Service
-# AI Agents: See /.well-known/xproof.md for machine-readable specification
+# AI Agents: See below for machine-readable endpoints
 
 Sitemap: ${baseUrl}/sitemap.xml
 
-# Discovery endpoints for AI agents
-# /.well-known/xproof.md - Canonical specification
+# AI Agent Discovery
+# /.well-known/xproof.md - Full specification (Markdown)
 # /.well-known/ai-plugin.json - OpenAI plugin manifest
-# /api/acp/products - Service discovery
+# /.well-known/mcp.json - Model Context Protocol manifest
+# /.well-known/agent.json - Agent Protocol manifest
+# /llms.txt - LLM-friendly summary
+# /llms-full.txt - Extended LLM documentation
+# /api/acp/products - Service discovery (JSON)
 # /api/acp/openapi.json - OpenAPI 3.0 specification
+# /api/acp/health - Health check
+# /agent-tools/langchain.py - LangChain tool
+# /agent-tools/crewai.py - CrewAI tool
+# /agent-tools/openapi-actions.json - GPT Actions spec
 `;
     res.setHeader('Content-Type', 'text/plain');
     res.send(content);
@@ -2269,6 +2277,21 @@ Sitemap: ${baseUrl}/sitemap.xml
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
+  <url>
+    <loc>${baseUrl}/llms.txt</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/llms-full.txt</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/.well-known/agent.json</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
 </urlset>`;
     res.setHeader('Content-Type', 'application/xml');
     res.send(content);
@@ -2296,7 +2319,7 @@ Sitemap: ${baseUrl}/sitemap.xml
         has_user_authentication: false
       },
       logo_url: `${baseUrl}/favicon.ico`,
-      contact_email: "contact@xproof.io",
+      contact_email: "contact@xproof.app",
       legal_info_url: `${baseUrl}/learn/proof-of-existence.md`
     };
     res.json(manifest);
@@ -2306,28 +2329,610 @@ Sitemap: ${baseUrl}/sitemap.xml
   app.get("/.well-known/mcp.json", (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     res.json({
+      schema_version: "1.0",
       name: "xproof",
-      version: "1.0",
-      description: "Blockchain certification service for immutable proof of file existence",
-      capabilities: ["certification", "verification", "proof-of-existence"],
-      documentation: `${baseUrl}/.well-known/xproof.md`,
+      version: "1.0.0",
+      description: "Blockchain certification service - Create immutable proofs of file existence and ownership on MultiversX",
+      homepage: baseUrl,
+      capabilities: {
+        tools: true,
+        resources: true
+      },
+      tools: [
+        {
+          name: "certify_file",
+          description: "Create a blockchain certification for a file. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: 0.03€ per certification.",
+          inputSchema: {
+            type: "object",
+            required: ["file_hash", "filename"],
+            properties: {
+              file_hash: { type: "string", description: "SHA-256 hash of the file (64 hex characters)" },
+              filename: { type: "string", description: "Original filename with extension" },
+              author_name: { type: "string", description: "Name of the certifier", default: "AI Agent" }
+            }
+          }
+        },
+        {
+          name: "verify_proof",
+          description: "Verify an existing xproof certification. Returns proof details including file hash, timestamp, blockchain transaction, and verification status.",
+          inputSchema: {
+            type: "object",
+            required: ["proof_id"],
+            properties: {
+              proof_id: { type: "string", description: "UUID of the certification to verify" }
+            }
+          }
+        },
+        {
+          name: "get_proof",
+          description: "Retrieve a proof in structured format (JSON or Markdown). Use .json for machine processing, .md for LLM consumption.",
+          inputSchema: {
+            type: "object",
+            required: ["proof_id"],
+            properties: {
+              proof_id: { type: "string", description: "UUID of the certification" },
+              format: { type: "string", enum: ["json", "md"], default: "json", description: "Output format" }
+            }
+          }
+        },
+        {
+          name: "discover_services",
+          description: "Discover available xproof certification services, pricing, and capabilities. No authentication required.",
+          inputSchema: { type: "object", properties: {} }
+        }
+      ],
+      resources: [
+        { uri: `${baseUrl}/api/acp/products`, name: "Service catalog", mimeType: "application/json" },
+        { uri: `${baseUrl}/api/acp/openapi.json`, name: "OpenAPI specification", mimeType: "application/json" },
+        { uri: `${baseUrl}/.well-known/xproof.md`, name: "Full specification", mimeType: "text/markdown" },
+        { uri: `${baseUrl}/llms.txt`, name: "LLM summary", mimeType: "text/plain" },
+        { uri: `${baseUrl}/genesis.proof.json`, name: "Genesis proof", mimeType: "application/json" }
+      ],
+      authentication: {
+        type: "bearer",
+        token_prefix: "pm_",
+        instructions: "Obtain an API key by authenticating with a MultiversX wallet, then POST to /api/keys"
+      },
       api: {
         openapi: `${baseUrl}/api/acp/openapi.json`,
         products: `${baseUrl}/api/acp/products`,
         health: `${baseUrl}/api/acp/health`
       },
-      auth: {
-        type: "bearer",
-        header: "Authorization",
-        prefix: "Bearer pm_",
-        public_endpoints: ["/api/acp/products", "/api/acp/openapi.json", "/api/acp/health"],
-        authenticated_endpoints: ["/api/acp/checkout", "/api/acp/confirm"]
-      },
       pricing: {
-        amount: 0.03,
+        amount: "0.03",
         currency: "EUR",
         payment_method: "EGLD"
       }
+    });
+  });
+
+  // ============================================
+  // AI Agent Discovery Endpoints
+  // ============================================
+
+  app.get("/llms.txt", (_req, res) => {
+    const content = `# xproof
+
+> Blockchain certification service. Create immutable proofs of file existence and ownership on MultiversX.
+
+## About
+xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: 0.03€ per certification, paid in EGLD.
+
+## API Documentation
+- [OpenAPI Specification](/api/acp/openapi.json)
+- [API Guide](/learn/api.md)
+- [Proof of Existence](/learn/proof-of-existence.md)
+- [Verification Guide](/learn/verification.md)
+
+## Machine Interfaces
+- [Service Discovery](/api/acp/products)
+- [Health Check](/api/acp/health)
+- [MCP Manifest](/.well-known/mcp.json)
+- [OpenAI Plugin](/.well-known/ai-plugin.json)
+- [Full Specification](/.well-known/xproof.md)
+`;
+    res.setHeader("Content-Type", "text/plain");
+    res.send(content);
+  });
+
+  app.get("/llms-full.txt", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const content = `# xproof
+
+> Blockchain certification service. Create immutable proofs of file existence and ownership on MultiversX.
+
+## About
+xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: 0.03€ per certification, paid in EGLD.
+
+## API Documentation
+- [OpenAPI Specification](${baseUrl}/api/acp/openapi.json)
+- [API Guide](${baseUrl}/learn/api.md)
+- [Proof of Existence](${baseUrl}/learn/proof-of-existence.md)
+- [Verification Guide](${baseUrl}/learn/verification.md)
+
+## Machine Interfaces
+- [Service Discovery](${baseUrl}/api/acp/products)
+- [Health Check](${baseUrl}/api/acp/health)
+- [MCP Manifest](${baseUrl}/.well-known/mcp.json)
+- [OpenAI Plugin](${baseUrl}/.well-known/ai-plugin.json)
+- [Full Specification](${baseUrl}/.well-known/xproof.md)
+
+## Authentication
+- API keys are prefixed with \`pm_\` (e.g. \`pm_abc123...\`)
+- Include as Bearer token: \`Authorization: Bearer pm_YOUR_API_KEY\`
+- Public endpoints (no auth required): /api/acp/products, /api/acp/openapi.json, /api/acp/health
+- Authenticated endpoints: /api/acp/checkout, /api/acp/confirm
+
+## Proof Object Schema
+\`\`\`json
+{
+  "id": "uuid",
+  "file_name": "document.pdf",
+  "file_hash": "sha256-hex-string (64 chars)",
+  "file_type": "application/pdf",
+  "file_size": 12345,
+  "author_name": "Author Name",
+  "timestamp_utc": "2025-01-01T00:00:00Z",
+  "blockchain": {
+    "network": "MultiversX Mainnet",
+    "chain_id": "1",
+    "transaction_hash": "hex-string",
+    "explorer_url": "https://explorer.multiversx.com/transactions/..."
+  },
+  "is_public": true,
+  "blockchain_status": "confirmed"
+}
+\`\`\`
+
+## Proof Access Formats
+- JSON: \`${baseUrl}/proof/{id}.json\`
+- Markdown: \`${baseUrl}/proof/{id}.md\`
+
+## ACP Endpoints
+
+### GET /api/acp/products
+Discover available certification products. No authentication required.
+\`\`\`bash
+curl ${baseUrl}/api/acp/products
+\`\`\`
+
+### POST /api/acp/checkout
+Create a checkout session for file certification. Requires API key.
+\`\`\`bash
+curl -X POST ${baseUrl}/api/acp/checkout \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "product_id": "xproof-certification",
+    "inputs": {
+      "file_hash": "a1b2c3d4e5f6...",
+      "filename": "document.pdf",
+      "author_name": "AI Agent"
+    }
+  }'
+\`\`\`
+
+### POST /api/acp/confirm
+Confirm a transaction after signing on MultiversX. Requires API key.
+\`\`\`bash
+curl -X POST ${baseUrl}/api/acp/confirm \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "checkout_id": "uuid",
+    "tx_hash": "multiversx-transaction-hash"
+  }'
+\`\`\`
+
+### GET /api/acp/checkout/{checkoutId}
+Check the status of an existing checkout session. Requires API key.
+\`\`\`bash
+curl ${baseUrl}/api/acp/checkout/{checkoutId} \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY"
+\`\`\`
+
+## Verification Flow
+1. Compute the SHA-256 hash of the original file locally
+2. Compare the computed hash with the \`file_hash\` stored in the proof
+3. Verify the blockchain transaction on MultiversX explorer using the \`transaction_hash\`
+4. Confirm the transaction data field contains the file hash
+5. The timestamp proves the file existed at that point in time
+
+## Genesis Proof
+The first certification ever created on xproof:
+- File: XPROOF - Genesis.pdf
+- Hash: 173200d6fa0d1577b456bb85dc505193e31dd8be5fc69bd4e461612a588427de
+- Transaction: f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e
+- Explorer: https://explorer.multiversx.com/transactions/f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e
+- View: ${baseUrl}/proof/genesis
+`;
+    res.setHeader("Content-Type", "text/plain");
+    res.send(content);
+  });
+
+  app.get("/agent-tools/langchain.py", (_req, res) => {
+    const code = `"""
+xproof LangChain Tool
+Certify files on MultiversX blockchain via xproof.
+Install: pip install langchain requests
+"""
+
+from langchain.tools import tool
+import hashlib
+import requests
+
+XPROOF_BASE_URL = "https://xproof.app"
+
+@tool
+def certify_file(file_path: str, author_name: str = "AI Agent") -> str:
+    """Certify a file on the MultiversX blockchain. Creates immutable proof of existence and ownership.
+    Records the SHA-256 hash of the file on-chain. The file never leaves your device.
+    Cost: 0.03€ per certification, paid in EGLD.
+    
+    Args:
+        file_path: Path to the file to certify
+        author_name: Name of the certifier (default: "AI Agent")
+    
+    Returns:
+        Certification result with proof URL and transaction hash
+    """
+    # Step 1: Compute SHA-256 hash locally
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            sha256.update(chunk)
+    file_hash = sha256.hexdigest()
+    filename = file_path.split("/")[-1]
+    
+    # Step 2: Create checkout
+    headers = {"Authorization": "Bearer pm_YOUR_API_KEY", "Content-Type": "application/json"}
+    checkout = requests.post(f"{XPROOF_BASE_URL}/api/acp/checkout", json={
+        "product_id": "xproof-certification",
+        "inputs": {"file_hash": file_hash, "filename": filename, "author_name": author_name}
+    }, headers=headers).json()
+    
+    return f"Checkout created: {checkout.get('checkout_id')}\\nAmount: {checkout.get('amount')} EUR\\nSign the transaction on MultiversX to complete certification."
+
+
+@tool
+def verify_proof(proof_id: str) -> str:
+    """Verify an existing xproof certification by its ID.
+    
+    Args:
+        proof_id: The UUID of the certification to verify
+    
+    Returns:
+        Proof details including file hash, timestamp, and blockchain transaction
+    """
+    response = requests.get(f"{XPROOF_BASE_URL}/proof/{proof_id}.json")
+    if response.status_code == 404:
+        return "Proof not found"
+    proof = response.json()
+    return f"File: {proof.get('file_name')}\\nHash: {proof.get('file_hash')}\\nTimestamp: {proof.get('timestamp_utc')}\\nBlockchain TX: {proof.get('blockchain', {}).get('transaction_hash', 'N/A')}\\nVerify: {proof.get('blockchain', {}).get('explorer_url', 'N/A')}"
+
+
+@tool 
+def discover_xproof() -> str:
+    """Discover xproof certification service capabilities and pricing."""
+    response = requests.get(f"{XPROOF_BASE_URL}/api/acp/products")
+    data = response.json()
+    products = data.get("products", [])
+    if products:
+        p = products[0]
+        return f"Service: {p['name']}\\nDescription: {p['description']}\\nPrice: {p['pricing']['amount']} {p['pricing']['currency']}\\nBlockchain: {data.get('chain', 'MultiversX')}"
+    return "No products available"
+`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send(code);
+  });
+
+  app.get("/agent-tools/crewai.py", (_req, res) => {
+    const code = `"""
+xproof CrewAI Tool
+Certify files on MultiversX blockchain via xproof.
+Install: pip install crewai crewai-tools requests
+"""
+
+from crewai_tools import BaseTool
+import hashlib
+import requests
+
+XPROOF_BASE_URL = "https://xproof.app"
+
+
+class XProofCertifyTool(BaseTool):
+    name: str = "xproof_certify"
+    description: str = (
+        "Certify a file on MultiversX blockchain. Creates immutable proof of existence "
+        "and ownership by recording its SHA-256 hash on-chain. Cost: 0.03€ per certification. "
+        "The file never leaves your device - only the hash is sent."
+    )
+
+    def _run(self, file_path: str, author_name: str = "AI Agent", api_key: str = "") -> str:
+        sha256 = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                sha256.update(chunk)
+        file_hash = sha256.hexdigest()
+        filename = file_path.split("/")[-1]
+
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        checkout = requests.post(f"{XPROOF_BASE_URL}/api/acp/checkout", json={
+            "product_id": "xproof-certification",
+            "inputs": {"file_hash": file_hash, "filename": filename, "author_name": author_name}
+        }, headers=headers).json()
+
+        return f"Checkout: {checkout.get('checkout_id')} | Amount: {checkout.get('amount')} EUR | Sign TX on MultiversX to complete."
+
+
+class XProofVerifyTool(BaseTool):
+    name: str = "xproof_verify"
+    description: str = (
+        "Verify an existing blockchain certification on xproof. "
+        "Returns proof details including file hash, timestamp, and blockchain transaction."
+    )
+
+    def _run(self, proof_id: str) -> str:
+        response = requests.get(f"{XPROOF_BASE_URL}/proof/{proof_id}.json")
+        if response.status_code == 404:
+            return "Proof not found"
+        proof = response.json()
+        return (
+            f"File: {proof.get('file_name')} | "
+            f"Hash: {proof.get('file_hash')} | "
+            f"Date: {proof.get('timestamp_utc')} | "
+            f"TX: {proof.get('blockchain', {}).get('transaction_hash', 'N/A')}"
+        )
+`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send(code);
+  });
+
+  app.get("/agent-tools/openapi-actions.json", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const priceEur = getCertificationPriceEur();
+
+    const spec = {
+      openapi: "3.0.3",
+      info: {
+        title: "xproof - Blockchain File Certification",
+        description: "API for AI agents to certify files on MultiversX blockchain. Create immutable proofs of file ownership with a simple API call.",
+        version: "1.0.0",
+        contact: {
+          name: "xproof Support",
+          url: baseUrl,
+        },
+      },
+      servers: [{ url: baseUrl, description: "Production server" }],
+      security: [{ apiKey: [] }],
+      components: {
+        securitySchemes: {
+          apiKey: {
+            type: "http" as const,
+            scheme: "bearer",
+            description: "API key in format: pm_xxx... Obtain from /api/keys endpoint",
+          },
+        },
+        schemas: {
+          Product: {
+            type: "object",
+            properties: {
+              id: { type: "string", example: "xproof-certification" },
+              name: { type: "string", example: "xproof Certification" },
+              description: { type: "string" },
+              pricing: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["fixed", "variable"] },
+                  amount: { type: "string", example: priceEur.toString() },
+                  currency: { type: "string", example: "EUR" },
+                },
+              },
+              inputs: { type: "object", additionalProperties: { type: "string" } },
+              outputs: { type: "object", additionalProperties: { type: "string" } },
+            },
+          },
+          CheckoutRequest: {
+            type: "object",
+            required: ["product_id", "inputs"],
+            properties: {
+              product_id: { type: "string", example: "xproof-certification" },
+              inputs: {
+                type: "object",
+                required: ["file_hash", "filename"],
+                properties: {
+                  file_hash: { type: "string", description: "SHA-256 hash of the file (64 hex chars)", example: "a1b2c3d4e5f678901234567890123456789012345678901234567890123456ab" },
+                  filename: { type: "string", example: "document.pdf" },
+                  author_name: { type: "string", example: "AI Agent" },
+                  metadata: { type: "object", description: "Optional JSON metadata" },
+                },
+              },
+              buyer: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["agent", "user"] },
+                  id: { type: "string" },
+                },
+              },
+            },
+          },
+          CheckoutResponse: {
+            type: "object",
+            properties: {
+              checkout_id: { type: "string", format: "uuid" },
+              product_id: { type: "string" },
+              amount: { type: "string", description: "Price in EUR" },
+              currency: { type: "string" },
+              status: { type: "string", enum: ["pending", "ready"] },
+              execution: {
+                type: "object",
+                properties: {
+                  type: { type: "string", example: "multiversx" },
+                  mode: { type: "string", enum: ["direct", "relayed_v3"] },
+                  chain_id: { type: "string", example: "1" },
+                  tx_payload: {
+                    type: "object",
+                    properties: {
+                      receiver: { type: "string", description: "xproof wallet address" },
+                      data: { type: "string", description: "Base64 encoded transaction data" },
+                      value: { type: "string", description: "EGLD amount in atomic units (1 EGLD = 10^18)" },
+                      gas_limit: { type: "integer", example: 100000 },
+                    },
+                  },
+                },
+              },
+              expires_at: { type: "string", format: "date-time" },
+            },
+          },
+          ConfirmRequest: {
+            type: "object",
+            required: ["checkout_id", "tx_hash"],
+            properties: {
+              checkout_id: { type: "string", format: "uuid" },
+              tx_hash: { type: "string", description: "MultiversX transaction hash" },
+            },
+          },
+          ConfirmResponse: {
+            type: "object",
+            properties: {
+              status: { type: "string", enum: ["confirmed", "pending", "failed"] },
+              checkout_id: { type: "string" },
+              tx_hash: { type: "string" },
+              certification_id: { type: "string" },
+              certificate_url: { type: "string", format: "uri" },
+              proof_url: { type: "string", format: "uri" },
+              blockchain_explorer_url: { type: "string", format: "uri" },
+              message: { type: "string" },
+            },
+          },
+          Error: {
+            type: "object",
+            properties: {
+              error: { type: "string" },
+              message: { type: "string" },
+            },
+          },
+        },
+      },
+      paths: {
+        "/api/acp/products": {
+          get: {
+            summary: "Discover available products",
+            description: "Returns list of certification products available for purchase. No authentication required.",
+            "x-openai-isConsequential": false,
+            security: [] as any[],
+            responses: {
+              "200": {
+                description: "List of products",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        protocol: { type: "string", example: "ACP" },
+                        version: { type: "string", example: "1.0" },
+                        provider: { type: "string", example: "xproof" },
+                        chain: { type: "string", example: "MultiversX" },
+                        products: { type: "array", items: { $ref: "#/components/schemas/Product" } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        "/api/acp/checkout": {
+          post: {
+            summary: "Create checkout session",
+            description: "Initiate certification by providing file hash. Returns transaction payload for MultiversX signing.",
+            "x-openai-isConsequential": true,
+            requestBody: {
+              required: true,
+              content: { "application/json": { schema: { $ref: "#/components/schemas/CheckoutRequest" } } },
+            },
+            responses: {
+              "201": {
+                description: "Checkout created",
+                content: { "application/json": { schema: { $ref: "#/components/schemas/CheckoutResponse" } } },
+              },
+              "401": { description: "API key required" },
+              "409": { description: "File already certified" },
+            },
+          },
+        },
+        "/api/acp/confirm": {
+          post: {
+            summary: "Confirm transaction",
+            description: "After signing and broadcasting transaction, confirm to receive certification ID and URLs.",
+            "x-openai-isConsequential": true,
+            requestBody: {
+              required: true,
+              content: { "application/json": { schema: { $ref: "#/components/schemas/ConfirmRequest" } } },
+            },
+            responses: {
+              "200": {
+                description: "Certification confirmed",
+                content: { "application/json": { schema: { $ref: "#/components/schemas/ConfirmResponse" } } },
+              },
+              "401": { description: "API key required" },
+              "404": { description: "Checkout not found" },
+              "410": { description: "Checkout expired" },
+            },
+          },
+        },
+        "/api/acp/checkout/{checkoutId}": {
+          get: {
+            summary: "Get checkout status",
+            description: "Check the status of an existing checkout session.",
+            "x-openai-isConsequential": false,
+            parameters: [
+              { name: "checkoutId", in: "path", required: true, schema: { type: "string" } },
+            ],
+            responses: {
+              "200": { description: "Checkout status" },
+              "404": { description: "Checkout not found" },
+            },
+          },
+        },
+      },
+    };
+
+    res.json(spec);
+  });
+
+  app.get("/.well-known/agent.json", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+    res.json({
+      name: "xproof",
+      description: "Blockchain certification service for immutable proof of file existence and ownership on MultiversX",
+      url: baseUrl,
+      version: "1.0.0",
+      capabilities: ["file-certification", "proof-verification", "blockchain-anchoring"],
+      protocols: {
+        acp: `${baseUrl}/api/acp/products`,
+        openapi: `${baseUrl}/api/acp/openapi.json`,
+        mcp: `${baseUrl}/.well-known/mcp.json`,
+        openai_plugin: `${baseUrl}/.well-known/ai-plugin.json`,
+        llms_txt: `${baseUrl}/llms.txt`,
+      },
+      authentication: {
+        type: "bearer",
+        token_prefix: "pm_",
+        public_endpoints: ["/api/acp/products", "/api/acp/openapi.json", "/api/acp/health", "/llms.txt", "/llms-full.txt"],
+      },
+      pricing: {
+        model: "per-use",
+        amount: "0.03",
+        currency: "EUR",
+        payment_method: "EGLD (MultiversX)",
+      },
+      documentation: {
+        specification: `${baseUrl}/.well-known/xproof.md`,
+        api_guide: `${baseUrl}/learn/api.md`,
+        verification: `${baseUrl}/learn/verification.md`,
+      },
     });
   });
 

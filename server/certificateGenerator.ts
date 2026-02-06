@@ -125,7 +125,7 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
       const contentWidth = pageWidth - (margin * 2);
       
       const certificateNumber = generateCertificateNumber(certification);
-      const proofUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://xproof.io'}/proof/${certification.id}`;
+      const proofUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://xproof.app'}/proof/${certification.id}`;
       const explorerUrl = certification.transactionHash ? `https://explorer.multiversx.com/transactions/${certification.transactionHash}` : null;
       const qrCodeDataUrl = await QRCode.toDataURL(proofUrl, { 
         width: 200, 
@@ -334,7 +334,7 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
                margin, footerY + 12, { width: contentWidth, align: 'center' });
       
       doc.fontSize(7).fillColor(COLORS.textMuted);
-      doc.text('xproof © ' + new Date().getFullYear() + ' — Blockchain Certification Platform — xproof.io',
+      doc.text('xproof © ' + new Date().getFullYear() + ' — Blockchain Certification Platform — xproof.app',
                margin, footerY + 30, { width: contentWidth, align: 'center' });
 
       if (subscriptionTier === 'free') {
