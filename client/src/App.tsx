@@ -17,6 +17,7 @@ import Settings from "@/pages/settings";
 import MentionsLegales from "@/pages/legal/mentions";
 import PolitiqueConfidentialite from "@/pages/legal/privacy";
 import ConditionsUtilisation from "@/pages/legal/terms";
+import AgentsPage from "@/pages/agents";
 import { Shield, Loader2 } from "lucide-react";
 
 function Router() {
@@ -44,6 +45,7 @@ function Router() {
         <Route path="/legal/mentions" component={MentionsLegales} />
         <Route path="/legal/privacy" component={PolitiqueConfidentialite} />
         <Route path="/legal/terms" component={ConditionsUtilisation} />
+        <Route path="/agents" component={AgentsPage} />
         <Route>
           <Redirect to="/" />
         </Route>
@@ -61,6 +63,7 @@ function Router() {
       <Route path="/legal/mentions" component={MentionsLegales} />
       <Route path="/legal/privacy" component={PolitiqueConfidentialite} />
       <Route path="/legal/terms" component={ConditionsUtilisation} />
+      <Route path="/agents" component={AgentsPage} />
       <Route component={NotFound} />
     </Switch>
   );

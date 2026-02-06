@@ -378,6 +378,11 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             description: "Validez la connexion dans xPortal puis revenez sur cette page.",
           });
 
+          const storeFallbackKey = 'xproof_store_fallback_ts';
+          const lastFallback = sessionStorage.getItem(storeFallbackKey);
+          const now = Date.now();
+          const recentlyFallbacked = lastFallback && (now - parseInt(lastFallback, 10)) < 30000;
+
           let didLeave = false;
           const onBlur = () => { didLeave = true; };
           window.addEventListener('blur', onBlur);
@@ -386,11 +391,16 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
 
           setTimeout(() => {
             window.removeEventListener('blur', onBlur);
-            if (!didLeave && !document.hidden) {
-              logger.log('📱 App not detected, redirecting to store');
-              window.location.href = storeLink;
+            if (recentlyFallbacked) {
+              logger.log('📱 Store fallback skipped (anti-loop: triggered recently)');
+              return;
             }
-          }, 1500);
+            if (!didLeave && !document.hidden) {
+              logger.log('📱 App not detected, opening store in new tab');
+              sessionStorage.setItem(storeFallbackKey, String(Date.now()));
+              window.open(storeLink, '_blank');
+            }
+          }, 5000);
         }
       }
       

@@ -360,6 +360,7 @@ export default function Landing() {
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li><a href="#how-it-works" className="hover:text-foreground transition-colors">Comment ça marche</a></li>
                   <li><a href="#faq" className="hover:text-foreground transition-colors">FAQ</a></li>
+                  <li><a href="/agents" className="hover:text-foreground transition-colors" data-testid="link-footer-agents">For AI Agents</a></li>
                 </ul>
               </div>
               
