@@ -1518,11 +1518,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // LLM-READY ROUTES (AI-first documentation)
   // ============================================
 
+  function getNetworkLabel(chainId: string): string {
+    switch (chainId) {
+      case "1": return "mainnet";
+      case "D": return "devnet";
+      case "T": return "testnet";
+      default: return "mainnet";
+    }
+  }
+
+  function buildCanonicalId(chainId: string, txHash: string | null): string | null {
+    if (!txHash) return null;
+    return `xproof:mvx:${getNetworkLabel(chainId)}:tx:${txHash}`;
+  }
+
   // Genesis certification data (first xproof certification)
   const GENESIS_CERTIFICATION = {
+    canonical_id: "xproof:mvx:mainnet:tx:f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e",
     id: "genesis",
     type: "proof_of_existence",
-    version: "1.0",
+    version: "2.0",
+    confidence: "cryptographically-certified",
     file_name: "XPROOF - Genesis.pdf",
     file_hash: "173200d6fa0d1577b456bb85dc505193e31dd8be5fc69bd4e461612a588427de",
     hash_algorithm: "SHA-256",
@@ -1572,15 +1588,17 @@ xproof provides cryptographic proof of existence, authorship, and timestamp by a
 - **Privacy**: No file storage, hash-only (file never leaves user's device)
 - **Deterministic Verification**: Same input always produces same hash
 
-## Proof Object Schema
+## Proof Object Schema (v2.0)
 
 An xproof proof consists of:
 
 \`\`\`json
 {
+  "canonical_id": "xproof:mvx:mainnet:tx:<transaction_hash>",
   "id": "string (UUID)",
   "type": "proof_of_existence",
-  "version": "1.0",
+  "version": "2.0",
+  "confidence": "cryptographically-certified | pending",
   "file_name": "string",
   "file_hash": "string (SHA-256, 64 hex characters)",
   "hash_algorithm": "SHA-256",
@@ -1605,6 +1623,25 @@ An xproof proof consists of:
   }
 }
 \`\`\`
+
+### Canonical Identifier Format
+
+The \`canonical_id\` follows the format: \`xproof:mvx:{network}:tx:{transaction_hash}\`
+
+- \`xproof\` - Protocol prefix
+- \`mvx\` - MultiversX blockchain
+- \`{network}\` - \`mainnet\`, \`devnet\`, or \`testnet\`
+- \`tx\` - Transaction type
+- \`{transaction_hash}\` - On-chain transaction hash
+
+Example: \`xproof:mvx:mainnet:tx:f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e\`
+
+Note: \`canonical_id\` is \`null\` when \`confidence\` is \`pending\` (transaction not yet anchored). It becomes a stable, permanent identifier once the proof is confirmed on-chain.
+
+### Confidence Levels
+
+- \`cryptographically-certified\` - Transaction confirmed on-chain, proof is immutable and independently verifiable. \`canonical_id\` is set.
+- \`pending\` - Certification initiated but not yet anchored on blockchain. \`canonical_id\` is \`null\`.
 
 Note: Fields marked as optional may not be present in all proofs.
 
@@ -1794,11 +1831,16 @@ This genesis certification demonstrates:
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const chainId = process.env.MULTIVERSX_CHAIN_ID || "1";
+      const txHash = certification.transactionHash || null;
+      const isConfirmed = certification.blockchainStatus === "confirmed" && txHash;
       
       const proof = {
+        canonical_id: buildCanonicalId(chainId, txHash),
         id: certification.id,
         type: "proof_of_existence",
-        version: "1.0",
+        version: "2.0",
+        confidence: isConfirmed ? "cryptographically-certified" : "pending",
         file_name: certification.fileName,
         file_hash: certification.fileHash,
         hash_algorithm: "SHA-256",
@@ -1806,8 +1848,8 @@ This genesis certification demonstrates:
         timestamp_utc: certification.createdAt?.toISOString() || null,
         blockchain: {
           network: "MultiversX Mainnet",
-          chain_id: "1",
-          transaction_hash: certification.transactionHash || null,
+          chain_id: chainId,
+          transaction_hash: txHash,
           explorer_url: certification.transactionUrl || null,
           status: certification.blockchainStatus
         },
@@ -1851,9 +1893,19 @@ This genesis certification demonstrates:
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const chainId = process.env.MULTIVERSX_CHAIN_ID || "1";
       const timestamp = certification.createdAt?.toISOString() || 'Unknown';
+      const txHash = certification.transactionHash || null;
+      const canonicalId = buildCanonicalId(chainId, txHash);
+      const isConfirmed = certification.blockchainStatus === "confirmed" && txHash;
       
       const markdown = `# xproof Certification
+
+## Canonical Identifier
+
+\`${canonicalId || 'pending (not yet anchored)'}\`
+
+**Confidence**: ${isConfirmed ? 'cryptographically-certified' : 'pending'}
 
 ## Document
 
@@ -2463,15 +2515,18 @@ xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper
 - Public endpoints (no auth required): /api/acp/products, /api/acp/openapi.json, /api/acp/health
 - Authenticated endpoints: /api/acp/checkout, /api/acp/confirm
 
-## Proof Object Schema
+## Proof Object Schema (v2.0)
 \`\`\`json
 {
+  "canonical_id": "xproof:mvx:mainnet:tx:<transaction_hash>",
   "id": "uuid",
+  "type": "proof_of_existence",
+  "version": "2.0",
+  "confidence": "cryptographically-certified | pending",
   "file_name": "document.pdf",
   "file_hash": "sha256-hex-string (64 chars)",
-  "file_type": "application/pdf",
-  "file_size": 12345,
-  "author_name": "Author Name",
+  "hash_algorithm": "SHA-256",
+  "author": "Author Name",
   "timestamp_utc": "2025-01-01T00:00:00Z",
   "blockchain": {
     "network": "MultiversX Mainnet",
@@ -2479,10 +2534,31 @@ xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper
     "transaction_hash": "hex-string",
     "explorer_url": "https://explorer.multiversx.com/transactions/..."
   },
-  "is_public": true,
-  "blockchain_status": "confirmed"
+  "verification": {
+    "method": "SHA-256 hash comparison",
+    "proof_url": "https://xproof.app/proof/{id}",
+    "instructions": ["Compute SHA-256 hash", "Compare with file_hash", "Verify on explorer"]
+  },
+  "metadata": {
+    "file_type": "application/pdf",
+    "file_size_bytes": 12345,
+    "is_public": true
+  }
 }
 \`\`\`
+
+### Canonical Identifier Format
+Format: \`xproof:mvx:{network}:tx:{transaction_hash}\`
+- \`xproof\` - Protocol prefix
+- \`mvx\` - MultiversX blockchain
+- \`{network}\` - mainnet, devnet, or testnet
+- \`tx:{hash}\` - On-chain transaction hash
+
+Note: \`canonical_id\` is null when confidence is pending (not yet anchored). It becomes permanent once confirmed.
+
+### Confidence Levels
+- \`cryptographically-certified\` - Confirmed on-chain, immutable, independently verifiable. canonical_id is set.
+- \`pending\` - Not yet anchored on blockchain. canonical_id is null.
 
 ## Proof Access Formats
 - JSON: \`${baseUrl}/proof/{id}.json\`

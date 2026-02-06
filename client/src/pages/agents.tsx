@@ -316,6 +316,124 @@ export default function AgentsPage() {
         </div>
       </section>
 
+      <section className="py-20 md:py-28" id="proof-object">
+        <div className="container">
+          <div className="mx-auto max-w-4xl">
+            <div className="mb-16 text-center">
+              <Badge variant="outline" className="mb-4">
+                <Hash className="mr-2 h-3.5 w-3.5" />
+                Standard
+              </Badge>
+              <h2 className="mb-4 text-3xl md:text-4xl font-bold" data-testid="text-proof-object-title">
+                Canonical Proof Object
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                Every proof follows a stable, versioned schema with a universally addressable identifier.
+              </p>
+            </div>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">v2.0</Badge>
+                    <span className="text-sm text-muted-foreground">Proof Object Schema</span>
+                  </div>
+                  <CopyButton text={`{
+  "canonical_id": "xproof:mvx:mainnet:tx:f376c0...",
+  "id": "uuid",
+  "type": "proof_of_existence",
+  "version": "2.0",
+  "confidence": "cryptographically-certified",
+  "file_name": "document.pdf",
+  "file_hash": "sha256-hex-string",
+  "hash_algorithm": "SHA-256",
+  "timestamp_utc": "2025-01-01T00:00:00Z",
+  "blockchain": {
+    "network": "MultiversX Mainnet",
+    "chain_id": "1",
+    "transaction_hash": "hex-string",
+    "explorer_url": "https://explorer.multiversx.com/transactions/..."
+  }
+}`} testId="button-copy-proof-schema" />
+                </div>
+                <pre className="overflow-x-auto text-sm font-mono whitespace-pre-wrap break-all" data-testid="code-proof-schema">{`{
+  "canonical_id": "xproof:mvx:mainnet:tx:f376c0...",  // null if pending
+  "id": "uuid",
+  "type": "proof_of_existence",
+  "version": "2.0",
+  "confidence": "cryptographically-certified",        // or "pending"
+  "file_name": "document.pdf",
+  "file_hash": "sha256-hex-string",
+  "hash_algorithm": "SHA-256",
+  "timestamp_utc": "2025-01-01T00:00:00Z",
+  "blockchain": {
+    "network": "MultiversX Mainnet",
+    "chain_id": "1",
+    "transaction_hash": "hex-string",
+    "explorer_url": "https://explorer.multiversx.com/transactions/..."
+  }
+}`}</pre>
+              </CardContent>
+            </Card>
+
+            <div className="mt-10 grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Canonical Identifier</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <pre className="text-sm font-mono break-all bg-muted p-3 rounded-md" data-testid="code-canonical-format">xproof:mvx:{'{network}'}:tx:{'{transaction_hash}'}</pre>
+                  <ul className="space-y-1 text-sm text-muted-foreground">
+                    <li><code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">xproof</code> Protocol prefix</li>
+                    <li><code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">mvx</code> MultiversX blockchain</li>
+                    <li><code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">mainnet</code> Network (mainnet / devnet / testnet)</li>
+                    <li><code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">tx:hash</code> On-chain transaction hash</li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Confidence Levels</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <Badge variant="default" className="shrink-0 mt-0.5">certified</Badge>
+                    <div>
+                      <p className="text-sm font-medium">cryptographically-certified</p>
+                      <p className="text-xs text-muted-foreground">Transaction confirmed on-chain. Immutable and independently verifiable.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Badge variant="secondary" className="shrink-0 mt-0.5">pending</Badge>
+                    <div>
+                      <p className="text-sm font-medium">pending</p>
+                      <p className="text-xs text-muted-foreground">Certification initiated but not yet anchored on blockchain.</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="mt-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Live example:{" "}
+                <a
+                  href="/genesis.proof.json"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-primary hover:underline"
+                  data-testid="link-genesis-proof"
+                >
+                  genesis.proof.json
+                </a>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="border-y bg-muted/30 py-20 md:py-28" id="discovery">
         <div className="container">
           <div className="mx-auto max-w-5xl">
