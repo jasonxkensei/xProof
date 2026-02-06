@@ -361,22 +361,36 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         setQrCodeDataUrl(qrDataUrl);
         logger.log('📸 QR code generated');
         
-        // For mobile, open xPortal deep link
         if (isMobileDevice()) {
           savePendingXPortalConnection();
           logger.log('📱 Saved pending xPortal connection state for recovery');
           
-          // Create xPortal deep link
           const encodedUri = encodeURIComponent(uri);
-          const xPortalLink = `https://maiar.page.link/?apn=com.elrond.maiar.wallet&isi=1519405832&ibi=com.elrond.maiar.wallet&link=https://maiar.com/?wallet-connect=${encodedUri}`;
-          
+          const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+          const nativeDeepLink = `https://maiar.com/?wallet-connect=${encodedUri}`;
+          const storeLink = isIOS
+            ? 'https://apps.apple.com/app/xportal/id1519405832'
+            : 'https://play.google.com/store/apps/details?id=com.elrond.maiar.wallet';
+
           toast({
             title: "xPortal",
             description: "Validez la connexion dans xPortal puis revenez sur cette page.",
           });
-          
-          // Open xPortal
-          window.location.href = xPortalLink;
+
+          let didLeave = false;
+          const onBlur = () => { didLeave = true; };
+          window.addEventListener('blur', onBlur);
+
+          window.location.href = nativeDeepLink;
+
+          setTimeout(() => {
+            window.removeEventListener('blur', onBlur);
+            if (!didLeave && !document.hidden) {
+              logger.log('📱 App not detected, redirecting to store');
+              window.location.href = storeLink;
+            }
+          }, 1500);
         }
       }
       

@@ -100,9 +100,7 @@ export default function Landing() {
             </Button>
           </div>
           
-          <p className="mt-6 text-sm text-muted-foreground">
-            0.03€ par certification • Paiement crypto uniquement • Illimité
-          </p>
+          <p className="mt-6 text-sm text-muted-foreground">0.03€ par certification • Illimité</p>
         </div>
       </section>
       {/* How It Works */}
