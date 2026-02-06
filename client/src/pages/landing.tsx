@@ -334,9 +334,6 @@ export default function Landing() {
               <Shield className="mr-2 h-5 w-5" />
               Commencer maintenant
             </Button>
-            <p className="mt-4 text-sm text-muted-foreground">
-              Paiement crypto uniquement
-            </p>
           </div>
         </div>
       </section>
