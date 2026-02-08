@@ -18,146 +18,146 @@ export default function PolitiqueConfidentialite() {
           <Link href="/">
             <Button variant="ghost" size="sm" data-testid="button-back-home">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Retour
+              Back
             </Button>
           </Link>
         </div>
       </header>
 
       <main className="container py-12 max-w-3xl">
-        <h1 className="text-3xl font-bold mb-8" data-testid="text-page-title">Politique de confidentialité</h1>
+        <h1 className="text-3xl font-bold mb-8" data-testid="text-page-title">Privacy policy</h1>
         
         <div className="prose prose-invert max-w-none space-y-8">
           <section>
             <h2 className="text-xl font-semibold mb-4">Introduction</h2>
             <p className="text-muted-foreground leading-relaxed">
-              xproof s'engage à protéger la vie privée de ses utilisateurs. Cette politique 
-              de confidentialité explique comment nous collectons, utilisons et protégeons 
-              vos données personnelles conformément au Règlement Général sur la Protection 
-              des Données (RGPD).
+              xproof is committed to protecting the privacy of its users. This privacy 
+              policy explains how we collect, use, and protect your personal data in 
+              compliance with applicable data protection regulations, including the 
+              General Data Protection Regulation (GDPR).
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Données collectées</h2>
+            <h2 className="text-xl font-semibold mb-4">Data collected</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              xproof collecte uniquement les données strictement nécessaires au fonctionnement du service :
+              xproof only collects data strictly necessary for the operation of the service:
             </p>
             <ul className="space-y-3 text-muted-foreground">
               <li>
-                <strong className="text-foreground">Adresse de portefeuille MultiversX :</strong> utilisée pour 
-                l'authentification et l'association des certifications à votre compte.
+                <strong className="text-foreground">MultiversX wallet address:</strong> used for 
+                authentication and associating certifications with your account.
               </li>
               <li>
-                <strong className="text-foreground">Hash SHA-256 des fichiers :</strong> empreinte cryptographique 
-                de vos fichiers. Le fichier original n'est jamais transmis ni stocké sur nos serveurs.
+                <strong className="text-foreground">SHA-256 file hash:</strong> cryptographic fingerprint 
+                of your files. The original file is never transmitted or stored on our servers.
               </li>
               <li>
-                <strong className="text-foreground">Métadonnées de certification :</strong> nom du fichier, 
-                date de certification, nom d'auteur (si fourni).
+                <strong className="text-foreground">Certification metadata:</strong> file name, 
+                certification date, author name (if provided).
               </li>
               <li>
-                <strong className="text-foreground">Données de paiement :</strong> traitées par nos prestataires 
-                de paiement (Stripe, xMoney). Nous ne stockons jamais vos données bancaires.
+                <strong className="text-foreground">Payment data:</strong> processed by our payment 
+                providers (Stripe, xMoney). We never store your banking information.
               </li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Données non collectées</h2>
+            <h2 className="text-xl font-semibold mb-4">Data not collected</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              Pour garantir la confidentialité de vos créations, xproof ne collecte jamais :
+              To ensure the confidentiality of your creations, xproof never collects:
             </p>
             <ul className="space-y-2 text-muted-foreground">
-              <li>Le contenu de vos fichiers</li>
-              <li>Vos données personnelles (nom, email, adresse) sauf si vous les fournissez volontairement</li>
-              <li>Votre historique de navigation en dehors du service</li>
+              <li>The content of your files</li>
+              <li>Your personal data (name, email, address) unless you voluntarily provide it</li>
+              <li>Your browsing history outside of the service</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Utilisation des données</h2>
+            <h2 className="text-xl font-semibold mb-4">Use of data</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              Vos données sont utilisées exclusivement pour :
+              Your data is used exclusively to:
             </p>
             <ul className="space-y-2 text-muted-foreground">
-              <li>Créer et gérer vos certifications blockchain</li>
-              <li>Générer les certificats PDF et pages de preuve publiques</li>
-              <li>Traiter les paiements</li>
-              <li>Améliorer le service (statistiques agrégées et anonymisées)</li>
+              <li>Create and manage your blockchain certifications</li>
+              <li>Generate PDF certificates and public proof pages</li>
+              <li>Process payments</li>
+              <li>Improve the service (aggregated and anonymized statistics)</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Données blockchain (publiques)</h2>
+            <h2 className="text-xl font-semibold mb-4">Blockchain data (public)</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Les preuves de certification sont enregistrées sur la blockchain MultiversX, 
-              un registre public et immuable. Les informations suivantes sont publiquement 
-              accessibles et ne peuvent être supprimées :
+              Certification proofs are recorded on the MultiversX blockchain, 
+              a public and immutable ledger. The following information is publicly 
+              accessible and cannot be deleted:
             </p>
             <ul className="mt-4 space-y-2 text-muted-foreground">
-              <li>Hash SHA-256 du fichier certifié</li>
-              <li>Adresse du portefeuille ayant effectué la certification</li>
-              <li>Date et heure de la transaction</li>
-              <li>Identifiant de certification</li>
+              <li>SHA-256 hash of the certified file</li>
+              <li>Wallet address that performed the certification</li>
+              <li>Date and time of the transaction</li>
+              <li>Certification identifier</li>
             </ul>
             <p className="text-muted-foreground leading-relaxed mt-4">
-              <strong className="text-foreground">Important :</strong> Le hash cryptographique ne permet pas 
-              de reconstituer le fichier original. Seul le propriétaire du fichier peut prouver 
-              qu'il correspond au hash enregistré.
+              <strong className="text-foreground">Important:</strong> The cryptographic hash does not allow 
+              the original file to be reconstructed. Only the file owner can prove 
+              that it matches the recorded hash.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Conservation des données</h2>
+            <h2 className="text-xl font-semibold mb-4">Data retention</h2>
             <ul className="space-y-3 text-muted-foreground">
               <li>
-                <strong className="text-foreground">Données de compte :</strong> conservées tant que votre 
-                compte est actif, puis supprimées sur demande.
+                <strong className="text-foreground">Account data:</strong> retained as long as your 
+                account is active, then deleted upon request.
               </li>
               <li>
-                <strong className="text-foreground">Données blockchain :</strong> permanentes et immuables 
-                par conception de la technologie blockchain.
+                <strong className="text-foreground">Blockchain data:</strong> permanent and immutable 
+                by design of blockchain technology.
               </li>
               <li>
-                <strong className="text-foreground">Données de paiement :</strong> conservées selon les 
-                obligations légales (10 ans pour les données comptables).
+                <strong className="text-foreground">Payment data:</strong> retained in accordance with 
+                legal obligations (10 years for accounting data).
               </li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Vos droits (RGPD)</h2>
+            <h2 className="text-xl font-semibold mb-4">Your rights (GDPR)</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              Conformément au RGPD, vous disposez des droits suivants :
+              In accordance with the GDPR, you have the following rights:
             </p>
             <ul className="space-y-2 text-muted-foreground">
-              <li><strong className="text-foreground">Droit d'accès :</strong> obtenir une copie de vos données</li>
-              <li><strong className="text-foreground">Droit de rectification :</strong> corriger vos données inexactes</li>
-              <li><strong className="text-foreground">Droit à l'effacement :</strong> supprimer vos données (hors blockchain)</li>
-              <li><strong className="text-foreground">Droit à la portabilité :</strong> recevoir vos données dans un format structuré</li>
-              <li><strong className="text-foreground">Droit d'opposition :</strong> vous opposer au traitement de vos données</li>
+              <li><strong className="text-foreground">Right of access:</strong> obtain a copy of your data</li>
+              <li><strong className="text-foreground">Right of rectification:</strong> correct your inaccurate data</li>
+              <li><strong className="text-foreground">Right to erasure:</strong> delete your data (except blockchain data)</li>
+              <li><strong className="text-foreground">Right to portability:</strong> receive your data in a structured format</li>
+              <li><strong className="text-foreground">Right to object:</strong> object to the processing of your data</li>
             </ul>
             <p className="text-muted-foreground leading-relaxed mt-4">
-              <strong className="text-foreground">Limitation :</strong> Les données enregistrées sur la blockchain 
-              ne peuvent être modifiées ou supprimées en raison de la nature immuable de cette technologie.
+              <strong className="text-foreground">Limitation:</strong> Data recorded on the blockchain 
+              cannot be modified or deleted due to the immutable nature of this technology.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Sous-traitants</h2>
+            <h2 className="text-xl font-semibold mb-4">Sub-processors</h2>
             <ul className="space-y-3 text-muted-foreground">
               <li>
-                <strong className="text-foreground">Replit, Inc.</strong> (hébergement) - États-Unis
+                <strong className="text-foreground">Replit, Inc.</strong> (hosting) - United States
               </li>
               <li>
-                <strong className="text-foreground">Stripe</strong> (paiements par carte) - États-Unis
+                <strong className="text-foreground">Stripe</strong> (card payments) - United States
               </li>
               <li>
-                <strong className="text-foreground">xMoney</strong> (paiements crypto) - Europe
+                <strong className="text-foreground">xMoney</strong> (crypto payments) - Europe
               </li>
               <li>
-                <strong className="text-foreground">Neon</strong> (base de données) - États-Unis
+                <strong className="text-foreground">Neon</strong> (database) - United States
               </li>
             </ul>
           </section>
@@ -165,14 +165,14 @@ export default function PolitiqueConfidentialite() {
           <section>
             <h2 className="text-xl font-semibold mb-4">Contact</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Pour exercer vos droits ou pour toute question concernant cette politique 
-              de confidentialité, vous pouvez nous contacter à : <span className="italic">[Email à venir]</span>
+              To exercise your rights or for any questions regarding this privacy 
+              policy, you can contact us at: <span className="italic">[Email coming soon]</span>
             </p>
           </section>
 
           <section className="border-t pt-8">
             <p className="text-sm text-muted-foreground">
-              Dernière mise à jour : {new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })}
+              Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </section>
         </div>

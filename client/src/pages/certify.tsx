@@ -74,14 +74,14 @@ export default function Certify() {
         explorerUrl: data.transactionUrl,
       });
       toast({
-        title: "Succès !",
-        description: "Votre fichier a été certifié sur la blockchain",
+        title: "Success!",
+        description: "Your file has been certified on the blockchain",
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Échec de la certification",
-        description: error.message || "Une erreur est survenue lors de la certification",
+        title: "Certification failed",
+        description: error.message || "An error occurred during certification",
         variant: "destructive",
       });
     },
@@ -106,8 +106,8 @@ export default function Certify() {
       setTimeout(() => setIsHashing(false), 300);
     } catch (error) {
       toast({
-        title: "Erreur",
-        description: "Impossible de calculer l'empreinte du fichier",
+        title: "Error",
+        description: "Unable to compute the file fingerprint",
         variant: "destructive",
       });
       setIsHashing(false);
@@ -140,8 +140,8 @@ export default function Certify() {
     
     if (!file || !fileHash || !authorName) {
       toast({
-        title: "Informations manquantes",
-        description: "Veuillez remplir tous les champs requis",
+        title: "Missing information",
+        description: "Please fill in all required fields",
         variant: "destructive",
       });
       return;
@@ -149,18 +149,18 @@ export default function Certify() {
 
     if (!user?.walletAddress) {
       toast({
-        title: "Wallet requis",
-        description: "Veuillez connecter votre wallet pour certifier des fichiers",
+        title: "Wallet required",
+        description: "Please connect your wallet to certify files",
         variant: "destructive",
       });
       return;
     }
 
     setIsSigning(true);
-    setSignatureStep("Création de la transaction...");
+    setSignatureStep("Creating the transaction...");
 
     try {
-      setSignatureStep("Vérifiez votre wallet pour signer (entrez le code 2FA si activé)...");
+      setSignatureStep("Check your wallet to sign (enter the 2FA code if enabled)...");
       
       const txResult = await sendCertificationTransaction({
         userAddress: user.walletAddress,
@@ -169,7 +169,7 @@ export default function Certify() {
         authorName,
       });
 
-      setSignatureStep("Enregistrement de la certification...");
+      setSignatureStep("Recording the certification...");
 
       const response = await apiRequest("POST", "/api/certifications", {
         fileName: file.name,
@@ -198,14 +198,14 @@ export default function Certify() {
       });
 
       toast({
-        title: "Succès !",
-        description: "Votre fichier a été certifié sur la blockchain MultiversX",
+        title: "Success!",
+        description: "Your file has been certified on the MultiversX blockchain",
       });
     } catch (error: any) {
       console.error("Certification error:", error);
       toast({
-        title: "Échec de la certification",
-        description: error.message || "Une erreur est survenue lors de la certification",
+        title: "Certification failed",
+        description: error.message || "An error occurred during certification",
         variant: "destructive",
       });
     } finally {
@@ -232,8 +232,8 @@ export default function Certify() {
         window.URL.revokeObjectURL(url);
         
         toast({
-          title: "PDF téléchargé",
-          description: "Votre certificat a été enregistré",
+          title: "PDF downloaded",
+          description: "Your certificate has been saved",
         });
         return;
       }
@@ -251,8 +251,8 @@ export default function Certify() {
       });
 
       toast({
-        title: "PDF téléchargé",
-        description: "Votre certificat a été enregistré",
+        title: "PDF downloaded",
+        description: "Your certificate has been saved",
       });
     }
   };
@@ -280,30 +280,30 @@ export default function Certify() {
             <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
               <CheckCircle className="h-10 w-10 text-primary" />
             </div>
-            <h1 className="mb-4 text-3xl font-bold tracking-tight">Certification réussie !</h1>
+            <h1 className="mb-4 text-3xl font-bold tracking-tight">Certification successful!</h1>
             <p className="mb-8 text-muted-foreground">
-              Votre fichier a été certifié sur la blockchain MultiversX
+              Your file has been certified on the MultiversX blockchain
             </p>
           </div>
 
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle>Détails de la certification</CardTitle>
+              <CardTitle>Certification details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <p className="text-sm text-muted-foreground">Nom du fichier</p>
+                <p className="text-sm text-muted-foreground">File name</p>
                 <p className="font-medium" data-testid="text-cert-filename">{certificationResult.fileName}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Empreinte SHA-256</p>
+                <p className="text-sm text-muted-foreground">SHA-256 hash</p>
                 <p className="break-all font-mono text-sm" data-testid="text-cert-hash">
                   {certificationResult.fileHash}
                 </p>
               </div>
               {certificationResult.txHash && (
                 <div>
-                  <p className="text-sm text-muted-foreground">Hash de la transaction</p>
+                  <p className="text-sm text-muted-foreground">Transaction hash</p>
                   <p className="break-all font-mono text-sm" data-testid="text-cert-txhash">
                     {certificationResult.txHash}
                   </p>
@@ -323,7 +323,7 @@ export default function Certify() {
                       rel="noopener noreferrer"
                     >
                       <ExternalLink className="mr-2 h-4 w-4" />
-                      Voir sur l'explorateur
+                      View on explorer
                     </a>
                   </Button>
                 </div>
@@ -338,7 +338,7 @@ export default function Certify() {
               data-testid="button-download-pdf"
             >
               <Download className="mr-2 h-4 w-4" />
-              Télécharger le certificat PDF
+              Download PDF certificate
             </Button>
             <Button
               variant="outline"
@@ -350,7 +350,7 @@ export default function Certify() {
               }}
               data-testid="button-certify-another"
             >
-              Certifier un autre fichier
+              Certify another file
             </Button>
           </div>
 
@@ -358,7 +358,7 @@ export default function Certify() {
             <Button asChild variant="ghost" size="sm" data-testid="button-back-dashboard">
               <Link href="/dashboard">
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Retour au tableau de bord
+                Back to dashboard
               </Link>
             </Button>
           </div>
@@ -380,7 +380,7 @@ export default function Certify() {
           <Button asChild variant="ghost" size="sm" data-testid="button-back-dashboard">
             <Link href="/dashboard">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Retour au tableau de bord
+              Back to dashboard
             </Link>
           </Button>
         </div>
@@ -388,19 +388,19 @@ export default function Certify() {
 
       <div className="container mx-auto max-w-3xl py-12">
         <div className="mb-8">
-          <h1 className="mb-2 text-3xl font-bold tracking-tight">Certifiez votre fichier</h1>
+          <h1 className="mb-2 text-3xl font-bold tracking-tight">Certify your file</h1>
           <p className="text-muted-foreground">
-            Déposez n'importe quel fichier pour créer une preuve immuable sur la blockchain
+            Drop any file to create an immutable proof on the blockchain
           </p>
         </div>
 
         {!isWalletConnected && (
           <Alert variant="destructive" className="mb-6">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Wallet déconnecté</AlertTitle>
+            <AlertTitle>Wallet disconnected</AlertTitle>
             <AlertDescription className="flex flex-col gap-3">
               <span>
-                Votre session wallet a expiré. Reconnectez-vous pour signer des transactions.
+                Your wallet session has expired. Reconnect to sign transactions.
               </span>
               <Button 
                 onClick={() => setShowWalletModal(true)}
@@ -410,7 +410,7 @@ export default function Certify() {
                 data-testid="button-reconnect-wallet"
               >
                 <Wallet className="mr-2 h-4 w-4" />
-                Reconnecter le wallet
+                Reconnect wallet
               </Button>
             </AlertDescription>
           </Alert>
@@ -424,7 +424,7 @@ export default function Certify() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Sélection du fichier</CardTitle>
+              <CardTitle>File selection</CardTitle>
             </CardHeader>
             <CardContent>
               {!file ? (
@@ -440,10 +440,10 @@ export default function Certify() {
                 >
                   <Upload className={`mb-4 h-12 w-12 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
                   <p className="mb-2 text-center text-sm font-medium">
-                    Déposez votre fichier ici ou cliquez pour parcourir
+                    Drop your file here or click to browse
                   </p>
                   <p className="mb-4 text-center text-xs text-muted-foreground">
-                    Formats supportés : Images, PDF, Documents, Audio, Vidéo
+                    Supported formats: Images, PDF, Documents, Audio, Video
                   </p>
                   <Input
                     type="file"
@@ -477,7 +477,7 @@ export default function Certify() {
                   {isHashing && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Calcul de l'empreinte SHA-256...</span>
+                        <span className="text-muted-foreground">Computing SHA-256 hash...</span>
                         <span className="font-medium">{hashProgress}%</span>
                       </div>
                       <Progress value={hashProgress} className="h-2" />
@@ -486,7 +486,7 @@ export default function Certify() {
 
                   {fileHash && !isHashing && (
                     <div className="rounded-lg bg-muted/30 p-3">
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">Empreinte du fichier</p>
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">File fingerprint</p>
                       <p className="break-all font-mono text-sm" data-testid="text-file-hash">
                         {fileHash}
                       </p>
@@ -504,7 +504,7 @@ export default function Certify() {
                     }}
                     data-testid="button-clear-file"
                   >
-                    Choisir un autre fichier
+                    Choose another file
                   </Button>
                 </div>
               )}
@@ -514,21 +514,21 @@ export default function Certify() {
           {file && fileHash && (
             <Card>
               <CardHeader>
-                <CardTitle>Informations de l'auteur</CardTitle>
+                <CardTitle>Author information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="authorName">Votre nom *</Label>
+                  <Label htmlFor="authorName">Your name *</Label>
                   <Input
                     id="authorName"
                     value={authorName}
                     onChange={(e) => setAuthorName(e.target.value)}
-                    placeholder="Entrez votre nom"
+                    placeholder="Enter your name"
                     required
                     data-testid="input-author-name"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Ce nom apparaîtra sur votre certificat
+                    This name will appear on your certificate
                   </p>
                 </div>
               </CardContent>
@@ -543,7 +543,7 @@ export default function Certify() {
                 asChild
                 data-testid="button-cancel"
               >
-                <Link href="/dashboard">Annuler</Link>
+                <Link href="/dashboard">Cancel</Link>
               </Button>
               <Button
                 type="submit"
@@ -553,17 +553,17 @@ export default function Certify() {
                 {isSigning ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {signatureStep || "Traitement..."}
+                    {signatureStep || "Processing..."}
                   </>
                 ) : !isWalletConnected ? (
                   <>
                     <AlertTriangle className="mr-2 h-4 w-4" />
-                    Wallet non connecté
+                    Wallet not connected
                   </>
                 ) : (
                   <>
                     <Wallet className="mr-2 h-4 w-4" />
-                    Signer et certifier
+                    Sign and certify
                   </>
                 )}
               </Button>

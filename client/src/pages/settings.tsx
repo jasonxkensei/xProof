@@ -35,7 +35,7 @@ export default function Settings() {
           <Button asChild variant="ghost" size="sm" data-testid="button-back-dashboard">
             <Link href="/dashboard">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Retour au tableau de bord
+              Back to dashboard
             </Link>
           </Button>
         </div>
@@ -43,34 +43,34 @@ export default function Settings() {
 
       <div className="container mx-auto max-w-4xl py-12">
         <div className="mb-8">
-          <h1 className="mb-2 text-3xl font-bold tracking-tight">Paramètres</h1>
+          <h1 className="mb-2 text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">
-            Détails de votre compte xproof
+            Your xproof account details
           </p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Informations du compte</CardTitle>
-            <CardDescription>Détails de votre connexion wallet</CardDescription>
+            <CardTitle>Account information</CardTitle>
+            <CardDescription>Your wallet connection details</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Adresse du wallet</label>
+              <label className="text-sm font-medium">Wallet address</label>
               <p className="text-sm text-muted-foreground font-mono break-all">
-                {user?.walletAddress || "Non connecté"}
+                {user?.walletAddress || "Not connected"}
               </p>
             </div>
             <div>
               <label className="text-sm font-medium">Email</label>
-              <p className="text-sm text-muted-foreground">{user?.email || "Non renseigné"}</p>
+              <p className="text-sm text-muted-foreground">{user?.email || "Not provided"}</p>
             </div>
             <div>
-              <label className="text-sm font-medium">Nom</label>
+              <label className="text-sm font-medium">Name</label>
               <p className="text-sm text-muted-foreground">
                 {user?.firstName || user?.lastName
                   ? `${user?.firstName || ""} ${user?.lastName || ""}`.trim()
-                  : "Non renseigné"}
+                  : "Not provided"}
               </p>
             </div>
           </CardContent>

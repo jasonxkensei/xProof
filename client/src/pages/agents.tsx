@@ -54,7 +54,7 @@ const guarantees = [
   { icon: Zap, text: "Deterministic (same input = same output)" },
   { icon: Globe, text: "Verifiable without xproof (on-chain)" },
   { icon: Lock, text: "Non-custodial (files never leave client)" },
-  { icon: Shield, text: "0.03\u20AC per certification in EGLD" },
+  { icon: Shield, text: "$0.05 per certification in EGLD" },
 ];
 
 const notDoes = [

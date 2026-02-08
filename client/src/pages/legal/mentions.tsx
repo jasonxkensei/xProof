@@ -18,91 +18,92 @@ export default function MentionsLegales() {
           <Link href="/">
             <Button variant="ghost" size="sm" data-testid="button-back-home">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Retour
+              Back
             </Button>
           </Link>
         </div>
       </header>
 
       <main className="container py-12 max-w-3xl">
-        <h1 className="text-3xl font-bold mb-8" data-testid="text-page-title">Mentions légales</h1>
+        <h1 className="text-3xl font-bold mb-8" data-testid="text-page-title">Legal notices</h1>
         
         <div className="prose prose-invert max-w-none space-y-8">
           <section>
-            <h2 className="text-xl font-semibold mb-4">Éditeur du service</h2>
+            <h2 className="text-xl font-semibold mb-4">Service operator</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Le service xproof est actuellement opéré par un entrepreneur individuel basé en France, 
-              dans l'attente de la création d'une structure juridique adaptée.
+              The xproof service is currently operated by a sole proprietor based in France, 
+              pending the establishment of a dedicated legal entity.
             </p>
             <ul className="mt-4 space-y-2 text-muted-foreground">
-              <li><strong className="text-foreground">Nom du service :</strong> xproof</li>
-              <li><strong className="text-foreground">Pays :</strong> France</li>
-              <li><strong className="text-foreground">Contact :</strong> <span className="italic">[Email à venir]</span></li>
+              <li><strong className="text-foreground">Service name:</strong> xproof</li>
+              <li><strong className="text-foreground">Country:</strong> France</li>
+              <li><strong className="text-foreground">Contact:</strong> <span className="italic">[Email coming soon]</span></li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Hébergement</h2>
+            <h2 className="text-xl font-semibold mb-4">Hosting</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Le service est hébergé par Replit, Inc.
+              The service is hosted by Replit, Inc.
             </p>
             <ul className="mt-4 space-y-2 text-muted-foreground">
-              <li><strong className="text-foreground">Raison sociale :</strong> Replit, Inc.</li>
-              <li><strong className="text-foreground">Adresse :</strong> 1555 Blake Street, Suite 301, Denver, CO 80202, USA</li>
-              <li><strong className="text-foreground">Site web :</strong> <a href="https://replit.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">replit.com</a></li>
+              <li><strong className="text-foreground">Company name:</strong> Replit, Inc.</li>
+              <li><strong className="text-foreground">Address:</strong> 1555 Blake Street, Suite 301, Denver, CO 80202, USA</li>
+              <li><strong className="text-foreground">Website:</strong> <a href="https://replit.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">replit.com</a></li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Infrastructure blockchain</h2>
+            <h2 className="text-xl font-semibold mb-4">Blockchain infrastructure</h2>
             <p className="text-muted-foreground leading-relaxed">
-              xproof utilise la blockchain MultiversX pour l'enregistrement des preuves d'existence.
-              Les transactions sont publiques et vérifiables sur l'explorateur MultiversX.
+              xproof uses the MultiversX blockchain for recording proof of existence.
+              Transactions are public and verifiable on the MultiversX explorer.
             </p>
             <ul className="mt-4 space-y-2 text-muted-foreground">
-              <li><strong className="text-foreground">Blockchain :</strong> MultiversX (anciennement Elrond)</li>
-              <li><strong className="text-foreground">Explorateur :</strong> <a href="https://explorer.multiversx.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">explorer.multiversx.com</a></li>
+              <li><strong className="text-foreground">Blockchain:</strong> MultiversX (formerly Elrond)</li>
+              <li><strong className="text-foreground">Explorer:</strong> <a href="https://explorer.multiversx.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">explorer.multiversx.com</a></li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Propriété intellectuelle</h2>
+            <h2 className="text-xl font-semibold mb-4">Intellectual property</h2>
             <p className="text-muted-foreground leading-relaxed">
-              L'ensemble des contenus présents sur xproof (textes, graphismes, logos, icônes, images, 
-              logiciels) sont la propriété exclusive de xproof ou de ses partenaires et sont protégés 
-              par les lois françaises et internationales relatives à la propriété intellectuelle.
+              All content on xproof (text, graphics, logos, icons, images, 
+              software) is the exclusive property of xproof or its partners and is protected 
+              by applicable intellectual property laws.
             </p>
             <p className="text-muted-foreground leading-relaxed mt-4">
-              Toute reproduction, représentation, modification, publication ou adaptation de tout ou 
-              partie des éléments du site, quel que soit le moyen ou le procédé utilisé, est interdite 
-              sauf autorisation écrite préalable.
+              Any reproduction, representation, modification, publication, or adaptation of all or 
+              part of the elements of the site, by any means or process, is prohibited 
+              without prior written authorization.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Limitation de responsabilité</h2>
+            <h2 className="text-xl font-semibold mb-4">Limitation of liability</h2>
             <p className="text-muted-foreground leading-relaxed">
-              xproof ne saurait être tenu responsable des dommages directs ou indirects résultant 
-              de l'utilisation du service, notamment en cas de perte de données ou d'interruption 
-              de service.
+              xproof shall not be held liable for any direct or indirect damages resulting 
+              from the use of the service, including but not limited to data loss or service 
+              interruption.
             </p>
             <p className="text-muted-foreground leading-relaxed mt-4">
-              Le service de certification repose sur la blockchain MultiversX. La disponibilité 
-              et la pérennité des preuves enregistrées dépendent de l'infrastructure blockchain.
+              The certification service relies on the MultiversX blockchain. The availability 
+              and permanence of recorded proofs depend on the blockchain infrastructure.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">Droit applicable</h2>
+            <h2 className="text-xl font-semibold mb-4">Applicable law</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Les présentes mentions légales sont régies par le droit français. En cas de litige, 
-              les tribunaux français seront seuls compétents.
+              These legal notices are governed by applicable law. The service is operated from France. 
+              In case of dispute, the parties shall first seek an amicable resolution before 
+              resorting to the competent courts.
             </p>
           </section>
 
           <section className="border-t pt-8">
             <p className="text-sm text-muted-foreground">
-              Dernière mise à jour : {new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })}
+              Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </section>
         </div>

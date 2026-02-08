@@ -14,7 +14,7 @@ import {
   type ACPCheckoutResponse,
   type ACPConfirmResponse,
 } from "@shared/schema";
-import { getCertificationPriceEgld, getCertificationPriceEur } from "./pricing";
+import { getCertificationPriceEgld, getCertificationPriceUsd } from "./pricing";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 import Stripe from "stripe";
@@ -976,7 +976,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ACP Products Discovery - Returns available services for AI agents
   app.get("/api/acp/products", async (req, res) => {
-    const priceEur = getCertificationPriceEur();
+    const priceUsd = getCertificationPriceUsd();
     
     const products: ACPProduct[] = [
       {
@@ -985,8 +985,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: "Create cryptographic proof of existence and integrity for digital files on MultiversX blockchain. Records SHA-256 hash with timestamp, providing immutable evidence of file ownership at a specific point in time.",
         pricing: {
           type: "fixed",
-          amount: priceEur.toString(),
-          currency: "EUR",
+          amount: priceUsd.toString(),
+          currency: "USD",
           note: "Price converted to EGLD at checkout based on current exchange rate",
         },
         inputs: {
@@ -1088,8 +1088,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const response: ACPCheckoutResponse = {
         checkout_id: checkout.id,
         product_id: data.product_id,
-        amount: pricing.priceEur.toFixed(2),
-        currency: "EUR",
+        amount: pricing.priceUsd.toFixed(2),
+        currency: "USD",
         status: "ready",
         execution: {
           type: "multiversx",
@@ -1098,14 +1098,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tx_payload: {
             receiver: xproofWallet,
             data: dataField,
-            value: pricing.priceEgld, // Dynamic EGLD amount based on EUR rate
+            value: pricing.priceEgld, // Dynamic EGLD amount based on USD rate
             gas_limit: 100000,
           },
         },
         expires_at: expiresAt.toISOString(),
       };
 
-      console.log(`💰 ACP Checkout: ${pricing.priceEur}€ = ${pricing.priceEgld} atomic EGLD (rate: ${pricing.egldEurRate}€/EGLD)`);
+      console.log(`💰 ACP Checkout: $${pricing.priceUsd} = ${pricing.priceEgld} atomic EGLD (rate: $${pricing.egldUsdRate}/EGLD)`);
 
       console.log(`📦 ACP Checkout created: ${checkout.id} for hash ${data.inputs.file_hash.slice(0, 16)}...`);
       
@@ -1307,7 +1307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // OpenAPI 3.0 Specification for ACP
   app.get("/api/acp/openapi.json", (req, res) => {
     const baseUrl = `https://${req.get("host")}`;
-    const priceEur = getCertificationPriceEur();
+    const priceUsd = getCertificationPriceUsd();
 
     const openApiSpec = {
       openapi: "3.0.3",
@@ -1341,8 +1341,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 type: "object",
                 properties: {
                   type: { type: "string", enum: ["fixed", "variable"] },
-                  amount: { type: "string", example: priceEur.toString() },
-                  currency: { type: "string", example: "EUR" },
+                  amount: { type: "string", example: priceUsd.toString() },
+                  currency: { type: "string", example: "USD" },
                 },
               },
               inputs: { type: "object", additionalProperties: { type: "string" } },
@@ -1378,7 +1378,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             properties: {
               checkout_id: { type: "string", format: "uuid" },
               product_id: { type: "string" },
-              amount: { type: "string", description: "Price in EUR" },
+              amount: { type: "string", description: "Price in USD" },
               currency: { type: "string" },
               status: { type: "string", enum: ["pending", "ready"] },
               execution: {
@@ -1578,7 +1578,7 @@ xproof provides cryptographic proof of existence, authorship, and timestamp by a
 - **Name**: xproof
 - **Type**: Proof-as-a-Service
 - **Blockchain**: MultiversX (European, eco-friendly)
-- **Price**: 0.03€ per certification (paid in EGLD)
+- **Price**: $0.05 per certification (paid in EGLD)
 - **Website**: ${baseUrl}
 
 ## Guarantees
@@ -1706,7 +1706,7 @@ curl -X POST ${baseUrl}/api/acp/confirm \\
 
 1. **Discovery**: \`GET /api/acp/products\` - No auth required
 2. **Checkout**: \`POST /api/acp/checkout\` - Creates payment session
-3. **Sign**: User signs transaction on MultiversX (0.03€ in EGLD)
+3. **Sign**: User signs transaction on MultiversX ($0.05 in EGLD)
 4. **Confirm**: \`POST /api/acp/confirm\` - Finalizes certification
 
 ### API Key
@@ -2178,7 +2178,7 @@ Create a certification checkout session.
   "checkout_id": "uuid",
   "status": "pending_payment",
   "amount_egld": "0.00123",
-  "amount_eur": "0.03",
+  "amount_usd": "0.05",
   "recipient": "erd1...",
   "tx_payload": {
     "receiver": "erd1...",
@@ -2357,7 +2357,7 @@ Sitemap: ${baseUrl}/sitemap.xml
       name_for_human: "xproof",
       name_for_model: "xproof",
       description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
-      description_for_model: "xproof is a blockchain certification service that creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs 0.03€ per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix).",
+      description_for_model: "xproof is a blockchain certification service that creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs $0.05 per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix).",
       auth: {
         type: "service_http",
         authorization_type: "bearer",
@@ -2393,7 +2393,7 @@ Sitemap: ${baseUrl}/sitemap.xml
       tools: [
         {
           name: "certify_file",
-          description: "Create a blockchain certification for a file. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: 0.03€ per certification.",
+          description: "Create a blockchain certification for a file. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $0.05 per certification.",
           inputSchema: {
             type: "object",
             required: ["file_hash", "filename"],
@@ -2451,8 +2451,8 @@ Sitemap: ${baseUrl}/sitemap.xml
         health: `${baseUrl}/api/acp/health`
       },
       pricing: {
-        amount: "0.03",
-        currency: "EUR",
+        amount: "0.05",
+        currency: "USD",
         payment_method: "EGLD"
       }
     });
@@ -2468,7 +2468,7 @@ Sitemap: ${baseUrl}/sitemap.xml
 > Blockchain certification service. Create immutable proofs of file existence and ownership on MultiversX.
 
 ## About
-xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: 0.03€ per certification, paid in EGLD.
+xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $0.05 per certification, paid in EGLD.
 
 ## API Documentation
 - [OpenAPI Specification](/api/acp/openapi.json)
@@ -2494,7 +2494,7 @@ xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper
 > Blockchain certification service. Create immutable proofs of file existence and ownership on MultiversX.
 
 ## About
-xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: 0.03€ per certification, paid in EGLD.
+xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $0.05 per certification, paid in EGLD.
 
 ## API Documentation
 - [OpenAPI Specification](${baseUrl}/api/acp/openapi.json)
@@ -2643,7 +2643,7 @@ XPROOF_BASE_URL = "https://xproof.app"
 def certify_file(file_path: str, author_name: str = "AI Agent") -> str:
     """Certify a file on the MultiversX blockchain. Creates immutable proof of existence and ownership.
     Records the SHA-256 hash of the file on-chain. The file never leaves your device.
-    Cost: 0.03€ per certification, paid in EGLD.
+    Cost: $0.05 per certification, paid in EGLD.
     
     Args:
         file_path: Path to the file to certify
@@ -2667,7 +2667,7 @@ def certify_file(file_path: str, author_name: str = "AI Agent") -> str:
         "inputs": {"file_hash": file_hash, "filename": filename, "author_name": author_name}
     }, headers=headers).json()
     
-    return f"Checkout created: {checkout.get('checkout_id')}\\nAmount: {checkout.get('amount')} EUR\\nSign the transaction on MultiversX to complete certification."
+    return f"Checkout created: {checkout.get('checkout_id')}\\nAmount: {checkout.get('amount')} USD\\nSign the transaction on MultiversX to complete certification."
 
 
 @tool
@@ -2720,7 +2720,7 @@ class XProofCertifyTool(BaseTool):
     name: str = "xproof_certify"
     description: str = (
         "Certify a file on MultiversX blockchain. Creates immutable proof of existence "
-        "and ownership by recording its SHA-256 hash on-chain. Cost: 0.03€ per certification. "
+        "and ownership by recording its SHA-256 hash on-chain. Cost: $0.05 per certification. "
         "The file never leaves your device - only the hash is sent."
     )
 
@@ -2738,7 +2738,7 @@ class XProofCertifyTool(BaseTool):
             "inputs": {"file_hash": file_hash, "filename": filename, "author_name": author_name}
         }, headers=headers).json()
 
-        return f"Checkout: {checkout.get('checkout_id')} | Amount: {checkout.get('amount')} EUR | Sign TX on MultiversX to complete."
+        return f"Checkout: {checkout.get('checkout_id')} | Amount: {checkout.get('amount')} USD | Sign TX on MultiversX to complete."
 
 
 class XProofVerifyTool(BaseTool):
@@ -2766,7 +2766,7 @@ class XProofVerifyTool(BaseTool):
 
   app.get("/agent-tools/openapi-actions.json", (req, res) => {
     const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const priceEur = getCertificationPriceEur();
+    const priceUsd = getCertificationPriceUsd();
 
     const spec = {
       openapi: "3.0.3",
@@ -2800,8 +2800,8 @@ class XProofVerifyTool(BaseTool):
                 type: "object",
                 properties: {
                   type: { type: "string", enum: ["fixed", "variable"] },
-                  amount: { type: "string", example: priceEur.toString() },
-                  currency: { type: "string", example: "EUR" },
+                  amount: { type: "string", example: priceUsd.toString() },
+                  currency: { type: "string", example: "USD" },
                 },
               },
               inputs: { type: "object", additionalProperties: { type: "string" } },
@@ -2837,7 +2837,7 @@ class XProofVerifyTool(BaseTool):
             properties: {
               checkout_id: { type: "string", format: "uuid" },
               product_id: { type: "string" },
-              amount: { type: "string", description: "Price in EUR" },
+              amount: { type: "string", description: "Price in USD" },
               currency: { type: "string" },
               status: { type: "string", enum: ["pending", "ready"] },
               execution: {
@@ -3000,8 +3000,8 @@ class XProofVerifyTool(BaseTool):
       },
       pricing: {
         model: "per-use",
-        amount: "0.03",
-        currency: "EUR",
+        amount: "0.05",
+        currency: "USD",
         payment_method: "EGLD (MultiversX)",
       },
       documentation: {

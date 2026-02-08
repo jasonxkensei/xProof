@@ -18,173 +18,173 @@ export default function ConditionsUtilisation() {
           <Link href="/">
             <Button variant="ghost" size="sm" data-testid="button-back-home">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Retour
+              Back
             </Button>
           </Link>
         </div>
       </header>
 
       <main className="container py-12 max-w-3xl">
-        <h1 className="text-3xl font-bold mb-8" data-testid="text-page-title">Conditions Générales d'Utilisation</h1>
+        <h1 className="text-3xl font-bold mb-8" data-testid="text-page-title">Terms of Use</h1>
         
         <div className="prose prose-invert max-w-none space-y-8">
           <section>
-            <h2 className="text-xl font-semibold mb-4">1. Objet du service</h2>
+            <h2 className="text-xl font-semibold mb-4">1. Purpose of the service</h2>
             <p className="text-muted-foreground leading-relaxed">
-              xproof est un service de certification numérique qui permet d'enregistrer 
-              des preuves d'existence de fichiers sur la blockchain MultiversX. Le service 
-              génère une empreinte cryptographique (hash SHA-256) de vos fichiers et l'inscrit 
-              de manière permanente sur la blockchain, créant ainsi une preuve horodatée et immuable.
+              xproof is a digital certification service that allows you to record 
+              proof of existence of files on the MultiversX blockchain. The service 
+              generates a cryptographic fingerprint (SHA-256 hash) of your files and records it 
+              permanently on the blockchain, thereby creating a timestamped and immutable proof.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">2. Acceptation des conditions</h2>
+            <h2 className="text-xl font-semibold mb-4">2. Acceptance of terms</h2>
             <p className="text-muted-foreground leading-relaxed">
-              L'utilisation du service xproof implique l'acceptation pleine et entière des 
-              présentes conditions générales d'utilisation. Si vous n'acceptez pas ces conditions, 
-              vous ne devez pas utiliser le service.
+              By using the xproof service, you fully and unconditionally accept these 
+              Terms of Use. If you do not accept these terms, 
+              you must not use the service.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">3. Inscription et authentification</h2>
+            <h2 className="text-xl font-semibold mb-4">3. Registration and authentication</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              L'accès au service nécessite une connexion via un portefeuille MultiversX compatible 
-              (xPortal, Extension, Web Wallet). L'utilisateur est responsable de la sécurité de 
-              son portefeuille et de ses clés privées.
+              Access to the service requires a connection via a compatible MultiversX wallet 
+              (xPortal, Extension, Web Wallet). The user is responsible for the security of 
+              their wallet and private keys.
             </p>
             <p className="text-muted-foreground leading-relaxed">
-              xproof n'a jamais accès à vos clés privées et ne peut pas récupérer l'accès à 
-              votre compte en cas de perte de vos identifiants de portefeuille.
+              xproof never has access to your private keys and cannot recover access to 
+              your account in case of loss of your wallet credentials.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">4. Description du service</h2>
+            <h2 className="text-xl font-semibold mb-4">4. Description of the service</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              Le service xproof comprend :
+              The xproof service includes:
             </p>
             <ul className="space-y-2 text-muted-foreground">
-              <li>La génération d'empreintes cryptographiques (hash SHA-256) de fichiers</li>
-              <li>L'enregistrement de ces empreintes sur la blockchain MultiversX</li>
-              <li>La génération de certificats PDF téléchargeables</li>
-              <li>La création de pages de preuve publiques vérifiables</li>
-              <li>L'accès à un tableau de bord pour gérer vos certifications</li>
+              <li>Generation of cryptographic fingerprints (SHA-256 hash) of files</li>
+              <li>Recording of these fingerprints on the MultiversX blockchain</li>
+              <li>Generation of downloadable PDF certificates</li>
+              <li>Creation of verifiable public proof pages</li>
+              <li>Access to a dashboard to manage your certifications</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">5. Tarification</h2>
+            <h2 className="text-xl font-semibold mb-4">5. Pricing</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              Le service de certification est facturé à <strong className="text-foreground">0.03€ par certification</strong>, 
-              payable en EGLD (la cryptomonnaie native de MultiversX) au taux de change en vigueur 
-              au moment de la transaction.
+              The certification service is priced at <strong className="text-foreground">$0.05 per certification</strong>, 
+              payable in EGLD (the native cryptocurrency of MultiversX) at the exchange rate in effect 
+              at the time of the transaction.
             </p>
             <p className="text-muted-foreground leading-relaxed">
-              Les frais de réseau blockchain (gas fees) sont inclus dans ce tarif lorsque le 
-              paiement est effectué via le système de paiement intégré. En cas de transaction 
-              signée directement par l'utilisateur, les frais de réseau sont à sa charge.
+              Blockchain network fees (gas fees) are included in this price when 
+              payment is made through the integrated payment system. For transactions 
+              signed directly by the user, network fees are the user's responsibility.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">6. Engagements de l'utilisateur</h2>
+            <h2 className="text-xl font-semibold mb-4">6. User obligations</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              L'utilisateur s'engage à :
+              The user agrees to:
             </p>
             <ul className="space-y-2 text-muted-foreground">
-              <li>Ne certifier que des fichiers dont il détient les droits ou l'autorisation de certifier</li>
-              <li>Ne pas utiliser le service à des fins illégales ou frauduleuses</li>
-              <li>Ne pas tenter de compromettre la sécurité ou le fonctionnement du service</li>
-              <li>Fournir des informations exactes lors de la certification</li>
+              <li>Only certify files for which they hold the rights or authorization to certify</li>
+              <li>Not use the service for illegal or fraudulent purposes</li>
+              <li>Not attempt to compromise the security or operation of the service</li>
+              <li>Provide accurate information during certification</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">7. Propriété intellectuelle</h2>
+            <h2 className="text-xl font-semibold mb-4">7. Intellectual property</h2>
             <p className="text-muted-foreground leading-relaxed">
-              xproof ne revendique aucun droit sur les fichiers que vous certifiez. La certification 
-              ne transfère aucun droit de propriété intellectuelle. Elle constitue uniquement une 
-              preuve que le fichier existait sous cette forme à une date donnée.
+              xproof does not claim any rights over the files you certify. Certification 
+              does not transfer any intellectual property rights. It solely constitutes 
+              proof that the file existed in this form at a given date.
             </p>
             <p className="text-muted-foreground leading-relaxed mt-4">
-              <strong className="text-foreground">Important :</strong> La certification xproof ne constitue 
-              pas une preuve de propriété ou de paternité. Elle prouve uniquement l'existence 
-              du fichier à une date précise.
+              <strong className="text-foreground">Important:</strong> xproof certification does not constitute 
+              proof of ownership or authorship. It only proves the existence 
+              of the file at a specific date.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">8. Limitation de responsabilité</h2>
+            <h2 className="text-xl font-semibold mb-4">8. Limitation of liability</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              xproof s'efforce de maintenir un service fiable et disponible, mais ne peut garantir :
+              xproof strives to maintain a reliable and available service, but cannot guarantee:
             </p>
             <ul className="space-y-2 text-muted-foreground">
-              <li>Une disponibilité continue et sans interruption du service</li>
-              <li>L'absence d'erreurs ou de dysfonctionnements</li>
-              <li>La pérennité de la blockchain MultiversX (infrastructure tierce)</li>
+              <li>Continuous and uninterrupted availability of the service</li>
+              <li>Absence of errors or malfunctions</li>
+              <li>Permanence of the MultiversX blockchain (third-party infrastructure)</li>
             </ul>
             <p className="text-muted-foreground leading-relaxed mt-4">
-              En aucun cas xproof ne pourra être tenu responsable des dommages directs ou indirects, 
-              pertes de données, pertes de revenus ou tout autre préjudice résultant de l'utilisation 
-              ou de l'impossibilité d'utiliser le service.
+              Under no circumstances shall xproof be held liable for direct or indirect damages, 
+              data loss, revenue loss, or any other harm resulting from the use 
+              or inability to use the service.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">9. Nature des certifications</h2>
+            <h2 className="text-xl font-semibold mb-4">9. Nature of certifications</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Les certifications xproof sont basées sur la technologie blockchain et constituent 
-              des preuves techniques d'existence à une date donnée. Leur valeur juridique dépend 
-              de la législation applicable et de l'appréciation des tribunaux compétents.
+              xproof certifications are based on blockchain technology and constitute 
+              technical proofs of existence at a given date. Their legal value depends 
+              on the applicable legislation and the assessment of the competent courts.
             </p>
             <p className="text-muted-foreground leading-relaxed mt-4">
-              xproof recommande de consulter un professionnel du droit pour toute utilisation 
-              des certifications dans un contexte juridique.
+              xproof recommends consulting a legal professional for any use 
+              of certifications in a legal context.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">10. Immuabilité des données blockchain</h2>
+            <h2 className="text-xl font-semibold mb-4">10. Immutability of blockchain data</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Par conception, les données enregistrées sur la blockchain sont permanentes et 
-              immuables. Une fois une certification effectuée, il est techniquement impossible 
-              de la modifier ou de la supprimer. L'utilisateur en est informé et l'accepte 
-              expressément en utilisant le service.
+              By design, data recorded on the blockchain is permanent and 
+              immutable. Once a certification is performed, it is technically impossible 
+              to modify or delete it. The user is informed of this and expressly accepts 
+              it by using the service.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">11. Modification des conditions</h2>
+            <h2 className="text-xl font-semibold mb-4">11. Modification of terms</h2>
             <p className="text-muted-foreground leading-relaxed">
-              xproof se réserve le droit de modifier les présentes conditions générales 
-              d'utilisation à tout moment. Les utilisateurs seront informés des modifications 
-              importantes. La continuation de l'utilisation du service après notification 
-              vaut acceptation des nouvelles conditions.
+              xproof reserves the right to modify these Terms of Use 
+              at any time. Users will be notified of significant changes. 
+              Continued use of the service after notification 
+              constitutes acceptance of the new terms.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold mb-4">12. Droit applicable et juridiction</h2>
+            <h2 className="text-xl font-semibold mb-4">12. Applicable law and jurisdiction</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Les présentes conditions sont régies par le droit français. En cas de litige, 
-              et après échec de toute tentative de résolution amiable, les tribunaux français 
-              seront seuls compétents.
+              These terms are governed by applicable law. The service is operated from France. 
+              In case of dispute, and after failure of any attempt at amicable resolution, 
+              the competent courts shall have jurisdiction.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold mb-4">13. Contact</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Pour toute question concernant ces conditions d'utilisation, vous pouvez 
-              nous contacter à : <span className="italic">[Email à venir]</span>
+              For any questions regarding these Terms of Use, you can 
+              contact us at: <span className="italic">[Email coming soon]</span>
             </p>
           </section>
 
           <section className="border-t pt-8">
             <p className="text-sm text-muted-foreground">
-              Dernière mise à jour : {new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })}
+              Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </section>
         </div>

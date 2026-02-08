@@ -38,7 +38,7 @@ export default function Landing() {
           </div>
           <nav className="hidden md:flex items-center gap-6">
             <a href="#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-how-it-works">
-              Comment ça marche
+              How it works
             </a>
             <a href="#faq" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-faq">
               FAQ
@@ -52,7 +52,7 @@ export default function Landing() {
               data-testid="button-login"
             >
               <Wallet className="mr-2 h-4 w-4" />
-              Connexion
+              Connect
             </Button>
           </div>
         </div>
@@ -62,18 +62,18 @@ export default function Landing() {
         <div className="mx-auto max-w-5xl text-center">
           <Badge variant="secondary" className="mb-6 px-4 py-1.5">
             <Shield className="mr-2 h-3.5 w-3.5" />
-            Preuve blockchain infalsifiable
+            Unfalsifiable blockchain proof
           </Badge>
           
           <h1 className="mb-6 text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
-            Prouvez que c'est le vôtre.
+            Prove that it's yours.
             <br />
-            <span className="text-primary">Pour toujours.</span>
+            <span className="text-primary">Forever.</span>
           </h1>
           
           <p className="mx-auto mb-8 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">
-            Une preuve irréfutable, 
-            reconnue mondialement, impossible à falsifier ou supprimer.
+            An irrefutable proof, 
+            recognized worldwide, impossible to falsify or delete.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -84,7 +84,7 @@ export default function Landing() {
               data-testid="button-certify-file"
             >
               <Upload className="mr-2 h-5 w-5" />
-              Certifier un fichier
+              Certify a file
             </Button>
             <Button 
               asChild 
@@ -95,12 +95,12 @@ export default function Landing() {
             >
               <a href="#how-it-works">
                 <Play className="mr-2 h-4 w-4" />
-                Voir comment ça marche
+                See how it works
               </a>
             </Button>
           </div>
           
-          <p className="mt-6 text-sm text-muted-foreground">0.03€ par certification • Illimité</p>
+          <p className="mt-6 text-sm text-muted-foreground">$0.05 per certification • Unlimited</p>
         </div>
       </section>
       {/* How It Works */}
@@ -108,13 +108,13 @@ export default function Landing() {
         <div className="container">
           <div className="mx-auto max-w-5xl">
             <div className="mb-16 text-center">
-              <Badge variant="outline" className="mb-4">Comment ça marche</Badge>
+              <Badge variant="outline" className="mb-4">How it works</Badge>
               <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-                3 étapes simples
+                3 simple steps
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Aucune connaissance technique requise. 
-                Si vous savez envoyer un email, vous savez utiliser xproof.
+                No technical knowledge required. 
+                If you can send an email, you can use xproof.
               </p>
             </div>
             
@@ -123,10 +123,10 @@ export default function Landing() {
                 <div className="mb-6 mx-auto md:mx-0 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
                   1
                 </div>
-                <h3 className="mb-3 text-xl font-semibold">Déposez votre fichier</h3>
+                <h3 className="mb-3 text-xl font-semibold">Upload your file</h3>
                 <p className="text-muted-foreground">
-                  Glissez n'importe quel fichier : photo, document, musique, code... 
-                  Votre fichier reste privé, il n'est jamais uploadé.
+                  Drag any file: photo, document, music, code... 
+                  Your file stays private, it is never uploaded.
                 </p>
                 <div className="hidden md:block absolute top-8 left-[calc(100%-20px)] w-[calc(100%-40px)]">
                   <ArrowRight className="h-6 w-6 text-muted-foreground/30" />
@@ -137,10 +137,10 @@ export default function Landing() {
                 <div className="mb-6 mx-auto md:mx-0 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
                   2
                 </div>
-                <h3 className="mb-3 text-xl font-semibold">On calcule l'empreinte</h3>
+                <h3 className="mb-3 text-xl font-semibold">We compute the fingerprint</h3>
                 <p className="text-muted-foreground">
-                  Une empreinte unique (hash SHA-256) est calculée localement. 
-                  C'est comme l'ADN de votre fichier.
+                  A unique fingerprint (SHA-256 hash) is computed locally. 
+                  It's like the DNA of your file.
                 </p>
                 <div className="hidden md:block absolute top-8 left-[calc(100%-20px)] w-[calc(100%-40px)]">
                   <ArrowRight className="h-6 w-6 text-muted-foreground/30" />
@@ -151,10 +151,10 @@ export default function Landing() {
                 <div className="mb-6 mx-auto md:mx-0 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
                   3
                 </div>
-                <h3 className="mb-3 text-xl font-semibold">Gravé dans la blockchain</h3>
+                <h3 className="mb-3 text-xl font-semibold">Engraved on the blockchain</h3>
                 <p className="text-muted-foreground">
-                  L'empreinte est enregistrée définitivement sur la blockchain. 
-                  Vous recevez un certificat PDF avec QR code.
+                  The fingerprint is permanently recorded on the blockchain. 
+                  You receive a PDF certificate with a QR code.
                 </p>
               </div>
             </div>
@@ -165,7 +165,7 @@ export default function Landing() {
                 onClick={handleConnect}
                 data-testid="button-try-now"
               >
-                Essayer maintenant
+                Try it now
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
@@ -177,12 +177,12 @@ export default function Landing() {
         <div className="container">
           <div className="mx-auto max-w-3xl">
             <div className="mb-12 text-center">
-              <Badge variant="outline" className="mb-4">Tarif simple</Badge>
+              <Badge variant="outline" className="mb-4">Simple pricing</Badge>
               <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-                Un prix unique. Sans abonnement.
+                One price. No subscription.
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Payez uniquement ce que vous utilisez. Pas de frais cachés, pas d'engagement.
+                Pay only for what you use. No hidden fees, no commitment.
               </p>
             </div>
             
@@ -190,32 +190,32 @@ export default function Landing() {
               <CardContent className="pt-8 pb-8">
                 <div className="text-center mb-6">
                   <div className="mb-2">
-                    <span className="text-5xl font-bold">0.03€</span>
+                    <span className="text-5xl font-bold">$0.05</span>
                   </div>
                   <p className="text-muted-foreground">
-                    par certification
+                    per certification
                   </p>
                 </div>
                 <ul className="mb-8 space-y-3 text-sm">
                   <li className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                    <span><strong>Certifications illimitées</strong></span>
+                    <span><strong>Unlimited certifications</strong></span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                    <span>Certificat PDF téléchargeable</span>
+                    <span>Downloadable PDF certificate</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                    <span>Page de vérification publique</span>
+                    <span>Public verification page</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                    <span>QR code de vérification</span>
+                    <span>Verification QR code</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                    <span>Blockchain MultiversX</span>
+                    <span>MultiversX blockchain</span>
                   </li>
                 </ul>
                 <Button 
@@ -224,12 +224,12 @@ export default function Landing() {
                   onClick={handleConnect}
                   data-testid="button-start-now"
                 >
-                  Commencer maintenant
+                  Get started
                 </Button>
               </CardContent>
             </Card>
             
-            <p className="mt-8 text-center text-sm text-muted-foreground">Paiement en $EGLD lors de la signature de la transaction.</p>
+            <p className="mt-8 text-center text-sm text-muted-foreground">Payment in $EGLD when signing the transaction.</p>
           </div>
         </div>
       </section>
@@ -240,74 +240,74 @@ export default function Landing() {
             <div className="mb-12 text-center">
               <Badge variant="outline" className="mb-4">FAQ</Badge>
               <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-                Questions fréquentes
+                Frequently asked questions
               </h2>
             </div>
             
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="item-1">
                 <AccordionTrigger className="text-left" data-testid="faq-trigger-upload">
-                  Est-ce que mon fichier est uploadé sur vos serveurs ?
+                  Is my file uploaded to your servers?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Non, jamais. Votre fichier reste sur votre appareil. Seule son "empreinte digitale" 
-                  (un code unique de 64 caractères) est calculée localement et enregistrée sur la blockchain. 
-                  Votre fichier reste 100% privé.
+                  No, never. Your file stays on your device. Only its "fingerprint" 
+                  (a unique 64-character code) is computed locally and recorded on the blockchain. 
+                  Your file remains 100% private.
                 </AccordionContent>
               </AccordionItem>
 
               <AccordionItem value="item-2">
                 <AccordionTrigger className="text-left" data-testid="faq-trigger-blockchain">
-                  Qu'est-ce que la blockchain MultiversX ?
+                  What is the MultiversX blockchain?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  MultiversX est une blockchain européenne ultra-performante et écologique. 
-                  Contrairement à Bitcoin, elle consomme très peu d'énergie. C'est un registre 
-                  public mondial, impossible à modifier ou supprimer, parfait pour les preuves légales.
+                  MultiversX is a high-performance, eco-friendly European blockchain. 
+                  Unlike Bitcoin, it consumes very little energy. It's a global public ledger, 
+                  impossible to modify or delete, perfect for legal proofs.
                 </AccordionContent>
               </AccordionItem>
 
               <AccordionItem value="item-3">
                 <AccordionTrigger className="text-left" data-testid="faq-trigger-legal">
-                  Est-ce que ça a une valeur juridique ?
+                  Does it have legal value?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Oui. L'horodatage blockchain est reconnu dans de nombreuses juridictions comme 
-                  preuve d'antériorité. Il prouve que votre fichier existait à une date précise, 
-                  ce qui est essentiel en cas de litige sur la propriété intellectuelle.
+                  Yes. Blockchain timestamping is recognized in many jurisdictions as 
+                  proof of prior existence. It proves that your file existed at a specific date, 
+                  which is essential in intellectual property disputes.
                 </AccordionContent>
               </AccordionItem>
 
               <AccordionItem value="item-4">
                 <AccordionTrigger className="text-left" data-testid="faq-trigger-modify">
-                  Que se passe-t-il si je modifie mon fichier ?
+                  What happens if I modify my file?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Le moindre changement (même un pixel) génère une empreinte complètement différente. 
-                  C'est ce qui garantit l'intégrité : si quelqu'un modifie votre fichier, 
-                  il ne correspondra plus au certificat original.
+                  The slightest change (even a single pixel) generates a completely different fingerprint. 
+                  This is what guarantees integrity: if someone modifies your file, 
+                  it will no longer match the original certificate.
                 </AccordionContent>
               </AccordionItem>
 
               <AccordionItem value="item-5">
                 <AccordionTrigger className="text-left" data-testid="faq-trigger-verify">
-                  Comment quelqu'un peut vérifier mon certificat ?
+                  How can someone verify my certificate?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Chaque certificat contient un QR code et un lien vers une page de vérification publique. 
-                  N'importe qui peut scanner le QR ou visiter le lien pour voir les détails de la certification 
-                  et vérifier directement sur la blockchain.
+                  Each certificate contains a QR code and a link to a public verification page. 
+                  Anyone can scan the QR or visit the link to see the certification details 
+                  and verify directly on the blockchain.
                 </AccordionContent>
               </AccordionItem>
 
               <AccordionItem value="item-6">
                 <AccordionTrigger className="text-left" data-testid="faq-trigger-wallet">
-                  Pourquoi ai-je besoin d'un portefeuille crypto ?
+                  Why do I need a crypto wallet?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Le portefeuille (wallet) sert à vous identifier de manière sécurisée et à signer 
-                  vos certifications. C'est comme une signature électronique ultra-sécurisée. 
-                  Vous pouvez utiliser l'extension navigateur MultiversX DeFi Wallet ou l'app xPortal.
+                  The wallet is used to securely identify you and to sign 
+                  your certifications. It works like an ultra-secure electronic signature. 
+                  You can use the MultiversX DeFi Wallet browser extension or the xPortal app.
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -319,11 +319,11 @@ export default function Landing() {
         <div className="container">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-              Protégez votre première création
+              Protect your first creation
             </h2>
             <p className="mb-8 text-lg text-muted-foreground">
-              Rejoignez les créateurs qui sécurisent leur travail. 
-              Seulement 0.03€ par certification.
+              Join creators who secure their work. 
+              Only $0.05 per certification.
             </p>
             <Button 
               size="lg" 
@@ -332,7 +332,7 @@ export default function Landing() {
               data-testid="button-final-cta"
             >
               <Shield className="mr-2 h-5 w-5" />
-              Commencer maintenant
+              Get started
             </Button>
           </div>
         </div>
@@ -350,36 +350,36 @@ export default function Landing() {
                   <span className="text-xl font-bold">xproof</span>
                 </div>
                 <p className="text-sm text-muted-foreground max-w-xs">
-                  Certification blockchain pour créateurs et entreprises. 
-                  Prouvez l'existence et la propriété de vos fichiers.
+                  Blockchain certification for creators and businesses. 
+                  Prove the existence and ownership of your files.
                 </p>
               </div>
               
               <div>
-                <h4 className="font-semibold mb-4">Produit</h4>
+                <h4 className="font-semibold mb-4">Product</h4>
                 <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li><a href="#how-it-works" className="hover:text-foreground transition-colors">Comment ça marche</a></li>
+                  <li><a href="#how-it-works" className="hover:text-foreground transition-colors">How it works</a></li>
                   <li><a href="#faq" className="hover:text-foreground transition-colors">FAQ</a></li>
                   <li><a href="/agents" className="hover:text-foreground transition-colors" data-testid="link-footer-agents">For AI Agents</a></li>
                 </ul>
               </div>
               
               <div>
-                <h4 className="font-semibold mb-4">Légal</h4>
+                <h4 className="font-semibold mb-4">Legal</h4>
                 <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li><a href="/legal/mentions" className="hover:text-foreground transition-colors" data-testid="link-legal-mentions">Mentions légales</a></li>
-                  <li><a href="/legal/privacy" className="hover:text-foreground transition-colors" data-testid="link-legal-privacy">Politique de confidentialité</a></li>
-                  <li><a href="/legal/terms" className="hover:text-foreground transition-colors" data-testid="link-legal-terms">CGU</a></li>
+                  <li><a href="/legal/mentions" className="hover:text-foreground transition-colors" data-testid="link-legal-mentions">Legal notices</a></li>
+                  <li><a href="/legal/privacy" className="hover:text-foreground transition-colors" data-testid="link-legal-privacy">Privacy policy</a></li>
+                  <li><a href="/legal/terms" className="hover:text-foreground transition-colors" data-testid="link-legal-terms">Terms</a></li>
                 </ul>
               </div>
             </div>
             
             <div className="border-t pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
-                © {new Date().getFullYear()} xproof. Tous droits réservés.
+                © {new Date().getFullYear()} xproof. All rights reserved.
               </p>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Propulsé par</span>
+                <span>Powered by</span>
                 <a 
                   href="https://multiversx.com" 
                   target="_blank" 

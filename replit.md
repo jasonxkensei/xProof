@@ -26,7 +26,7 @@ xproof integrates with the MultiversX blockchain for immutable proof storage. It
 PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides type-safe database operations with a schema-first approach. Key tables include `users` (wallet-based profiles with Stripe integration), `certifications` (file certification records), and `sessions` (Express session storage). Drizzle Kit manages database migrations.
 
 ### Agent Commerce Protocol (ACP)
-xproof implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is 0.03€ per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
+xproof implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is $0.05 per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
 
 ### LLM-Ready Routes & AI Agent Discovery
 The platform offers comprehensive machine-readable documentation for AI agent discovery:

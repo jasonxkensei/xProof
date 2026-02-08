@@ -97,8 +97,8 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         await queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
         
         toast({
-          title: "Wallet connecté",
-          description: `Connecté : ${walletAddress.substring(0, 10)}...${walletAddress.slice(-6)}`,
+          title: "Wallet connected",
+          description: `Connected: ${walletAddress.substring(0, 10)}...${walletAddress.slice(-6)}`,
         });
         
         onOpenChange(false);
@@ -109,14 +109,14 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         const errorText = await response.text().catch(() => 'Unknown error');
         console.error('Backend sync failed:', response.status, errorText);
         
-        setError('Échec de la synchronisation. Veuillez réessayer.');
+        setError('Sync failed. Please try again.');
         setLoading(null);
         setWaitingForConnection(false);
         syncAttempted.current = false;
         
         toast({
-          title: "Erreur de connexion",
-          description: "Impossible de créer votre session.",
+          title: "Connection error",
+          description: "Unable to create your session.",
           variant: "destructive"
         });
         
@@ -124,14 +124,14 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       }
     } catch (err) {
       console.error('Sync error:', err);
-      setError('Erreur de connexion au serveur.');
+      setError('Server connection error.');
       setLoading(null);
       setWaitingForConnection(false);
       syncAttempted.current = false;
       
       toast({
-        title: "Erreur de connexion",
-        description: "Une erreur est survenue.",
+        title: "Connection error",
+        description: "An error occurred.",
         variant: "destructive"
       });
       
@@ -231,7 +231,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             removePollingInterval(intervalId);
             setWaitingForConnection(false);
             setLoading(null);
-            setError('Connexion expirée. Veuillez réessayer.');
+            setError('Connection timed out. Please try again.');
           }
         }, 500);
         addPollingInterval(intervalId);
@@ -242,10 +242,10 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       console.error('❌ Error message:', err?.message);
       console.error('❌ Error stack:', err?.stack);
       
-      const errorMsg = err.message || "Veuillez installer l'extension MultiversX";
-      setError(`Erreur: ${errorMsg}`);
+      const errorMsg = err.message || "Please install the MultiversX extension";
+      setError(`Error: ${errorMsg}`);
       toast({
-        title: "Échec de connexion",
+        title: "Connection failed",
         description: errorMsg,
         variant: "destructive"
       });
@@ -275,10 +275,10 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
       
     } catch (err: any) {
       console.error('Web Wallet login error:', err);
-      setError(err.message || "Impossible de se connecter");
+      setError(err.message || "Unable to connect");
       toast({
-        title: "Échec de connexion",
-        description: err.message || "Erreur Web Wallet",
+        title: "Connection failed",
+        description: err.message || "Web Wallet error",
         variant: "destructive"
       });
       setLoading(null);
@@ -367,22 +367,23 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           
           const encodedUri = encodeURIComponent(uri);
 
-          const nativeDeepLink = `https://maiar.com/?wallet-connect=${encodedUri}`;
+          const xportalDeepLink = `xportal://wc?uri=${encodedUri}`;
+          const universalLink = `https://maiar.com/?wallet-connect=${encodedUri}`;
 
           toast({
             title: "xPortal",
-            description: "Validez la connexion dans xPortal puis revenez sur cette page.",
+            description: "Approve the connection in xPortal, then come back to this page.",
           });
 
-          const hiddenLink = document.createElement('a');
-          hiddenLink.href = nativeDeepLink;
-          hiddenLink.target = '_blank';
-          hiddenLink.rel = 'noopener noreferrer';
-          hiddenLink.style.display = 'none';
-          document.body.appendChild(hiddenLink);
-          hiddenLink.click();
-          setTimeout(() => document.body.removeChild(hiddenLink), 100);
-          logger.log('📱 Deep link opened via hidden anchor (page stays alive)');
+          logger.log('📱 Trying xPortal deep link (xportal:// scheme)...');
+          window.location.href = xportalDeepLink;
+
+          setTimeout(() => {
+            if (!document.hidden) {
+              logger.log('📱 xportal:// scheme did not open app, trying universal link...');
+              window.location.href = universalLink;
+            }
+          }, 2500);
         }
       }
       
@@ -426,7 +427,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             setLoading(null);
             setWcUri(null);
             setQrCodeDataUrl(null);
-            setError('Connexion expirée. Veuillez réessayer.');
+            setError('Connection timed out. Please try again.');
           }
         }, 1000);
         addPollingInterval(intervalId);
@@ -444,10 +445,10 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         return;
       }
       
-      setError(err.message || "Erreur de connexion xPortal");
+      setError(err.message || "xPortal connection error");
       toast({
-        title: "Échec de connexion",
-        description: err.message || "Erreur xPortal",
+        title: "Connection failed",
+        description: err.message || "xPortal error",
         variant: "destructive"
       });
       setLoading(null);
@@ -540,14 +541,14 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
               ) : (
                 <Wallet className="h-5 w-5 text-primary" />
               )}
-              {qrCodeDataUrl ? "Scannez avec xPortal" : "Connexion en cours..."}
+              {qrCodeDataUrl ? "Scan with xPortal" : "Connecting..."}
             </DialogTitle>
             <DialogDescription>
               {qrCodeDataUrl 
-                ? "Ouvrez xPortal sur votre téléphone et scannez ce QR code"
+                ? "Open xPortal on your phone and scan this QR code"
                 : loading === 'walletconnect' 
-                  ? "Validez la connexion dans xPortal puis revenez ici"
-                  : "Validez la connexion dans votre wallet"
+                  ? "Approve the connection in xPortal then come back here"
+                  : "Approve the connection in your wallet"
               }
             </DialogDescription>
           </DialogHeader>
@@ -564,25 +565,25 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
                   />
                 </div>
                 <p className="text-center text-sm text-muted-foreground">
-                  En attente de connexion depuis xPortal...
+                  Waiting for connection from xPortal...
                 </p>
               </>
             ) : (
               <>
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
                 <p className="text-center text-muted-foreground">
-                  En attente de validation...
+                  Waiting for approval...
                 </p>
               </>
             )}
             {loading === 'walletconnect' && isMobileDevice() && !qrCodeDataUrl && (
               <p className="text-center text-sm text-muted-foreground">
-                Après avoir validé dans xPortal, revenez sur cette page.
+                After approving in xPortal, come back to this page.
               </p>
             )}
             <Button variant="ghost" onClick={handleCancel} data-testid="button-cancel">
               <X className="h-4 w-4 mr-2" />
-              Annuler
+              Cancel
             </Button>
           </div>
         </DialogContent>
@@ -596,10 +597,10 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            Connectez votre wallet
+            Connect your wallet
           </DialogTitle>
           <DialogDescription>
-            Choisissez votre méthode de connexion
+            Choose your connection method
           </DialogDescription>
         </DialogHeader>
 
@@ -657,7 +658,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         </div>
 
         <p className="text-xs text-muted-foreground text-center">
-          Authentification sécurisée par signature cryptographique
+          Secure authentication via cryptographic signature
         </p>
       </DialogContent>
     </Dialog>

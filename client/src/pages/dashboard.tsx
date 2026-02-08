@@ -32,7 +32,7 @@ export default function Dashboard() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">Chargement de vos certifications...</p>
+          <p className="text-sm text-muted-foreground">Loading your certifications...</p>
         </div>
       </div>
     );
@@ -42,8 +42,8 @@ export default function Dashboard() {
     const success = await copyToClipboard(text);
     if (success) {
       toast({
-        title: "Copié !",
-        description: "Hash copié dans le presse-papiers",
+        title: "Copied!",
+        description: "Hash copied to clipboard",
       });
     }
   };
@@ -51,11 +51,11 @@ export default function Dashboard() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "confirmed":
-        return <Badge variant="default" className="bg-chart-2 hover:bg-chart-2">Vérifié</Badge>;
+        return <Badge variant="default" className="bg-chart-2 hover:bg-chart-2">Verified</Badge>;
       case "pending":
-        return <Badge variant="secondary">En attente</Badge>;
+        return <Badge variant="secondary">Pending</Badge>;
       case "failed":
-        return <Badge variant="destructive">Échec</Badge>;
+        return <Badge variant="destructive">Failed</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
@@ -76,12 +76,12 @@ export default function Dashboard() {
             <Button asChild variant="ghost" size="sm" data-testid="button-settings">
               <Link href="/settings">
                 <SettingsIcon className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Paramètres</span>
+                <span className="hidden sm:inline">Settings</span>
               </Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={() => logout()} data-testid="button-logout">
               <LogOut className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Déconnexion</span>
+              <span className="hidden sm:inline">Log out</span>
             </Button>
           </div>
         </div>
@@ -91,10 +91,10 @@ export default function Dashboard() {
         {/* Welcome Section */}
         <div className="mb-6 sm:mb-8">
           <h1 className="mb-2 text-2xl sm:text-3xl font-bold tracking-tight">
-            Bon retour{user?.firstName ? `, ${user.firstName}` : ""} !
+            Welcome back{user?.firstName ? `, ${user.firstName}` : ""}!
           </h1>
           <p className="text-sm sm:text-base text-muted-foreground">
-            Gérez vos certifications blockchain
+            Manage your blockchain certifications
           </p>
         </div>
 
@@ -102,7 +102,7 @@ export default function Dashboard() {
         <div className="mb-8">
           <Card className="max-w-xs">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Mes certifications</CardTitle>
+              <CardTitle className="text-sm font-medium">My certifications</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -118,14 +118,14 @@ export default function Dashboard() {
           <Button asChild size="lg" data-testid="button-certify-new">
             <Link href="/certify">
               <Upload className="mr-2 h-5 w-5" />
-              Certifier un fichier
+              Certify a file
             </Link>
           </Button>
         </div>
 
         {/* Certifications List */}
         <div>
-          <h2 className="mb-4 text-xl font-semibold">Vos certifications</h2>
+          <h2 className="mb-4 text-xl font-semibold">Your certifications</h2>
           {certifications && certifications.length > 0 ? (
             <div className="space-y-4">
               {certifications.map((cert) => (
@@ -155,7 +155,7 @@ export default function Dashboard() {
                             </Button>
                           </div>
                           <p data-testid={`text-date-${cert.id}`}>
-                            {cert.createdAt ? format(new Date(cert.createdAt), "dd/MM/yyyy 'à' HH:mm") : "Date inconnue"}
+                            {cert.createdAt ? format(new Date(cert.createdAt), "MM/dd/yyyy 'at' HH:mm") : "Unknown date"}
                           </p>
                         </div>
                       </div>
@@ -169,7 +169,7 @@ export default function Dashboard() {
                           >
                             <a href={cert.transactionUrl} target="_blank" rel="noopener noreferrer">
                               <ExternalLink className="h-4 w-4 sm:mr-2" />
-                              <span className="hidden sm:inline">Voir sur la blockchain</span>
+                              <span className="hidden sm:inline">View on blockchain</span>
                               <span className="sm:hidden">Blockchain</span>
                             </a>
                           </Button>
@@ -183,8 +183,8 @@ export default function Dashboard() {
                           >
                             <Link href={`/proof/${cert.id}`}>
                               <Shield className="h-4 w-4 sm:mr-2" />
-                              <span className="hidden sm:inline">Voir la preuve</span>
-                              <span className="sm:hidden">Preuve</span>
+                              <span className="hidden sm:inline">View proof</span>
+                              <span className="sm:hidden">Proof</span>
                             </Link>
                           </Button>
                         )}
@@ -196,7 +196,7 @@ export default function Dashboard() {
                         >
                           <a href={`/api/certificates/${cert.id}.pdf`} download>
                             <Download className="h-4 w-4 sm:mr-2" />
-                            <span className="hidden sm:inline">Certificat</span>
+                            <span className="hidden sm:inline">Certificate</span>
                             <span className="sm:hidden">PDF</span>
                           </a>
                         </Button>
@@ -210,14 +210,14 @@ export default function Dashboard() {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16 text-center">
                 <Shield className="mb-4 h-16 w-16 text-muted-foreground/50" />
-                <h3 className="mb-2 text-lg font-semibold">Aucune certification</h3>
+                <h3 className="mb-2 text-lg font-semibold">No certifications</h3>
                 <p className="mb-6 text-sm text-muted-foreground">
-                  Commencez par certifier votre premier fichier sur la blockchain
+                  Start by certifying your first file on the blockchain
                 </p>
                 <Button asChild data-testid="button-certify-first">
                   <Link href="/certify">
                     <Upload className="mr-2 h-4 w-4" />
-                    Certifier mon premier fichier
+                    Certify my first file
                   </Link>
                 </Button>
               </CardContent>
