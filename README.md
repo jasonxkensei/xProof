@@ -41,7 +41,7 @@ MultiversX is a European, carbon-negative blockchain with 6-second finality, neg
 | **Wallet Authentication** | Native Auth via xPortal, MultiversX Web Wallet, or WalletConnect. |
 | **Agent Commerce Protocol** | AI agents can discover, purchase, and use certifications programmatically. |
 | **MCP / LangChain / CrewAI** | Ready-made tool definitions for major AI agent frameworks. |
-| **Subscription Tiers** | Free (1/mo), Pro (20/mo), Business (200/mo) with Stripe & xMoney payments. |
+| **Pay Per Use** | $0.05 per certification, paid in EGLD via xMoney or by card via Stripe. |
 | **API Keys** | Generate `pm_` prefixed bearer tokens for programmatic access. |
 | **LLM Discovery** | `llms.txt`, OpenAI plugin manifest, MCP manifest, agent.json &mdash; all served automatically. |
 
@@ -55,7 +55,7 @@ MultiversX is a European, carbon-negative blockchain with 6-second finality, neg
 | **Backend** | Node.js, Express.js, TypeScript |
 | **Database** | PostgreSQL (Neon), Drizzle ORM |
 | **Blockchain** | MultiversX SDK (sdk-core, sdk-dapp, sdk-network-providers, sdk-wallet) |
-| **Payments** | Stripe (subscriptions), xMoney (EGLD payments) |
+| **Payments** | Stripe (card payments), xMoney (EGLD payments) |
 | **Auth** | MultiversX Native Auth (cryptographic wallet signatures) |
 | **PDF** | jsPDF 4.x with QR code generation |
 
@@ -178,7 +178,7 @@ Full documentation: [docs/api-reference.md](docs/api-reference.md)
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/create-subscription` | Wallet | Create Stripe subscription |
+| `POST` | `/api/create-payment` | Wallet | Create Stripe payment |
 | `POST` | `/api/xmoney/create-payment` | Wallet | Create xMoney payment |
 | `GET` | `/api/xmoney/order/:orderId` | Wallet | Check xMoney order status |
 
@@ -264,13 +264,11 @@ User/Agent                    xproof                     MultiversX
 
 ---
 
-## Subscription Tiers
+## Pricing
 
-| Tier | Price | Certifications / Month | Features |
-|---|---|---|---|
-| **Free** | $0 | 1 | xproof watermark, public verification |
-| **Pro** | $9.99/mo | 20 | No watermark, custom branding, priority support |
-| **Business** | $39/mo | 200 | API access, custom branding, dedicated support |
+**$0.05 per certification** &mdash; simple, transparent, pay-as-you-go. No subscriptions, no monthly fees.
+
+Payment accepted via **Stripe** (card) or **xMoney** (EGLD on MultiversX).
 
 ---
 

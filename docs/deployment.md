@@ -6,7 +6,7 @@
 - **npm** 9 or later
 - **PostgreSQL** 14 or later (Neon recommended for managed hosting)
 - A **MultiversX wallet** with a private key for server-side transaction signing
-- **Stripe** account with API keys (for subscription billing)
+- **Stripe** account with API keys (for payment processing)
 - **xMoney** merchant account (optional, for EGLD payment processing)
 - **WalletConnect** project ID (for mobile wallet connections)
 
@@ -217,7 +217,7 @@ The database schema is defined in `shared/schema.ts` using Drizzle ORM's table b
 | Table | Purpose |
 |-------|---------|
 | `sessions` | Express session storage (connect-pg-simple) |
-| `users` | Wallet-based user accounts with subscription data |
+| `users` | Wallet-based user accounts with payment data |
 | `certifications` | File certification records with blockchain references |
 | `api_keys` | API keys for programmatic access |
 | `acp_checkouts` | Agent Commerce Protocol checkout sessions |

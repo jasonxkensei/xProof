@@ -505,14 +505,8 @@ After certification, proofs are publicly accessible in multiple formats:
 
 ## Rate Limiting
 
-API key requests are subject to the usage limits of the associated user account:
+API key requests are subject to standard rate limiting to prevent abuse.
 
-| Tier | Monthly Certifications | Price |
-|------|----------------------|-------|
-| Free | 1 | $0/month |
-| Pro | 20 | $9.99/month |
-| Business | 200 | $39/month |
-
-When the monthly limit is reached, certification requests will return HTTP 403. Usage resets monthly based on the account's `usage_reset_date`.
+**Pricing:** $0.05 per certification, paid in EGLD. No subscriptions or monthly fees.
 
 The ACP health endpoint (`/api/acp/health`) and product discovery (`/api/acp/products`) are not rate-limited.

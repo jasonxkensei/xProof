@@ -17,7 +17,7 @@ xproof is a blockchain certification service that anchors SHA-256 file hashes on
         |                           |       |
         |    +--------------+       |       |       +------------------+
         +--->| Web Crypto   |       |       +------>| Stripe API       |
-             | SHA-256 Hash |       |       |       | (Subscriptions)  |
+             | SHA-256 Hash |       |       |       | (Payments)       |
              +--------------+       |       |       +------------------+
                                     |       |
                               +-----+       +-------+
@@ -82,7 +82,7 @@ client/
       dashboard.tsx           # User certification history
       proof.tsx               # Public proof verification page
       agents.tsx              # AI agent integration / API keys
-      settings.tsx            # User profile and subscription settings
+      settings.tsx            # User profile and account settings
       legal/                  # Legal pages (terms, privacy, mentions)
       not-found.tsx           # 404 page
     components/
@@ -195,7 +195,7 @@ Routes are organized into the following groups within `routes.ts`:
 | Blockchain | `/api/blockchain/*` | Wallet session | Account info and transaction broadcasting |
 | Proof | `/api/proof/:id` | None | Public proof verification |
 | Certificates | `/api/certificates/:id.pdf` | None | PDF certificate download |
-| Payments | `/api/create-subscription`, `/api/xmoney/*` | Wallet session | Stripe and xMoney payments |
+| Payments | `/api/create-payment`, `/api/xmoney/*` | Wallet session | Stripe and xMoney payments ($0.05/cert) |
 | Webhooks | `/api/webhooks/*` | Signature verification | Stripe and xMoney callbacks |
 | API Keys | `/api/keys` | Wallet session | API key management |
 | ACP | `/api/acp/*` | API key / None | Agent Commerce Protocol |
@@ -273,7 +273,7 @@ PostgreSQL hosted on Neon, accessed via Drizzle ORM with a schema-first approach
 
 **sessions** -- Stores Express session data serialized as JSONB. Used by `connect-pg-simple` for server-side session persistence. An index on `expire` supports automatic cleanup.
 
-**users** -- Wallet-based user profiles keyed by MultiversX wallet address (`erd1...`). Each user has a subscription tier (free/pro/business), usage tracking (monthly count and reset date), and optional Stripe customer/subscription IDs for billing.
+**users** -- Wallet-based user profiles keyed by MultiversX wallet address (`erd1...`). Each user has usage tracking (monthly count and reset date) and optional Stripe customer ID for payment processing.
 
 **certifications** -- File certification records. Each record stores the file metadata (name, hash, type, size), author information, blockchain transaction details (hash, URL, status), and visibility settings. The `file_hash` column has a unique constraint to prevent duplicate certifications of the same file content.
 
@@ -408,24 +408,22 @@ Protected routes use the `isWalletAuthenticated` middleware, which checks for `r
 
 ## Payment Processing Flow
 
-### Stripe Subscriptions
+### Stripe Payments
 
 ```
-[1] User selects subscription tier (Pro: $9.99/mo, Business: $39/mo)
+[1] User initiates certification ($0.05 per certification)
       |
-[2] POST /api/create-subscription
+[2] POST /api/create-payment
     - Creates Stripe customer if needed
-    - Creates Stripe subscription with appropriate price ID
+    - Creates payment intent for $0.05
     - Returns client_secret for Stripe Elements confirmation
       |
 [3] User completes payment in Stripe Elements (client-side)
       |
 [4] Stripe sends webhook to POST /api/webhooks/stripe
-    - invoice.payment_succeeded: activates subscription, updates tier
-    - customer.subscription.updated: syncs status changes
-    - customer.subscription.deleted: downgrades to free tier
+    - payment_intent.succeeded: confirms payment, allows certification
       |
-[5] User record updated with new subscription_tier and subscription_status
+[5] Certification proceeds after payment confirmation
 ```
 
 Webhook payloads are verified using `stripe.webhooks.constructEvent` with the raw request body and the Stripe webhook signing secret.
@@ -535,4 +533,4 @@ The server sets a restrictive CSP header allowing connections only to MultiversX
 - Request bodies are validated using Zod schemas generated from the Drizzle ORM schema via `drizzle-zod`
 - Wallet addresses are validated for the `erd1` prefix format
 - File hashes are validated as 64-character hexadecimal strings
-- Subscription tiers are validated against the allowed enum values
+- Payment amounts are validated against the expected per-certification price

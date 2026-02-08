@@ -66,7 +66,7 @@ The platform offers comprehensive machine-readable documentation for AI agent di
 ## External Dependencies
 
 ### Payment Processing
-- **Stripe**: For traditional card payments and subscription management, including client-side integration (`@stripe/stripe-js`, `@stripe/react-stripe-js`) and server-side webhook handling.
+- **Stripe**: For card payments ($0.05 per certification), including client-side integration (`@stripe/stripe-js`, `@stripe/react-stripe-js`) and server-side webhook handling.
 - **xMoney**: For MultiversX blockchain payments, integrating via REST API calls and webhook handling with HMAC SHA256 signature verification.
 
 ### Blockchain Services

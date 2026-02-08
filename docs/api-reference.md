@@ -96,9 +96,6 @@ If `walletAddress` is provided, it must match the address in the Native Auth tok
   "lastName": null,
   "profileImageUrl": null,
   "stripeCustomerId": null,
-  "stripeSubscriptionId": null,
-  "subscriptionTier": "free",
-  "subscriptionStatus": "active",
   "monthlyUsage": 0,
   "usageResetDate": "2026-02-01T00:00:00.000Z",
   "companyName": null,
@@ -170,7 +167,6 @@ Get the currently authenticated user's data.
 {
   "id": "uuid",
   "walletAddress": "erd1...",
-  "subscriptionTier": "free",
   "monthlyUsage": 3,
   ...
 }
@@ -420,30 +416,17 @@ Download a PDF certificate for a certification.
 
 ## Payments
 
-### POST /api/create-subscription
+### POST /api/create-payment
 
-Create a Stripe subscription for the authenticated user.
+Create a Stripe payment for a certification.
 
 **Auth:** Wallet session (required)
-
-**Request Body:**
-
-```json
-{
-  "tier": "pro"
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| tier | string | Yes | One of: pro, business |
 
 **Response (200):**
 
 ```json
 {
-  "clientSecret": "pi_..._secret_...",
-  "subscriptionId": "sub_..."
+  "clientSecret": "pi_..._secret_..."
 }
 ```
 
@@ -451,15 +434,13 @@ Create a Stripe subscription for the authenticated user.
 
 ### POST /api/webhooks/stripe
 
-Stripe webhook endpoint for subscription lifecycle events.
+Stripe webhook endpoint for payment events.
 
 **Auth:** Stripe signature verification
 
 **Handled Events:**
 
-- `invoice.payment_succeeded` -- Activates subscription, updates user tier
-- `customer.subscription.updated` -- Syncs subscription status changes
-- `customer.subscription.deleted` -- Downgrades user to free tier
+- `payment_intent.succeeded` -- Confirms payment, allows certification
 
 **Response (200):**
 

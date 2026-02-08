@@ -29,7 +29,7 @@ On Replit, the `PG*` variables are auto-populated when you create a PostgreSQL d
 
 | Variable | Required | Description |
 |---|---|---|
-| `STRIPE_SECRET_KEY` | Yes | Stripe secret key (`sk_test_...` for test, `sk_live_...` for production). Used server-side for subscription management. |
+| `STRIPE_SECRET_KEY` | Yes | Stripe secret key (`sk_test_...` for test, `sk_live_...` for production). Used server-side for payment processing. |
 | `VITE_STRIPE_PUBLIC_KEY` | Yes | Stripe publishable key (`pk_test_...` or `pk_live_...`). Exposed to the frontend via Vite. |
 
 Get your keys from the [Stripe Dashboard](https://dashboard.stripe.com/apikeys).
