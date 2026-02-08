@@ -29,6 +29,7 @@ import {
   destroyWalletSession 
 } from "./walletAuth";
 import { getSession } from "./replitAuth";
+import { authRateLimiter, paymentRateLimiter } from "./reliability";
 
 const stripeSecretKey = process.env.TESTING_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
 if (!stripeSecretKey) {
@@ -56,7 +57,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Sync wallet state with backend (used by sdk-dapp integration)
   // REQUIRES Native Auth token verification for security
-  app.post("/api/auth/wallet/sync", async (req, res) => {
+  app.post("/api/auth/wallet/sync", authRateLimiter, async (req, res) => {
     try {
       const { verifyNativeAuthToken, extractBearerToken } = await import("./nativeAuth");
       
@@ -492,7 +493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create subscription
-  app.post("/api/create-subscription", isWalletAuthenticated, async (req: any, res) => {
+  app.post("/api/create-subscription", paymentRateLimiter, isWalletAuthenticated, async (req: any, res) => {
     try {
       const walletAddress = req.walletAddress;
       const { plan } = req.body;
@@ -642,7 +643,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // xMoney payment routes
   
   // Create payment order
-  app.post("/api/xmoney/create-payment", isWalletAuthenticated, async (req: any, res) => {
+  app.post("/api/xmoney/create-payment", paymentRateLimiter, isWalletAuthenticated, async (req: any, res) => {
     try {
       if (!isXMoneyConfigured()) {
         return res.status(503).json({ 

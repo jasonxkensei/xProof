@@ -1,6 +1,15 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { 
+  globalRateLimiter, 
+  healthCheck, 
+  requestTimeout, 
+  setupGracefulShutdown, 
+  setupProcessErrorHandlers 
+} from "./reliability";
+
+setupProcessErrorHandlers();
 
 const app = express();
 
@@ -35,6 +44,11 @@ app.use((req, res, next) => {
 });
 
 app.use(express.urlencoded({ extended: false }));
+
+app.get("/health", healthCheck);
+
+app.use("/api", globalRateLimiter);
+app.use("/api", requestTimeout(30000));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -73,8 +87,11 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    console.error(`[xproof] Error ${status}: ${message}`, err.stack || "");
+
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
   });
 
   // importantly only setup vite in development and after
@@ -98,4 +115,6 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
   });
+
+  setupGracefulShutdown(server);
 })();
