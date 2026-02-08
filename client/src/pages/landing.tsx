@@ -66,7 +66,7 @@ export default function Landing() {
           </Badge>
           
           <h1 className="mb-6 text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
-            Prove that it's yours.
+            Prove that's yours.
             <br />
             <span className="text-primary">Forever.</span>
           </h1>
