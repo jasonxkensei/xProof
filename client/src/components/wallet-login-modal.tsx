@@ -400,7 +400,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
               sessionStorage.setItem(storeFallbackKey, String(Date.now()));
               window.open(storeLink, '_blank');
             }
-          }, 5000);
+          }, 20000);
         }
       }
       
