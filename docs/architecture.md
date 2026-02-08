@@ -15,17 +15,17 @@ xproof is a blockchain certification service that anchors SHA-256 file hashes on
 +-------------------+        +-------------------+        +---------------------+
         |                           |       |
         |                           |       |
-        |    +--------------+       |       |       +------------------+
-        +--->| Web Crypto   |       |       +------>| Stripe API       |
-             | SHA-256 Hash |       |       |       | (Payments)       |
-             +--------------+       |       |       +------------------+
-                                    |       |
-                              +-----+       +-------+
-                              |                     |
-                     +--------v-------+    +--------v-------+
-                     | PostgreSQL     |    | xMoney API     |
-                     | (Neon)         |    | (EGLD Payments)|
-                     +----------------+    +----------------+
+        |    +--------------+       |       |
+        +--->| Web Crypto   |       |       |       +------------------+
+             | SHA-256 Hash |       |       +------>| xMoney API       |
+             +--------------+       |               | (EGLD Payments)  |
+                                    |               +------------------+
+                              +-----+
+                              |
+                     +--------v-------+
+                     | PostgreSQL     |
+                     | (Neon)         |
+                     +----------------+
 ```
 
 ### Request Flow
@@ -128,7 +128,7 @@ client/
 - **Database:** PostgreSQL (Neon) with Drizzle ORM
 - **Session Store:** PostgreSQL-backed sessions (connect-pg-simple)
 - **Blockchain:** MultiversX SDK (sdk-core, sdk-wallet, sdk-native-auth-server)
-- **Payments:** Stripe SDK, xMoney REST API
+- **Payments:** xMoney REST API (EGLD)
 
 ### Directory Structure
 
@@ -195,8 +195,8 @@ Routes are organized into the following groups within `routes.ts`:
 | Blockchain | `/api/blockchain/*` | Wallet session | Account info and transaction broadcasting |
 | Proof | `/api/proof/:id` | None | Public proof verification |
 | Certificates | `/api/certificates/:id.pdf` | None | PDF certificate download |
-| Payments | `/api/create-payment`, `/api/xmoney/*` | Wallet session | Stripe and xMoney payments ($0.05/cert) |
-| Webhooks | `/api/webhooks/*` | Signature verification | Stripe and xMoney callbacks |
+| Payments | `/api/xmoney/*` | Wallet session | EGLD payments via xMoney ($0.05/cert) |
+| Webhooks | `/api/webhooks/xmoney` | Signature verification | xMoney payment callbacks |
 | API Keys | `/api/keys` | Wallet session | API key management |
 | ACP | `/api/acp/*` | API key / None | Agent Commerce Protocol |
 | Discovery | `/.well-known/*`, `/llms.txt`, etc. | None | AI agent discovery endpoints |
@@ -273,7 +273,7 @@ PostgreSQL hosted on Neon, accessed via Drizzle ORM with a schema-first approach
 
 **sessions** -- Stores Express session data serialized as JSONB. Used by `connect-pg-simple` for server-side session persistence. An index on `expire` supports automatic cleanup.
 
-**users** -- Wallet-based user profiles keyed by MultiversX wallet address (`erd1...`). Each user has usage tracking (monthly count and reset date) and optional Stripe customer ID for payment processing.
+**users** -- Wallet-based user profiles keyed by MultiversX wallet address (`erd1...`). Each user has usage tracking (monthly count and reset date).
 
 **certifications** -- File certification records. Each record stores the file metadata (name, hash, type, size), author information, blockchain transaction details (hash, URL, status), and visibility settings. The `file_hash` column has a unique constraint to prevent duplicate certifications of the same file content.
 
@@ -408,27 +408,9 @@ Protected routes use the `isWalletAuthenticated` middleware, which checks for `r
 
 ## Payment Processing Flow
 
-### Stripe Payments
-
-```
-[1] User initiates certification ($0.05 per certification)
-      |
-[2] POST /api/create-payment
-    - Creates Stripe customer if needed
-    - Creates payment intent for $0.05
-    - Returns client_secret for Stripe Elements confirmation
-      |
-[3] User completes payment in Stripe Elements (client-side)
-      |
-[4] Stripe sends webhook to POST /api/webhooks/stripe
-    - payment_intent.succeeded: confirms payment, allows certification
-      |
-[5] Certification proceeds after payment confirmation
-```
-
-Webhook payloads are verified using `stripe.webhooks.constructEvent` with the raw request body and the Stripe webhook signing secret.
-
 ### xMoney EGLD Payments
+
+Certifications cost $0.05, paid in EGLD at the real-time market rate (fetched from CoinGecko with a 5-minute cache).
 
 ```
 [1] POST /api/xmoney/create-payment
@@ -520,7 +502,6 @@ Files never leave the user's browser. SHA-256 hashing is performed entirely clie
 
 ### Webhook Security
 
-- Stripe webhooks are verified using `stripe.webhooks.constructEvent` with raw body and signing secret
 - xMoney webhooks use HMAC-SHA256 signature verification with constant-time comparison to prevent timing attacks
 - Webhook endpoints skip JSON body parsing to preserve raw payloads for signature verification
 

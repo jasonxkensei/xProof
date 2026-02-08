@@ -25,26 +25,15 @@ On Replit, the `PG*` variables are auto-populated when you create a PostgreSQL d
 
 ---
 
-## Stripe (Payment Processing)
+## xMoney (EGLD Payments)
 
 | Variable | Required | Description |
 |---|---|---|
-| `STRIPE_SECRET_KEY` | Yes | Stripe secret key (`sk_test_...` for test, `sk_live_...` for production). Used server-side for payment processing. |
-| `VITE_STRIPE_PUBLIC_KEY` | Yes | Stripe publishable key (`pk_test_...` or `pk_live_...`). Exposed to the frontend via Vite. |
+| `XMONEY_API_KEY` | Yes | xMoney API key for creating EGLD payment orders. |
+| `XMONEY_SITE_ID` | Yes | xMoney merchant site identifier. |
+| `XMONEY_WEBHOOK_SECRET` | Yes | Secret for verifying xMoney webhook signatures (HMAC SHA-256). |
 
-Get your keys from the [Stripe Dashboard](https://dashboard.stripe.com/apikeys).
-
----
-
-## xMoney (MultiversX Payments)
-
-| Variable | Required | Description |
-|---|---|---|
-| `XMONEY_API_KEY` | Optional | xMoney API key for creating EGLD payment orders. |
-| `XMONEY_SITE_ID` | Optional | xMoney merchant site identifier. |
-| `XMONEY_WEBHOOK_SECRET` | Optional | Secret for verifying xMoney webhook signatures (HMAC SHA-256). |
-
-Required only if you want to accept EGLD payments via xMoney.
+Get your credentials from your [xMoney merchant dashboard](https://merchant.xmoney.com). Certifications cost $0.05, converted to EGLD at real-time market rate.
 
 ---
 
@@ -93,6 +82,7 @@ DATABASE_URL=postgresql://...
 SESSION_SECRET=<generated-secret>
 VITE_WALLETCONNECT_PROJECT_ID=<your-project-id>
 PROOFMINT_WALLET_ADDRESS=erd1...
-STRIPE_SECRET_KEY=sk_test_...
-VITE_STRIPE_PUBLIC_KEY=pk_test_...
+XMONEY_API_KEY=<your-xmoney-api-key>
+XMONEY_SITE_ID=<your-xmoney-site-id>
+XMONEY_WEBHOOK_SECRET=<your-xmoney-webhook-secret>
 ```

@@ -6,8 +6,7 @@
 - **npm** 9 or later
 - **PostgreSQL** 14 or later (Neon recommended for managed hosting)
 - A **MultiversX wallet** with a private key for server-side transaction signing
-- **Stripe** account with API keys (for payment processing)
-- **xMoney** merchant account (optional, for EGLD payment processing)
+- **xMoney** merchant account (for EGLD payment processing)
 - **WalletConnect** project ID (for mobile wallet connections)
 
 ---
@@ -95,8 +94,9 @@ Create a `.env` file in the project root (see the Environment Variables section 
 ```bash
 DATABASE_URL=postgresql://user:password@host:5432/xproof
 SESSION_SECRET=<random-64-char-string>
-STRIPE_SECRET_KEY=sk_live_...
-VITE_STRIPE_PUBLIC_KEY=pk_live_...
+XMONEY_API_KEY=<your-xmoney-api-key>
+XMONEY_SITE_ID=<your-xmoney-site-id>
+XMONEY_WEBHOOK_SECRET=<your-xmoney-webhook-secret>
 MULTIVERSX_PRIVATE_KEY=<hex-encoded-private-key>
 MULTIVERSX_SENDER_ADDRESS=erd1...
 MULTIVERSX_CHAIN_ID=1
@@ -171,8 +171,9 @@ server {
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `SESSION_SECRET` | Random string for signing session cookies (minimum 32 characters) |
-| `STRIPE_SECRET_KEY` | Stripe secret API key (`sk_live_...` or `sk_test_...`) |
-| `VITE_STRIPE_PUBLIC_KEY` | Stripe publishable key (`pk_live_...` or `pk_test_...`) |
+| `XMONEY_API_KEY` | xMoney API key for EGLD payment processing |
+| `XMONEY_SITE_ID` | xMoney merchant site identifier |
+| `XMONEY_WEBHOOK_SECRET` | Secret for verifying xMoney webhook signatures |
 | `MULTIVERSX_PRIVATE_KEY` | Hex-encoded ed25519 private key for server-side transaction signing |
 | `MULTIVERSX_SENDER_ADDRESS` | MultiversX wallet address corresponding to the private key (`erd1...`) |
 | `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect Cloud project ID for mobile wallet connections |
@@ -278,7 +279,7 @@ xproof requires HTTPS in production for:
 - Secure session cookies (`secure: true`)
 - MultiversX Native Auth origin verification
 - WalletConnect relay connections
-- Stripe and xMoney webhook signatures
+- xMoney webhook signatures
 
 On Replit, HTTPS is provided automatically. For self-hosted deployments, use a reverse proxy with TLS termination (see the nginx example above).
 

@@ -23,7 +23,7 @@ RESTful APIs are provided under `/api/*`, with middleware for logging and error 
 xproof integrates with the MultiversX blockchain for immutable proof storage. It supports both XPortal (user-signed transactions with their own gas fees) and an optional server-side signing mode. The system handles transaction signing, broadcasting, and generation of explorer URLs. It supports Mainnet, Devnet, and Testnet.
 
 ### Data Storage
-PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides type-safe database operations with a schema-first approach. Key tables include `users` (wallet-based profiles with Stripe integration), `certifications` (file certification records), and `sessions` (Express session storage). Drizzle Kit manages database migrations.
+PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides type-safe database operations with a schema-first approach. Key tables include `users` (wallet-based profiles), `certifications` (file certification records), and `sessions` (Express session storage). Drizzle Kit manages database migrations.
 
 ### Agent Commerce Protocol (ACP)
 xproof implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is $0.05 per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
@@ -66,7 +66,6 @@ The platform offers comprehensive machine-readable documentation for AI agent di
 ## External Dependencies
 
 ### Payment Processing
-- **Stripe**: For card payments ($0.05 per certification), including client-side integration (`@stripe/stripe-js`, `@stripe/react-stripe-js`) and server-side webhook handling.
 - **xMoney**: For MultiversX blockchain payments, integrating via REST API calls and webhook handling with HMAC SHA256 signature verification.
 
 ### Blockchain Services
@@ -89,7 +88,6 @@ The platform offers comprehensive machine-readable documentation for AI agent di
 ### Environment Configuration
 - `DATABASE_URL`
 - `SESSION_SECRET`
-- `STRIPE_SECRET_KEY`, `VITE_STRIPE_PUBLIC_KEY`
 - `XMONEY_API_KEY`, `XMONEY_SITE_ID`, `XMONEY_WEBHOOK_SECRET`
 - `MULTIVERSX_PRIVATE_KEY`, `MULTIVERSX_SENDER_ADDRESS`, `MULTIVERSX_CHAIN_ID`, `MULTIVERSX_GATEWAY_URL` (optional, for server-side signing)
 - `REPL_ID`

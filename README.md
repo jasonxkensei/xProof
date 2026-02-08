@@ -41,7 +41,7 @@ MultiversX is a European, carbon-negative blockchain with 6-second finality, neg
 | **Wallet Authentication** | Native Auth via xPortal, MultiversX Web Wallet, or WalletConnect. |
 | **Agent Commerce Protocol** | AI agents can discover, purchase, and use certifications programmatically. |
 | **MCP / LangChain / CrewAI** | Ready-made tool definitions for major AI agent frameworks. |
-| **Pay Per Use** | $0.05 per certification, paid in EGLD via xMoney or by card via Stripe. |
+| **Pay Per Use** | $0.05 per certification, paid in EGLD via xMoney. |
 | **API Keys** | Generate `pm_` prefixed bearer tokens for programmatic access. |
 | **LLM Discovery** | `llms.txt`, OpenAI plugin manifest, MCP manifest, agent.json &mdash; all served automatically. |
 
@@ -55,7 +55,7 @@ MultiversX is a European, carbon-negative blockchain with 6-second finality, neg
 | **Backend** | Node.js, Express.js, TypeScript |
 | **Database** | PostgreSQL (Neon), Drizzle ORM |
 | **Blockchain** | MultiversX SDK (sdk-core, sdk-dapp, sdk-network-providers, sdk-wallet) |
-| **Payments** | Stripe (card payments), xMoney (EGLD payments) |
+| **Payments** | xMoney (EGLD payments on MultiversX) |
 | **Auth** | MultiversX Native Auth (cryptographic wallet signatures) |
 | **PDF** | jsPDF 4.x with QR code generation |
 
@@ -178,9 +178,8 @@ Full documentation: [docs/api-reference.md](docs/api-reference.md)
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/create-payment` | Wallet | Create Stripe payment |
-| `POST` | `/api/xmoney/create-payment` | Wallet | Create xMoney payment |
-| `GET` | `/api/xmoney/order/:orderId` | Wallet | Check xMoney order status |
+| `POST` | `/api/xmoney/create-payment` | Wallet | Create EGLD payment via xMoney |
+| `GET` | `/api/xmoney/order/:orderId` | Wallet | Check payment order status |
 
 ### API Keys
 
@@ -268,7 +267,7 @@ User/Agent                    xproof                     MultiversX
 
 **$0.05 per certification** &mdash; simple, transparent, pay-as-you-go. No subscriptions, no monthly fees.
 
-Payment accepted via **Stripe** (card) or **xMoney** (EGLD on MultiversX).
+Payment accepted in **EGLD** via **xMoney** on MultiversX, converted at real-time market rate.
 
 ---
 

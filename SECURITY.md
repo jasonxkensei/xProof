@@ -41,9 +41,8 @@ xproof **never stores or transmits user files**. SHA-256 hashing is performed en
 
 ### Payment Security
 
-- Stripe handles all card payment processing. xproof never stores card details.
-- xMoney webhooks use HMAC SHA-256 signature verification.
-- Stripe webhooks are verified using Stripe's signature verification.
+- All payments are processed through xMoney in EGLD. xproof never stores payment credentials.
+- xMoney webhooks use HMAC SHA-256 signature verification with constant-time comparison.
 
 ### Data Protection
 

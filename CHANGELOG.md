@@ -13,8 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Machine-readable proofs in JSON and Markdown formats.
 - MultiversX Native Auth for secure wallet authentication (xPortal, Web Wallet, WalletConnect).
 - User dashboard with certification history.
-- Pay-per-use pricing ($0.05 per certification) with Stripe and xMoney payment integration.
-- xMoney integration for EGLD-based payments.
+- Pay-per-use pricing ($0.05 per certification) paid in EGLD via xMoney, converted at real-time market rate.
 - Agent Commerce Protocol (ACP) for programmatic AI agent access.
 - API key management (`pm_` prefixed bearer tokens).
 - AI agent discovery endpoints:

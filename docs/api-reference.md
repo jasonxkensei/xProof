@@ -95,7 +95,6 @@ If `walletAddress` is provided, it must match the address in the Native Auth tok
   "firstName": null,
   "lastName": null,
   "profileImageUrl": null,
-  "stripeCustomerId": null,
   "monthlyUsage": 0,
   "usageResetDate": "2026-02-01T00:00:00.000Z",
   "companyName": null,
@@ -415,42 +414,6 @@ Download a PDF certificate for a certification.
 ---
 
 ## Payments
-
-### POST /api/create-payment
-
-Create a Stripe payment for a certification.
-
-**Auth:** Wallet session (required)
-
-**Response (200):**
-
-```json
-{
-  "clientSecret": "pi_..._secret_..."
-}
-```
-
----
-
-### POST /api/webhooks/stripe
-
-Stripe webhook endpoint for payment events.
-
-**Auth:** Stripe signature verification
-
-**Handled Events:**
-
-- `payment_intent.succeeded` -- Confirms payment, allows certification
-
-**Response (200):**
-
-```json
-{
-  "received": true
-}
-```
-
----
 
 ### POST /api/xmoney/create-payment
 
