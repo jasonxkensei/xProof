@@ -6,7 +6,7 @@ import { queryClient } from '@/lib/queryClient';
 import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
 import { useGetIsLoggedIn } from '@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn';
 import { getAccountProvider } from '@multiversx/sdk-dapp/out/providers/helpers/accountProvider';
-import { disconnectWcProvider } from '@/lib/walletConnectStore';
+import { logoutAction } from '@multiversx/sdk-dapp/out/store/actions/sharedActions/sharedActions';
 
 interface User {
   id: number;
@@ -239,10 +239,9 @@ export function useWalletAuth() {
       }
       
       try {
-        await disconnectWcProvider();
-        logger.log('WalletConnect provider disconnected');
+        logoutAction();
       } catch (e) {
-        logger.log('WalletConnect disconnect error (non-fatal):', e);
+        logger.log('SDK logout action error (non-fatal):', e);
       }
       
       try {
