@@ -366,41 +366,23 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
           logger.log('📱 Saved pending xPortal connection state for recovery');
           
           const encodedUri = encodeURIComponent(uri);
-          const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
           const nativeDeepLink = `https://maiar.com/?wallet-connect=${encodedUri}`;
-          const storeLink = isIOS
-            ? 'https://apps.apple.com/app/xportal/id1519405832'
-            : 'https://play.google.com/store/apps/details?id=com.elrond.maiar.wallet';
 
           toast({
             title: "xPortal",
             description: "Validez la connexion dans xPortal puis revenez sur cette page.",
           });
 
-          const storeFallbackKey = 'xproof_store_fallback_ts';
-          const lastFallback = sessionStorage.getItem(storeFallbackKey);
-          const now = Date.now();
-          const recentlyFallbacked = lastFallback && (now - parseInt(lastFallback, 10)) < 30000;
-
-          let didLeave = false;
-          const onBlur = () => { didLeave = true; };
-          window.addEventListener('blur', onBlur);
-
-          window.location.href = nativeDeepLink;
-
-          setTimeout(() => {
-            window.removeEventListener('blur', onBlur);
-            if (recentlyFallbacked) {
-              logger.log('📱 Store fallback skipped (anti-loop: triggered recently)');
-              return;
-            }
-            if (!didLeave && !document.hidden) {
-              logger.log('📱 App not detected, opening store in new tab');
-              sessionStorage.setItem(storeFallbackKey, String(Date.now()));
-              window.open(storeLink, '_blank');
-            }
-          }, 20000);
+          const hiddenLink = document.createElement('a');
+          hiddenLink.href = nativeDeepLink;
+          hiddenLink.target = '_blank';
+          hiddenLink.rel = 'noopener noreferrer';
+          hiddenLink.style.display = 'none';
+          document.body.appendChild(hiddenLink);
+          hiddenLink.click();
+          setTimeout(() => document.body.removeChild(hiddenLink), 100);
+          logger.log('📱 Deep link opened via hidden anchor (page stays alive)');
         }
       }
       
