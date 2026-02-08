@@ -655,7 +655,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
             ) : (
               <Smartphone className="h-5 w-5" />
             )}
-            <span>xPortal App (Mobile)</span>
+            <span>xPortal App</span>
           </Button>
 
           <Button
