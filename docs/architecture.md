@@ -221,17 +221,16 @@ PostgreSQL hosted on Neon, accessed via Drizzle ORM with a schema-first approach
 +----------------+       | first_name        |       | file_hash (uniq) |
                           | last_name         |       | file_type        |
                           | profile_image_url |       | file_size        |
-                          | stripe_customer_id|       | author_name      |
-                          | stripe_sub_id     |       | author_signature |
-                          | subscription_tier |       | transaction_hash |
-                          | subscription_stat |       | transaction_url  |
-                          | monthly_usage     |       | blockchain_status|
-                          | usage_reset_date  |       | certificate_url  |
-                          | company_name      |       | is_public        |
-                          | company_logo_url  |       | created_at       |
-                          | created_at        |       | updated_at       |
-                          | updated_at        |       +------------------+
-                          +-------------------+
+                          | subscription_tier |       | author_name      |
+                          | subscription_stat |       | author_signature |
+                          | monthly_usage     |       | transaction_hash |
+                          | usage_reset_date  |       | transaction_url  |
+                          | company_name      |       | blockchain_status|
+                          | company_logo_url  |       | certificate_url  |
+                          | created_at        |       | is_public        |
+                          | updated_at        |       | created_at       |
+                          +-------------------+       | updated_at       |
+                                                      +------------------+
                                   |
                                   | 1:N
                                   v

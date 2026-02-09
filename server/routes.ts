@@ -17,7 +17,6 @@ import {
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "./pricing";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
-import Stripe from "stripe";
 import { generateCertificatePDF } from "./certificateGenerator";
 import { createXMoneyOrder, getXMoneyOrderStatus, verifyXMoneyWebhook, isXMoneyConfigured } from "./xmoney";
 import { recordOnBlockchain, isMultiversXConfigured, broadcastSignedTransaction } from "./blockchain";
@@ -30,15 +29,6 @@ import {
 } from "./walletAuth";
 import { getSession } from "./replitAuth";
 import { authRateLimiter, paymentRateLimiter } from "./reliability";
-
-const stripeSecretKey = process.env.TESTING_STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
-if (!stripeSecretKey) {
-  throw new Error("Missing STRIPE_SECRET_KEY or TESTING_STRIPE_SECRET_KEY environment variable");
-}
-
-const stripe = new Stripe(stripeSecretKey, {
-  apiVersion: "2025-09-30.clover",
-});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply session middleware
@@ -489,154 +479,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error generating certificate:", error);
       res.status(500).json({ message: "Failed to generate certificate" });
-    }
-  });
-
-  // Create subscription
-  app.post("/api/create-subscription", paymentRateLimiter, isWalletAuthenticated, async (req: any, res) => {
-    try {
-      const walletAddress = req.walletAddress;
-      const { plan } = req.body;
-
-      if (!["pro", "business"].includes(plan)) {
-        return res.status(400).json({ message: "Invalid plan" });
-      }
-
-      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Create or get Stripe customer
-      let customerId = user.stripeCustomerId;
-      
-      if (!customerId) {
-        console.log('Creating Stripe customer for user:', user.id);
-        const customer = await stripe.customers.create({
-          email: user.email || undefined,
-          metadata: {
-            userId: user.id,
-          },
-        });
-        customerId = customer.id;
-        
-        await db
-          .update(users)
-          .set({ stripeCustomerId: customerId })
-          .where(eq(users.walletAddress, walletAddress));
-      }
-
-      // Create subscription
-      const priceId = plan === "pro" 
-        ? process.env.STRIPE_PRO_PRICE_ID 
-        : process.env.STRIPE_BUSINESS_PRICE_ID;
-
-      if (!priceId) {
-        // For development, create a PaymentIntent instead
-        const amount = plan === "pro" ? 999 : 3900; // in cents
-        
-        const paymentIntent = await stripe.paymentIntents.create({
-          amount,
-          currency: "usd",
-          customer: customerId,
-          setup_future_usage: "off_session",
-          metadata: {
-            userId: user.id,
-            plan,
-          },
-        });
-
-        return res.json({ clientSecret: paymentIntent.client_secret });
-      }
-
-      const subscription = await stripe.subscriptions.create({
-        customer: customerId,
-        items: [{ price: priceId }],
-        payment_behavior: "default_incomplete",
-        expand: ["latest_invoice.payment_intent"],
-      });
-
-      const invoice = subscription.latest_invoice as Stripe.Invoice;
-      const paymentIntent = (invoice as any).payment_intent as Stripe.PaymentIntent;
-
-      // Update user subscription info
-      await db
-        .update(users)
-        .set({
-          stripeSubscriptionId: subscription.id,
-          subscriptionTier: plan,
-          subscriptionStatus: subscription.status,
-        })
-        .where(eq(users.walletAddress, walletAddress));
-
-      res.json({ clientSecret: paymentIntent.client_secret });
-    } catch (error) {
-      console.error("Error creating subscription:", error);
-      res.status(500).json({ message: "Failed to create subscription" });
-    }
-  });
-
-  // Stripe webhook
-  app.post("/api/webhooks/stripe", express.raw({ type: "application/json" }), async (req, res) => {
-    const sig = req.headers["stripe-signature"];
-
-    if (!sig || !process.env.STRIPE_WEBHOOK_SECRET) {
-      return res.status(400).send("Webhook signature missing");
-    }
-
-    try {
-      const event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-
-      switch (event.type) {
-        case "customer.subscription.updated":
-        case "customer.subscription.deleted": {
-          const subscription = event.data.object as Stripe.Subscription;
-          const customerId = subscription.customer as string;
-
-          const [user] = await db
-            .select()
-            .from(users)
-            .where(eq(users.stripeCustomerId, customerId));
-
-          if (user) {
-            await db
-              .update(users)
-              .set({
-                subscriptionStatus: subscription.status,
-                subscriptionTier: subscription.status === "active" ? user.subscriptionTier : "free",
-              })
-              .where(eq(users.id, user.id));
-          }
-          break;
-        }
-
-        case "payment_intent.succeeded": {
-          const paymentIntent = event.data.object as Stripe.PaymentIntent;
-          const userId = paymentIntent.metadata.userId;
-          const plan = paymentIntent.metadata.plan;
-
-          if (userId && plan) {
-            await db
-              .update(users)
-              .set({
-                subscriptionTier: plan,
-                subscriptionStatus: "active",
-              })
-              .where(eq(users.id, userId));
-          }
-          break;
-        }
-      }
-
-      res.json({ received: true });
-    } catch (error) {
-      console.error("Webhook error:", error);
-      res.status(400).send(`Webhook Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   });
 
