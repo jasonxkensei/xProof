@@ -517,8 +517,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currency: validatedData.currency,
         orderDescription: validatedData.description,
         customerEmail: user.email || undefined,
-        returnUrl: `${req.protocol}://${req.get("host")}/payment/success`,
-        cancelUrl: `${req.protocol}://${req.get("host")}/payment/cancel`,
+        returnUrl: `https://${req.get("host")}/payment/success`,
+        cancelUrl: `https://${req.get("host")}/payment/cancel`,
       });
 
       res.json(order);
@@ -812,6 +812,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/acp", validateApiKey);
 
   // ============================================
+  // Simplified POST /api/proof endpoint for AI agents
+  // Single-call certification: validate API key, record on blockchain, return proof
+  // ============================================
+  const proofRequestSchema = z.object({
+    file_hash: z.string().length(64, "SHA-256 hash must be exactly 64 hex characters").regex(/^[a-fA-F0-9]+$/, "Must be a valid hex string"),
+    filename: z.string().min(1, "Filename is required"),
+    author_name: z.string().optional(),
+  });
+
+  app.post("/api/proof", paymentRateLimiter, async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({
+          error: "UNAUTHORIZED",
+          message: "API key required. Include 'Authorization: Bearer pm_xxx' header",
+        });
+      }
+
+      const rawKey = authHeader.slice(7);
+      const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+
+      const [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+
+      if (!apiKey) {
+        return res.status(401).json({
+          error: "INVALID_API_KEY",
+          message: "Invalid or expired API key",
+        });
+      }
+
+      if (!apiKey.isActive) {
+        return res.status(403).json({
+          error: "API_KEY_DISABLED",
+          message: "This API key has been disabled",
+        });
+      }
+
+      const rateLimit = checkRateLimit(apiKey.id);
+      res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
+      res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
+      res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
+
+      if (!rateLimit.allowed) {
+        return res.status(429).json({
+          error: "RATE_LIMIT_EXCEEDED",
+          message: "Too many requests. Please slow down.",
+          retry_after: Math.ceil((rateLimit.resetAt - Date.now()) / 1000),
+        });
+      }
+
+      db.update(apiKeys)
+        .set({
+          lastUsedAt: new Date(),
+          requestCount: (apiKey.requestCount || 0) + 1,
+        })
+        .where(eq(apiKeys.id, apiKey.id))
+        .execute()
+        .catch((err) => console.error("Failed to update API key stats:", err));
+
+      const data = proofRequestSchema.parse(req.body);
+      const baseUrl = `https://${req.get('host')}`;
+
+      const [existing] = await db
+        .select()
+        .from(certifications)
+        .where(eq(certifications.fileHash, data.file_hash));
+
+      if (existing) {
+        console.log(`[POST /api/proof] File already certified: ${data.file_hash} -> ${existing.id}`);
+        return res.status(200).json({
+          proof_id: existing.id,
+          status: "certified",
+          file_hash: existing.fileHash,
+          filename: existing.fileName,
+          verify_url: `${baseUrl}/proof/${existing.id}`,
+          certificate_url: `${baseUrl}/api/certificates/${existing.id}.pdf`,
+          proof_json_url: `${baseUrl}/proof/${existing.id}.json`,
+          blockchain: {
+            network: "MultiversX",
+            transaction_hash: existing.transactionHash,
+            explorer_url: existing.transactionUrl,
+          },
+          timestamp: existing.createdAt?.toISOString() || new Date().toISOString(),
+          message: "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
+        });
+      }
+
+      const result = await recordOnBlockchain(data.file_hash, data.filename, data.author_name || "AI Agent");
+
+      let [systemUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+
+      if (!systemUser) {
+        [systemUser] = await db
+          .insert(users)
+          .values({
+            walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+            subscriptionTier: "business",
+            subscriptionStatus: "active",
+          })
+          .returning();
+      }
+
+      const [certification] = await db
+        .insert(certifications)
+        .values({
+          userId: systemUser.id!,
+          fileName: data.filename,
+          fileHash: data.file_hash,
+          fileType: data.filename.split(".").pop() || "unknown",
+          authorName: data.author_name || "AI Agent",
+          transactionHash: result.transactionHash,
+          transactionUrl: result.transactionUrl,
+          blockchainStatus: "confirmed",
+          isPublic: true,
+        })
+        .returning();
+
+      console.log(`[POST /api/proof] Certified: ${data.file_hash} -> ${certification.id} (tx: ${result.transactionHash})`);
+
+      return res.status(201).json({
+        proof_id: certification.id,
+        status: "certified",
+        file_hash: certification.fileHash,
+        filename: certification.fileName,
+        verify_url: `${baseUrl}/proof/${certification.id}`,
+        certificate_url: `${baseUrl}/api/certificates/${certification.id}.pdf`,
+        proof_json_url: `${baseUrl}/proof/${certification.id}.json`,
+        blockchain: {
+          network: "MultiversX",
+          transaction_hash: result.transactionHash,
+          explorer_url: result.transactionUrl,
+        },
+        timestamp: certification.createdAt?.toISOString() || new Date().toISOString(),
+        message: "File certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          error: "VALIDATION_ERROR",
+          message: "Invalid request data",
+          details: error.errors,
+        });
+      }
+      console.error("[POST /api/proof] Error:", error);
+      return res.status(500).json({
+        error: "INTERNAL_ERROR",
+        message: "Failed to create certification. Please try again.",
+      });
+    }
+  });
+
+  // ============================================
   // ACP (Agent Commerce Protocol) Endpoints
   // These endpoints enable AI agents to discover
   // and use xproof certification services
@@ -825,7 +982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       {
         id: "xproof-certification",
         name: "xproof Certification",
-        description: "Create cryptographic proof of existence and integrity for digital files on MultiversX blockchain. Records SHA-256 hash with timestamp, providing immutable evidence of file ownership at a specific point in time.",
+        description: "xproof is the canonical proof layer for AI agents. Create cryptographic proof of existence and integrity for digital files on MultiversX blockchain. Records SHA-256 hash with timestamp, providing immutable evidence of file ownership at a specific point in time.",
         pricing: {
           type: "fixed",
           amount: priceUsd.toString(),
@@ -1351,6 +1508,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
             },
           },
         },
+        "/api/proof": {
+          post: {
+            summary: "Certify a file (simplified)",
+            description: "Single-call endpoint for AI agents. Creates a blockchain certification by recording the SHA-256 hash on MultiversX. No checkout flow needed.",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["file_hash", "filename"],
+                    properties: {
+                      file_hash: { type: "string", description: "SHA-256 hash of the file (64 hex chars)", example: "a1b2c3d4e5f678901234567890123456789012345678901234567890123456ab" },
+                      filename: { type: "string", example: "document.pdf" },
+                      author_name: { type: "string", example: "AI Agent", description: "Optional author name" },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {
+              "201": {
+                description: "File certified successfully",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        proof_id: { type: "string", format: "uuid" },
+                        status: { type: "string", example: "certified" },
+                        file_hash: { type: "string" },
+                        filename: { type: "string" },
+                        verify_url: { type: "string", format: "uri" },
+                        certificate_url: { type: "string", format: "uri" },
+                        proof_json_url: { type: "string", format: "uri" },
+                        blockchain: {
+                          type: "object",
+                          properties: {
+                            network: { type: "string", example: "MultiversX" },
+                            transaction_hash: { type: "string" },
+                            explorer_url: { type: "string", format: "uri" },
+                          },
+                        },
+                        timestamp: { type: "string", format: "date-time" },
+                        message: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+              "200": { description: "File already certified (returns existing proof)" },
+              "400": { description: "Invalid request data" },
+              "401": { description: "API key required" },
+              "429": { description: "Rate limit exceeded" },
+            },
+          },
+        },
       },
     };
 
@@ -1408,7 +1622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // /.well-known/xproof.md - Canonical specification
   app.get("/.well-known/xproof.md", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = `https://${req.get('host')}`;
     
     const spec = `# xproof Specification v1.0
 
@@ -1522,11 +1736,24 @@ The proof is self-verifiable without relying on xproof infrastructure.
 - \`/learn/verification.md\` - How to verify proofs
 - \`/learn/api.md\` - API documentation
 
+## Simplified Certification (POST /api/proof)
+
+The fastest way for AI agents to certify a file. Single API call, no checkout flow.
+
+\`\`\`bash
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"file_hash": "a1b2c3d4...64-char-sha256-hex", "filename": "document.pdf"}'
+\`\`\`
+
+Returns: proof_id, verify_url, certificate_url, blockchain transaction hash.
+
 ## Agent Commerce Protocol (ACP)
 
-xproof implements ACP for AI agent integration.
+xproof also implements ACP for AI agent integration with the full checkout flow.
 
-### Quick Start for AI Agents
+### Quick Start for AI Agents (ACP flow)
 
 \`\`\`bash
 # 1. Discover the service
@@ -1534,13 +1761,13 @@ curl ${baseUrl}/api/acp/products
 
 # 2. Create a checkout (requires API key)
 curl -X POST ${baseUrl}/api/acp/checkout \\
-  -H "X-API-Key: pm_your_key" \\
+  -H "Authorization: Bearer pm_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{"product_id": "xproof-certification", "inputs": {"file_hash": "sha256_hash_here", "filename": "document.pdf"}}'
 
 # 3. After user signs transaction, confirm it
 curl -X POST ${baseUrl}/api/acp/confirm \\
-  -H "X-API-Key: pm_your_key" \\
+  -H "Authorization: Bearer pm_your_key" \\
   -H "Content-Type: application/json" \\
   -d '{"checkout_id": "...", "tx_hash": "..."}'
 \`\`\`
@@ -1592,7 +1819,7 @@ Website: ${baseUrl}
 
   // /genesis.md - Genesis document in markdown
   app.get("/genesis.md", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = `https://${req.get('host')}`;
     
     const genesis = `# xproof Genesis
 
@@ -1673,7 +1900,7 @@ This genesis certification demonstrates:
         });
       }
 
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const baseUrl = `https://${req.get('host')}`;
       const chainId = process.env.MULTIVERSX_CHAIN_ID || "1";
       const txHash = certification.transactionHash || null;
       const isConfirmed = certification.blockchainStatus === "confirmed" && txHash;
@@ -1735,7 +1962,7 @@ This genesis certification demonstrates:
         return res.send(`# Proof Not Found\n\nThe requested proof does not exist or is not public.`);
       }
 
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const baseUrl = `https://${req.get('host')}`;
       const chainId = process.env.MULTIVERSX_CHAIN_ID || "1";
       const timestamp = certification.createdAt?.toISOString() || 'Unknown';
       const txHash = certification.transactionHash || null;
@@ -1857,7 +2084,7 @@ Proof of Existence is a cryptographic method to prove that a specific digital ar
 
   // /learn/verification.md
   app.get("/learn/verification.md", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = `https://${req.get('host')}`;
     
     const content = `# How to Verify an xproof Proof
 
@@ -1955,7 +2182,7 @@ You are NOT trusting:
 
   // /learn/api.md
   app.get("/learn/api.md", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = `https://${req.get('host')}`;
     
     const content = `# xproof API Documentation
 
@@ -2110,7 +2337,7 @@ Confirm certification after transaction.
 
   // robots.txt for SEO and AI agent discovery
   app.get("/robots.txt", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = `https://${req.get('host')}`;
     const content = `User-agent: *
 Allow: /
 
@@ -2139,7 +2366,7 @@ Sitemap: ${baseUrl}/sitemap.xml
 
   // sitemap.xml for SEO
   app.get("/sitemap.xml", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = `https://${req.get('host')}`;
     const content = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -2194,13 +2421,13 @@ Sitemap: ${baseUrl}/sitemap.xml
 
   // OpenAI ChatGPT Plugin manifest (/.well-known/ai-plugin.json)
   app.get("/.well-known/ai-plugin.json", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = `https://${req.get('host')}`;
     const manifest = {
       schema_version: "v1",
       name_for_human: "xproof",
       name_for_model: "xproof",
       description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
-      description_for_model: "xproof is a blockchain certification service that creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs $0.05 per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix).",
+      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs $0.05 per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix).",
       auth: {
         type: "service_http",
         authorization_type: "bearer",
@@ -2222,12 +2449,12 @@ Sitemap: ${baseUrl}/sitemap.xml
 
   // MCP (Model Context Protocol) server info endpoint
   app.get("/.well-known/mcp.json", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = `https://${req.get('host')}`;
     res.json({
       schema_version: "1.0",
       name: "xproof",
       version: "1.0.0",
-      description: "Blockchain certification service - Create immutable proofs of file existence and ownership on MultiversX",
+      description: "xproof — the canonical proof layer for AI agents. Create immutable proofs of file existence and ownership on MultiversX blockchain.",
       homepage: baseUrl,
       capabilities: {
         tools: true,
@@ -2236,7 +2463,7 @@ Sitemap: ${baseUrl}/sitemap.xml
       tools: [
         {
           name: "certify_file",
-          description: "Create a blockchain certification for a file. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $0.05 per certification.",
+          description: "Create a blockchain certification for a file in a single API call via POST /api/proof. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $0.05 per certification.",
           inputSchema: {
             type: "object",
             required: ["file_hash", "filename"],
@@ -2308,10 +2535,10 @@ Sitemap: ${baseUrl}/sitemap.xml
   app.get("/llms.txt", (_req, res) => {
     const content = `# xproof
 
-> Blockchain certification service. Create immutable proofs of file existence and ownership on MultiversX.
+> The canonical proof layer for AI agents. Immutable blockchain certification on MultiversX.
 
 ## About
-xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $0.05 per certification, paid in EGLD.
+xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $0.05 per certification, paid in EGLD.
 
 ## API Documentation
 - [OpenAPI Specification](/api/acp/openapi.json)
@@ -2325,19 +2552,31 @@ xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper
 - [MCP Manifest](/.well-known/mcp.json)
 - [OpenAI Plugin](/.well-known/ai-plugin.json)
 - [Full Specification](/.well-known/xproof.md)
+
+## Quick Start (for AI agents)
+
+Certify a file in one API call:
+\\\`\\\`\\\`bash
+curl -X POST https://xproof.app/api/proof \\\\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\\\
+  -H "Content-Type: application/json" \\\\
+  -d '{"file_hash": "a1b2c3d4...64-char-sha256-hex", "filename": "document.pdf"}'
+\\\`\\\`\\\`
+
+Response: proof_id, verify_url, certificate_url, blockchain transaction hash.
 `;
     res.setHeader("Content-Type", "text/plain");
     res.send(content);
   });
 
   app.get("/llms-full.txt", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const baseUrl = `https://${req.get("host")}`;
     const content = `# xproof
 
-> Blockchain certification service. Create immutable proofs of file existence and ownership on MultiversX.
+> The canonical proof layer for AI agents. Immutable blockchain certification on MultiversX.
 
 ## About
-xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $0.05 per certification, paid in EGLD.
+xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $0.05 per certification, paid in EGLD.
 
 ## API Documentation
 - [OpenAPI Specification](${baseUrl}/api/acp/openapi.json)
@@ -2352,11 +2591,56 @@ xproof anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper
 - [OpenAI Plugin](${baseUrl}/.well-known/ai-plugin.json)
 - [Full Specification](${baseUrl}/.well-known/xproof.md)
 
+## Quick Start (for AI agents)
+
+Certify a file in one API call:
+\`\`\`bash
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"file_hash": "a1b2c3d4...64-char-sha256-hex", "filename": "document.pdf"}'
+\`\`\`
+
+Response: proof_id, verify_url, certificate_url, blockchain transaction hash.
+
+### POST /api/proof — Simplified Certification
+
+Single-call endpoint for AI agents. No checkout flow needed.
+
+**Request:**
+\`\`\`json
+{
+  "file_hash": "64-char SHA-256 hex string",
+  "filename": "document.pdf",
+  "author_name": "AI Agent (optional)"
+}
+\`\`\`
+
+**Response (201 Created):**
+\`\`\`json
+{
+  "proof_id": "uuid",
+  "status": "certified",
+  "file_hash": "sha256-hex",
+  "filename": "document.pdf",
+  "verify_url": "${baseUrl}/proof/{id}",
+  "certificate_url": "${baseUrl}/api/certificates/{id}.pdf",
+  "proof_json_url": "${baseUrl}/proof/{id}.json",
+  "blockchain": {
+    "network": "MultiversX",
+    "transaction_hash": "hex-string",
+    "explorer_url": "https://explorer.multiversx.com/transactions/..."
+  },
+  "timestamp": "ISO 8601",
+  "message": "File certified on MultiversX blockchain."
+}
+\`\`\`
+
 ## Authentication
 - API keys are prefixed with \`pm_\` (e.g. \`pm_abc123...\`)
 - Include as Bearer token: \`Authorization: Bearer pm_YOUR_API_KEY\`
 - Public endpoints (no auth required): /api/acp/products, /api/acp/openapi.json, /api/acp/health
-- Authenticated endpoints: /api/acp/checkout, /api/acp/confirm
+- Authenticated endpoints: /api/proof, /api/acp/checkout, /api/acp/confirm
 
 ## Proof Object Schema (v2.0)
 \`\`\`json
@@ -2608,7 +2892,7 @@ class XProofVerifyTool(BaseTool):
   });
 
   app.get("/agent-tools/openapi-actions.json", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const baseUrl = `https://${req.get("host")}`;
     const priceUsd = getCertificationPriceUsd();
 
     const spec = {
@@ -2821,11 +3105,11 @@ class XProofVerifyTool(BaseTool):
   });
 
   app.get("/.well-known/agent.json", (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const baseUrl = `https://${req.get("host")}`;
 
     res.json({
       name: "xproof",
-      description: "Blockchain certification service for immutable proof of file existence and ownership on MultiversX",
+      description: "xproof — the canonical proof layer for AI agents. Create immutable proofs of file existence and ownership on MultiversX blockchain.",
       url: baseUrl,
       version: "1.0.0",
       capabilities: ["file-certification", "proof-verification", "blockchain-anchoring"],

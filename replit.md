@@ -28,6 +28,9 @@ PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides t
 ### Agent Commerce Protocol (ACP)
 xproof implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is $0.05 per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
 
+### Simplified Agent API (POST /api/proof)
+A single-call certification endpoint for AI agents. Accepts `{ file_hash, filename, author_name? }` with a Bearer API key, handles blockchain recording server-side, and returns `{ proof_id, verify_url, certificate_url, blockchain }`. This eliminates the 3-step checkout/sign/confirm flow for agents that don't need to manage their own MultiversX transactions.
+
 ### LLM-Ready Routes & AI Agent Discovery
 The platform offers comprehensive machine-readable documentation for AI agent discovery:
 
@@ -59,7 +62,7 @@ The platform offers comprehensive machine-readable documentation for AI agent di
 
 **Authentication:**
 - Public endpoints: `/api/acp/products`, `/api/acp/openapi.json`, `/api/acp/health`, `/llms.txt`, `/llms-full.txt`
-- Authenticated endpoints: `/api/acp/checkout`, `/api/acp/confirm` (require `pm_` API key)
+- Authenticated endpoints: `/api/acp/checkout`, `/api/acp/confirm`, `/api/proof` (require `pm_` API key)
 
 **Domain:** xproof.app (all references updated from xproof.io)
 
