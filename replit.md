@@ -29,7 +29,10 @@ PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides t
 xproof implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is $0.05 per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
 
 ### Simplified Agent API (POST /api/proof)
-A single-call certification endpoint for AI agents. Accepts `{ file_hash, filename, author_name? }` with a Bearer API key, handles blockchain recording server-side, and returns `{ proof_id, verify_url, certificate_url, blockchain }`. This eliminates the 3-step checkout/sign/confirm flow for agents that don't need to manage their own MultiversX transactions.
+A single-call certification endpoint for AI agents. Accepts `{ file_hash, filename, author_name?, webhook_url? }` with a Bearer API key, handles blockchain recording server-side, and returns `{ proof_id, verify_url, certificate_url, blockchain, webhook_status }`. This eliminates the 3-step checkout/sign/confirm flow for agents that don't need to manage their own MultiversX transactions.
+
+### Webhook Notifications
+When agents include `webhook_url` in their POST /api/proof request, xProof sends a POST notification when the proof is confirmed on-chain. The webhook payload includes proof_id, file_hash, verify_url, certificate_url, and blockchain details. Security: HMAC-SHA256 signed (X-xProof-Signature header). Retry policy: up to 3 attempts with exponential backoff (immediate, 10s, 20s). Webhook status tracked per certification: pending → delivered or failed.
 
 ### LLM-Ready Routes & AI Agent Discovery
 The platform offers comprehensive machine-readable documentation for AI agent discovery:

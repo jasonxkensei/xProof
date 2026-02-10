@@ -60,6 +60,10 @@ export const certifications = pgTable("certifications", {
   blockchainStatus: varchar("blockchain_status").default("pending"), // pending, confirmed, failed
   certificateUrl: text("certificate_url"),
   isPublic: boolean("is_public").default(true),
+  webhookUrl: text("webhook_url"),
+  webhookStatus: varchar("webhook_status"),
+  webhookLastAttempt: timestamp("webhook_last_attempt"),
+  webhookAttempts: integer("webhook_attempts").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

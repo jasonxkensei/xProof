@@ -819,6 +819,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     file_hash: z.string().length(64, "SHA-256 hash must be exactly 64 hex characters").regex(/^[a-fA-F0-9]+$/, "Must be a valid hex string"),
     filename: z.string().min(1, "Filename is required"),
     author_name: z.string().optional(),
+    webhook_url: z.string().url("Must be a valid URL").refine((url) => !url || url.startsWith("https://"), { message: "Webhook URL must use HTTPS" }).optional(),
   });
 
   app.post("/api/proof", paymentRateLimiter, async (req, res) => {
@@ -897,6 +898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             explorer_url: existing.transactionUrl,
           },
           timestamp: existing.createdAt?.toISOString() || new Date().toISOString(),
+          webhook_status: "not_applicable",
           message: "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
         });
       }
@@ -936,6 +938,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[POST /api/proof] Certified: ${data.file_hash} -> ${certification.id} (tx: ${result.transactionHash})`);
 
+      let webhookStatus: string = data.webhook_url ? "pending" : "not_requested";
+      
+      if (data.webhook_url) {
+        const { scheduleWebhookDelivery, isValidWebhookUrl } = await import("./webhook");
+        if (isValidWebhookUrl(data.webhook_url)) {
+          await db.update(certifications)
+            .set({ webhookUrl: data.webhook_url, webhookStatus: "pending" })
+            .where(eq(certifications.id, certification.id));
+          
+          scheduleWebhookDelivery(certification.id, data.webhook_url, baseUrl, keyHash);
+        } else {
+          webhookStatus = "failed";
+          await db.update(certifications)
+            .set({ webhookUrl: data.webhook_url, webhookStatus: "failed" })
+            .where(eq(certifications.id, certification.id));
+        }
+      }
+
       return res.status(201).json({
         proof_id: certification.id,
         status: "certified",
@@ -950,6 +970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           explorer_url: result.transactionUrl,
         },
         timestamp: certification.createdAt?.toISOString() || new Date().toISOString(),
+        webhook_status: webhookStatus,
         message: "File certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
       });
     } catch (error) {
@@ -1523,6 +1544,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       file_hash: { type: "string", description: "SHA-256 hash of the file (64 hex chars)", example: "a1b2c3d4e5f678901234567890123456789012345678901234567890123456ab" },
                       filename: { type: "string", example: "document.pdf" },
                       author_name: { type: "string", example: "AI Agent", description: "Optional author name" },
+                      webhook_url: { type: "string", format: "uri", description: "Optional HTTPS URL to receive a POST notification when the proof is confirmed on-chain. Payload includes proof_id, file_hash, verify_url, blockchain details. Signed with X-xProof-Signature (HMAC-SHA256).", example: "https://your-agent.example.com/webhooks/xproof" },
                     },
                   },
                 },
@@ -1552,6 +1574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           },
                         },
                         timestamp: { type: "string", format: "date-time" },
+                        webhook_status: { type: "string", enum: ["pending", "delivered", "failed", "not_requested", "not_applicable"], description: "Webhook delivery status. 'pending': delivery in progress, 'delivered': successfully sent, 'failed': delivery failed after retries or invalid URL, 'not_requested': no webhook_url provided, 'not_applicable': file was already certified." },
                         message: { type: "string" },
                       },
                     },
@@ -1744,10 +1767,12 @@ The fastest way for AI agents to certify a file. Single API call, no checkout fl
 curl -X POST ${baseUrl}/api/proof \\
   -H "Authorization: Bearer pm_YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"file_hash": "a1b2c3d4...64-char-sha256-hex", "filename": "document.pdf"}'
+  -d '{"file_hash": "a1b2c3d4...64-char-sha256-hex", "filename": "document.pdf", "webhook_url": "https://your-agent.example.com/webhooks/xproof"}'
 \`\`\`
 
-Returns: proof_id, verify_url, certificate_url, blockchain transaction hash.
+Returns: proof_id, verify_url, certificate_url, blockchain transaction hash, webhook_status.
+
+Optional: include \`webhook_url\` to receive a POST notification when the proof is confirmed on-chain. The payload is signed with HMAC-SHA256 (header: \`X-xProof-Signature\`). Retries up to 3 times with exponential backoff.
 
 ## Agent Commerce Protocol (ACP)
 
@@ -2470,7 +2495,8 @@ Sitemap: ${baseUrl}/sitemap.xml
             properties: {
               file_hash: { type: "string", description: "SHA-256 hash of the file (64 hex characters)" },
               filename: { type: "string", description: "Original filename with extension" },
-              author_name: { type: "string", description: "Name of the certifier", default: "AI Agent" }
+              author_name: { type: "string", description: "Name of the certifier", default: "AI Agent" },
+              webhook_url: { type: "string", format: "uri", description: "Optional HTTPS URL to receive a POST notification when the proof is confirmed on-chain. Payload is signed with HMAC-SHA256 (X-xProof-Signature header)." }
             }
           }
         },
@@ -2560,10 +2586,12 @@ Certify a file in one API call:
 curl -X POST https://xproof.app/api/proof \\\\
   -H "Authorization: Bearer pm_YOUR_API_KEY" \\\\
   -H "Content-Type: application/json" \\\\
-  -d '{"file_hash": "a1b2c3d4...64-char-sha256-hex", "filename": "document.pdf"}'
+  -d '{"file_hash": "a1b2c3d4...64-char-sha256-hex", "filename": "document.pdf", "webhook_url": "https://your-agent.example.com/webhooks/xproof"}'
 \\\`\\\`\\\`
 
-Response: proof_id, verify_url, certificate_url, blockchain transaction hash.
+Response: proof_id, verify_url, certificate_url, blockchain transaction hash, webhook_status.
+
+Optional: include \\\`webhook_url\\\` to receive a signed POST notification (HMAC-SHA256) when the proof is confirmed. Retries up to 3 times.
 `;
     res.setHeader("Content-Type", "text/plain");
     res.send(content);
@@ -2598,10 +2626,10 @@ Certify a file in one API call:
 curl -X POST ${baseUrl}/api/proof \\
   -H "Authorization: Bearer pm_YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"file_hash": "a1b2c3d4...64-char-sha256-hex", "filename": "document.pdf"}'
+  -d '{"file_hash": "a1b2c3d4...64-char-sha256-hex", "filename": "document.pdf", "webhook_url": "https://your-agent.example.com/webhooks/xproof"}'
 \`\`\`
 
-Response: proof_id, verify_url, certificate_url, blockchain transaction hash.
+Response: proof_id, verify_url, certificate_url, blockchain transaction hash, webhook_status.
 
 ### POST /api/proof — Simplified Certification
 
@@ -2612,7 +2640,8 @@ Single-call endpoint for AI agents. No checkout flow needed.
 {
   "file_hash": "64-char SHA-256 hex string",
   "filename": "document.pdf",
-  "author_name": "AI Agent (optional)"
+  "author_name": "AI Agent (optional)",
+  "webhook_url": "https://your-agent.example.com/webhooks/xproof (optional)"
 }
 \`\`\`
 
@@ -2632,9 +2661,41 @@ Single-call endpoint for AI agents. No checkout flow needed.
     "explorer_url": "https://explorer.multiversx.com/transactions/..."
   },
   "timestamp": "ISO 8601",
+  "webhook_status": "pending | delivered | failed | not_requested | not_applicable",
   "message": "File certified on MultiversX blockchain."
 }
 \`\`\`
+
+### Webhook Notifications
+
+Include \`webhook_url\` in your request to receive a POST callback when the proof is confirmed on-chain.
+
+**Webhook payload:**
+\`\`\`json
+{
+  "event": "proof.certified",
+  "proof_id": "uuid",
+  "status": "certified",
+  "file_hash": "sha256-hex",
+  "filename": "document.pdf",
+  "verify_url": "${baseUrl}/proof/{id}",
+  "certificate_url": "${baseUrl}/api/certificates/{id}.pdf",
+  "proof_json_url": "${baseUrl}/proof/{id}.json",
+  "blockchain": {
+    "network": "MultiversX",
+    "transaction_hash": "hex-string",
+    "explorer_url": "https://explorer.multiversx.com/transactions/..."
+  },
+  "timestamp": "ISO 8601"
+}
+\`\`\`
+
+**Security:** Each webhook is signed with HMAC-SHA256. Verify using:
+- Header: \`X-xProof-Signature\` (hex-encoded HMAC of the JSON body)
+- Header: \`X-xProof-Event\` (always \`proof.certified\`)
+- Header: \`X-xProof-Delivery\` (certification ID)
+
+**Retry policy:** Up to 3 attempts with exponential backoff (immediate, 10s, 20s). Status updates: pending → delivered or failed.
 
 ## Authentication
 - API keys are prefixed with \`pm_\` (e.g. \`pm_abc123...\`)
