@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { prerenderMiddleware } from "./prerender";
 import { 
   globalRateLimiter, 
   healthCheck, 
@@ -93,6 +94,9 @@ app.use((req, res, next) => {
       res.status(status).json({ message });
     }
   });
+
+  // Pre-render for crawlers (before SPA catch-all)
+  app.use(prerenderMiddleware());
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
