@@ -16,6 +16,9 @@ The frontend is built with React 18 and TypeScript, using Vite for fast developm
 ### Backend
 The backend utilizes Express.js with TypeScript and Node.js. It integrates MultiversX SDK-dApp for secure, cryptographic authentication using Native Auth, supporting various wallets like Extension, Web Wallet, and WalletConnect. The authentication flow involves client-side signature generation and backend verification to establish secure user sessions, stored in PostgreSQL.
 
+### Crawler Pre-rendering (SEO)
+A pre-rendering middleware (`server/prerender.ts`) detects crawler User-Agents (ChatGPT, GPTBot, Googlebot, Bingbot, Twitterbot, facebookexternalhit, etc.) and serves full semantic HTML with meta tags, Open Graph, Twitter Cards, and JSON-LD structured data instead of the empty SPA shell. Routes: `/` (homepage), `/certify`, `/agents`, `/proof/:id` (dynamic). Normal browser requests pass through to the React SPA. Mounted before the Vite/static catch-all in `server/index.ts`.
+
 ### API Architecture
 RESTful APIs are provided under `/api/*`, with middleware for logging and error handling. Protected routes enforce wallet authentication. Key API endpoints include wallet synchronization, user data retrieval, and session logout. File processing involves client-side SHA-256 hashing for privacy and performance, sending only metadata to the server.
 
