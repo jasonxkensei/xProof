@@ -20,6 +20,8 @@ import { z } from "zod";
 import { generateCertificatePDF } from "./certificateGenerator";
 import { createXMoneyOrder, getXMoneyOrderStatus, verifyXMoneyWebhook, isXMoneyConfigured } from "./xmoney";
 import { recordOnBlockchain, isMultiversXConfigured, broadcastSignedTransaction } from "./blockchain";
+import { createMcpServer, authenticateApiKey } from "./mcp";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { 
   isWalletAuthenticated, 
   generateChallenge, 
@@ -1529,6 +1531,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
             },
           },
         },
+        "/mcp": {
+          post: {
+            summary: "MCP Server (JSON-RPC 2.0)",
+            description: "Model Context Protocol server endpoint. Accepts JSON-RPC 2.0 requests over Streamable HTTP. Supports methods: initialize, tools/list, tools/call, resources/list, resources/read. Tools: certify_file, verify_proof, get_proof, discover_services. Resources: xproof://specification, xproof://openapi. Stateless (no session management). Protocol version: 2025-03-26.",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["jsonrpc", "method"],
+                    properties: {
+                      jsonrpc: { type: "string", example: "2.0" },
+                      id: { type: "integer", example: 1 },
+                      method: { type: "string", enum: ["initialize", "tools/list", "tools/call", "resources/list", "resources/read"], example: "initialize" },
+                      params: { type: "object", description: "Method-specific parameters" },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {
+              "200": {
+                description: "JSON-RPC 2.0 response",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        jsonrpc: { type: "string", example: "2.0" },
+                        id: { type: "integer" },
+                        result: { type: "object", description: "Method-specific result" },
+                      },
+                    },
+                  },
+                },
+              },
+              "401": { description: "Invalid or missing API key (for authenticated methods like tools/call)" },
+            },
+          },
+        },
         "/api/proof": {
           post: {
             summary: "Certify a file (simplified)",
@@ -1753,6 +1796,7 @@ The proof is self-verifiable without relying on xproof infrastructure.
 - \`/genesis.proof.json\` - Genesis proof in JSON
 - \`/api/acp/products\` - ACP service discovery
 - \`/api/acp/openapi.json\` - OpenAPI 3.0 specification
+- \`/mcp\` - MCP server (JSON-RPC 2.0 over Streamable HTTP, POST only)
 
 ### Documentation
 - \`/learn/proof-of-existence.md\` - What is proof of existence
@@ -2479,8 +2523,11 @@ Sitemap: ${baseUrl}/sitemap.xml
       schema_version: "1.0",
       name: "xproof",
       version: "1.0.0",
-      description: "xproof — the canonical proof layer for AI agents. Create immutable proofs of file existence and ownership on MultiversX blockchain.",
+      description: "xproof — the canonical proof layer for AI agents. Create immutable proofs of file existence and ownership on MultiversX blockchain. Live MCP server available at POST /mcp (JSON-RPC 2.0 over Streamable HTTP).",
       homepage: baseUrl,
+      endpoint: `${baseUrl}/mcp`,
+      transport: "streamable-http",
+      protocol_version: "2025-03-26",
       capabilities: {
         tools: true,
         resources: true
@@ -2575,12 +2622,14 @@ xproof is the canonical proof-of-existence service for AI agents. It anchors SHA
 ## Machine Interfaces
 - [Service Discovery](/api/acp/products)
 - [Health Check](/api/acp/health)
+- [MCP Server (JSON-RPC)](/mcp)
 - [MCP Manifest](/.well-known/mcp.json)
 - [OpenAI Plugin](/.well-known/ai-plugin.json)
 - [Full Specification](/.well-known/xproof.md)
 
 ## Quick Start (for AI agents)
 
+### REST API
 Certify a file in one API call:
 \\\`\\\`\\\`bash
 curl -X POST https://xproof.app/api/proof \\\\
@@ -2592,6 +2641,9 @@ curl -X POST https://xproof.app/api/proof \\\\
 Response: proof_id, verify_url, certificate_url, blockchain transaction hash, webhook_status.
 
 Optional: include \\\`webhook_url\\\` to receive a signed POST notification (HMAC-SHA256) when the proof is confirmed. Retries up to 3 times.
+
+### MCP (Model Context Protocol)
+Connect via JSON-RPC 2.0 over Streamable HTTP at POST /mcp. Tools: certify_file, verify_proof, get_proof, discover_services. Auth: Bearer pm_YOUR_API_KEY.
 `;
     res.setHeader("Content-Type", "text/plain");
     res.send(content);
@@ -2615,12 +2667,14 @@ xproof is the canonical proof-of-existence service for AI agents. It anchors SHA
 ## Machine Interfaces
 - [Service Discovery](${baseUrl}/api/acp/products)
 - [Health Check](${baseUrl}/api/acp/health)
+- [MCP Server (JSON-RPC)](${baseUrl}/mcp)
 - [MCP Manifest](${baseUrl}/.well-known/mcp.json)
 - [OpenAI Plugin](${baseUrl}/.well-known/ai-plugin.json)
 - [Full Specification](${baseUrl}/.well-known/xproof.md)
 
 ## Quick Start (for AI agents)
 
+### REST API
 Certify a file in one API call:
 \`\`\`bash
 curl -X POST ${baseUrl}/api/proof \\
@@ -2801,6 +2855,64 @@ curl ${baseUrl}/api/acp/checkout/{checkoutId} \\
 3. Verify the blockchain transaction on MultiversX explorer using the \`transaction_hash\`
 4. Confirm the transaction data field contains the file hash
 5. The timestamp proves the file existed at that point in time
+
+## MCP Server (Model Context Protocol)
+
+xproof exposes a native MCP server at \`POST ${baseUrl}/mcp\` using JSON-RPC 2.0 over Streamable HTTP.
+
+**Protocol**: JSON-RPC 2.0 over Streamable HTTP (spec version 2025-03-26)
+**Authentication**: Bearer token (\`pm_\` prefixed API keys) via Authorization header
+**Session**: Stateless (no session management required)
+
+### Available Tools
+- \`certify_file\` - Create a blockchain certification for a file
+- \`verify_proof\` - Verify an existing certification
+- \`get_proof\` - Retrieve a proof in JSON or Markdown format
+- \`discover_services\` - Discover available services and pricing
+
+### Available Resources
+- \`xproof://specification\` - Full xproof specification
+- \`xproof://openapi\` - OpenAPI 3.0 specification
+
+### Connect to MCP Server
+
+**Initialize:**
+\`\`\`bash
+curl -X POST ${baseUrl}/mcp \\
+  -H "Content-Type: application/json" \\
+  -H "Accept: application/json, text/event-stream" \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"my-agent","version":"1.0.0"}}}'
+\`\`\`
+
+**Call a tool:**
+\`\`\`bash
+curl -X POST ${baseUrl}/mcp \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"discover_services","arguments":{}}}'
+\`\`\`
+
+**Certify a file via MCP:**
+\`\`\`bash
+curl -X POST ${baseUrl}/mcp \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"certify_file","arguments":{"file_hash":"a1b2c3d4...64-char-sha256-hex","filename":"document.pdf"}}}'
+\`\`\`
+
+### MCP Client Configuration (Claude Desktop, Cursor, etc.)
+\`\`\`json
+{
+  "mcpServers": {
+    "xproof": {
+      "url": "${baseUrl}/mcp",
+      "headers": {
+        "Authorization": "Bearer pm_YOUR_API_KEY"
+      }
+    }
+  }
+}
+\`\`\`
 
 ## Genesis Proof
 The first certification ever created on xproof:
@@ -3178,6 +3290,7 @@ class XProofVerifyTool(BaseTool):
         acp: `${baseUrl}/api/acp/products`,
         openapi: `${baseUrl}/api/acp/openapi.json`,
         mcp: `${baseUrl}/.well-known/mcp.json`,
+        mcp_endpoint: `${baseUrl}/mcp`,
         openai_plugin: `${baseUrl}/.well-known/ai-plugin.json`,
         llms_txt: `${baseUrl}/llms.txt`,
       },
@@ -3198,6 +3311,66 @@ class XProofVerifyTool(BaseTool):
         verification: `${baseUrl}/learn/verification.md`,
       },
     });
+  });
+
+  // ============================================
+  // MCP (Model Context Protocol) Server Endpoint
+  // Streamable HTTP transport for native AI agent integration
+  // ============================================
+
+  app.post("/mcp", paymentRateLimiter, async (req, res) => {
+    try {
+      const auth = await authenticateApiKey(req.headers.authorization);
+      const baseUrl = `https://${req.get('host')}`;
+
+      const method = req.body?.method;
+      const toolName = req.body?.params?.name;
+      if (method === "tools/call" && toolName === "certify_file" && !auth.valid) {
+        return res.status(200).json({
+          jsonrpc: "2.0",
+          id: req.body?.id || null,
+          error: {
+            code: -32600,
+            message: "Authentication required. Include 'Authorization: Bearer pm_xxx' header for certify_file.",
+          },
+        });
+      }
+
+      const mcpServer = createMcpServer({ baseUrl, auth });
+
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      });
+
+      res.on("close", () => {
+        transport.close();
+      });
+
+      await mcpServer.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error("[MCP] Error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: { code: -32603, message: "Internal server error" },
+          id: null,
+        });
+      }
+    }
+  });
+
+  app.get("/mcp", (_req, res) => {
+    res.status(405).json({
+      jsonrpc: "2.0",
+      error: { code: -32601, message: "Method not allowed. Use POST for MCP requests." },
+      id: null,
+    });
+  });
+
+  app.delete("/mcp", (_req, res) => {
+    res.status(204).end();
   });
 
   const httpServer = createServer(app);

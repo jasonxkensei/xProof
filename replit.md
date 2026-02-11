@@ -37,10 +37,18 @@ When agents include `webhook_url` in their POST /api/proof request, xProof sends
 ### LLM-Ready Routes & AI Agent Discovery
 The platform offers comprehensive machine-readable documentation for AI agent discovery:
 
+**MCP Server (Model Context Protocol):**
+- `/mcp` - Live MCP JSON-RPC 2.0 endpoint (Streamable HTTP transport, spec 2025-03-26)
+- Tools: `certify_file`, `verify_proof`, `get_proof`, `discover_services`
+- Resources: `xproof://specification`, `xproof://openapi`
+- Auth: Bearer token (pm_ API keys) via Authorization header
+- Stateless mode (no session management)
+- SDK: `@modelcontextprotocol/sdk` (server/mcp.ts)
+
 **Discovery Endpoints:**
 - `/.well-known/xproof.md` - Canonical specification v1.0 (also at `/.well-known/proofmint.md` for backwards compatibility)
 - `/.well-known/ai-plugin.json` - OpenAI ChatGPT plugin manifest
-- `/.well-known/mcp.json` - Model Context Protocol manifest with tool schemas
+- `/.well-known/mcp.json` - Model Context Protocol manifest with tool schemas (points to /mcp)
 - `/.well-known/agent.json` - Agent Protocol manifest
 - `/llms.txt` - LLM-friendly summary (llms.txt standard)
 - `/llms-full.txt` - Extended LLM documentation with full API details

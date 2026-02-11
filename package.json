@@ -13,6 +13,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@multiversx/sdk-core": "^15.2.1",
     "@multiversx/sdk-dapp": "^5.2.8",
     "@multiversx/sdk-dapp-ui": "^0.0.35",
