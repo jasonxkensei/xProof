@@ -333,8 +333,26 @@ function renderAgentsPage(baseUrl: string): string {
   </section>
 
   <section>
-    <h2>Quick Start - 3 API calls to certify</h2>
-    <p>No SDK required. Standard HTTP requests with JSON payloads.</p>
+    <h2>Simplest Integration: POST /api/proof</h2>
+    <p>One API call to certify a file. No checkout flow, no transaction management. Just send a hash and get a proof.</p>
+    <code>POST ${baseUrl}/api/proof</code>
+    <p>Request: { "file_hash": "sha256...", "filename": "document.pdf" }</p>
+    <p>Response: { "proof_id": "...", "verify_url": "...", "certificate_url": "...", "blockchain": "MultiversX" }</p>
+    <p>Authentication: Bearer token with pm_ prefix API key.</p>
+  </section>
+
+  <section>
+    <h2>MCP Server (Model Context Protocol)</h2>
+    <p>Native MCP integration for Claude, GPT, Cursor, and any MCP-compatible agent.</p>
+    <code>POST ${baseUrl}/mcp</code>
+    <p>Transport: Streamable HTTP (JSON-RPC 2.0). Protocol version: 2025-03-26.</p>
+    <p>Tools: certify_file, verify_proof, get_proof, discover_services.</p>
+    <p>Authentication: Bearer token with pm_ prefix API key for certify_file. Other tools are public.</p>
+  </section>
+
+  <section>
+    <h2>ACP Flow - 3 API calls</h2>
+    <p>Agent Commerce Protocol for agents that manage their own transactions.</p>
     <ol>
       <li>
         <h3>Discover</h3>
