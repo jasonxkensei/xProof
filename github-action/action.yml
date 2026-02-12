@@ -1,5 +1,5 @@
 name: 'xProof Notarize'
-description: 'Notarize build artifacts on MultiversX blockchain via xProof. Creates immutable proof-of-existence for any file.'
+description: 'Programmable software artifact notarization. Hash locally, anchor on MultiversX blockchain, verify forever. Supply chain attestation for CI/CD pipelines.'
 author: 'xproof'
 branding:
   icon: 'shield'
@@ -28,6 +28,8 @@ outputs:
     description: 'Comma-separated list of proof verification URLs'
   badge_urls:
     description: 'Comma-separated list of badge SVG URLs'
+  proof_json:
+    description: 'Path to JSON attestation file containing all proof details (suitable for GitHub Releases)'
   summary:
     description: 'Human-readable summary of all notarizations'
 
@@ -49,6 +51,8 @@ runs:
         BADGE_URLS=""
         SUMMARY=""
         COUNT=0
+        JSON_ARTIFACTS="[]"
+        ATTESTATION_FILE="${RUNNER_TEMP:-/tmp}/xproof-attestation.json"
 
         # Expand glob patterns
         FILES=$(eval echo $XPROOF_FILES)
@@ -89,6 +93,8 @@ runs:
             if [ -n "$PROOF_ID" ]; then
               COUNT=$((COUNT + 1))
               BADGE_URL="${XPROOF_API_URL}/badge/${PROOF_ID}"
+              TX_HASH=$(echo "$BODY" | jq -r '.blockchain.transaction_hash // .tx_hash // empty')
+              EXPLORER_URL=$(echo "$BODY" | jq -r '.blockchain.explorer_url // empty')
 
               [ -n "$PROOF_IDS" ] && PROOF_IDS="${PROOF_IDS},"
               PROOF_IDS="${PROOF_IDS}${PROOF_ID}"
@@ -100,6 +106,16 @@ runs:
               BADGE_URLS="${BADGE_URLS}${BADGE_URL}"
 
               SUMMARY="${SUMMARY}${FILE_NAME}: ${VERIFY_URL}\n"
+
+              JSON_ARTIFACTS=$(echo "$JSON_ARTIFACTS" | jq \
+                --arg fn "$FILE_NAME" \
+                --arg fh "$FILE_HASH" \
+                --arg pid "$PROOF_ID" \
+                --arg vu "$VERIFY_URL" \
+                --arg bu "$BADGE_URL" \
+                --arg tx "${TX_HASH:-}" \
+                --arg eu "${EXPLORER_URL:-}" \
+                '. + [{"filename": $fn, "sha256": $fh, "proof_id": $pid, "verify_url": $vu, "badge_url": $bu, "tx_hash": $tx, "explorer_url": $eu}]' 2>/dev/null || echo "$JSON_ARTIFACTS")
 
               echo "::notice::Notarized ${FILE_NAME} -> ${VERIFY_URL}"
             else
@@ -115,6 +131,32 @@ runs:
         echo "proof_urls=${PROOF_URLS}" >> $GITHUB_OUTPUT
         echo "badge_urls=${BADGE_URLS}" >> $GITHUB_OUTPUT
         echo "summary=${COUNT} file(s) notarized on MultiversX blockchain via xProof" >> $GITHUB_OUTPUT
+
+        # Write attestation JSON only when files were notarized
+        if [ $COUNT -gt 0 ]; then
+          jq -n \
+            --arg version "1.0" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg blockchain "MultiversX" \
+            --arg repo "${GITHUB_REPOSITORY:-unknown}" \
+            --arg commit "${GITHUB_SHA:-unknown}" \
+            --arg ref "${GITHUB_REF:-unknown}" \
+            --arg run_id "${GITHUB_RUN_ID:-unknown}" \
+            --argjson artifacts "$JSON_ARTIFACTS" \
+            '{
+              "xproof_attestation": $version,
+              "timestamp": $timestamp,
+              "blockchain": $blockchain,
+              "source": {
+                "repository": $repo,
+                "commit": $commit,
+                "ref": $ref,
+                "run_id": $run_id
+              },
+              "artifacts": $artifacts
+            }' > "$ATTESTATION_FILE"
+          echo "proof_json=${ATTESTATION_FILE}" >> $GITHUB_OUTPUT
+        fi
 
         if [ $COUNT -gt 0 ]; then
           echo ""
