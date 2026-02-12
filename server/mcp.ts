@@ -250,7 +250,8 @@ export function createMcpServer(ctx: McpContext) {
             badge: {
               endpoint: `${baseUrl}/badge/{proof_id}`,
               description: "Dynamic SVG badge for README files. Shows verification status (green=verified, yellow=pending).",
-              markdown_template: "[![xProof Verified](https://xproof.app/badge/{proof_id})](https://xproof.app/proof/{proof_id})",
+              markdown_template: "[![xProof Verified](https://xproof.app/badge/{proof_id})](https://explorer.multiversx.com/transactions/{tx_hash})",
+              markdown_note: "Replace {tx_hash} with the transaction hash from the certification response. For pending proofs, use https://xproof.app/proof/{proof_id} instead.",
             },
             endpoints: {
               mcp: `${baseUrl}/mcp`,

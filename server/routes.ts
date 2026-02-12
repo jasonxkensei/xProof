@@ -2935,7 +2935,8 @@ curl -X POST https://xproof.app/api/batch \\\\
 Connect via JSON-RPC 2.0 over Streamable HTTP at POST /mcp. Tools: certify_file, verify_proof, get_proof, discover_services. Auth: Bearer pm_YOUR_API_KEY.
 
 ### Verification Badge
-Embed a dynamic badge in README: \\\`![xProof](https://xproof.app/badge/{proof_id})\\\`
+Embed a dynamic badge in README: \\\`[![xProof](https://xproof.app/badge/{proof_id})](https://explorer.multiversx.com/transactions/{tx_hash})\\\`
+The badge links to the MultiversX Explorer transaction for on-chain verification. Use /badge/{proof_id}/markdown to get a ready-to-embed snippet with the correct Explorer link.
 
 ### When to certify (for autonomous agents)
 - After generating code, contracts, or configuration files
