@@ -383,7 +383,7 @@ export default function AgentsPage() {
                   <CardTitle className="text-base">Canonical Identifier</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <pre className="text-sm font-mono break-all overflow-x-auto bg-muted p-3 rounded-md" data-testid="code-canonical-format">xproof:mvx:{'{network}'}:tx:{'{transaction_hash}'}</pre>
+                  <code className="block text-sm font-mono break-all whitespace-pre-wrap bg-muted p-3 rounded-md" data-testid="code-canonical-format">xproof:mvx:{'{network}'}:tx:{'{transaction_hash}'}</code>
                   <ul className="space-y-1 text-sm text-muted-foreground">
                     <li><code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">xproof</code> Protocol prefix</li>
                     <li><code className="text-xs font-mono bg-muted px-1 py-0.5 rounded">mvx</code> MultiversX blockchain</li>
