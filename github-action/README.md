@@ -76,7 +76,7 @@ jobs:
 After notarizing, add a verification badge to your README:
 
 ```markdown
-[![xProof Verified](https://xproof.app/badge/YOUR_PROOF_ID)](https://xproof.app/proof/YOUR_PROOF_ID)
+[![xProof Verified](https://xproof.app/badge/{proof_id})](https://explorer.multiversx.com/transactions/{tx_hash})
 ```
 
 ## How it works
