@@ -342,6 +342,15 @@ function renderAgentsPage(baseUrl: string): string {
   </section>
 
   <section>
+    <h2>Batch Certification: POST /api/batch</h2>
+    <p>Certify up to 50 files in a single API call. Ideal for agents that generate multiple outputs.</p>
+    <code>POST ${baseUrl}/api/batch</code>
+    <p>Request: { "files": [{ "file_hash": "...", "filename": "..." }, ...], "author_name": "optional" }</p>
+    <p>Response: { "batch_id": "...", "total": N, "created": X, "results": [...] }</p>
+    <p>Authentication: Bearer token with pm_ prefix API key.</p>
+  </section>
+
+  <section>
     <h2>MCP Server (Model Context Protocol)</h2>
     <p>Native MCP integration for Claude, GPT, Cursor, and any MCP-compatible agent.</p>
     <code>POST ${baseUrl}/mcp</code>
@@ -384,6 +393,13 @@ function renderAgentsPage(baseUrl: string): string {
       <li><a href="${baseUrl}/api/acp/products">products</a> - Product discovery (JSON)</li>
       <li><a href="${baseUrl}/api/acp/health">health</a> - Health check</li>
     </ul>
+  </section>
+
+  <section>
+    <h2>Verification Badges</h2>
+    <p>Embed a dynamic verification badge in your README or documentation.</p>
+    <code>![xProof Verified](https://xproof.app/badge/{proof_id})</code>
+    <p>Badge links to the public proof page. Status updates automatically: Verified (green), Pending (yellow), Not Found (red).</p>
   </section>
 
   <section>

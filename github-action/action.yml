@@ -1,0 +1,138 @@
+name: 'xProof Notarize'
+description: 'Notarize build artifacts on MultiversX blockchain via xProof. Creates immutable proof-of-existence for any file.'
+author: 'xproof'
+branding:
+  icon: 'shield'
+  color: 'green'
+
+inputs:
+  api_key:
+    description: 'xProof API key (pm_xxx). Store as a GitHub secret.'
+    required: true
+  files:
+    description: 'Files or glob patterns to notarize (space-separated). Example: "build.zip dist/**/*.js"'
+    required: true
+  author_name:
+    description: 'Author name to attach to the certification (optional).'
+    required: false
+    default: ''
+  api_url:
+    description: 'xProof API URL (override for testing).'
+    required: false
+    default: 'https://xproof.app'
+
+outputs:
+  proof_ids:
+    description: 'Comma-separated list of proof IDs created'
+  proof_urls:
+    description: 'Comma-separated list of proof verification URLs'
+  badge_urls:
+    description: 'Comma-separated list of badge SVG URLs'
+  summary:
+    description: 'Human-readable summary of all notarizations'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Notarize files with xProof
+      shell: bash
+      env:
+        XPROOF_API_KEY: ${{ inputs.api_key }}
+        XPROOF_FILES: ${{ inputs.files }}
+        XPROOF_AUTHOR: ${{ inputs.author_name }}
+        XPROOF_API_URL: ${{ inputs.api_url }}
+      run: |
+        set -euo pipefail
+
+        PROOF_IDS=""
+        PROOF_URLS=""
+        BADGE_URLS=""
+        SUMMARY=""
+        COUNT=0
+
+        # Expand glob patterns
+        FILES=$(eval echo $XPROOF_FILES)
+
+        for file in $FILES; do
+          if [ ! -f "$file" ]; then
+            echo "::warning::File not found: $file (skipping)"
+            continue
+          fi
+
+          # Calculate SHA-256 hash
+          FILE_HASH=$(sha256sum "$file" | awk '{print $1}')
+          FILE_NAME=$(basename "$file")
+
+          echo "Notarizing: $FILE_NAME ($FILE_HASH)"
+
+          # Build JSON payload
+          PAYLOAD="{\"file_hash\": \"$FILE_HASH\", \"filename\": \"$FILE_NAME\""
+          if [ -n "$XPROOF_AUTHOR" ]; then
+            PAYLOAD="$PAYLOAD, \"author_name\": \"$XPROOF_AUTHOR\""
+          fi
+          PAYLOAD="$PAYLOAD}"
+
+          # Call xProof API
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST "${XPROOF_API_URL}/api/proof" \
+            -H "Authorization: Bearer $XPROOF_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            PROOF_ID=$(echo "$BODY" | jq -r '.proof_id // .id // empty')
+            VERIFY_URL=$(echo "$BODY" | jq -r '.verify_url // empty')
+
+            if [ -n "$PROOF_ID" ]; then
+              COUNT=$((COUNT + 1))
+              BADGE_URL="${XPROOF_API_URL}/badge/${PROOF_ID}"
+
+              [ -n "$PROOF_IDS" ] && PROOF_IDS="${PROOF_IDS},"
+              PROOF_IDS="${PROOF_IDS}${PROOF_ID}"
+
+              [ -n "$PROOF_URLS" ] && PROOF_URLS="${PROOF_URLS},"
+              PROOF_URLS="${PROOF_URLS}${VERIFY_URL}"
+
+              [ -n "$BADGE_URLS" ] && BADGE_URLS="${BADGE_URLS},"
+              BADGE_URLS="${BADGE_URLS}${BADGE_URL}"
+
+              SUMMARY="${SUMMARY}${FILE_NAME}: ${VERIFY_URL}\n"
+
+              echo "::notice::Notarized ${FILE_NAME} -> ${VERIFY_URL}"
+            else
+              echo "::warning::Unexpected response for ${FILE_NAME}: ${BODY}"
+            fi
+          else
+            echo "::error::Failed to notarize ${FILE_NAME} (HTTP ${HTTP_CODE}): ${BODY}"
+          fi
+        done
+
+        # Set outputs
+        echo "proof_ids=${PROOF_IDS}" >> $GITHUB_OUTPUT
+        echo "proof_urls=${PROOF_URLS}" >> $GITHUB_OUTPUT
+        echo "badge_urls=${BADGE_URLS}" >> $GITHUB_OUTPUT
+        echo "summary=${COUNT} file(s) notarized on MultiversX blockchain via xProof" >> $GITHUB_OUTPUT
+
+        if [ $COUNT -gt 0 ]; then
+          echo ""
+          echo "=== xProof Notarization Summary ==="
+          echo -e "$SUMMARY"
+          echo "Total: $COUNT file(s) notarized"
+
+          # Add to GitHub Step Summary
+          echo "## xProof Notarization" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Proof |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          for url in $(echo "$PROOF_URLS" | tr ',' '\n'); do
+            FNAME=$(echo "$SUMMARY" | grep "$url" | cut -d: -f1)
+            echo "| ${FNAME:-file} | [Verify](${url}) |" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Powered by [xProof](https://xproof.app)" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "::warning::No files were notarized"
+        fi

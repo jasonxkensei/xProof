@@ -34,6 +34,15 @@ xproof implements the ACP to allow AI agents to programmatically interact with i
 ### Simplified Agent API (POST /api/proof)
 A single-call certification endpoint for AI agents. Accepts `{ file_hash, filename, author_name?, webhook_url? }` with a Bearer API key, handles blockchain recording server-side, and returns `{ proof_id, verify_url, certificate_url, blockchain, webhook_status }`. This eliminates the 3-step checkout/sign/confirm flow for agents that don't need to manage their own MultiversX transactions.
 
+### Batch Certification (POST /api/batch)
+Certify up to 50 files in a single API call. Accepts `{ files: [{ file_hash, filename }], author_name?, webhook_url? }` with Bearer API key. Returns `{ batch_id, total, created, existing, results: [{ file_hash, filename, proof_id, verify_url, badge_url, status }] }`. Ideal for agents that generate multiple outputs.
+
+### Verification Badges (GET /badge/:id)
+Dynamic SVG badges (shields.io-style) showing certification status: green "Verified", yellow "Pending", red "Not Found". Respects isPublic flag for privacy. GET /badge/:id/markdown returns ready-to-embed markdown snippet. Used in GitHub READMEs to create social proof signal.
+
+### GitHub Action (github-action/)
+Composite GitHub Action for CI/CD pipeline integration. Hashes build artifacts, calls POST /api/proof, outputs proof_ids, proof_urls, badge_urls. Plug-and-play in 3 lines of YAML. Located in github-action/ directory, ready to publish as xproof-app/notarize-action.
+
 ### Webhook Notifications
 When agents include `webhook_url` in their POST /api/proof request, xProof sends a POST notification when the proof is confirmed on-chain. The webhook payload includes proof_id, file_hash, verify_url, certificate_url, and blockchain details. Security: HMAC-SHA256 signed (X-xProof-Signature header). Retry policy: up to 3 attempts with exponential backoff (immediate, 10s, 20s). Webhook status tracked per certification: pending → delivered or failed.
 
