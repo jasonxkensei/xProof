@@ -2199,42 +2199,62 @@ This genesis certification demonstrates:
 
       let statusText: string;
       let statusColor: string;
+      let statusColorDark: string;
+      let dotColor: string;
 
       if (!cert || cert.isPublic === false) {
         statusText = "Not Found";
-        statusColor = "#EF4444";
+        statusColor = "#3B3B3B";
+        statusColorDark = "#2A2A2A";
+        dotColor = "#666";
       } else if (cert.blockchainStatus === "confirmed") {
         statusText = "Verified";
-        statusColor = "#10B981";
+        statusColor = "#0D9B6A";
+        statusColorDark = "#0A7D55";
+        dotColor = "#14F195";
       } else {
         statusText = "Pending";
-        statusColor = "#F59E0B";
+        statusColor = "#92690D";
+        statusColorDark = "#7A580B";
+        dotColor = "#FBD34D";
       }
 
-      const labelText = "xProof";
-      const labelWidth = 52;
-      const statusWidth = statusText === "Not Found" ? 72 : statusText === "Verified" ? 60 : 58;
+      const labelText = "xproof";
+      const pad = 10;
+      const labelCharW = 6.8;
+      const statusCharW = 6.6;
+      const dotR = 3.5;
+      const dotSpace = 12;
+      const labelWidth = Math.round(labelText.length * labelCharW + pad * 2);
+      const statusWidth = Math.round(statusText.length * statusCharW + pad * 2 + dotSpace);
       const totalWidth = labelWidth + statusWidth;
+      const h = 24;
+      const r = 5;
 
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20" role="img" aria-label="${labelText}: ${statusText}">
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${h}" role="img" aria-label="${labelText}: ${statusText}">
   <title>${labelText}: ${statusText}</title>
-  <linearGradient id="s" x2="0" y2="100%">
-    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
-    <stop offset="1" stop-opacity=".1"/>
-  </linearGradient>
-  <clipPath id="r">
-    <rect width="${totalWidth}" height="20" rx="3" fill="#fff"/>
-  </clipPath>
-  <g clip-path="url(#r)">
-    <rect width="${labelWidth}" height="20" fill="#333"/>
-    <rect x="${labelWidth}" width="${statusWidth}" height="20" fill="${statusColor}"/>
-    <rect width="${totalWidth}" height="20" fill="url(#s)"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1E1E1E"/>
+      <stop offset="100%" stop-color="#161616"/>
+    </linearGradient>
+    <linearGradient id="st" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${statusColor}"/>
+      <stop offset="100%" stop-color="${statusColorDark}"/>
+    </linearGradient>
+    <clipPath id="cr">
+      <rect width="${totalWidth}" height="${h}" rx="${r}"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#cr)">
+    <rect width="${totalWidth}" height="${h}" fill="url(#bg)"/>
+    <rect x="${labelWidth}" width="${statusWidth}" height="${h}" fill="url(#st)"/>
   </g>
-  <g fill="#fff" text-anchor="middle" font-family="Verdana,DejaVu Sans,Geneva,sans-serif" text-rendering="geometricPrecision" font-size="11">
-    <text aria-hidden="true" x="${labelWidth / 2}" y="15" fill="#010101" fill-opacity=".3">${labelText}</text>
-    <text x="${labelWidth / 2}" y="14" fill="#fff">${labelText}</text>
-    <text aria-hidden="true" x="${labelWidth + statusWidth / 2}" y="15" fill="#010101" fill-opacity=".3">${statusText}</text>
-    <text x="${labelWidth + statusWidth / 2}" y="14" fill="#fff">${statusText}</text>
+  <rect width="${totalWidth}" height="${h}" rx="${r}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <circle cx="${labelWidth + pad + dotR}" cy="${h / 2}" r="${dotR}" fill="${dotColor}"/>
+  <g text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11" text-rendering="geometricPrecision">
+    <text x="${labelWidth / 2}" y="${h / 2 + 4}" fill="rgba(255,255,255,0.9)" letter-spacing="0.5">${labelText}</text>
+    <text x="${labelWidth + dotSpace + (statusWidth - dotSpace) / 2}" y="${h / 2 + 4}" fill="rgba(255,255,255,0.95)">${statusText}</text>
   </g>
 </svg>`;
 
@@ -2243,19 +2263,37 @@ This genesis certification demonstrates:
       res.send(svg);
     } catch (error) {
       console.error("Error generating badge:", error);
-      const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="110" height="20" role="img"><rect width="110" height="20" rx="3" fill="#999"/><text x="55" y="14" fill="#fff" text-anchor="middle" font-family="Verdana,DejaVu Sans,Geneva,sans-serif" font-size="11">xProof: Error</text></svg>`;
+      const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="24" role="img"><rect width="120" height="24" rx="5" fill="#1E1E1E"/><rect width="120" height="24" rx="5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="60" y="16" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11">xproof: Error</text></svg>`;
       res.setHeader("Content-Type", "image/svg+xml");
       res.status(500).send(fallbackSvg);
     }
   });
 
-  // /badge/:id/markdown - Returns markdown snippet for embedding badge
   app.get("/badge/:id/markdown", async (req, res) => {
-    const certId = req.params.id;
-    const baseUrl = `https://${req.get("host")}`;
-    const markdown = `[![xProof Verified](${baseUrl}/badge/${certId})](${baseUrl}/proof/${certId})`;
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.send(markdown);
+    try {
+      const certId = req.params.id;
+      const baseUrl = `https://${req.get("host")}`;
+      const badgeUrl = `${baseUrl}/badge/${certId}`;
+
+      const [cert] = await db
+        .select()
+        .from(certifications)
+        .where(eq(certifications.id, certId));
+
+      let linkUrl: string;
+      if (cert?.transactionUrl && cert.blockchainStatus === "confirmed") {
+        linkUrl = cert.transactionUrl;
+      } else {
+        linkUrl = `${baseUrl}/proof/${certId}`;
+      }
+
+      const markdown = `[![xProof Verified](${badgeUrl})](${linkUrl})`;
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.send(markdown);
+    } catch (error) {
+      console.error("Error generating badge markdown:", error);
+      res.status(500).send("Error generating badge markdown");
+    }
   });
 
   // /proof/:id.md - Proof in markdown for LLMs
