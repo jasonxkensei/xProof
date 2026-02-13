@@ -253,6 +253,15 @@ export function createMcpServer(ctx: McpContext) {
               markdown_template: "[![xProof Verified](https://xproof.app/badge/{proof_id})](https://explorer.multiversx.com/transactions/{tx_hash})",
               markdown_note: "Replace {tx_hash} with the transaction hash from the certification response. For pending proofs, use https://xproof.app/proof/{proof_id} instead.",
             },
+            mx8004: {
+              standard: "MX-8004 (Trustless Agents Standard)",
+              role: "validation_oracle",
+              description: "Each certification is registered as a validated job in the MX-8004 registries, building verifiable on-chain reputation for AI agents.",
+              status_endpoint: `${baseUrl}/api/mx8004/status`,
+              reputation_endpoint: `${baseUrl}/api/agent/{nonce}/reputation`,
+              specification: "https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md",
+              agent_explorer: "https://agents.multiversx.com",
+            },
             endpoints: {
               mcp: `${baseUrl}/mcp`,
               api: `${baseUrl}/api/proof`,
@@ -260,6 +269,7 @@ export function createMcpServer(ctx: McpContext) {
               products: `${baseUrl}/api/acp/products`,
               openapi: `${baseUrl}/api/acp/openapi.json`,
               health: `${baseUrl}/api/acp/health`,
+              mx8004_status: `${baseUrl}/api/mx8004/status`,
               specification: `${baseUrl}/.well-known/xproof.md`,
             },
             authentication: { type: "bearer", prefix: "pm_", header: "Authorization: Bearer pm_YOUR_KEY" },

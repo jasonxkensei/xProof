@@ -25,6 +25,16 @@ RESTful APIs are provided under `/api/*`, with middleware for logging and error 
 ### Blockchain Integration
 xproof integrates with the MultiversX blockchain for immutable proof storage. It supports both XPortal (user-signed transactions with their own gas fees) and an optional server-side signing mode. The system handles transaction signing, broadcasting, and generation of explorer URLs. It supports Mainnet, Devnet, and Testnet.
 
+### MX-8004 Integration (Trustless Agents Standard)
+xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard. The module (`server/mx8004.ts`) provides:
+- **Identity Registry**: Agent registration with soulbound NFTs
+- **Validation Registry**: Each certification is registered as a validated job; xproof acts as the validation oracle
+- **Reputation Registry**: On-chain reputation scoring from validated certification work
+- Endpoints: `GET /api/mx8004/status`, `GET /api/agent/:nonce/reputation`
+- Env vars: `MX8004_IDENTITY_REGISTRY`, `MX8004_VALIDATION_REGISTRY`, `MX8004_REPUTATION_REGISTRY`, `MX8004_XPROOF_AGENT_NONCE`
+- Non-blocking: MX-8004 job registration happens asynchronously after certification, doesn't block API responses
+- Graceful degradation: if MX-8004 env vars not set, integration is silently skipped
+
 ### Data Storage
 PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides type-safe database operations with a schema-first approach. Key tables include `users` (wallet-based profiles), `certifications` (file certification records), and `sessions` (Express session storage). Drizzle Kit manages database migrations.
 
@@ -116,4 +126,5 @@ The platform offers comprehensive machine-readable documentation for AI agent di
 - `SESSION_SECRET`
 - `XMONEY_API_KEY`, `XMONEY_SITE_ID`, `XMONEY_WEBHOOK_SECRET`
 - `MULTIVERSX_PRIVATE_KEY`, `MULTIVERSX_SENDER_ADDRESS`, `MULTIVERSX_CHAIN_ID`, `MULTIVERSX_GATEWAY_URL` (optional, for server-side signing)
+- `MX8004_IDENTITY_REGISTRY`, `MX8004_VALIDATION_REGISTRY`, `MX8004_REPUTATION_REGISTRY`, `MX8004_XPROOF_AGENT_NONCE`
 - `REPL_ID`

@@ -140,6 +140,12 @@ const discoveryEndpoints = [
     url: "/api/acp/health",
     description: "Health check",
   },
+  {
+    icon: Shield,
+    title: "MX-8004 Status",
+    url: "/api/mx8004/status",
+    description: "Trustless Agents Standard integration status",
+  },
 ];
 
 const frameworkIntegrations = [

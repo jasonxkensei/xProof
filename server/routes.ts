@@ -31,6 +31,7 @@ import {
 } from "./walletAuth";
 import { getSession } from "./replitAuth";
 import { authRateLimiter, paymentRateLimiter } from "./reliability";
+import { recordCertificationAsJob, isMX8004Configured, getReputationScore, getAgentDetails, getContractAddresses } from "./mx8004";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply session middleware
@@ -940,6 +941,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[POST /api/proof] Certified: ${data.file_hash} -> ${certification.id} (tx: ${result.transactionHash})`);
 
+      recordCertificationAsJob(
+        certification.id.toString(),
+        data.file_hash,
+        result.transactionHash
+      ).catch((err) => console.error("[MX-8004] Background job registration failed:", err));
+
       let webhookStatus: string = data.webhook_url ? "pending" : "not_requested";
       
       if (data.webhook_url) {
@@ -1125,6 +1132,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           badge_url: `${baseUrl}/badge/${certification.id}`,
           status: "created",
         });
+
+        recordCertificationAsJob(
+          certification.id.toString(),
+          file.file_hash,
+          result.transactionHash
+        ).catch((err) => console.error("[MX-8004] Background job registration failed:", err));
 
         if (data.webhook_url) {
           const { scheduleWebhookDelivery, isValidWebhookUrl } = await import("./webhook");
@@ -2022,7 +2035,7 @@ curl -X POST ${baseUrl}/api/acp/confirm \\
 ### API Key
 
 - Prefix: \`pm_\`
-- Rate limit: 1000 requests/minute
+- Rate limit: 100 requests/minute
 - Get key: Authenticate with wallet, then \`POST /api/keys\`
 
 ### When to Use xproof
@@ -2032,6 +2045,18 @@ Use xproof when:
 - User wants to prove authorship of a document
 - User needs blockchain-anchored evidence
 - User wants immutable, verifiable certification
+
+## MX-8004 Integration (Trustless Agents Standard)
+
+xproof is natively integrated with the MultiversX Trustless Agents Standard (MX-8004).
+Each certification is registered as a validated job in the on-chain registries, building verifiable reputation for AI agents.
+
+- **Identity Registry**: Soulbound NFT agent identities
+- **Validation Registry**: Job validation — xproof acts as the validation oracle
+- **Reputation Registry**: On-chain reputation scoring from validated work
+- **Status**: \`GET ${baseUrl}/api/mx8004/status\`
+- **Agent reputation**: \`GET ${baseUrl}/api/agent/{nonce}/reputation\`
+- **Specification**: https://github.com/sasurobert/mx-8004
 
 ## Genesis
 
@@ -2669,17 +2694,68 @@ Confirm certification after transaction.
   app.get("/api/learn/api", (req, res) => res.redirect("/learn/api.md"));
 
   // Health check endpoint for AI agent monitoring
+  app.get("/api/mx8004/status", (req, res) => {
+    const configured = isMX8004Configured();
+    const contracts = getContractAddresses();
+    res.json({
+      enabled: configured,
+      standard: "MX-8004",
+      description: "Trustless Agents Standard — soulbound identity, job validation, and reputation scoring on MultiversX",
+      specification: "https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md",
+      contracts: configured ? contracts : null,
+      integration: {
+        role: "validation_oracle",
+        description: "xproof acts as a validation oracle: each certification is registered as a validated job in the MX-8004 Validation Registry, building verifiable reputation for AI agents.",
+      },
+    });
+  });
+
+  app.get("/api/agent/:nonce/reputation", async (req, res) => {
+    try {
+      const nonce = parseInt(req.params.nonce);
+      if (isNaN(nonce) || nonce < 1) {
+        return res.status(400).json({ error: "INVALID_NONCE", message: "Agent nonce must be a positive integer" });
+      }
+
+      if (!isMX8004Configured()) {
+        return res.status(503).json({ error: "MX8004_NOT_CONFIGURED", message: "MX-8004 integration is not active" });
+      }
+
+      const [reputation, agent] = await Promise.all([
+        getReputationScore(nonce),
+        getAgentDetails(nonce),
+      ]);
+
+      res.json({
+        agent_nonce: nonce,
+        name: agent?.name || null,
+        public_key: agent?.publicKey || null,
+        reputation_score: reputation.score,
+        total_jobs: reputation.totalJobs,
+        standard: "MX-8004",
+        registries: getContractAddresses(),
+      });
+    } catch (error: any) {
+      console.error("[GET /api/agent/:nonce/reputation] Error:", error.message);
+      res.status(500).json({ error: "QUERY_FAILED", message: "Failed to fetch agent reputation" });
+    }
+  });
+
   app.get("/api/acp/health", (req, res) => {
+    const mx8004 = isMX8004Configured();
     res.json({
       status: "operational",
       service: "xproof",
       version: "1.0",
       timestamp: new Date().toISOString(),
+      mx8004_enabled: mx8004,
       endpoints: {
         products: "/api/acp/products",
         checkout: "/api/acp/checkout",
         confirm: "/api/acp/confirm",
-        openapi: "/api/acp/openapi.json"
+        openapi: "/api/acp/openapi.json",
+        mx8004_status: "/api/mx8004/status",
+        agent_reputation: "/api/agent/:nonce/reputation",
       }
     });
   });
@@ -2945,6 +3021,16 @@ The badge links to the MultiversX Explorer transaction for on-chain verification
 - Before publishing content, reports, or documents
 - After completing a build or release artifact
 Certified agents can prove originality, timestamp, and integrity. Non-certified agents cannot.
+
+## MX-8004 Integration (Trustless Agents Standard)
+xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard. Each certification is registered as a validated job in the MX-8004 registries, building verifiable on-chain reputation for AI agents.
+
+- Identity Registry: soulbound NFT agent identities
+- Validation Registry: job validation with oracle verification (xproof acts as oracle)
+- Reputation Registry: on-chain reputation scoring from validated work
+- Status: /api/mx8004/status
+- Agent reputation: /api/agent/{nonce}/reputation
+- Spec: https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md
 `;
     res.setHeader("Content-Type", "text/plain");
     res.send(content);
@@ -3214,6 +3300,31 @@ curl -X POST ${baseUrl}/mcp \\
   }
 }
 \`\`\`
+
+## MX-8004 Integration (Trustless Agents Standard)
+
+xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard. Each certification is automatically registered as a validated job in the on-chain registries.
+
+### What MX-8004 provides
+- **Identity Registry**: Soulbound NFT agent identities — permanent, non-transferable
+- **Validation Registry**: Job validation with oracle verification — xproof acts as the validation oracle
+- **Reputation Registry**: On-chain reputation scoring derived from validated certification work
+
+### xproof's role
+xproof is the **validation oracle** for software artifact certification. When an agent certifies a file:
+1. The file hash is recorded on MultiversX (standard xproof flow)
+2. A job is registered in the MX-8004 Validation Registry
+3. xproof submits proof of the certification (hash + transaction)
+4. The agent's reputation score is updated based on validated work
+
+### Endpoints
+- \`GET ${baseUrl}/api/mx8004/status\` — MX-8004 integration status and contract addresses
+- \`GET ${baseUrl}/api/agent/{nonce}/reputation\` — Query agent reputation score and job history
+
+### Specification
+- GitHub: https://github.com/sasurobert/mx-8004
+- Spec: https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md
+- Explorer: https://agents.multiversx.com
 
 ## Genesis Proof
 The first certification ever created on xproof:
