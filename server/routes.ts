@@ -2057,6 +2057,7 @@ Each certification is registered as a validated job in the on-chain registries, 
 - **Status**: \`GET ${baseUrl}/api/mx8004/status\`
 - **Agent reputation**: \`GET ${baseUrl}/api/agent/{nonce}/reputation\`
 - **Specification**: https://github.com/sasurobert/mx-8004
+- **Explorer**: https://agents.multiversx.com
 
 ## Genesis
 
@@ -2702,6 +2703,7 @@ Confirm certification after transaction.
       standard: "MX-8004",
       description: "Trustless Agents Standard — soulbound identity, job validation, and reputation scoring on MultiversX",
       specification: "https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md",
+      explorer: "https://agents.multiversx.com",
       contracts: configured ? contracts : null,
       integration: {
         role: "validation_oracle",
@@ -3031,6 +3033,7 @@ xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Stan
 - Status: /api/mx8004/status
 - Agent reputation: /api/agent/{nonce}/reputation
 - Spec: https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md
+- Explorer: https://agents.multiversx.com
 `;
     res.setHeader("Content-Type", "text/plain");
     res.send(content);

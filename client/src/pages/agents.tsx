@@ -534,6 +534,16 @@ export default function AgentsPage() {
               >
                 MultiversX
               </a>
+              {" | "}
+              <a
+                href="https://agents.multiversx.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-primary hover:underline"
+                data-testid="link-agents-explorer"
+              >
+                MX-8004 Explorer
+              </a>
             </p>
             <a
               href="/"
