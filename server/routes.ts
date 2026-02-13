@@ -725,7 +725,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Rate Limiting for ACP (anti-abuse)
   // ============================================
   const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-  const RATE_LIMIT_MAX = 1000; // 1000 requests per minute
+  const RATE_LIMIT_MAX = 100; // 100 requests per minute
   const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 
   function checkRateLimit(identifier: string): { allowed: boolean; remaining: number; resetAt: number } {
