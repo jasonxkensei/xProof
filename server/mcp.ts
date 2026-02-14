@@ -236,7 +236,7 @@ export function createMcpServer(ctx: McpContext) {
                 "Before delivering work products to clients or other agents — proves integrity at handoff",
                 "After creating datasets, models, or training data — proves version and origin",
                 "Before publishing content, reports, or documents — establishes priority",
-                "After completing a build or release artifact — creates auditable notarization",
+                "After completing a build or release artifact — creates auditable certification",
                 "When resolving disputes about who created what first — timestamped proof settles it",
                 "When storing or exchanging valuable digital assets between agents — chain of custody",
               ],

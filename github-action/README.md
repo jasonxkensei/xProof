@@ -1,17 +1,17 @@
-# xProof Notarize — GitHub Action
+# xProof Certify — GitHub Action
 
-Programmable software artifact notarization. Hash locally, anchor on MultiversX blockchain, verify forever. Supply chain attestation for your CI/CD pipeline.
+Programmable software artifact certification. Hash locally, anchor on MultiversX blockchain, verify forever. Supply chain attestation for your CI/CD pipeline.
 
 ## Quick Start
 
 ```yaml
-name: Notarize Release
+name: Certify Release
 on:
   push:
     branches: [main]
 
 jobs:
-  notarize:
+  certify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,8 +19,8 @@ jobs:
       - name: Build
         run: npm run build && zip -r build.zip dist/
 
-      - name: Notarize with xProof
-        uses: xproof-app/notarize-action@v1
+      - name: Certify with xProof
+        uses: xproof-app/certify-action@v1
         with:
           api_key: ${{ secrets.XPROOF_API_KEY }}
           files: 'build.zip'
@@ -31,7 +31,7 @@ jobs:
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `api_key` | Yes | — | xProof API key (`pm_xxx`). Store as GitHub secret. |
-| `files` | Yes | — | Files or glob patterns to notarize (space-separated). |
+| `files` | Yes | — | Files or glob patterns to certify (space-separated). |
 | `author_name` | No | `''` | Author name to attach to certification. |
 | `api_url` | No | `https://xproof.app` | API URL (override for testing). |
 
@@ -47,37 +47,37 @@ jobs:
 
 ## Examples
 
-### Notarize a single file
+### Certify a single file
 
 ```yaml
-- name: Notarize
-  uses: xproof-app/notarize-action@v1
+- name: Certify
+  uses: xproof-app/certify-action@v1
   with:
     api_key: ${{ secrets.XPROOF_API_KEY }}
     files: 'release.tar.gz'
 ```
 
-### Notarize multiple files
+### Certify multiple files
 
 ```yaml
-- name: Notarize
-  id: notarize
-  uses: xproof-app/notarize-action@v1
+- name: Certify
+  id: certify
+  uses: xproof-app/certify-action@v1
   with:
     api_key: ${{ secrets.XPROOF_API_KEY }}
     files: 'build.zip package.json contracts/main.sol'
     author_name: 'CI Bot'
 
 - name: Show results
-  run: echo "Proofs: ${{ steps.notarize.outputs.proof_urls }}"
+  run: echo "Proofs: ${{ steps.certify.outputs.proof_urls }}"
 ```
 
 ### Attach attestation to GitHub Release
 
 ```yaml
-- name: Notarize
-  id: notarize
-  uses: xproof-app/notarize-action@v1
+- name: Certify
+  id: certify
+  uses: xproof-app/certify-action@v1
   with:
     api_key: ${{ secrets.XPROOF_API_KEY }}
     files: 'build.zip'
@@ -85,7 +85,7 @@ jobs:
 - name: Upload attestation to Release
   uses: softprops/action-gh-release@v2
   with:
-    files: ${{ steps.notarize.outputs.proof_json }}
+    files: ${{ steps.certify.outputs.proof_json }}
 ```
 
 The attestation JSON contains full provenance data:
