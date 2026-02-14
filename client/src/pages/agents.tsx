@@ -222,6 +222,12 @@ export default function AgentsPage() {
           </h1>
 
           <p
+            className="mx-auto mb-4 max-w-2xl text-lg md:text-xl font-medium leading-relaxed"
+            data-testid="text-hero-why"
+          >
+            Every output an agent produces without proof is an output anyone can claim.
+          </p>
+          <p
             className="mx-auto mb-8 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed"
             data-testid="text-hero-subtitle"
           >

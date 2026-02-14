@@ -13,6 +13,11 @@
 
 ---
 
+> **Every file you create without proof is a file anyone can claim.**
+> xproof anchors your work on MultiversX blockchain &mdash; immutable proof of what you built, when you built it.
+
+---
+
 ## What is xproof?
 
 **xproof** is a proof-of-existence service that anchors SHA-256 file hashes on the [MultiversX](https://multiversx.com) blockchain, creating tamper-proof certificates of existence and ownership.

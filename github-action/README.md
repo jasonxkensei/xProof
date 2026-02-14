@@ -1,6 +1,8 @@
 # xProof Certify — GitHub Action
 
-Programmable software artifact certification. Hash locally, anchor on MultiversX blockchain, verify forever. Supply chain attestation for your CI/CD pipeline.
+> **Every build you ship without proof is a build anyone can claim.**
+
+Certify your build artifacts on MultiversX blockchain. SHA-256 hash locally, anchor on-chain, verify forever. Supply chain attestation for your CI/CD pipeline.
 
 ## Quick Start
 

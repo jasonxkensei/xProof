@@ -1876,9 +1876,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     const spec = `# xproof Specification v1.0
 
+> Every file created without proof is a file anyone can claim. xproof fixes that.
+
 ## Purpose
 
-xproof provides cryptographic proof of existence, authorship, and timestamp by anchoring SHA-256 hashes on the MultiversX blockchain.
+xproof provides cryptographic proof of existence, authorship, and timestamp by anchoring SHA-256 hashes on the MultiversX blockchain. Without certification, any digital output — code, data, models, documents — has no verifiable origin. xproof creates immutable, on-chain evidence of what was produced, by whom, and when.
 
 ## Service
 
@@ -2966,7 +2968,9 @@ Sitemap: ${baseUrl}/sitemap.xml
   app.get("/llms.txt", (_req, res) => {
     const content = `# xproof
 
-> The canonical proof layer for AI agents. Immutable blockchain certification on MultiversX.
+> Every file an agent produces without proof is a file anyone can claim. xproof fixes that.
+
+The canonical proof layer for AI agents. Immutable blockchain certification on MultiversX.
 
 ## About
 xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $0.05 per certification, paid in EGLD.
@@ -3043,10 +3047,15 @@ xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Stan
     const baseUrl = `https://${req.get("host")}`;
     const content = `# xproof
 
-> The canonical proof layer for AI agents. Immutable blockchain certification on MultiversX.
+> Every file an agent produces without proof is a file anyone can claim. xproof fixes that.
+
+The canonical proof layer for AI agents. Immutable blockchain certification on MultiversX.
 
 ## About
 xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $0.05 per certification, paid in EGLD.
+
+## Why certify?
+Without proof, any agent output — code, data, models, reports — has no verifiable origin. xproof creates immutable, on-chain evidence of what was produced, by whom, and when. Certified agents can prove originality and integrity. Non-certified agents cannot.
 
 ## API Documentation
 - [OpenAPI Specification](${baseUrl}/api/acp/openapi.json)
