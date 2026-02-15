@@ -41,8 +41,11 @@ PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides t
 ### Agent Commerce Protocol (ACP)
 xproof implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is $0.05 per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
 
+### x402 Payment Protocol (HTTP 402)
+xproof supports the x402 payment protocol as an alternative to API key authentication. With x402, agents pay per-request directly via HTTP — no account or API key needed. Endpoints POST /api/proof and POST /api/batch accept x402 payments. Price: $0.05 per certification in USDC on Base (eip155:8453). Flow: request without auth → 402 with payment requirements → sign USDC payment → resend with X-PAYMENT header → 200 with result. Module: `server/x402.ts`. Packages: `@x402/express`, `@x402/evm`, `@x402/core`. Env vars: `X402_PAY_TO` (wallet address), `X402_NETWORK` (default eip155:8453), `X402_FACILITATOR_URL` (default https://www.x402.org/facilitator), `X402_PRICE_PROOF` (default $0.05), `X402_PRICE_BATCH` (default $0.05).
+
 ### Simplified Agent API (POST /api/proof)
-A single-call certification endpoint for AI agents. Accepts `{ file_hash, filename, author_name?, webhook_url? }` with a Bearer API key, handles blockchain recording server-side, and returns `{ proof_id, verify_url, certificate_url, blockchain, webhook_status }`. This eliminates the 3-step checkout/sign/confirm flow for agents that don't need to manage their own MultiversX transactions.
+A single-call certification endpoint for AI agents. Accepts `{ file_hash, filename, author_name?, webhook_url? }` with a Bearer API key or x402 payment, handles blockchain recording server-side, and returns `{ proof_id, verify_url, certificate_url, blockchain, webhook_status }`. This eliminates the 3-step checkout/sign/confirm flow for agents that don't need to manage their own MultiversX transactions.
 
 ### Batch Certification (POST /api/batch)
 Certify up to 50 files in a single API call. Accepts `{ files: [{ file_hash, filename }], author_name?, webhook_url? }` with Bearer API key. Returns `{ batch_id, total, created, existing, results: [{ file_hash, filename, proof_id, verify_url, badge_url, status }] }`. Ideal for agents that generate multiple outputs.

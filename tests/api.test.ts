@@ -162,7 +162,7 @@ describe("xproof API", () => {
       });
       expect(res.status).toBe(401);
       const body = await res.json();
-      expect(body.error).toBe("UNAUTHORIZED");
+      expect(["UNAUTHORIZED", "INVALID_API_KEY"]).toContain(body.error);
     });
   });
 

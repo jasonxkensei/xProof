@@ -19,6 +19,7 @@ import { getCertificationPriceEgld, getCertificationPriceUsd } from "./pricing";
 import { eq, desc, sql, and, gte, count } from "drizzle-orm";
 import { z } from "zod";
 import { getMetrics } from "./metrics";
+import { isX402Configured, verifyX402Payment, send402Response } from "./x402";
 import { generateCertificatePDF } from "./certificateGenerator";
 import { createXMoneyOrder, getXMoneyOrderStatus, verifyXMoneyWebhook, isXMoneyConfigured } from "./xmoney";
 import { recordOnBlockchain, isMultiversXConfigured, broadcastSignedTransaction } from "./blockchain";
@@ -829,55 +830,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/proof", paymentRateLimiter, async (req, res) => {
     try {
+      let authMethod: "api_key" | "x402" = "api_key";
       const authHeader = req.headers.authorization;
+      const hasBearerToken = authHeader && authHeader.startsWith("Bearer ");
+      const hasX402Payment = !!req.headers["x-payment"];
 
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      if (hasBearerToken) {
+        const rawKey = authHeader!.slice(7);
+
+        if (!rawKey.startsWith("pm_")) {
+          return res.status(401).json({
+            error: "INVALID_API_KEY",
+            message: "API key must start with 'pm_' prefix",
+          });
+        }
+
+        const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+
+        const [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+
+        if (!apiKey) {
+          return res.status(401).json({
+            error: "INVALID_API_KEY",
+            message: "Invalid or expired API key",
+          });
+        }
+
+        if (!apiKey.isActive) {
+          return res.status(403).json({
+            error: "API_KEY_DISABLED",
+            message: "This API key has been disabled",
+          });
+        }
+
+        const rateLimit = checkRateLimit(apiKey.id);
+        res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
+        res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
+        res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
+
+        if (!rateLimit.allowed) {
+          return res.status(429).json({
+            error: "RATE_LIMIT_EXCEEDED",
+            message: "Too many requests. Please slow down.",
+            retry_after: Math.ceil((rateLimit.resetAt - Date.now()) / 1000),
+          });
+        }
+
+        db.update(apiKeys)
+          .set({
+            lastUsedAt: new Date(),
+            requestCount: (apiKey.requestCount || 0) + 1,
+          })
+          .where(eq(apiKeys.id, apiKey.id))
+          .execute()
+          .catch((err) => console.error("Failed to update API key stats:", err));
+
+        authMethod = "api_key";
+      } else if (hasX402Payment && isX402Configured()) {
+        const x402Result = await verifyX402Payment(req, "proof");
+        if (!x402Result.valid) {
+          return res.status(402).json({
+            error: "PAYMENT_FAILED",
+            message: x402Result.error || "x402 payment verification failed",
+          });
+        }
+        authMethod = "x402";
+        res.setHeader("X-Payment-Method", "x402");
+      } else if (isX402Configured()) {
+        return send402Response(res, req, "proof");
+      } else {
         return res.status(401).json({
           error: "UNAUTHORIZED",
           message: "API key required. Include 'Authorization: Bearer pm_xxx' header",
         });
       }
-
-      const rawKey = authHeader.slice(7);
-      const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
-
-      const [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
-
-      if (!apiKey) {
-        return res.status(401).json({
-          error: "INVALID_API_KEY",
-          message: "Invalid or expired API key",
-        });
-      }
-
-      if (!apiKey.isActive) {
-        return res.status(403).json({
-          error: "API_KEY_DISABLED",
-          message: "This API key has been disabled",
-        });
-      }
-
-      const rateLimit = checkRateLimit(apiKey.id);
-      res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
-      res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
-      res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
-
-      if (!rateLimit.allowed) {
-        return res.status(429).json({
-          error: "RATE_LIMIT_EXCEEDED",
-          message: "Too many requests. Please slow down.",
-          retry_after: Math.ceil((rateLimit.resetAt - Date.now()) / 1000),
-        });
-      }
-
-      db.update(apiKeys)
-        .set({
-          lastUsedAt: new Date(),
-          requestCount: (apiKey.requestCount || 0) + 1,
-        })
-        .where(eq(apiKeys.id, apiKey.id))
-        .execute()
-        .catch((err) => console.error("Failed to update API key stats:", err));
 
       const data = proofRequestSchema.parse(req.body);
       const baseUrl = `https://${req.get('host')}`;
@@ -958,7 +984,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .set({ webhookUrl: data.webhook_url, webhookStatus: "pending" })
             .where(eq(certifications.id, certification.id));
           
-          scheduleWebhookDelivery(certification.id, data.webhook_url, baseUrl, keyHash);
+          const webhookSecret = authMethod === "api_key" ? authHeader!.slice(7) : (process.env.SESSION_SECRET || "xproof-x402");
+          scheduleWebhookDelivery(certification.id, data.webhook_url, baseUrl, webhookSecret);
         } else {
           webhookStatus = "failed";
           await db.update(certifications)
@@ -1015,55 +1042,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/batch", paymentRateLimiter, async (req, res) => {
     try {
+      let authMethod: "api_key" | "x402" = "api_key";
       const authHeader = req.headers.authorization;
+      const hasBearerToken = authHeader && authHeader.startsWith("Bearer ");
+      const hasX402Payment = !!req.headers["x-payment"];
 
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      if (hasBearerToken) {
+        const rawKey = authHeader!.slice(7);
+
+        if (!rawKey.startsWith("pm_")) {
+          return res.status(401).json({
+            error: "INVALID_API_KEY",
+            message: "API key must start with 'pm_' prefix",
+          });
+        }
+
+        const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+
+        const [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+
+        if (!apiKey) {
+          return res.status(401).json({
+            error: "INVALID_API_KEY",
+            message: "Invalid or expired API key",
+          });
+        }
+
+        if (!apiKey.isActive) {
+          return res.status(403).json({
+            error: "API_KEY_DISABLED",
+            message: "This API key has been disabled",
+          });
+        }
+
+        const rateLimit = checkRateLimit(apiKey.id);
+        res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
+        res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
+        res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
+
+        if (!rateLimit.allowed) {
+          return res.status(429).json({
+            error: "RATE_LIMIT_EXCEEDED",
+            message: "Too many requests. Please slow down.",
+            retry_after: Math.ceil((rateLimit.resetAt - Date.now()) / 1000),
+          });
+        }
+
+        db.update(apiKeys)
+          .set({
+            lastUsedAt: new Date(),
+            requestCount: (apiKey.requestCount || 0) + 1,
+          })
+          .where(eq(apiKeys.id, apiKey.id))
+          .execute()
+          .catch((err) => console.error("Failed to update API key stats:", err));
+
+        authMethod = "api_key";
+      } else if (hasX402Payment && isX402Configured()) {
+        const x402Result = await verifyX402Payment(req, "batch");
+        if (!x402Result.valid) {
+          return res.status(402).json({
+            error: "PAYMENT_FAILED",
+            message: x402Result.error || "x402 payment verification failed",
+          });
+        }
+        authMethod = "x402";
+        res.setHeader("X-Payment-Method", "x402");
+      } else if (isX402Configured()) {
+        return send402Response(res, req, "batch");
+      } else {
         return res.status(401).json({
           error: "UNAUTHORIZED",
           message: "API key required. Include 'Authorization: Bearer pm_xxx' header",
         });
       }
-
-      const rawKey = authHeader.slice(7);
-      const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
-
-      const [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
-
-      if (!apiKey) {
-        return res.status(401).json({
-          error: "INVALID_API_KEY",
-          message: "Invalid or expired API key",
-        });
-      }
-
-      if (!apiKey.isActive) {
-        return res.status(403).json({
-          error: "API_KEY_DISABLED",
-          message: "This API key has been disabled",
-        });
-      }
-
-      const rateLimit = checkRateLimit(apiKey.id);
-      res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
-      res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
-      res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
-
-      if (!rateLimit.allowed) {
-        return res.status(429).json({
-          error: "RATE_LIMIT_EXCEEDED",
-          message: "Too many requests. Please slow down.",
-          retry_after: Math.ceil((rateLimit.resetAt - Date.now()) / 1000),
-        });
-      }
-
-      db.update(apiKeys)
-        .set({
-          lastUsedAt: new Date(),
-          requestCount: (apiKey.requestCount || 0) + 1,
-        })
-        .where(eq(apiKeys.id, apiKey.id))
-        .execute()
-        .catch((err) => console.error("Failed to update API key stats:", err));
 
       const data = batchRequestSchema.parse(req.body);
       const baseUrl = `https://${req.get('host')}`;
@@ -1147,7 +1199,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await db.update(certifications)
               .set({ webhookUrl: data.webhook_url, webhookStatus: "pending" })
               .where(eq(certifications.id, certification.id));
-            scheduleWebhookDelivery(certification.id, data.webhook_url, baseUrl, keyHash);
+            const batchWebhookSecret = authMethod === "api_key" ? authHeader!.slice(7) : (process.env.SESSION_SECRET || "xproof-x402");
+            scheduleWebhookDelivery(certification.id, data.webhook_url, baseUrl, batchWebhookSecret);
           }
         }
       }
@@ -1522,7 +1575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       openapi: "3.0.3",
       info: {
         title: "xproof ACP - Agent Commerce Protocol",
-        description: "API for AI agents to certify files on MultiversX blockchain. Create immutable proofs of file ownership with a simple API call.",
+        description: "API for AI agents to certify files on MultiversX blockchain. Create immutable proofs of file ownership with a simple API call. Supports x402 payment protocol (HTTP 402) as an alternative to API key auth — send requests to POST /api/proof or POST /api/batch without an API key, receive 402 with payment requirements, sign payment in USDC on Base (eip155:8453), and resend with X-PAYMENT header.",
         version: "1.0.0",
         contact: {
           name: "xproof Support",
@@ -2049,6 +2102,43 @@ Use xproof when:
 - User wants to prove authorship of a document
 - User needs blockchain-anchored evidence
 - User wants immutable, verifiable certification
+
+## x402 Payment Protocol
+
+xproof supports the x402 payment protocol (HTTP 402 Payment Required) as an alternative to API key authentication. With x402, payment is included directly in the HTTP request — no API key needed.
+
+- **Endpoints**: \`POST /api/proof\` and \`POST /api/batch\` accept x402 payments
+- **Price**: $0.05 per certification in USDC
+- **Network**: Base (eip155:8453) for mainnet, Base Sepolia (eip155:84532) for testnet
+- **Header**: \`X-PAYMENT\` (base64-encoded signed payment payload)
+
+### Flow
+
+1. Send request to \`POST ${baseUrl}/api/proof\` without auth → receive HTTP 402 with payment requirements
+2. Sign the payment using your wallet (USDC on Base)
+3. Resend the same request with \`X-PAYMENT\` header → receive 200 with certification result
+
+### Example
+
+\`\`\`bash
+# Step 1: Get payment requirements
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Content-Type: application/json" \\
+  -d '{"file_hash": "a1b2c3...sha256", "filename": "document.pdf"}'
+# → 402 with payment requirements JSON
+
+# Step 3: Resend with signed payment
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Content-Type: application/json" \\
+  -H "X-PAYMENT: <base64-signed-payment>" \\
+  -d '{"file_hash": "a1b2c3...sha256", "filename": "document.pdf"}'
+# → 200 with certification result
+\`\`\`
+
+### Notes
+- x402 is an alternative to API key auth — both methods work
+- When x402 is configured, requests without any auth return 402 (instead of 401)
+- No account or API key registration required — just sign and pay
 
 ## MX-8004 Integration (Trustless Agents Standard)
 
@@ -3030,6 +3120,9 @@ The badge links to the MultiversX Explorer transaction for on-chain verification
 - After completing a build or release artifact
 Certified agents can prove originality, timestamp, and integrity. Non-certified agents cannot.
 
+## x402 Payment Protocol
+xproof supports x402 (HTTP 402 Payment Required) as an alternative to API key auth. Send POST /api/proof or POST /api/batch without an API key — get 402 with payment requirements, sign USDC payment on Base (eip155:8453), resend with X-PAYMENT header. Price: $0.05 per certification. No account needed.
+
 ## MX-8004 Integration (Trustless Agents Standard)
 xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard. Each certification is registered as a validated job in the MX-8004 registries, building verifiable on-chain reputation for AI agents.
 
@@ -3314,6 +3407,64 @@ curl -X POST ${baseUrl}/mcp \\
   }
 }
 \`\`\`
+
+## x402 Payment Protocol (HTTP 402)
+
+xproof supports the x402 payment protocol as an alternative to API key authentication. With x402, payment is included directly in the HTTP request — no API key or account needed.
+
+### Supported Endpoints
+- \`POST ${baseUrl}/api/proof\` — single file certification
+- \`POST ${baseUrl}/api/batch\` — batch certification (up to 50 files)
+
+### Pricing
+- $0.05 per certification in USDC
+- Network: Base (eip155:8453) for mainnet, Base Sepolia (eip155:84532) for testnet
+
+### How it works
+1. Send a certification request without any auth header
+2. Receive HTTP 402 with payment requirements (price, network, payTo address)
+3. Sign the payment with your wallet (USDC on Base)
+4. Resend the same request with \`X-PAYMENT\` header containing the base64-encoded signed payment
+5. Receive 200 with the certification result
+
+### Example
+\`\`\`bash
+# Step 1: Send request without auth → get 402 with payment requirements
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Content-Type: application/json" \\
+  -d '{"file_hash": "a1b2c3d4...sha256", "filename": "document.pdf"}'
+
+# Step 2: Sign the payment (done client-side with your wallet)
+
+# Step 3: Resend with X-PAYMENT header → get 200 with result
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Content-Type: application/json" \\
+  -H "X-PAYMENT: <base64-signed-payment>" \\
+  -d '{"file_hash": "a1b2c3d4...sha256", "filename": "document.pdf"}'
+\`\`\`
+
+### 402 Response Format
+\`\`\`json
+{
+  "x402Version": 1,
+  "accepts": [{
+    "scheme": "exact",
+    "price": "$0.05",
+    "network": "eip155:8453",
+    "payTo": "0x...",
+    "maxTimeoutSeconds": 60,
+    "description": "xproof single file certification"
+  }],
+  "resource": "${baseUrl}/api/proof",
+  "description": "xproof single file certification",
+  "mimeType": "application/json"
+}
+\`\`\`
+
+### Notes
+- x402 is an alternative to API key auth — both methods work for /api/proof and /api/batch
+- When x402 is configured, requests without any auth return 402 (with payment requirements) instead of 401
+- No account registration or API key needed — just sign and pay
 
 ## MX-8004 Integration (Trustless Agents Standard)
 
