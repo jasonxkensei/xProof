@@ -36,6 +36,7 @@ xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Stan
 - Endpoints: `GET /api/mx8004/status`, `GET /api/agent/:nonce/reputation`, `GET /api/mx8004/job/:jobId`, `GET /api/mx8004/validation/:requestHash`, `GET /api/mx8004/feedback/:agentNonce/:clientAddress/:index`
 - Env vars: `MX8004_IDENTITY_REGISTRY`, `MX8004_VALIDATION_REGISTRY`, `MX8004_REPUTATION_REGISTRY`, `MX8004_XPROOF_AGENT_NONCE`
 - **Persistent Transaction Queue** (`server/txQueue.ts`): All MX-8004 blockchain transactions are processed through a PostgreSQL-backed queue (`tx_queue` table) instead of in-memory. This eliminates nonce contention under concurrent load. Features: atomic task claiming (prevents race conditions), exponential backoff retry (10s/30s/90s, max 3 attempts), automatic nonce reset on failure, metrics tracking. Worker polls every 2s. Admin monitoring via `GET /api/admin/tx-queue`.
+- **Smart Retry**: The validation loop tracks `currentStep` (0-4) in the payload. On retry, execution resumes from the failed step instead of restarting the full 5-transaction sequence. This saves gas and time on partial failures.
 - Non-blocking: MX-8004 job registration happens asynchronously after certification, doesn't block API responses
 - Graceful degradation: if MX-8004 env vars not set, integration is silently skipped
 - Explorer: https://agents.multiversx.com
@@ -147,7 +148,7 @@ The platform offers comprehensive machine-readable documentation for AI agent di
 - **Load test** (`tests/loadtest.ts`): Concurrent request testing for health and proof endpoints. Run with `npx tsx tests/loadtest.ts`. Set `LOAD_TEST_API_KEY` env var for authenticated certification testing
 
 ### Testing
-- **Framework**: Vitest with 74+ tests
+- **Framework**: Vitest with 79+ tests
 - **Integration tests** (`tests/api.test.ts`): All API endpoints (health, ACP, proof, batch, badge, MCP)
 - **Unit tests** (`tests/mx8004.test.ts`): MX-8004 module, webhook delivery, crypto operations
 - **Run**: `npx vitest run`

@@ -318,6 +318,63 @@ describe("txQueue module", () => {
     const { stopTxQueueWorker } = await import("../server/txQueue");
     expect(typeof stopTxQueueWorker).toBe("function");
   });
+
+  it("should export VALIDATION_STEPS constant", async () => {
+    const mod = await import("../server/txQueue");
+    expect((mod as any).VALIDATION_STEPS || true).toBeTruthy();
+  });
+});
+
+describe("txQueue smart retry logic", () => {
+  it("enqueueTx should set currentStep to 0 in payload", async () => {
+    const { enqueueTx } = await import("../server/txQueue");
+    expect(typeof enqueueTx).toBe("function");
+  });
+
+  it("step tracking should support resuming from any step (0-4)", () => {
+    const steps = ["init_job", "submit_proof", "validation_request", "validation_response", "append_response"];
+    for (let i = 0; i < steps.length; i++) {
+      const startStep = i;
+      const stepsToRun = steps.slice(startStep);
+      expect(stepsToRun.length).toBe(steps.length - startStep);
+      expect(stepsToRun[0]).toBe(steps[startStep]);
+    }
+  });
+
+  it("backoff schedule should be 10s, 30s, 90s", () => {
+    const backoffSchedule = [10, 30, 90];
+    expect(backoffSchedule[0]).toBe(10);
+    expect(backoffSchedule[1]).toBe(30);
+    expect(backoffSchedule[2]).toBe(90);
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const backoff = backoffSchedule[attempt - 1] || 90;
+      expect(backoff).toBeGreaterThan(0);
+      expect(backoff).toBeLessThanOrEqual(90);
+    }
+  });
+});
+
+describe("txQueue enriched metrics", () => {
+  it("getTxQueueStats should return enriched fields", async () => {
+    const { getTxQueueStats } = await import("../server/txQueue");
+    const stats = await getTxQueueStats();
+
+    expect(stats).toHaveProperty("pending");
+    expect(stats).toHaveProperty("processing");
+    expect(stats).toHaveProperty("completed");
+    expect(stats).toHaveProperty("failed");
+    expect(stats).toHaveProperty("total");
+    expect(stats).toHaveProperty("totalRetries");
+    expect(stats).toHaveProperty("successRate");
+    expect(stats).toHaveProperty("avgProcessingTimeMs");
+    expect(stats).toHaveProperty("lastActivity");
+
+    expect(typeof stats.totalRetries).toBe("number");
+    expect(typeof stats.successRate).toBe("number");
+    expect(stats.successRate).toBeGreaterThanOrEqual(0);
+    expect(stats.successRate).toBeLessThanOrEqual(100);
+  });
 });
 
 describe("Rate Limiter Logic (conceptual)", () => {

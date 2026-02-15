@@ -4213,6 +4213,12 @@ class XProofVerifyTool(BaseTool):
 
       res.json({
         stats,
+        metrics: {
+          success_rate: stats.successRate,
+          avg_processing_time_ms: stats.avgProcessingTimeMs,
+          total_retries: stats.totalRetries,
+          last_activity: stats.lastActivity,
+        },
         recent_failed: recentFailed,
         recent_processing: recentProcessing,
       });

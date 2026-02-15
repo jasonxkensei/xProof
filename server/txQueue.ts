@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { txQueue } from "@shared/schema";
-import { eq, and, lte, or, isNull, sql, count } from "drizzle-orm";
+import { eq, and, lte, or, isNull, sql, count, sum, avg, max, desc } from "drizzle-orm";
 import { setMx8004QueueSize } from "./metrics";
 import {
   initJob,
@@ -13,6 +13,14 @@ import {
 
 let workerInterval: ReturnType<typeof setInterval> | null = null;
 
+const VALIDATION_STEPS = [
+  "init_job",
+  "submit_proof",
+  "validation_request",
+  "validation_response",
+  "append_response",
+] as const;
+
 export async function enqueueTx(
   jobType: string,
   jobId: string,
@@ -21,12 +29,20 @@ export async function enqueueTx(
   await db.insert(txQueue).values({
     jobType,
     jobId,
-    payload,
+    payload: { ...payload, currentStep: 0 },
     status: "pending",
     attempts: 0,
     maxAttempts: 3,
   });
   console.log(`[TX-Queue] Enqueued job: ${jobType} / ${jobId}`);
+}
+
+async function updatePayload(taskId: string, updates: Record<string, any>): Promise<void> {
+  if (!taskId) return;
+  await db
+    .update(txQueue)
+    .set({ payload: sql`payload || ${JSON.stringify(updates)}::jsonb` })
+    .where(eq(txQueue.id, taskId));
 }
 
 async function processNextTask(): Promise<void> {
@@ -49,7 +65,7 @@ async function processNextTask(): Promise<void> {
     console.log(`[TX-Queue] Processing: ${task.jobType} / ${task.jobId} (attempt ${task.attempts + 1}/${task.maxAttempts})`);
 
     try {
-      await executeTask(task.jobType, task.jobId, task.payload as Record<string, any>);
+      await executeTask(task.id, task.jobType, task.jobId, task.payload as Record<string, any>);
 
       await db
         .update(txQueue)
@@ -101,6 +117,7 @@ async function processNextTask(): Promise<void> {
 }
 
 async function executeTask(
+  taskId: string,
   jobType: string,
   jobId: string,
   payload: Record<string, any>
@@ -108,31 +125,56 @@ async function executeTask(
   switch (jobType) {
     case "mx8004_validation_loop": {
       const { certificationId, fileHash, transactionHash, agentNonce, senderAddress } = payload;
+      const rawStep = typeof payload.currentStep === "number" ? payload.currentStep : 0;
+      const startStep = Math.max(0, Math.min(4, rawStep));
+      if (rawStep >= 5) {
+        throw new Error(`Job already completed (currentStep=${rawStep})`);
+      }
       const proof = `hash:${fileHash}|tx:${transactionHash}`;
-
-      console.log(`[TX-Queue] Registering job: ${jobId} for agent nonce ${agentNonce}`);
-
-      const jobTxHash = await initJob(jobId, agentNonce);
-      console.log(`[TX-Queue] Job initialized: ${jobTxHash}`);
-
-      const proofTxHash = await submitProof(jobId, proof);
-      console.log(`[TX-Queue] Proof submitted: ${proofTxHash}`);
 
       const crypto = await import("crypto");
       const requestHash = crypto.createHash("sha256").update(proof).digest("hex");
       const requestUri = `https://xproof.app/proof/${certificationId}.json`;
-
-      const valReqTxHash = await validationRequest(jobId, senderAddress, requestUri, requestHash);
-      console.log(`[TX-Queue] Validation request: ${valReqTxHash}`);
-
       const responseUri = `https://xproof.app/proof/${certificationId}`;
       const responseHash = crypto.createHash("sha256").update(`verified:${fileHash}`).digest("hex");
-      const valRespTxHash = await validationResponse(requestHash, 100, responseUri, responseHash, "xproof-certification");
-      console.log(`[TX-Queue] Validation response (verified): ${valRespTxHash}`);
-
       const certUrl = `https://xproof.app/api/certificates/${certificationId}.pdf`;
-      const appendTxHash = await appendResponse(jobId, certUrl);
-      console.log(`[TX-Queue] Response appended: ${appendTxHash}`);
+
+      if (startStep > 0) {
+        console.log(`[TX-Queue] Resuming ${jobId} from step ${startStep} (${VALIDATION_STEPS[startStep]})`);
+      } else {
+        console.log(`[TX-Queue] Registering job: ${jobId} for agent nonce ${agentNonce}`);
+      }
+
+      if (startStep <= 0) {
+        const txHash = await initJob(jobId, agentNonce);
+        console.log(`[TX-Queue] Step 1/5 init_job: ${txHash}`);
+        await updatePayload(taskId, { currentStep: 1 });
+      }
+
+      if (startStep <= 1) {
+        const txHash = await submitProof(jobId, proof);
+        console.log(`[TX-Queue] Step 2/5 submit_proof: ${txHash}`);
+        await updatePayload(taskId, { currentStep: 2 });
+      }
+
+      if (startStep <= 2) {
+        const txHash = await validationRequest(jobId, senderAddress, requestUri, requestHash);
+        console.log(`[TX-Queue] Step 3/5 validation_request: ${txHash}`);
+        await updatePayload(taskId, { currentStep: 3 });
+      }
+
+      if (startStep <= 3) {
+        const txHash = await validationResponse(requestHash, 100, responseUri, responseHash, "xproof-certification");
+        console.log(`[TX-Queue] Step 4/5 validation_response: ${txHash}`);
+        await updatePayload(taskId, { currentStep: 4 });
+      }
+
+      if (startStep <= 4) {
+        const txHash = await appendResponse(jobId, certUrl);
+        console.log(`[TX-Queue] Step 5/5 append_response: ${txHash}`);
+        await updatePayload(taskId, { currentStep: 5 });
+      }
+
       break;
     }
     default:
@@ -148,7 +190,6 @@ async function updateQueueMetrics(): Promise<void> {
       .where(eq(txQueue.status, "pending"));
     setMx8004QueueSize(result.count);
   } catch {
-    // ignore metrics errors
   }
 }
 
@@ -158,6 +199,10 @@ export async function getTxQueueStats(): Promise<{
   completed: number;
   failed: number;
   total: number;
+  totalRetries: number;
+  successRate: number;
+  avgProcessingTimeMs: number | null;
+  lastActivity: string | null;
 }> {
   const [pendingRow] = await db.select({ count: count() }).from(txQueue).where(eq(txQueue.status, "pending"));
   const [processingRow] = await db.select({ count: count() }).from(txQueue).where(eq(txQueue.status, "processing"));
@@ -165,12 +210,42 @@ export async function getTxQueueStats(): Promise<{
   const [failedRow] = await db.select({ count: count() }).from(txQueue).where(eq(txQueue.status, "failed"));
   const [totalRow] = await db.select({ count: count() }).from(txQueue);
 
+  const [retriesRow] = await db
+    .select({ total: sql<number>`COALESCE(SUM(GREATEST(attempts - 1, 0)), 0)` })
+    .from(txQueue)
+    .where(or(eq(txQueue.status, "completed"), eq(txQueue.status, "failed")));
+
+  const totalRetries = Number(retriesRow.total || 0);
+  const finishedCount = completedRow.count + failedRow.count;
+  const successRate = finishedCount > 0 ? Math.round((completedRow.count / finishedCount) * 10000) / 100 : 0;
+
+  const [avgRow] = await db
+    .select({
+      avgMs: sql<number>`ROUND(AVG(EXTRACT(EPOCH FROM (completed_at - started_at)) * 1000))`,
+    })
+    .from(txQueue)
+    .where(and(eq(txQueue.status, "completed"), sql`completed_at IS NOT NULL`, sql`started_at IS NOT NULL`));
+
+  const [lastActivityRow] = await db
+    .select({
+      latest: sql<Date>`MAX(GREATEST(COALESCE(completed_at, '1970-01-01'), COALESCE(started_at, '1970-01-01'), COALESCE(created_at, '1970-01-01')))`,
+    })
+    .from(txQueue);
+
+  const lastActivity = lastActivityRow.latest && lastActivityRow.latest.getTime() > 0
+    ? lastActivityRow.latest.toISOString()
+    : null;
+
   return {
     pending: pendingRow.count,
     processing: processingRow.count,
     completed: completedRow.count,
     failed: failedRow.count,
     total: totalRow.count,
+    totalRetries,
+    successRate,
+    avgProcessingTimeMs: avgRow.avgMs ? Number(avgRow.avgMs) : null,
+    lastActivity,
   };
 }
 
