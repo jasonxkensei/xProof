@@ -47,6 +47,7 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ extended: false }));
 
 app.get("/health", healthCheck);
+app.get("/api/health", healthCheck);
 
 app.use("/api", globalRateLimiter);
 app.use("/api", requestTimeout(30000));

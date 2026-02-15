@@ -15,6 +15,7 @@ import MentionsLegales from "@/pages/legal/mentions";
 import PolitiqueConfidentialite from "@/pages/legal/privacy";
 import ConditionsUtilisation from "@/pages/legal/terms";
 import AgentsPage from "@/pages/agents";
+import AdminDashboard from "@/pages/admin";
 import { Shield, Loader2 } from "lucide-react";
 
 function Router() {
@@ -56,6 +57,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/certify" component={Certify} />
       <Route path="/settings" component={Settings} />
+      <Route path="/admin" component={AdminDashboard} />
       <Route path="/proof/:id" component={ProofPage} />
       <Route path="/legal/mentions" component={MentionsLegales} />
       <Route path="/legal/privacy" component={PolitiqueConfidentialite} />

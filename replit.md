@@ -127,4 +127,18 @@ The platform offers comprehensive machine-readable documentation for AI agent di
 - `XMONEY_API_KEY`, `XMONEY_SITE_ID`, `XMONEY_WEBHOOK_SECRET`
 - `MULTIVERSX_PRIVATE_KEY`, `MULTIVERSX_SENDER_ADDRESS`, `MULTIVERSX_CHAIN_ID`, `MULTIVERSX_GATEWAY_URL` (optional, for server-side signing)
 - `MX8004_IDENTITY_REGISTRY`, `MX8004_VALIDATION_REGISTRY`, `MX8004_REPUTATION_REGISTRY`, `MX8004_XPROOF_AGENT_NONCE`
+- `ADMIN_WALLETS` (comma-separated list of MultiversX wallet addresses allowed to access /admin and /api/admin/stats)
 - `REPL_ID`
+
+### Monitoring & Admin
+- **Health endpoint** (`/api/health`): Structured per-component checks (database, blockchain gateway, MX-8004), operational metrics (commit SHA, deploy timestamp, uptime), returns `ok`/`degraded`/`down` status
+- **Metrics module** (`server/metrics.ts`): In-memory tracking of transaction latency, success/failure rates, MX-8004 queue size, last success/failure timestamps
+- **Admin stats** (`/api/admin/stats`): Protected by wallet auth + ADMIN_WALLETS allowlist. Certification counts (total, 24h, 7d, 30d), source breakdown (API vs user), blockchain status breakdown, API key usage, webhook delivery stats, daily activity (7d)
+- **Admin dashboard** (`/admin`): React page with stat cards, system health display, source breakdown bars, webhook stats, daily activity chart. Auto-refreshes every 30s
+- **Load test** (`tests/loadtest.ts`): Concurrent request testing for health and proof endpoints. Run with `npx tsx tests/loadtest.ts`. Set `LOAD_TEST_API_KEY` env var for authenticated certification testing
+
+### Testing
+- **Framework**: Vitest with 62+ tests
+- **Integration tests** (`tests/api.test.ts`): All API endpoints (health, ACP, proof, batch, badge, MCP)
+- **Unit tests** (`tests/mx8004.test.ts`): MX-8004 module, webhook delivery, crypto operations
+- **Run**: `npx vitest run`

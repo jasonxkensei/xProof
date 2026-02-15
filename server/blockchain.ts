@@ -3,6 +3,7 @@ import {
   TransactionComputer,
   Address,
 } from "@multiversx/sdk-core";
+import { recordTransaction } from "./metrics";
 
 // MultiversX configuration from environment
 const PRIVATE_KEY = process.env.MULTIVERSX_PRIVATE_KEY;
@@ -83,21 +84,18 @@ export async function recordOnBlockchain(
     };
   }
 
+  const txStart = Date.now();
   try {
-    // Build transaction data payload
     const payloadText = `certify:${fileHash}${filename ? `|filename:${filename}` : ""}${author ? `|author:${author}` : ""}`;
     const dataPayload = Buffer.from(payloadText);
 
-    // Get current nonce for the sender account
     const nonce = await getAccountNonce(SENDER_ADDRESS!);
 
-    // Calculate gas limit: base (50000) + data cost (1500 per byte)
     const gasLimit = BigInt(50000 + dataPayload.length * 1500);
 
-    // Create transaction
     const transaction = new Transaction({
       nonce: nonce,
-      value: BigInt(0), // No EGLD transfer, just data
+      value: BigInt(0),
       sender: Address.newFromBech32(SENDER_ADDRESS!),
       receiver: Address.newFromBech32(RECEIVER_ADDRESS!),
       gasLimit: gasLimit,
@@ -105,7 +103,6 @@ export async function recordOnBlockchain(
       chainID: CHAIN_ID,
     });
 
-    // Sign transaction with private key using ed25519
     const privateKeyHex = PRIVATE_KEY!.replace(/^0x/i, "");
     const privateKeyBuffer = Buffer.from(privateKeyHex, "hex");
     
@@ -116,21 +113,22 @@ export async function recordOnBlockchain(
     const signature = await ed.sign(serializedTx, privateKeyBuffer.slice(0, 32));
     transaction.signature = Buffer.from(signature);
 
-    // Submit to gateway
     const result = await submitTransaction(transaction);
 
-    // Build explorer URL based on network
     const explorerBaseUrl = CHAIN_ID === "D" 
       ? "https://devnet-explorer.multiversx.com"
       : CHAIN_ID === "T"
       ? "https://testnet-explorer.multiversx.com"
       : "https://explorer.multiversx.com";
 
+    recordTransaction(true, Date.now() - txStart, "certification");
+
     return {
       transactionHash: result.txHash,
       transactionUrl: `${explorerBaseUrl}/transactions/${result.txHash}`,
     };
   } catch (error: any) {
+    recordTransaction(false, Date.now() - txStart, "certification");
     console.error("❌ MultiversX transaction error:", error);
     throw new Error(`Failed to record on blockchain: ${error.message}`);
   }

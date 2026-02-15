@@ -3,6 +3,7 @@ import {
   TransactionComputer,
   Address,
 } from "@multiversx/sdk-core";
+import { setMx8004QueueSize, recordTransaction } from "./metrics";
 
 const PRIVATE_KEY = process.env.MULTIVERSX_PRIVATE_KEY;
 const SENDER_ADDRESS = process.env.MULTIVERSX_SENDER_ADDRESS;
@@ -58,6 +59,7 @@ async function processQueue() {
   processing = true;
   while (txQueue.length > 0) {
     const task = txQueue.shift()!;
+    setMx8004QueueSize(txQueue.length);
     try {
       await task();
     } catch (err: any) {
@@ -66,10 +68,12 @@ async function processQueue() {
     }
   }
   processing = false;
+  setMx8004QueueSize(0);
 }
 
 function enqueue(task: () => Promise<void>) {
   txQueue.push(task);
+  setMx8004QueueSize(txQueue.length);
   processQueue();
 }
 
@@ -82,6 +86,7 @@ async function signAndSubmit(tx: Transaction): Promise<string> {
   const signature = await ed.sign(serializedTx, privateKeyBuffer.slice(0, 32));
   tx.signature = Buffer.from(signature);
 
+  const txStart = Date.now();
   const response = await fetch(`${GATEWAY_URL}/transaction/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -90,13 +95,21 @@ async function signAndSubmit(tx: Transaction): Promise<string> {
 
   if (!response.ok) {
     const errorText = await response.text();
+    recordTransaction(false, Date.now() - txStart, "mx8004");
     throw new Error(`Gateway error: ${response.statusText} - ${errorText}`);
   }
 
   const result = await response.json();
-  if (result.error) throw new Error(`Transaction error: ${result.error}`);
-  if (!result.data?.txHash) throw new Error(`Invalid response: ${JSON.stringify(result)}`);
+  if (result.error) {
+    recordTransaction(false, Date.now() - txStart, "mx8004");
+    throw new Error(`Transaction error: ${result.error}`);
+  }
+  if (!result.data?.txHash) {
+    recordTransaction(false, Date.now() - txStart, "mx8004");
+    throw new Error(`Invalid response: ${JSON.stringify(result)}`);
+  }
 
+  recordTransaction(true, Date.now() - txStart, "mx8004");
   return result.data.txHash;
 }
 
