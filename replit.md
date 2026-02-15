@@ -1,9 +1,17 @@
-# xproof - Blockchain Certification Platform
+# xproof — Proof primitive for agents & humans on MultiversX
 
 ## Overview
-xproof is a Web3 certification platform designed to provide immutable and verifiable proof of digital file ownership. It achieves this by recording SHA-256 hashes of files on the MultiversX blockchain. The platform aims to offer a professional and accessible interface for non-technical users to certify various digital assets, positioning itself as a "truth primitive" for both human and AI agents. It offers features like public proof pages, certificate generation, and blockchain verification.
+xproof is a trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is API-first, composable, and built for both human users and autonomous agents. Core positioning: "Proof primitive for agents & humans on MultiversX."
 
 **Rebranding Note (Feb 2026):** Previously known as "ProofMint", the service was rebranded to "xproof" to better align with the MultiversX ecosystem ("x" prefix).
+
+## Recent Changes (Feb 15, 2026)
+- **Positioning update**: README, landing page hero, meta tags, and WalletConnect metadata updated to reflect "Proof primitive for agents & humans on MultiversX" positioning (hybride stratégique tone).
+- **Webhook HMAC improvement**: Added X-xProof-Timestamp header and timestamp in HMAC signature for replay protection.
+- **API key rotation**: New POST /api/keys/:keyId/rotate endpoint with 24h grace period for old key (previousKeyHash, previousKeyExpiresAt columns in api_keys table).
+- **Admin RBAC middleware**: Extracted inline admin checks into reusable requireAdmin middleware.
+- **Rate limiting hardened**: Added apiKeyCreationRateLimiter (10/hour) for key creation and rotation. Fixed IPv6 bypass vulnerability on all rate limiters by removing custom keyGenerator.
+- **Drizzle best practices**: Converted pool.query() calls to db.execute(sql`...`) in admin stats endpoint.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

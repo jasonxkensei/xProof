@@ -1,6 +1,6 @@
 <p align="center">
   <strong>xproof</strong><br>
-  <em>Blockchain Certification Service &mdash; Immutable Proof of Existence on MultiversX</em>
+  <em>Proof primitive for agents &amp; humans on MultiversX</em>
 </p>
 
 <p align="center">
@@ -13,42 +13,74 @@
 
 ---
 
-> **Every file you create without proof is a file anyone can claim.**
-> xproof anchors your work on MultiversX blockchain &mdash; immutable proof of what you built, when you built it.
+> **Trust is programmable.**
+> xproof anchors verifiable proofs of existence, authorship, and agent output on MultiversX &mdash; composable, API-first, built for both humans and autonomous agents.
 
 ---
 
 ## What is xproof?
 
-**xproof** is a proof-of-existence service that anchors SHA-256 file hashes on the [MultiversX](https://multiversx.com) blockchain, creating tamper-proof certificates of existence and ownership.
+**xproof** is a trust primitive that records SHA-256 file hashes on the [MultiversX](https://multiversx.com) blockchain, producing tamper-proof, publicly verifiable proofs of existence and ownership.
 
-- Upload any file. Its SHA-256 hash is computed **locally** in the browser &mdash; your file never leaves your device.
-- The hash is recorded on-chain as an immutable, publicly verifiable transaction.
-- A PDF certificate with QR code is generated for offline verification.
-- Public proof pages allow anyone to independently verify a certification.
-
-xproof is designed for both **human users** (via the web interface) and **AI agents** (via the Agent Commerce Protocol, MCP, LangChain tools, and more).
+- **Client-side hashing** &mdash; SHA-256 is computed locally in the browser. Your file never leaves your device.
+- **On-chain anchoring** &mdash; the hash is recorded as an immutable transaction on MultiversX mainnet.
+- **Verifiable output** &mdash; PDF certificate, QR code, public proof page, and machine-readable JSON.
+- **Agent-native** &mdash; discoverable and consumable by AI agents via ACP, MCP, LangChain, CrewAI, and x402.
 
 ### Why MultiversX?
 
-MultiversX is a European, carbon-negative blockchain with 6-second finality, negligible fees, and a growing ecosystem of AI-native protocols. xproof leverages its security and efficiency to provide enterprise-grade certification at minimal cost.
+MultiversX is a European, carbon-negative blockchain with 6-second finality, negligible fees, and a growing ecosystem of AI-native protocols. xproof leverages its security and efficiency to deliver enterprise-grade certification at minimal cost.
 
 ---
 
-## Features
+## Core Capabilities
 
-| Feature | Description |
+| Capability | Description |
 |---|---|
 | **Client-Side Hashing** | SHA-256 computed in-browser. Zero data leaves your device. |
-| **Blockchain Anchoring** | On-chain proof via MultiversX (Mainnet / Devnet / Testnet). |
+| **Blockchain Anchoring** | On-chain proof via MultiversX mainnet. |
+| **MX-8004 Compliance** | Validation loop, cumulative scoring, on-chain feedback. |
 | **PDF Certificates** | Downloadable certificate with QR code linking to the blockchain explorer. |
 | **Public Proof Pages** | Shareable `/proof/:id` pages for independent verification. |
 | **Wallet Authentication** | Native Auth via xPortal, MultiversX Web Wallet, or WalletConnect. |
-| **Agent Commerce Protocol** | AI agents can discover, purchase, and use certifications programmatically. |
+| **Agent Commerce Protocol** | AI agents discover, purchase, and consume certifications programmatically. |
+| **x402 Payment Protocol** | HTTP 402 native payment flow &mdash; no account needed. |
 | **MCP / LangChain / CrewAI** | Ready-made tool definitions for major AI agent frameworks. |
-| **Pay Per Use** | $0.05 per certification, paid in EGLD via xMoney. |
-| **API Keys** | Generate `pm_` prefixed bearer tokens for programmatic access. |
-| **LLM Discovery** | `llms.txt`, OpenAI plugin manifest, MCP manifest, agent.json &mdash; all served automatically. |
+| **Webhook Delivery** | HMAC-signed notifications with retry logic and exponential backoff. |
+| **API Keys** | `pm_`-prefixed bearer tokens for programmatic access with per-key rate limiting. |
+| **LLM Discovery** | `llms.txt`, OpenAI plugin manifest, MCP manifest, agent.json &mdash; served automatically. |
+
+---
+
+## For Developers
+
+xproof is API-first. A single `POST /api/proof` call with an API key certifies a file hash on-chain and returns a structured proof.
+
+```bash
+curl -X POST https://xproof.app/api/proof \
+  -H "Authorization: Bearer pm_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"file_hash": "sha256_of_your_file", "filename": "report.pdf"}'
+```
+
+Full API documentation: [docs/api-reference.md](docs/api-reference.md)
+
+## For Agents
+
+xproof is designed to be discovered and consumed by autonomous agents. It exposes machine-readable endpoints across multiple standards:
+
+| Endpoint | Standard | Purpose |
+|---|---|---|
+| `/.well-known/ai-plugin.json` | OpenAI Plugin | ChatGPT plugin manifest |
+| `/.well-known/mcp.json` | MCP | Model Context Protocol manifest |
+| `/.well-known/agent.json` | Agent Protocol | Agent discovery manifest |
+| `/llms.txt` | llms.txt | LLM-friendly summary |
+| `/agent-tools/langchain.py` | LangChain | Python tool definition |
+| `/agent-tools/crewai.py` | CrewAI | Python tool definition |
+
+Agents can also pay per-proof via x402 (HTTP 402) without needing an account or API key.
+
+For detailed integration guides, see [docs/agent-integration.md](docs/agent-integration.md).
 
 ---
 
@@ -60,9 +92,9 @@ MultiversX is a European, carbon-negative blockchain with 6-second finality, neg
 | **Backend** | Node.js, Express.js, TypeScript |
 | **Database** | PostgreSQL (Neon), Drizzle ORM |
 | **Blockchain** | MultiversX SDK (sdk-core, sdk-dapp, sdk-network-providers, sdk-wallet) |
-| **Payments** | xMoney (EGLD payments on MultiversX) |
+| **Payments** | xMoney (EGLD), Stripe (fiat), x402 (USDC on Base) |
 | **Auth** | MultiversX Native Auth (cryptographic wallet signatures) |
-| **PDF** | jsPDF 4.x with QR code generation |
+| **PDF** | jsPDF with QR code generation |
 
 ---
 
@@ -91,6 +123,7 @@ xproof/
     routes.ts            # All API routes (REST + ACP + discovery)
     db.ts                # Database connection (Drizzle + Neon)
     blockchain.ts        # MultiversX blockchain interactions
+    webhook.ts           # HMAC-signed webhook delivery
     certificateGenerator.ts  # Server-side PDF generation
     nativeAuth.ts        # Native Auth token verification
     walletAuth.ts        # Session & wallet middleware
@@ -121,13 +154,11 @@ npm install
 
 ### Environment Variables
 
-Copy the example file and fill in your credentials:
-
 ```bash
 cp .env.example .env
 ```
 
-See [docs/environment-variables.md](docs/environment-variables.md) for detailed descriptions of each variable.
+See [docs/environment-variables.md](docs/environment-variables.md) for detailed descriptions.
 
 ### Database Setup
 
@@ -160,11 +191,12 @@ Full documentation: [docs/api-reference.md](docs/api-reference.md)
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
+| `POST` | `/api/proof` | API Key | Certify a file hash (single call) |
+| `POST` | `/api/batch` | API Key | Batch certification |
 | `POST` | `/api/auth/wallet/sync` | - | Authenticate via Native Auth token |
 | `GET` | `/api/auth/me` | Wallet | Get current user |
-| `POST` | `/api/certifications` | Wallet | Create a certification |
+| `POST` | `/api/certifications` | Wallet | Create a certification (web flow) |
 | `GET` | `/api/certifications` | Wallet | List user certifications |
-| `POST` | `/api/blockchain/broadcast` | Wallet | Broadcast signed transaction |
 | `GET` | `/api/proof/:id` | - | Get public proof data |
 | `GET` | `/api/certificates/:id.pdf` | - | Download PDF certificate |
 
@@ -176,15 +208,7 @@ Full documentation: [docs/api-reference.md](docs/api-reference.md)
 | `GET` | `/api/acp/openapi.json` | - | OpenAPI 3.0 specification |
 | `POST` | `/api/acp/checkout` | API Key | Start a checkout session |
 | `POST` | `/api/acp/confirm` | API Key | Confirm transaction execution |
-| `GET` | `/api/acp/checkout/:id` | API Key | Check checkout status |
 | `GET` | `/api/acp/health` | - | Health check |
-
-### Payments
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/xmoney/create-payment` | Wallet | Create EGLD payment via xMoney |
-| `GET` | `/api/xmoney/order/:orderId` | Wallet | Check payment order status |
 
 ### API Keys
 
@@ -196,73 +220,28 @@ Full documentation: [docs/api-reference.md](docs/api-reference.md)
 
 ---
 
-## AI Agent Discovery
-
-xproof is built to be **discovered and used by AI agents automatically**. The following machine-readable endpoints are served:
-
-| Endpoint | Standard | Purpose |
-|---|---|---|
-| `/.well-known/xproof.md` | Custom | Full xproof specification |
-| `/.well-known/ai-plugin.json` | OpenAI Plugin | ChatGPT plugin manifest |
-| `/.well-known/mcp.json` | MCP | Model Context Protocol manifest |
-| `/.well-known/agent.json` | Agent Protocol | Agent discovery manifest |
-| `/llms.txt` | llms.txt | LLM-friendly summary |
-| `/llms-full.txt` | llms.txt | Extended documentation for LLMs |
-| `/robots.txt` | Standard | SEO with AI discovery hints |
-| `/sitemap.xml` | Standard | SEO sitemap |
-
-### Agent Tool Definitions
-
-Ready-to-use tool definitions for popular AI frameworks:
-
-| Endpoint | Framework | Language |
-|---|---|---|
-| `/agent-tools/langchain.py` | LangChain | Python |
-| `/agent-tools/crewai.py` | CrewAI | Python |
-| `/agent-tools/openapi-actions.json` | GPT Actions / Custom GPTs | OpenAPI 3.0 |
-
-### Machine-Readable Proofs
-
-| Endpoint | Format | Description |
-|---|---|---|
-| `/proof/:id.json` | JSON | Structured proof data |
-| `/proof/:id.md` | Markdown | LLM-friendly proof |
-| `/genesis.proof.json` | JSON | Genesis certification |
-
-### Learn & Documentation
-
-| Endpoint | Description |
-|---|---|
-| `/learn/proof-of-existence.md` | Concept explanation |
-| `/learn/verification.md` | How to verify proofs |
-| `/learn/api.md` | API usage guide |
-
-For detailed integration guides, see [docs/agent-integration.md](docs/agent-integration.md).
-
----
-
 ## How It Works
 
 ```
 User/Agent                    xproof                     MultiversX
     |                           |                           |
-    |  1. Upload file           |                           |
+    |  1. Submit file/hash      |                           |
     |-------------------------->|                           |
     |                           |                           |
-    |  2. SHA-256 computed      |                           |
-    |     locally in browser    |                           |
+    |  2. SHA-256 verified      |                           |
+    |     (client-side or API)  |                           |
     |                           |                           |
-    |  3. Sign transaction      |                           |
-    |     (xPortal / wallet)    |                           |
+    |  3. Transaction signed    |                           |
+    |     & broadcast           |                           |
     |-------------------------->|                           |
-    |                           |  4. Broadcast to chain    |
+    |                           |  4. Anchored on-chain     |
     |                           |-------------------------->|
     |                           |                           |
-    |                           |  5. Transaction confirmed |
+    |                           |  5. Confirmed (6s)        |
     |                           |<--------------------------|
     |                           |                           |
-    |  6. PDF certificate       |                           |
-    |     + public proof page   |                           |
+    |  6. Proof returned        |                           |
+    |     (PDF + JSON + URL)    |                           |
     |<--------------------------|                           |
 ```
 
@@ -270,9 +249,9 @@ User/Agent                    xproof                     MultiversX
 
 ## Pricing
 
-**$0.05 per certification** &mdash; simple, transparent, pay-as-you-go. No subscriptions, no monthly fees.
+**$0.05 per certification** &mdash; pay-as-you-go. No subscriptions, no monthly fees.
 
-Payment accepted in **EGLD** via **xMoney** on MultiversX, converted at real-time market rate.
+Payment accepted in **EGLD** via **xMoney**, fiat via **Stripe**, or **USDC on Base** via x402.
 
 ---
 

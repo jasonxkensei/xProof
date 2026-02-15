@@ -220,6 +220,8 @@ export const apiKeys = pgTable("api_keys", {
   lastUsedAt: timestamp("last_used_at"),
   requestCount: integer("request_count").default(0),
   isActive: boolean("is_active").default(true),
+  previousKeyHash: varchar("previous_key_hash"),
+  previousKeyExpiresAt: timestamp("previous_key_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

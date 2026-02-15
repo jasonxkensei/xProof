@@ -71,8 +71,9 @@ export async function deliverWebhook(
     };
 
     const payloadStr = JSON.stringify(payload);
+    const timestamp = Math.floor(Date.now() / 1000).toString();
     const webhookSecret = signingSecret || process.env.SESSION_SECRET || "xproof-webhook-secret";
-    const signature = signPayload(payloadStr, webhookSecret);
+    const signature = signPayload(timestamp + "." + payloadStr, webhookSecret);
 
     await db
       .update(certifications)
@@ -92,6 +93,7 @@ export async function deliverWebhook(
         headers: {
           "Content-Type": "application/json",
           "X-xProof-Signature": signature,
+          "X-xProof-Timestamp": timestamp,
           "X-xProof-Event": "proof.certified",
           "X-xProof-Delivery": certificationId,
           "User-Agent": "xProof-Webhook/1.0",

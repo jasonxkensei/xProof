@@ -33,7 +33,7 @@ import {
   destroyWalletSession 
 } from "./walletAuth";
 import { getSession } from "./replitAuth";
-import { authRateLimiter, paymentRateLimiter } from "./reliability";
+import { authRateLimiter, paymentRateLimiter, apiKeyCreationRateLimiter } from "./reliability";
 import { recordCertificationAsJob, isMX8004Configured, getReputationScore, getAgentDetails, getContractAddresses, getJobData, getValidationStatus, hasGivenFeedback, getAgentResponse, readFeedback, getAgentsExplorerUrl } from "./mx8004";
 import { getTxQueueStats } from "./txQueue";
 
@@ -628,7 +628,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================
 
   // Generate new API key (requires wallet auth)
-  app.post("/api/keys", isWalletAuthenticated, async (req: any, res) => {
+  app.post("/api/keys", isWalletAuthenticated, apiKeyCreationRateLimiter, async (req: any, res) => {
     try {
       const { name } = req.body;
       if (!name || typeof name !== "string") {
@@ -726,6 +726,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/keys/:keyId/rotate", isWalletAuthenticated, apiKeyCreationRateLimiter, async (req: any, res) => {
+    try {
+      const { keyId } = req.params;
+      const walletAddress = req.session?.walletAddress;
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const [existingKey] = await db.select().from(apiKeys).where(eq(apiKeys.id, keyId));
+      if (!existingKey || existingKey.userId !== user.id) {
+        return res.status(404).json({ error: "API key not found" });
+      }
+
+      if (!existingKey.isActive) {
+        return res.status(400).json({ error: "Cannot rotate a disabled key" });
+      }
+
+      const newRawKey = `pm_${crypto.randomBytes(32).toString("hex")}`;
+      const newKeyHash = crypto.createHash("sha256").update(newRawKey).digest("hex");
+      const newKeyPrefix = newRawKey.slice(0, 10) + "...";
+
+      const gracePeriodEnd = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await db
+        .update(apiKeys)
+        .set({
+          previousKeyHash: existingKey.keyHash,
+          previousKeyExpiresAt: gracePeriodEnd,
+          keyHash: newKeyHash,
+          keyPrefix: newKeyPrefix,
+        })
+        .where(eq(apiKeys.id, keyId));
+
+      console.log(`🔄 API key rotated: ${existingKey.keyPrefix} -> ${newKeyPrefix}`);
+
+      res.json({
+        id: keyId,
+        key: newRawKey,
+        prefix: newKeyPrefix,
+        previous_key_expires_at: gracePeriodEnd.toISOString(),
+        message: "New key generated. Previous key remains valid for 24 hours.",
+      });
+    } catch (error) {
+      console.error("API key rotation error:", error);
+      res.status(500).json({ error: "Failed to rotate API key" });
+    }
+  });
+
   // ============================================
   // Rate Limiting for ACP (anti-abuse)
   // ============================================
@@ -770,7 +819,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const rawKey = authHeader.slice(7);
     const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
 
-    const [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+    let [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+
+    if (!apiKey) {
+      const [rotatedKey] = await db.select().from(apiKeys).where(
+        and(eq(apiKeys.previousKeyHash, keyHash), gte(apiKeys.previousKeyExpiresAt, new Date()))
+      );
+      if (rotatedKey) {
+        apiKey = rotatedKey;
+        res.setHeader("X-xProof-Key-Deprecated", "true");
+        res.setHeader("X-xProof-Key-Expires", rotatedKey.previousKeyExpiresAt!.toISOString());
+      }
+    }
 
     if (!apiKey) {
       return res.status(401).json({
@@ -4078,12 +4138,16 @@ class XProofVerifyTool(BaseTool):
   // ============================================
   // Admin Analytics Endpoint
   // ============================================
-  app.get("/api/admin/stats", isWalletAuthenticated, async (req: any, res) => {
+  function requireAdmin(req: any, res: express.Response, next: express.NextFunction) {
     const adminWallets = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim()).filter(Boolean);
     const userWallet = req.session?.walletAddress;
     if (adminWallets.length > 0 && !adminWallets.includes(userWallet)) {
       return res.status(403).json({ error: "Forbidden: admin access required" });
     }
+    next();
+  }
+
+  app.get("/api/admin/stats", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
     try {
       const now = new Date();
       const h24 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -4188,13 +4252,7 @@ class XProofVerifyTool(BaseTool):
     }
   });
 
-  app.get("/api/admin/tx-queue", isWalletAuthenticated, async (req: any, res) => {
-    const adminWallets = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim()).filter(Boolean);
-    const userWallet = req.session?.walletAddress;
-    if (adminWallets.length > 0 && !adminWallets.includes(userWallet)) {
-      return res.status(403).json({ error: "Forbidden: admin access required" });
-    }
-
+  app.get("/api/admin/tx-queue", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
     try {
       const stats = await getTxQueueStats();
       const recentFailed = await db

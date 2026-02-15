@@ -19,7 +19,7 @@ const walletConnectV2Options = walletConnectProjectId ? {
   projectId: walletConnectProjectId,
   metadata: {
     name: 'xproof',
-    description: 'Blockchain Certification Platform - Create immutable proofs of file ownership',
+    description: 'Proof primitive for agents & humans on MultiversX',
     url: window.location.origin,
     icons: [`${window.location.origin}/favicon.ico`]
   },

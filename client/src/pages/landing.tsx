@@ -62,18 +62,17 @@ export default function Landing() {
         <div className="mx-auto max-w-5xl text-center">
           <Badge variant="secondary" className="mb-6 px-4 py-1.5">
             <Shield className="mr-2 h-3.5 w-3.5" />
-            Unfalsifiable blockchain proof
+            Proof primitive on MultiversX
           </Badge>
           
           <h1 className="mb-6 text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
-            Prove that's yours.
+            Trust is
             <br />
-            <span className="text-primary">Forever.</span>
+            <span className="text-primary">programmable.</span>
           </h1>
           
           <p className="mx-auto mb-8 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">
-            An irrefutable proof, 
-            recognized worldwide, impossible to falsify or delete.
+            Verifiable proofs of existence, authorship, and agent output — anchored on-chain, composable, API-first.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -319,11 +318,10 @@ export default function Landing() {
         <div className="container">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-              Protect your first creation
+              Start anchoring trust
             </h2>
             <p className="mb-8 text-lg text-muted-foreground">
-              Join creators who secure their work. 
-              Only $0.05 per certification.
+              Verifiable proofs for developers, agents, and enterprises. $0.05 per proof.
             </p>
             <Button 
               size="lg" 
@@ -350,8 +348,7 @@ export default function Landing() {
                   <span className="text-xl font-bold">xproof</span>
                 </div>
                 <p className="text-sm text-muted-foreground max-w-xs">
-                  Blockchain certification for creators and businesses. 
-                  Prove the existence and ownership of your files.
+                  Proof primitive for agents and humans. Verifiable trust, anchored on MultiversX.
                 </p>
               </div>
               
