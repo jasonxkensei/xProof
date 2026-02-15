@@ -71,9 +71,7 @@ export default function Landing() {
             <span className="text-primary">programmable.</span>
           </h1>
           
-          <p className="mx-auto mb-8 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">
-            Verifiable proofs of existence, authorship, and agent output — anchored on-chain, composable, API-first.
-          </p>
+          <p className="mx-auto mb-8 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">Verifiable proofs of existence, authorship, and agent output, anchored on-chain, composable, API-first.</p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
