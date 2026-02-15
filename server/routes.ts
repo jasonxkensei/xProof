@@ -2,7 +2,6 @@ import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
 import { db } from "./db";
-import { pool } from "./db";
 import { storage } from "./storage";
 import { 
   certifications, 
@@ -4116,7 +4115,7 @@ class XProofVerifyTool(BaseTool):
         .from(apiKeys)
         .where(and(eq(apiKeys.isActive, true), gte(apiKeys.lastUsedAt, h24)));
 
-      const webhookStats = await pool.query(`
+      const webhookStats = await db.execute(sql`
         SELECT 
           COUNT(*) FILTER (WHERE webhook_status = 'delivered') as delivered,
           COUNT(*) FILTER (WHERE webhook_status = 'failed') as failed,
@@ -4125,22 +4124,22 @@ class XProofVerifyTool(BaseTool):
         FROM certifications
       `);
 
-      const wh = webhookStats.rows[0] || {};
+      const wh = (webhookStats.rows[0] as Record<string, string>) || {};
       const whTotal = parseInt(wh.total || "0");
       const whDelivered = parseInt(wh.delivered || "0");
 
-      const statusBreakdown = await pool.query(`
+      const statusBreakdown = await db.execute(sql`
         SELECT blockchain_status, COUNT(*) as count
         FROM certifications
         GROUP BY blockchain_status
       `);
 
       const byStatus: Record<string, number> = {};
-      for (const row of statusBreakdown.rows) {
+      for (const row of statusBreakdown.rows as Array<Record<string, string>>) {
         byStatus[row.blockchain_status || "unknown"] = parseInt(row.count);
       }
 
-      const dailyCerts = await pool.query(`
+      const dailyCerts = await db.execute(sql`
         SELECT DATE(created_at) as day, COUNT(*) as count
         FROM certifications
         WHERE created_at >= NOW() - INTERVAL '7 days'
