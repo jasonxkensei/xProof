@@ -34,7 +34,7 @@ import {
 } from "./walletAuth";
 import { getSession } from "./replitAuth";
 import { authRateLimiter, paymentRateLimiter } from "./reliability";
-import { recordCertificationAsJob, isMX8004Configured, getReputationScore, getAgentDetails, getContractAddresses } from "./mx8004";
+import { recordCertificationAsJob, isMX8004Configured, getReputationScore, getAgentDetails, getContractAddresses, getJobData, getValidationStatus, hasGivenFeedback, getAgentResponse, readFeedback, getAgentsExplorerUrl } from "./mx8004";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply session middleware
@@ -2142,14 +2142,18 @@ curl -X POST ${baseUrl}/api/proof \\
 
 ## MX-8004 Integration (Trustless Agents Standard)
 
-xproof is natively integrated with the MultiversX Trustless Agents Standard (MX-8004).
-Each certification is registered as a validated job in the on-chain registries, building verifiable reputation for AI agents.
+xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard, with full ERC-8004 compliance.
+Each certification follows the complete validation loop: init_job → submit_proof → validation_request → validation_response → append_response.
+Jobs reach "Verified" status on-chain. xproof acts as the validation oracle.
 
 - **Identity Registry**: Soulbound NFT agent identities
-- **Validation Registry**: Job validation — xproof acts as the validation oracle
-- **Reputation Registry**: On-chain reputation scoring from validated work
+- **Validation Registry**: Full ERC-8004 job validation — xproof self-validates with score 100
+- **Reputation Registry**: On-chain reputation scoring + ERC-8004 raw feedback signals (giveFeedback, revokeFeedback, readFeedback)
 - **Status**: \`GET ${baseUrl}/api/mx8004/status\`
 - **Agent reputation**: \`GET ${baseUrl}/api/agent/{nonce}/reputation\`
+- **Job data**: \`GET ${baseUrl}/api/mx8004/job/{jobId}\`
+- **Validation status**: \`GET ${baseUrl}/api/mx8004/validation/{requestHash}\`
+- **Feedback**: \`GET ${baseUrl}/api/mx8004/feedback/{agentNonce}/{clientAddress}/{index}\`
 - **Specification**: https://github.com/sasurobert/mx-8004
 - **Explorer**: https://agents.multiversx.com
 
@@ -2788,22 +2792,124 @@ Confirm certification after transaction.
   app.get("/api/learn/verification", (req, res) => res.redirect("/learn/verification.md"));
   app.get("/api/learn/api", (req, res) => res.redirect("/learn/api.md"));
 
-  // Health check endpoint for AI agent monitoring
   app.get("/api/mx8004/status", (req, res) => {
-    const configured = isMX8004Configured();
+    const baseUrl = `https://${req.get("host")}`;
+    
+    if (!isMX8004Configured()) {
+      return res.status(503).json({
+        standard: "MX-8004",
+        version: "1.0",
+        erc8004_compliant: true,
+        status: "not_configured",
+        message: "MX-8004 integration is not active. Set MX8004_* environment variables to enable.",
+        documentation: "https://github.com/sasurobert/mx-8004",
+        agents_explorer: "https://agents.multiversx.com",
+      });
+    }
+
     const contracts = getContractAddresses();
-    res.json({
-      enabled: configured,
+    
+    return res.json({
       standard: "MX-8004",
-      description: "Trustless Agents Standard — soulbound identity, job validation, and reputation scoring on MultiversX",
-      specification: "https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md",
-      explorer: "https://agents.multiversx.com",
-      contracts: configured ? contracts : null,
-      integration: {
-        role: "validation_oracle",
-        description: "xproof acts as a validation oracle: each certification is registered as a validated job in the MX-8004 Validation Registry, building verifiable reputation for AI agents.",
+      version: "1.0",
+      erc8004_compliant: true,
+      status: "active",
+      role: "validation_oracle",
+      description: "xproof acts as a validation oracle: each certification is registered as a validated job in the MX-8004 Validation Registry, with full ERC-8004 validation loop (init_job → submit_proof → validation_request → validation_response → append_response).",
+      contracts,
+      capabilities: {
+        identity: ["register_agent", "get_agent", "set_metadata", "set_service_configs"],
+        validation: ["init_job", "submit_proof", "validation_request", "validation_response", "get_job_data", "get_validation_status", "is_job_verified"],
+        reputation: ["get_reputation_score", "get_total_jobs", "giveFeedbackSimple", "giveFeedback", "revokeFeedback", "readFeedback", "append_response", "has_given_feedback", "get_agent_response"],
+      },
+      validation_flow: {
+        description: "Full ERC-8004 validation loop for each certification",
+        steps: [
+          "1. init_job — create job in Validation Registry",
+          "2. submit_proof — attach file hash + blockchain tx as proof",
+          "3. validation_request — xproof nominates itself as validator",
+          "4. validation_response — xproof submits score 100 (verified)",
+          "5. append_response — attach certificate URL to job",
+        ],
+        final_status: "Verified",
+      },
+      endpoints: {
+        status: `${baseUrl}/api/mx8004/status`,
+        agent_reputation: `${baseUrl}/api/agent/{nonce}/reputation`,
+        job_data: `${baseUrl}/api/mx8004/job/{jobId}`,
+        feedback: `${baseUrl}/api/mx8004/feedback/{agentNonce}/{clientAddress}/{index}`,
       },
     });
+  });
+
+  app.get("/api/mx8004/job/:jobId", async (req, res) => {
+    if (!isMX8004Configured()) {
+      return res.status(503).json({ error: "MX8004_NOT_CONFIGURED", message: "MX-8004 integration is not active" });
+    }
+
+    try {
+      const jobData = await getJobData(req.params.jobId);
+      if (!jobData) {
+        return res.status(404).json({ error: "JOB_NOT_FOUND", message: "Job not found in Validation Registry" });
+      }
+      return res.json({
+        job_id: req.params.jobId,
+        ...jobData,
+        standard: "MX-8004",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: "MX8004_QUERY_FAILED", message: err.message });
+    }
+  });
+
+  app.get("/api/mx8004/validation/:requestHash", async (req, res) => {
+    if (!isMX8004Configured()) {
+      return res.status(503).json({ error: "MX8004_NOT_CONFIGURED", message: "MX-8004 integration is not active" });
+    }
+
+    try {
+      const status = await getValidationStatus(req.params.requestHash);
+      if (!status) {
+        return res.status(404).json({ error: "VALIDATION_NOT_FOUND", message: "Validation request not found" });
+      }
+      return res.json({
+        request_hash: req.params.requestHash,
+        ...status,
+        standard: "MX-8004",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: "MX8004_QUERY_FAILED", message: err.message });
+    }
+  });
+
+  app.get("/api/mx8004/feedback/:agentNonce/:clientAddress/:index", async (req, res) => {
+    if (!isMX8004Configured()) {
+      return res.status(503).json({ error: "MX8004_NOT_CONFIGURED", message: "MX-8004 integration is not active" });
+    }
+
+    try {
+      const agentNonce = parseInt(req.params.agentNonce);
+      const feedbackIndex = parseInt(req.params.index);
+      
+      if (isNaN(agentNonce) || isNaN(feedbackIndex)) {
+        return res.status(400).json({ error: "INVALID_PARAMS", message: "agentNonce and index must be numbers" });
+      }
+
+      const feedback = await readFeedback(agentNonce, req.params.clientAddress, feedbackIndex);
+      if (!feedback) {
+        return res.status(404).json({ error: "FEEDBACK_NOT_FOUND", message: "Feedback not found" });
+      }
+      return res.json({
+        agent_nonce: agentNonce,
+        client: req.params.clientAddress,
+        feedback_index: feedbackIndex,
+        ...feedback,
+        standard: "MX-8004",
+        erc8004: true,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: "MX8004_QUERY_FAILED", message: err.message });
+    }
   });
 
   app.get("/api/agent/:nonce/reputation", async (req, res) => {
@@ -2830,6 +2936,7 @@ Confirm certification after transaction.
         total_jobs: reputation.totalJobs,
         standard: "MX-8004",
         registries: getContractAddresses(),
+        agents_explorer: getAgentsExplorerUrl(nonce),
       });
     } catch (error: any) {
       console.error("[GET /api/agent/:nonce/reputation] Error:", error.message);
@@ -3124,13 +3231,17 @@ Certified agents can prove originality, timestamp, and integrity. Non-certified 
 xproof supports x402 (HTTP 402 Payment Required) as an alternative to API key auth. Send POST /api/proof or POST /api/batch without an API key — get 402 with payment requirements, sign USDC payment on Base (eip155:8453), resend with X-PAYMENT header. Price: $0.05 per certification. No account needed.
 
 ## MX-8004 Integration (Trustless Agents Standard)
-xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard. Each certification is registered as a validated job in the MX-8004 registries, building verifiable on-chain reputation for AI agents.
+xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard, with full ERC-8004 compliance.
+Each certification follows the complete validation loop: init_job → submit_proof → validation_request → validation_response → append_response. Jobs reach "Verified" status on-chain.
 
 - Identity Registry: soulbound NFT agent identities
-- Validation Registry: job validation with oracle verification (xproof acts as oracle)
-- Reputation Registry: on-chain reputation scoring from validated work
+- Validation Registry: full ERC-8004 job validation — xproof self-validates with score 100
+- Reputation Registry: on-chain scoring + ERC-8004 raw feedback signals (giveFeedback, revokeFeedback, readFeedback)
 - Status: /api/mx8004/status
 - Agent reputation: /api/agent/{nonce}/reputation
+- Job data: /api/mx8004/job/{jobId}
+- Validation status: /api/mx8004/validation/{requestHash}
+- Feedback: /api/mx8004/feedback/{agentNonce}/{clientAddress}/{index}
 - Spec: https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md
 - Explorer: https://agents.multiversx.com
 `;
@@ -3468,23 +3579,36 @@ curl -X POST ${baseUrl}/api/proof \\
 
 ## MX-8004 Integration (Trustless Agents Standard)
 
-xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard. Each certification is automatically registered as a validated job in the on-chain registries.
+xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard, with full ERC-8004 compliance.
+Each certification follows the complete validation loop, reaching "Verified" status on-chain.
 
 ### What MX-8004 provides
 - **Identity Registry**: Soulbound NFT agent identities — permanent, non-transferable
-- **Validation Registry**: Job validation with oracle verification — xproof acts as the validation oracle
-- **Reputation Registry**: On-chain reputation scoring derived from validated certification work
+- **Validation Registry**: Full ERC-8004 job validation with oracle verification
+- **Reputation Registry**: On-chain reputation scoring + ERC-8004 raw feedback signals
 
-### xproof's role
+### xproof's role as validation oracle
 xproof is the **validation oracle** for software artifact certification. When an agent certifies a file:
 1. The file hash is recorded on MultiversX (standard xproof flow)
-2. A job is registered in the MX-8004 Validation Registry
-3. xproof submits proof of the certification (hash + transaction)
-4. The agent's reputation score is updated based on validated work
+2. \`init_job\` — job is registered in the MX-8004 Validation Registry
+3. \`submit_proof\` — file hash + blockchain tx attached as proof (status: Pending)
+4. \`validation_request\` — xproof nominates itself as validator (status: ValidationRequested)
+5. \`validation_response\` — xproof submits score 100 (status: Verified)
+6. \`append_response\` — certificate URL appended to the job record
+
+### ERC-8004 Feedback System
+The Reputation Registry supports two feedback modes:
+- **giveFeedbackSimple(job_id, agent_nonce, rating)** — On-chain cumulative moving average scoring
+- **giveFeedback(agent_nonce, value, decimals, tag1, tag2, endpoint, uri, hash)** — Raw signal feedback (no on-chain scoring, off-chain aggregation expected)
+- **revokeFeedback(agent_nonce, feedback_index)** — Revoke previously submitted feedback
+- **readFeedback(agent_nonce, client, index)** — Read feedback data (view)
 
 ### Endpoints
-- \`GET ${baseUrl}/api/mx8004/status\` — MX-8004 integration status and contract addresses
+- \`GET ${baseUrl}/api/mx8004/status\` — MX-8004 integration status, capabilities, and contract addresses
 - \`GET ${baseUrl}/api/agent/{nonce}/reputation\` — Query agent reputation score and job history
+- \`GET ${baseUrl}/api/mx8004/job/{jobId}\` — Query job data from the Validation Registry
+- \`GET ${baseUrl}/api/mx8004/validation/{requestHash}\` — Query validation status
+- \`GET ${baseUrl}/api/mx8004/feedback/{agentNonce}/{clientAddress}/{index}\` — Read ERC-8004 feedback
 
 ### Specification
 - GitHub: https://github.com/sasurobert/mx-8004

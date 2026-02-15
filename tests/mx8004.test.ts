@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import crypto from "crypto";
 
-import { isMX8004Configured, getContractAddresses, getExplorerUrl } from "../server/mx8004";
+import { isMX8004Configured, getContractAddresses, getExplorerUrl, getAgentsExplorerUrl } from "../server/mx8004";
 import { isValidWebhookUrl } from "../server/webhook";
 
 describe("MX-8004 Module", () => {
@@ -14,11 +14,11 @@ describe("MX-8004 Module", () => {
   describe("getContractAddresses", () => {
     it("should return null values when not configured", () => {
       const addresses = getContractAddresses();
-      expect(addresses).toEqual({
-        identityRegistry: null,
-        validationRegistry: null,
-        reputationRegistry: null,
-      });
+      expect(addresses.identityRegistry).toBeNull();
+      expect(addresses.validationRegistry).toBeNull();
+      expect(addresses.reputationRegistry).toBeNull();
+      expect(addresses.xproofAgentNonce).toBeNull();
+      expect(addresses.xproofAgentExplorer).toBeNull();
     });
 
     it("should return an object with the expected keys", () => {
@@ -26,6 +26,26 @@ describe("MX-8004 Module", () => {
       expect(addresses).toHaveProperty("identityRegistry");
       expect(addresses).toHaveProperty("validationRegistry");
       expect(addresses).toHaveProperty("reputationRegistry");
+      expect(addresses).toHaveProperty("agentsExplorer");
+      expect(addresses).toHaveProperty("xproofAgentNonce");
+      expect(addresses).toHaveProperty("xproofAgentExplorer");
+    });
+
+    it("should include agents explorer URL", () => {
+      const addresses = getContractAddresses();
+      expect(addresses.agentsExplorer).toBe("https://agents.multiversx.com");
+    });
+  });
+
+  describe("getAgentsExplorerUrl", () => {
+    it("should return base agents explorer URL without nonce", () => {
+      const url = getAgentsExplorerUrl();
+      expect(url).toBe("https://agents.multiversx.com");
+    });
+
+    it("should return agent-specific URL with nonce", () => {
+      const url = getAgentsExplorerUrl(42);
+      expect(url).toBe("https://agents.multiversx.com/agents/42");
     });
   });
 

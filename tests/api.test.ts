@@ -357,4 +357,52 @@ describe("xproof API", () => {
       expect(body.error.message).toContain("Method not allowed");
     });
   });
+
+  describe("MX-8004 Endpoints", () => {
+    it("GET /api/mx8004/status should return MX-8004 status", async () => {
+      const res = await fetch(`${BASE_URL}/api/mx8004/status`);
+      const body = await res.json();
+      expect(body.standard).toBe("MX-8004");
+      expect(body.version).toBe("1.0");
+      expect(body.erc8004_compliant).toBe(true);
+      expect(["active", "not_configured"]).toContain(body.status);
+      if (body.status === "active") {
+        expect(body.contracts).toBeDefined();
+        expect(body.capabilities).toBeDefined();
+        expect(body.capabilities.identity).toBeDefined();
+        expect(body.capabilities.validation).toBeDefined();
+        expect(body.capabilities.reputation).toBeDefined();
+        expect(body.validation_flow).toBeDefined();
+        expect(body.validation_flow.steps).toHaveLength(5);
+        expect(body.endpoints).toBeDefined();
+      }
+    });
+
+    it("GET /api/mx8004/job/:jobId should return 503 or job data", async () => {
+      const res = await fetch(`${BASE_URL}/api/mx8004/job/test_job_123`);
+      expect([200, 404, 503]).toContain(res.status);
+      const body = await res.json();
+      if (res.status === 503) {
+        expect(body.error).toBe("MX8004_NOT_CONFIGURED");
+      }
+    });
+
+    it("GET /api/mx8004/validation/:hash should return 503 or validation data", async () => {
+      const res = await fetch(`${BASE_URL}/api/mx8004/validation/test_hash_123`);
+      expect([200, 404, 503]).toContain(res.status);
+      const body = await res.json();
+      if (res.status === 503) {
+        expect(body.error).toBe("MX8004_NOT_CONFIGURED");
+      }
+    });
+
+    it("GET /api/mx8004/feedback/:nonce/:addr/:index should validate params", async () => {
+      const res = await fetch(`${BASE_URL}/api/mx8004/feedback/abc/erd1test/1`);
+      expect([400, 503]).toContain(res.status);
+      const body = await res.json();
+      if (res.status === 400) {
+        expect(body.error).toBe("INVALID_PARAMS");
+      }
+    });
+  });
 });

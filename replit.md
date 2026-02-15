@@ -26,14 +26,19 @@ RESTful APIs are provided under `/api/*`, with middleware for logging and error 
 xproof integrates with the MultiversX blockchain for immutable proof storage. It supports both XPortal (user-signed transactions with their own gas fees) and an optional server-side signing mode. The system handles transaction signing, broadcasting, and generation of explorer URLs. It supports Mainnet, Devnet, and Testnet.
 
 ### MX-8004 Integration (Trustless Agents Standard)
-xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard. The module (`server/mx8004.ts`) provides:
+xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard, with full ERC-8004 compliance. The module (`server/mx8004.ts`) provides:
 - **Identity Registry**: Agent registration with soulbound NFTs
-- **Validation Registry**: Each certification is registered as a validated job; xproof acts as the validation oracle
-- **Reputation Registry**: On-chain reputation scoring from validated certification work
-- Endpoints: `GET /api/mx8004/status`, `GET /api/agent/:nonce/reputation`
+- **Validation Registry**: Full ERC-8004 validation loop — each certification goes through init_job → submit_proof → validation_request → validation_response → append_response, reaching "Verified" status on-chain. xproof self-validates as the oracle with score 100.
+- **Reputation Registry**: On-chain reputation scoring via `giveFeedbackSimple` (cumulative moving average) + ERC-8004 raw feedback signals via `giveFeedback`, `revokeFeedback`, `readFeedback`
+- **Validation Views**: `getJobData`, `getValidationStatus`, `isJobVerified` — query job lifecycle from on-chain
+- **Reputation Views**: `getReputationScore`, `hasGivenFeedback`, `getAgentResponse`, `readFeedback`
+- **append_response**: Attach certificate URL to job record after validation
+- Endpoints: `GET /api/mx8004/status`, `GET /api/agent/:nonce/reputation`, `GET /api/mx8004/job/:jobId`, `GET /api/mx8004/validation/:requestHash`, `GET /api/mx8004/feedback/:agentNonce/:clientAddress/:index`
 - Env vars: `MX8004_IDENTITY_REGISTRY`, `MX8004_VALIDATION_REGISTRY`, `MX8004_REPUTATION_REGISTRY`, `MX8004_XPROOF_AGENT_NONCE`
 - Non-blocking: MX-8004 job registration happens asynchronously after certification, doesn't block API responses
 - Graceful degradation: if MX-8004 env vars not set, integration is silently skipped
+- Explorer: https://agents.multiversx.com
+- Specification: https://github.com/sasurobert/mx-8004
 
 ### Data Storage
 PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides type-safe database operations with a schema-first approach. Key tables include `users` (wallet-based profiles), `certifications` (file certification records), and `sessions` (Express session storage). Drizzle Kit manages database migrations.

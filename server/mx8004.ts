@@ -323,7 +323,217 @@ export async function recordCertificationAsJob(
 
     const proofTxHash = await submitProof(jobId, proof);
     console.log(`[MX-8004] Proof submitted: ${proofTxHash}`);
+
+    const crypto = await import("crypto");
+    const requestHash = crypto.createHash("sha256").update(proof).digest("hex");
+    const requestUri = `https://xproof.app/proof/${certificationId}.json`;
+
+    const valReqTxHash = await validationRequest(jobId, SENDER_ADDRESS!, requestUri, requestHash);
+    console.log(`[MX-8004] Validation request: ${valReqTxHash}`);
+
+    const responseUri = `https://xproof.app/proof/${certificationId}`;
+    const responseHash = crypto.createHash("sha256").update(`verified:${fileHash}`).digest("hex");
+    const valRespTxHash = await validationResponse(requestHash, 100, responseUri, responseHash, "xproof-certification");
+    console.log(`[MX-8004] Validation response (verified): ${valRespTxHash}`);
+
+    const certUrl = `https://xproof.app/api/certificates/${certificationId}.pdf`;
+    const appendTxHash = await appendResponse(jobId, certUrl);
+    console.log(`[MX-8004] Response appended: ${appendTxHash}`);
   });
+}
+
+export async function getJobData(jobId: string): Promise<{
+  status: string;
+  proof: string;
+  employer: string;
+  agentNonce: number;
+  creationTimestamp: number;
+} | null> {
+  if (!isMX8004Configured()) throw new Error("MX-8004 not configured");
+
+  try {
+    const returnData = await vmQuery(VALIDATION_REGISTRY!, "get_job_data", [toHex(jobId)]);
+    if (!returnData || returnData.length === 0) return null;
+
+    const statusHex = Buffer.from(returnData[0] || "", "base64").toString("hex");
+    const statusMap: Record<string, string> = { "00": "New", "01": "Pending", "02": "Verified", "03": "ValidationRequested" };
+    const status = statusMap[statusHex] || "Unknown";
+
+    const proof = returnData[1] ? Buffer.from(returnData[1], "base64").toString("utf-8") : "";
+    const employer = returnData[2] ? Address.newFromHex(Buffer.from(returnData[2], "base64").toString("hex")).toBech32() : "";
+    const creationTimestamp = returnData[3] ? parseInt(Buffer.from(returnData[3], "base64").toString("hex") || "0", 16) : 0;
+    const agentNonce = returnData[4] ? parseInt(Buffer.from(returnData[4], "base64").toString("hex") || "0", 16) : 0;
+
+    return { status, proof, employer, agentNonce, creationTimestamp };
+  } catch {
+    return null;
+  }
+}
+
+export async function getValidationStatus(requestHash: string): Promise<{
+  response: number;
+  responseHash: string;
+  tag: string;
+} | null> {
+  if (!isMX8004Configured()) throw new Error("MX-8004 not configured");
+
+  try {
+    const returnData = await vmQuery(VALIDATION_REGISTRY!, "get_validation_status", [toHex(requestHash)]);
+    if (!returnData || returnData.length === 0) return null;
+
+    const response = returnData[0] ? parseInt(Buffer.from(returnData[0], "base64").toString("hex") || "0", 16) : 0;
+    const responseHash = returnData[1] ? Buffer.from(returnData[1], "base64").toString("hex") : "";
+    const tag = returnData[2] ? Buffer.from(returnData[2], "base64").toString("utf-8") : "";
+
+    return { response, responseHash, tag };
+  } catch {
+    return null;
+  }
+}
+
+export async function hasGivenFeedback(jobId: string): Promise<boolean> {
+  if (!isMX8004Configured()) throw new Error("MX-8004 not configured");
+
+  try {
+    const [data] = await vmQuery(REPUTATION_REGISTRY!, "has_given_feedback", [toHex(jobId)]);
+    if (!data) return false;
+    const hex = Buffer.from(data, "base64").toString("hex");
+    return hex === "01";
+  } catch {
+    return false;
+  }
+}
+
+export async function getAgentResponse(jobId: string): Promise<string | null> {
+  if (!isMX8004Configured()) throw new Error("MX-8004 not configured");
+
+  try {
+    const [data] = await vmQuery(REPUTATION_REGISTRY!, "get_agent_response", [toHex(jobId)]);
+    if (!data) return null;
+    return Buffer.from(data, "base64").toString("utf-8");
+  } catch {
+    return null;
+  }
+}
+
+export async function giveFeedbackSimple(
+  jobId: string,
+  agentNonce: number,
+  rating: number
+): Promise<string> {
+  if (!isMX8004Configured()) throw new Error("MX-8004 not configured");
+
+  const tx = await buildScCall(
+    REPUTATION_REGISTRY!,
+    "giveFeedbackSimple",
+    [toHex(jobId), numberToHex(agentNonce), numberToHex(rating)],
+    BigInt(0),
+    BigInt(15_000_000)
+  );
+
+  return signAndSubmit(tx);
+}
+
+export async function giveFeedback(
+  agentNonce: number,
+  value: number,
+  valueDecimals: number,
+  tag1: string,
+  tag2: string,
+  endpoint: string,
+  feedbackUri: string,
+  feedbackHash: string
+): Promise<string> {
+  if (!isMX8004Configured()) throw new Error("MX-8004 not configured");
+
+  const valueHex = numberToHex(value < 0 ? BigInt(value) + BigInt("18446744073709551616") : BigInt(value));
+
+  const tx = await buildScCall(
+    REPUTATION_REGISTRY!,
+    "giveFeedback",
+    [
+      numberToHex(agentNonce),
+      valueHex,
+      numberToHex(valueDecimals),
+      toHex(tag1),
+      toHex(tag2),
+      toHex(endpoint),
+      toHex(feedbackUri),
+      toHex(feedbackHash),
+    ],
+    BigInt(0),
+    BigInt(20_000_000)
+  );
+
+  return signAndSubmit(tx);
+}
+
+export async function revokeFeedback(
+  agentNonce: number,
+  feedbackIndex: number
+): Promise<string> {
+  if (!isMX8004Configured()) throw new Error("MX-8004 not configured");
+
+  const tx = await buildScCall(
+    REPUTATION_REGISTRY!,
+    "revokeFeedback",
+    [numberToHex(agentNonce), numberToHex(feedbackIndex)],
+    BigInt(0),
+    BigInt(10_000_000)
+  );
+
+  return signAndSubmit(tx);
+}
+
+export async function readFeedback(
+  agentNonce: number,
+  clientAddress: string,
+  feedbackIndex: number
+): Promise<{
+  value: number;
+  valueDecimals: number;
+  tag1: string;
+  tag2: string;
+  isRevoked: boolean;
+} | null> {
+  if (!isMX8004Configured()) throw new Error("MX-8004 not configured");
+
+  try {
+    const returnData = await vmQuery(REPUTATION_REGISTRY!, "readFeedback", [
+      numberToHex(agentNonce),
+      addressToHex(clientAddress),
+      numberToHex(feedbackIndex),
+    ]);
+    if (!returnData || returnData.length < 5) return null;
+
+    const value = returnData[0] ? parseInt(Buffer.from(returnData[0], "base64").toString("hex") || "0", 16) : 0;
+    const valueDecimals = returnData[1] ? parseInt(Buffer.from(returnData[1], "base64").toString("hex") || "0", 16) : 0;
+    const tag1 = returnData[2] ? Buffer.from(returnData[2], "base64").toString("utf-8") : "";
+    const tag2 = returnData[3] ? Buffer.from(returnData[3], "base64").toString("utf-8") : "";
+    const isRevokedHex = Buffer.from(returnData[4] || "", "base64").toString("hex");
+    const isRevoked = isRevokedHex === "01";
+
+    return { value, valueDecimals, tag1, tag2, isRevoked };
+  } catch {
+    return null;
+  }
+}
+
+export async function appendResponse(
+  jobId: string,
+  responseUri: string
+): Promise<string> {
+  if (!isMX8004Configured()) throw new Error("MX-8004 not configured");
+
+  const tx = await buildScCall(
+    REPUTATION_REGISTRY!,
+    "append_response",
+    [toHex(jobId), toHex(responseUri)],
+    BigInt(0),
+    BigInt(10_000_000)
+  );
+
+  return signAndSubmit(tx);
 }
 
 export function getExplorerUrl(txHash: string): string {
@@ -335,10 +545,23 @@ export function getExplorerUrl(txHash: string): string {
   return `${base}/transactions/${txHash}`;
 }
 
+export function getAgentsExplorerUrl(agentNonce?: number): string {
+  const base = CHAIN_ID === "D" || CHAIN_ID === "T"
+    ? "https://agents.multiversx.com"
+    : "https://agents.multiversx.com";
+  if (agentNonce !== undefined) {
+    return `${base}/agents/${agentNonce}`;
+  }
+  return base;
+}
+
 export function getContractAddresses() {
   return {
     identityRegistry: IDENTITY_REGISTRY || null,
     validationRegistry: VALIDATION_REGISTRY || null,
     reputationRegistry: REPUTATION_REGISTRY || null,
+    agentsExplorer: getAgentsExplorerUrl(),
+    xproofAgentNonce: XPROOF_AGENT_NONCE ? parseInt(XPROOF_AGENT_NONCE) : null,
+    xproofAgentExplorer: XPROOF_AGENT_NONCE ? getAgentsExplorerUrl(parseInt(XPROOF_AGENT_NONCE)) : null,
   };
 }
