@@ -1,17 +1,7 @@
 # xproof — Proof primitive for agents & humans on MultiversX
 
 ## Overview
-xproof is a trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is API-first, composable, and built for both human users and autonomous agents. Core positioning: "Proof primitive for agents & humans on MultiversX."
-
-**Rebranding Note (Feb 2026):** Previously known as "ProofMint", the service was rebranded to "xproof" to better align with the MultiversX ecosystem ("x" prefix).
-
-## Recent Changes (Feb 15, 2026)
-- **Positioning update**: README, landing page hero, meta tags, and WalletConnect metadata updated to reflect "Proof primitive for agents & humans on MultiversX" positioning (hybride stratégique tone).
-- **Webhook HMAC improvement**: Added X-xProof-Timestamp header and timestamp in HMAC signature for replay protection.
-- **API key rotation**: New POST /api/keys/:keyId/rotate endpoint with 24h grace period for old key (previousKeyHash, previousKeyExpiresAt columns in api_keys table).
-- **Admin RBAC middleware**: Extracted inline admin checks into reusable requireAdmin middleware.
-- **Rate limiting hardened**: Added apiKeyCreationRateLimiter (10/hour) for key creation and rotation. Fixed IPv6 bypass vulnerability on all rate limiters by removing custom keyGenerator.
-- **Drizzle best practices**: Converted pool.query() calls to db.execute(sql`...`) in admin stats endpoint.
+xproof is a trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is API-first, composable, and built for both human users and autonomous agents. The project aims to provide a robust and verifiable proof system within the MultiversX ecosystem, catering to the growing needs of decentralized applications and agent-based systems.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -19,116 +9,71 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend
-The frontend is built with React 18 and TypeScript, using Vite for fast development and optimized builds. It incorporates Wouter for routing and TanStack Query v5 for data management. The UI is designed with Shadcn/ui (Radix UI primitives) and Tailwind CSS, following a "New York" aesthetic with an emerald green primary color and support for dark mode. Typography uses Space Grotesk and Inter. Form handling is managed with React Hook Form and Zod validation.
+The frontend is built with React 18 and TypeScript, using Vite for development and optimized builds. It utilizes Wouter for routing and TanStack Query v5 for data management. The UI follows a "New York" aesthetic with Shadcn/ui (Radix UI primitives) and Tailwind CSS, featuring an emerald green primary color and dark mode support. Typography uses Space Grotesk and Inter. Form handling is managed with React Hook Form and Zod validation.
 
 ### Backend
-The backend utilizes Express.js with TypeScript and Node.js. It integrates MultiversX SDK-dApp for secure, cryptographic authentication using Native Auth, supporting various wallets like Extension, Web Wallet, and WalletConnect. The authentication flow involves client-side signature generation and backend verification to establish secure user sessions, stored in PostgreSQL.
-
-### Crawler Pre-rendering (SEO)
-A pre-rendering middleware (`server/prerender.ts`) detects crawler User-Agents (ChatGPT, GPTBot, Googlebot, Bingbot, Twitterbot, facebookexternalhit, etc.) and serves full semantic HTML with meta tags, Open Graph, Twitter Cards, and JSON-LD structured data instead of the empty SPA shell. Routes: `/` (homepage), `/certify`, `/agents`, `/proof/:id` (dynamic). Normal browser requests pass through to the React SPA. Mounted before the Vite/static catch-all in `server/index.ts`.
+The backend utilizes Express.js with TypeScript and Node.js. It integrates MultiversX SDK-dApp for secure, cryptographic authentication using Native Auth, supporting various wallets. Authentication involves client-side signature generation and backend verification to establish secure user sessions, stored in PostgreSQL. A pre-rendering middleware (`server/prerender.ts`) detects crawler User-Agents for SEO purposes, serving full semantic HTML for specific routes while normal browser requests access the React SPA.
 
 ### API Architecture
-RESTful APIs are provided under `/api/*`, with middleware for logging and error handling. Protected routes enforce wallet authentication. Key API endpoints include wallet synchronization, user data retrieval, and session logout. File processing involves client-side SHA-256 hashing for privacy and performance, sending only metadata to the server.
+RESTful APIs are provided under `/api/*`, with middleware for logging and error handling. Protected routes enforce wallet authentication. Key API endpoints include wallet synchronization, user data retrieval, session logout, and certification services. File processing involves client-side SHA-256 hashing for privacy and performance, sending only metadata to the server.
 
 ### Blockchain Integration
-xproof integrates with the MultiversX blockchain for immutable proof storage. It supports both XPortal (user-signed transactions with their own gas fees) and an optional server-side signing mode. The system handles transaction signing, broadcasting, and generation of explorer URLs. It supports Mainnet, Devnet, and Testnet.
+xproof integrates with the MultiversX blockchain for immutable proof storage. It supports both XPortal (user-signed transactions) and an optional server-side signing mode, handling transaction signing, broadcasting, and generation of explorer URLs across Mainnet, Devnet, and Testnet.
 
 ### MX-8004 Integration (Trustless Agents Standard)
-xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard, with full ERC-8004 compliance. The module (`server/mx8004.ts`) provides:
-- **Identity Registry**: Agent registration with soulbound NFTs
-- **Validation Registry**: Full ERC-8004 validation loop — each certification goes through init_job → submit_proof → validation_request → validation_response → append_response, reaching "Verified" status on-chain. xproof self-validates as the oracle with score 100.
-- **Reputation Registry**: On-chain reputation scoring via `giveFeedbackSimple` (cumulative moving average) + ERC-8004 raw feedback signals via `giveFeedback`, `revokeFeedback`, `readFeedback`
-- **Validation Views**: `getJobData`, `getValidationStatus`, `isJobVerified` — query job lifecycle from on-chain
-- **Reputation Views**: `getReputationScore`, `hasGivenFeedback`, `getAgentResponse`, `readFeedback`
-- **append_response**: Attach certificate URL to job record after validation
-- Endpoints: `GET /api/mx8004/status`, `GET /api/agent/:nonce/reputation`, `GET /api/mx8004/job/:jobId`, `GET /api/mx8004/validation/:requestHash`, `GET /api/mx8004/feedback/:agentNonce/:clientAddress/:index`
-- Env vars: `MX8004_IDENTITY_REGISTRY`, `MX8004_VALIDATION_REGISTRY`, `MX8004_REPUTATION_REGISTRY`, `MX8004_XPROOF_AGENT_NONCE`
-- **Persistent Transaction Queue** (`server/txQueue.ts`): All MX-8004 blockchain transactions are processed through a PostgreSQL-backed queue (`tx_queue` table) instead of in-memory. This eliminates nonce contention under concurrent load. Features: atomic task claiming (prevents race conditions), exponential backoff retry (10s/30s/90s, max 3 attempts), automatic nonce reset on failure, metrics tracking. Worker polls every 2s. Admin monitoring via `GET /api/admin/tx-queue`.
-- **Smart Retry**: The validation loop tracks `currentStep` (0-4) in the payload. On retry, execution resumes from the failed step instead of restarting the full 5-transaction sequence. This saves gas and time on partial failures.
-- Non-blocking: MX-8004 job registration happens asynchronously after certification, doesn't block API responses
-- Graceful degradation: if MX-8004 env vars not set, integration is silently skipped
-- Explorer: https://agents.multiversx.com
-- Specification: https://github.com/sasurobert/mx-8004
+xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard, providing:
+- **Identity Registry**: Agent registration with soulbound NFTs.
+- **Validation Registry**: Full ERC-8004 validation loop for certifications, reaching "Verified" status on-chain.
+- **Reputation Registry**: On-chain reputation scoring for agents.
+- **Validation Views**: Query job lifecycle from on-chain.
+- **Reputation Views**: Query agent reputation and feedback.
+- **Persistent Transaction Queue**: All MX-8004 blockchain transactions are processed through a PostgreSQL-backed queue (`tx_queue` table) to manage nonce contention and ensure reliable execution with exponential backoff retry.
+- **Smart Retry**: Execution resumes from the failed step on retry, saving gas and time.
+- MX-8004 job registration happens asynchronously after certification.
 
 ### Data Storage
-PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides type-safe database operations with a schema-first approach. Key tables include `users` (wallet-based profiles), `certifications` (file certification records), `sessions` (Express session storage), and `tx_queue` (persistent blockchain transaction queue with status tracking, retry logic, and error history). Drizzle Kit manages database migrations.
+PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides type-safe database operations. Key tables include `users`, `certifications`, `sessions`, and `tx_queue`. Drizzle Kit manages database migrations.
 
 ### Agent Commerce Protocol (ACP)
 xproof implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is $0.05 per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
 
 ### x402 Payment Protocol (HTTP 402)
-xproof supports the x402 payment protocol as an alternative to API key authentication. With x402, agents pay per-request directly via HTTP — no account or API key needed. Endpoints POST /api/proof and POST /api/batch accept x402 payments. Price: $0.05 per certification in USDC on Base (eip155:8453). Flow: request without auth → 402 with payment requirements → sign USDC payment → resend with X-PAYMENT header → 200 with result. Module: `server/x402.ts`. Packages: `@x402/express`, `@x402/evm`, `@x402/core`. Env vars: `X402_PAY_TO` (wallet address), `X402_NETWORK` (default eip155:8453), `X402_FACILITATOR_URL` (default https://www.x402.org/facilitator), `X402_PRICE_PROOF` (default $0.05), `X402_PRICE_BATCH` (default $0.05).
+xproof supports the x402 payment protocol for per-request payments via HTTP, eliminating the need for an account or API key. Endpoints POST /api/proof and POST /api/batch accept x402 payments at $0.05 per certification in USDC on Base.
 
-### Simplified Agent API (POST /api/proof)
-A single-call certification endpoint for AI agents. Accepts `{ file_hash, filename, author_name?, webhook_url? }` with a Bearer API key or x402 payment, handles blockchain recording server-side, and returns `{ proof_id, verify_url, certificate_url, blockchain, webhook_status }`. This eliminates the 3-step checkout/sign/confirm flow for agents that don't need to manage their own MultiversX transactions.
+### Simplified Agent API & Batch Certification
+A single-call certification endpoint (POST /api/proof) simplifies the process for AI agents, accepting file metadata and handling blockchain recording server-side. Batch certification (POST /api/batch) allows certifying up to 50 files in a single API call.
 
-### Batch Certification (POST /api/batch)
-Certify up to 50 files in a single API call. Accepts `{ files: [{ file_hash, filename }], author_name?, webhook_url? }` with Bearer API key. Returns `{ batch_id, total, created, existing, results: [{ file_hash, filename, proof_id, verify_url, badge_url, status }] }`. Ideal for agents that generate multiple outputs.
+### Verification Badges
+Dynamic SVG badges (shields.io-style) display certification status ("Verified", "Pending", "Not Found") and respect privacy settings. Markdown snippets are available for embedding.
 
-### Verification Badges (GET /badge/:id)
-Dynamic SVG badges (shields.io-style) showing certification status: green "Verified", yellow "Pending", red "Not Found". Respects isPublic flag for privacy. GET /badge/:id/markdown returns ready-to-embed markdown snippet. Used in GitHub READMEs to create social proof signal.
-
-### GitHub Action (github-action/)
-Composite GitHub Action for CI/CD pipeline integration. Hashes build artifacts, calls POST /api/proof, outputs proof_ids, proof_urls, badge_urls. Plug-and-play in 3 lines of YAML. Located in github-action/ directory, ready to publish as xproof-app/certify-action.
+### GitHub Action
+A Composite GitHub Action integrates xproof into CI/CD pipelines, hashing build artifacts and calling the certification API.
 
 ### Webhook Notifications
-When agents include `webhook_url` in their POST /api/proof request, xProof sends a POST notification when the proof is confirmed on-chain. The webhook payload includes proof_id, file_hash, verify_url, certificate_url, and blockchain details. Security: HMAC-SHA256 signed (X-xProof-Signature header). Retry policy: up to 3 attempts with exponential backoff (immediate, 10s, 20s). Webhook status tracked per certification: pending → delivered or failed.
+xProof sends POST notifications to specified `webhook_url`s upon on-chain proof confirmation, including proof details and blockchain information. Security is ensured with HMAC-SHA256 signed headers, and a retry policy is implemented.
 
 ### LLM-Ready Routes & AI Agent Discovery
-The platform offers comprehensive machine-readable documentation for AI agent discovery:
+The platform offers comprehensive machine-readable documentation and endpoints for AI agent discovery and integration:
+- **MCP Server**: Live MCP JSON-RPC 2.0 endpoint with tools like `certify_file`, `verify_proof`.
+- **Discovery Endpoints**: `.well-known` files for canonical specification, OpenAI ChatGPT plugin manifest, Model Context Protocol manifest, Agent Protocol manifest, and LLM-friendly summaries.
+- **Agent Tool Integrations**: LangChain, CrewAI, and OpenAPI tool definitions.
+- **Proof Access**: Structured JSON and Markdown proofs.
+- **Documentation**: Explanations and API guides.
 
-**MCP Server (Model Context Protocol):**
-- `/mcp` - Live MCP JSON-RPC 2.0 endpoint (Streamable HTTP transport, spec 2025-03-26)
-- Tools: `certify_file`, `verify_proof`, `get_proof`, `discover_services`
-- Resources: `xproof://specification`, `xproof://openapi`
-- Auth: Bearer token (pm_ API keys) via Authorization header
-- Stateless mode (no session management)
-- SDK: `@modelcontextprotocol/sdk` (server/mcp.ts)
-
-**Discovery Endpoints:**
-- `/.well-known/xproof.md` - Canonical specification v1.0 (also at `/.well-known/proofmint.md` for backwards compatibility)
-- `/.well-known/ai-plugin.json` - OpenAI ChatGPT plugin manifest
-- `/.well-known/mcp.json` - Model Context Protocol manifest with tool schemas (points to /mcp)
-- `/.well-known/agent.json` - Agent Protocol manifest
-- `/llms.txt` - LLM-friendly summary (llms.txt standard)
-- `/llms-full.txt` - Extended LLM documentation with full API details
-- `/api/acp/health` - Health check (public)
-- `/robots.txt` - SEO with AI agent discovery hints
-- `/sitemap.xml` - SEO sitemap
-
-**Agent Tool Integrations:**
-- `/agent-tools/langchain.py` - LangChain tool definitions (Python)
-- `/agent-tools/crewai.py` - CrewAI tool definitions (Python)
-- `/agent-tools/openapi-actions.json` - GPT Actions / Custom GPTs OpenAPI spec
-
-**Proof Access:**
-- `/proof/{id}.json` - Structured JSON proof
-- `/proof/{id}.md` - Markdown proof for LLMs
-- `/genesis.proof.json` - Genesis certification
-
-**Documentation:**
-- `/learn/proof-of-existence.md` - Concept explanation
-- `/learn/verification.md` - Verification guide
-- `/learn/api.md` - API documentation
-
-**Authentication:**
-- Public endpoints: `/api/acp/products`, `/api/acp/openapi.json`, `/api/acp/health`, `/llms.txt`, `/llms-full.txt`
-- Authenticated endpoints: `/api/acp/checkout`, `/api/acp/confirm`, `/api/proof` (require `pm_` API key)
-
-**Domain:** xproof.app (all references updated from xproof.io)
+### Monitoring & Admin
+- **Health endpoint**: Provides structured component checks, operational metrics, and status.
+- **Metrics module**: Tracks transaction latency, success/failure rates, and MX-8004 queue size.
+- **Admin stats**: Protected by wallet authentication, provides certification counts, source breakdown, blockchain status, API key usage, and webhook delivery stats.
+- **Admin dashboard**: React page displaying system health and various statistics with auto-refresh.
 
 ## External Dependencies
 
 ### Payment Processing
-- **xMoney**: For MultiversX blockchain payments, integrating via REST API calls and webhook handling with HMAC SHA256 signature verification.
+- **xMoney**: For MultiversX blockchain payments via REST API and webhooks.
 
 ### Blockchain Services
-- **MultiversX blockchain**: The core blockchain for proof-of-existence.
+- **MultiversX blockchain**: Core blockchain for proof-of-existence.
 - **MultiversX Explorer**: For transaction verification links.
-
-### Development Tools
-- Replit-specific plugins
-- Cartographer (for Replit IDE)
 
 ### Third-Party UI Libraries
 - Radix UI primitives
@@ -143,20 +88,7 @@ The platform offers comprehensive machine-readable documentation for AI agent di
 - `DATABASE_URL`
 - `SESSION_SECRET`
 - `XMONEY_API_KEY`, `XMONEY_SITE_ID`, `XMONEY_WEBHOOK_SECRET`
-- `MULTIVERSX_PRIVATE_KEY`, `MULTIVERSX_SENDER_ADDRESS`, `MULTIVERSX_CHAIN_ID`, `MULTIVERSX_GATEWAY_URL` (optional, for server-side signing)
+- `MULTIVERSX_PRIVATE_KEY`, `MULTIVERSX_SENDER_ADDRESS`, `MULTIVERSX_CHAIN_ID`, `MULTIVERSX_GATEWAY_URL`
 - `MX8004_IDENTITY_REGISTRY`, `MX8004_VALIDATION_REGISTRY`, `MX8004_REPUTATION_REGISTRY`, `MX8004_XPROOF_AGENT_NONCE`
-- `ADMIN_WALLETS` (comma-separated list of MultiversX wallet addresses allowed to access /admin and /api/admin/stats)
+- `ADMIN_WALLETS`
 - `REPL_ID`
-
-### Monitoring & Admin
-- **Health endpoint** (`/api/health`): Structured per-component checks (database, blockchain gateway, MX-8004), operational metrics (commit SHA, deploy timestamp, uptime), returns `ok`/`degraded`/`down` status
-- **Metrics module** (`server/metrics.ts`): In-memory tracking of transaction latency, success/failure rates, MX-8004 queue size, last success/failure timestamps
-- **Admin stats** (`/api/admin/stats`): Protected by wallet auth + ADMIN_WALLETS allowlist. Certification counts (total, 24h, 7d, 30d), source breakdown (API vs user), blockchain status breakdown, API key usage, webhook delivery stats, daily activity (7d)
-- **Admin dashboard** (`/admin`): React page with stat cards, system health display, source breakdown bars, webhook stats, daily activity chart. Auto-refreshes every 30s
-- **Load test** (`tests/loadtest.ts`): Concurrent request testing for health and proof endpoints. Run with `npx tsx tests/loadtest.ts`. Set `LOAD_TEST_API_KEY` env var for authenticated certification testing
-
-### Testing
-- **Framework**: Vitest with 79+ tests
-- **Integration tests** (`tests/api.test.ts`): All API endpoints (health, ACP, proof, batch, badge, MCP)
-- **Unit tests** (`tests/mx8004.test.ts`): MX-8004 module, webhook delivery, crypto operations
-- **Run**: `npx vitest run`
