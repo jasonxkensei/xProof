@@ -232,3 +232,21 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
 
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type InsertApiKey = typeof apiKeys.$inferInsert;
+
+export const txQueue = pgTable("tx_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobType: varchar("job_type").notNull(),
+  jobId: varchar("job_id").notNull(),
+  status: varchar("status").default("pending").notNull(),
+  payload: jsonb("payload").notNull(),
+  attempts: integer("attempts").default(0).notNull(),
+  maxAttempts: integer("max_attempts").default(3).notNull(),
+  lastError: text("last_error"),
+  nextRetryAt: timestamp("next_retry_at"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type TxQueueItem = typeof txQueue.$inferSelect;
+export type InsertTxQueueItem = typeof txQueue.$inferInsert;

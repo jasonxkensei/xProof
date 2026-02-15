@@ -3,7 +3,8 @@ import {
   TransactionComputer,
   Address,
 } from "@multiversx/sdk-core";
-import { setMx8004QueueSize, recordTransaction } from "./metrics";
+import { recordTransaction } from "./metrics";
+import { enqueueTx } from "./txQueue";
 
 const PRIVATE_KEY = process.env.MULTIVERSX_PRIVATE_KEY;
 const SENDER_ADDRESS = process.env.MULTIVERSX_SENDER_ADDRESS;
@@ -35,8 +36,6 @@ function addressToHex(bech32: string): string {
 }
 
 let localNonce: bigint | null = null;
-const txQueue: Array<() => Promise<void>> = [];
-let processing = false;
 
 async function getNextNonce(): Promise<bigint> {
   if (localNonce === null) {
@@ -50,31 +49,8 @@ async function getNextNonce(): Promise<bigint> {
   return nonce;
 }
 
-function resetNonce() {
+export function resetNonce() {
   localNonce = null;
-}
-
-async function processQueue() {
-  if (processing) return;
-  processing = true;
-  while (txQueue.length > 0) {
-    const task = txQueue.shift()!;
-    setMx8004QueueSize(txQueue.length);
-    try {
-      await task();
-    } catch (err: any) {
-      console.error("[MX-8004] Queue task error:", err.message);
-      resetNonce();
-    }
-  }
-  processing = false;
-  setMx8004QueueSize(0);
-}
-
-function enqueue(task: () => Promise<void>) {
-  txQueue.push(task);
-  setMx8004QueueSize(txQueue.length);
-  processQueue();
 }
 
 async function signAndSubmit(tx: Transaction): Promise<string> {
@@ -302,9 +278,7 @@ export async function recordCertificationAsJob(
   fileHash: string,
   transactionHash: string
 ): Promise<void> {
-  if (!isMX8004Configured()) {
-    return;
-  }
+  if (!isMX8004Configured()) return;
 
   const agentNonce = parseInt(XPROOF_AGENT_NONCE!);
   if (isNaN(agentNonce) || agentNonce < 1) {
@@ -312,33 +286,12 @@ export async function recordCertificationAsJob(
     return;
   }
 
-  enqueue(async () => {
-    const jobId = `xproof_cert_${certificationId}`;
-    const proof = `hash:${fileHash}|tx:${transactionHash}`;
-
-    console.log(`[MX-8004] Registering job: ${jobId} for agent nonce ${agentNonce}`);
-
-    const jobTxHash = await initJob(jobId, agentNonce);
-    console.log(`[MX-8004] Job initialized: ${jobTxHash}`);
-
-    const proofTxHash = await submitProof(jobId, proof);
-    console.log(`[MX-8004] Proof submitted: ${proofTxHash}`);
-
-    const crypto = await import("crypto");
-    const requestHash = crypto.createHash("sha256").update(proof).digest("hex");
-    const requestUri = `https://xproof.app/proof/${certificationId}.json`;
-
-    const valReqTxHash = await validationRequest(jobId, SENDER_ADDRESS!, requestUri, requestHash);
-    console.log(`[MX-8004] Validation request: ${valReqTxHash}`);
-
-    const responseUri = `https://xproof.app/proof/${certificationId}`;
-    const responseHash = crypto.createHash("sha256").update(`verified:${fileHash}`).digest("hex");
-    const valRespTxHash = await validationResponse(requestHash, 100, responseUri, responseHash, "xproof-certification");
-    console.log(`[MX-8004] Validation response (verified): ${valRespTxHash}`);
-
-    const certUrl = `https://xproof.app/api/certificates/${certificationId}.pdf`;
-    const appendTxHash = await appendResponse(jobId, certUrl);
-    console.log(`[MX-8004] Response appended: ${appendTxHash}`);
+  await enqueueTx("mx8004_validation_loop", `xproof_cert_${certificationId}`, {
+    certificationId,
+    fileHash,
+    transactionHash,
+    agentNonce,
+    senderAddress: SENDER_ADDRESS!,
   });
 }
 

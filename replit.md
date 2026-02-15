@@ -35,13 +35,14 @@ xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Stan
 - **append_response**: Attach certificate URL to job record after validation
 - Endpoints: `GET /api/mx8004/status`, `GET /api/agent/:nonce/reputation`, `GET /api/mx8004/job/:jobId`, `GET /api/mx8004/validation/:requestHash`, `GET /api/mx8004/feedback/:agentNonce/:clientAddress/:index`
 - Env vars: `MX8004_IDENTITY_REGISTRY`, `MX8004_VALIDATION_REGISTRY`, `MX8004_REPUTATION_REGISTRY`, `MX8004_XPROOF_AGENT_NONCE`
+- **Persistent Transaction Queue** (`server/txQueue.ts`): All MX-8004 blockchain transactions are processed through a PostgreSQL-backed queue (`tx_queue` table) instead of in-memory. This eliminates nonce contention under concurrent load. Features: atomic task claiming (prevents race conditions), exponential backoff retry (10s/30s/90s, max 3 attempts), automatic nonce reset on failure, metrics tracking. Worker polls every 2s. Admin monitoring via `GET /api/admin/tx-queue`.
 - Non-blocking: MX-8004 job registration happens asynchronously after certification, doesn't block API responses
 - Graceful degradation: if MX-8004 env vars not set, integration is silently skipped
 - Explorer: https://agents.multiversx.com
 - Specification: https://github.com/sasurobert/mx-8004
 
 ### Data Storage
-PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides type-safe database operations with a schema-first approach. Key tables include `users` (wallet-based profiles), `certifications` (file certification records), and `sessions` (Express session storage). Drizzle Kit manages database migrations.
+PostgreSQL, hosted on Neon, is used for data persistence. Drizzle ORM provides type-safe database operations with a schema-first approach. Key tables include `users` (wallet-based profiles), `certifications` (file certification records), `sessions` (Express session storage), and `tx_queue` (persistent blockchain transaction queue with status tracking, retry logic, and error history). Drizzle Kit manages database migrations.
 
 ### Agent Commerce Protocol (ACP)
 xproof implements the ACP to allow AI agents to programmatically interact with its certification services. It provides endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. The pricing model is $0.05 per certification, paid in EGLD. API key management is included for secure agent access and rate limiting.
@@ -146,7 +147,7 @@ The platform offers comprehensive machine-readable documentation for AI agent di
 - **Load test** (`tests/loadtest.ts`): Concurrent request testing for health and proof endpoints. Run with `npx tsx tests/loadtest.ts`. Set `LOAD_TEST_API_KEY` env var for authenticated certification testing
 
 ### Testing
-- **Framework**: Vitest with 62+ tests
+- **Framework**: Vitest with 74+ tests
 - **Integration tests** (`tests/api.test.ts`): All API endpoints (health, ACP, proof, batch, badge, MCP)
 - **Unit tests** (`tests/mx8004.test.ts`): MX-8004 module, webhook delivery, crypto operations
 - **Run**: `npx vitest run`

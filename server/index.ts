@@ -9,6 +9,7 @@ import {
   setupGracefulShutdown, 
   setupProcessErrorHandlers 
 } from "./reliability";
+import { startTxQueueWorker } from "./txQueue";
 
 setupProcessErrorHandlers();
 
@@ -119,6 +120,7 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    startTxQueueWorker();
   });
 
   setupGracefulShutdown(server);

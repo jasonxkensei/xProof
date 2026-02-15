@@ -9,6 +9,7 @@ import {
   users, 
   acpCheckouts,
   apiKeys,
+  txQueue as txQueueTable,
   acpCheckoutRequestSchema,
   acpConfirmRequestSchema,
   type ACPProduct,
@@ -35,6 +36,7 @@ import {
 import { getSession } from "./replitAuth";
 import { authRateLimiter, paymentRateLimiter } from "./reliability";
 import { recordCertificationAsJob, isMX8004Configured, getReputationScore, getAgentDetails, getContractAddresses, getJobData, getValidationStatus, hasGivenFeedback, getAgentResponse, readFeedback, getAgentsExplorerUrl } from "./mx8004";
+import { getTxQueueStats } from "./txQueue";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply session middleware
@@ -4184,6 +4186,38 @@ class XProofVerifyTool(BaseTool):
     } catch (error) {
       console.error("[Admin Stats] Error:", error);
       res.status(500).json({ error: "Failed to generate stats" });
+    }
+  });
+
+  app.get("/api/admin/tx-queue", isWalletAuthenticated, async (req: any, res) => {
+    const adminWallets = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim()).filter(Boolean);
+    const userWallet = req.session?.walletAddress;
+    if (adminWallets.length > 0 && !adminWallets.includes(userWallet)) {
+      return res.status(403).json({ error: "Forbidden: admin access required" });
+    }
+
+    try {
+      const stats = await getTxQueueStats();
+      const recentFailed = await db
+        .select()
+        .from(txQueueTable)
+        .where(eq(txQueueTable.status, "failed"))
+        .orderBy(txQueueTable.createdAt)
+        .limit(10);
+      const recentProcessing = await db
+        .select()
+        .from(txQueueTable)
+        .where(eq(txQueueTable.status, "processing"))
+        .orderBy(txQueueTable.createdAt)
+        .limit(5);
+
+      res.json({
+        stats,
+        recent_failed: recentFailed,
+        recent_processing: recentProcessing,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

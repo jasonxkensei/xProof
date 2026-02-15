@@ -298,6 +298,28 @@ describe("Nonce Manager Logic (conceptual)", () => {
   });
 });
 
+describe("txQueue module", () => {
+  it("should export enqueueTx function", async () => {
+    const { enqueueTx } = await import("../server/txQueue");
+    expect(typeof enqueueTx).toBe("function");
+  });
+
+  it("should export getTxQueueStats function", async () => {
+    const { getTxQueueStats } = await import("../server/txQueue");
+    expect(typeof getTxQueueStats).toBe("function");
+  });
+
+  it("should export startTxQueueWorker function", async () => {
+    const { startTxQueueWorker } = await import("../server/txQueue");
+    expect(typeof startTxQueueWorker).toBe("function");
+  });
+
+  it("should export stopTxQueueWorker function", async () => {
+    const { stopTxQueueWorker } = await import("../server/txQueue");
+    expect(typeof stopTxQueueWorker).toBe("function");
+  });
+});
+
 describe("Rate Limiter Logic (conceptual)", () => {
   it("should allow requests under the limit", () => {
     const windowMs = 60000;

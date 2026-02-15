@@ -404,5 +404,10 @@ describe("xproof API", () => {
         expect(body.error).toBe("INVALID_PARAMS");
       }
     });
+
+    it("GET /api/admin/tx-queue should require authentication", async () => {
+      const res = await fetch(`${BASE_URL}/api/admin/tx-queue`);
+      expect([401, 403]).toContain(res.status);
+    });
   });
 });
