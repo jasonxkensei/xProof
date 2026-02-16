@@ -1,6 +1,6 @@
 <p align="center">
   <strong>xproof</strong><br>
-  <em>Proof primitive for agents &amp; humans on MultiversX</em>
+  <em>Proof primitive for AI agents &amp; humans on MultiversX</em>
 </p>
 
 <p align="center">

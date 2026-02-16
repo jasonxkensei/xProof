@@ -19,7 +19,7 @@ const walletConnectV2Options = walletConnectProjectId ? {
   projectId: walletConnectProjectId,
   metadata: {
     name: 'xproof',
-    description: 'Proof primitive for agents & humans on MultiversX',
+    description: 'Proof primitive for AI agents & humans on MultiversX',
     url: window.location.origin,
     icons: [`${window.location.origin}/favicon.ico`]
   },

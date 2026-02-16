@@ -62,7 +62,7 @@ export default function Landing() {
         <div className="mx-auto max-w-5xl text-center">
           <Badge variant="secondary" className="mb-6 px-4 py-1.5">
             <Shield className="mr-2 h-3.5 w-3.5" />
-            Proof primitive on MultiversX
+            Proof primitive for AI agents & humans on MultiversX
           </Badge>
           
           <h1 className="mb-6 text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
@@ -346,7 +346,7 @@ export default function Landing() {
                   <span className="text-xl font-bold">xproof</span>
                 </div>
                 <p className="text-sm text-muted-foreground max-w-xs">
-                  Proof primitive for agents and humans. Verifiable trust, anchored on MultiversX.
+                  Proof primitive for AI agents and humans. Verifiable trust, anchored on MultiversX.
                 </p>
               </div>
               
