@@ -5,6 +5,7 @@ import {
 } from "@multiversx/sdk-core";
 import { recordTransaction } from "./metrics";
 import { enqueueTx } from "./txQueue";
+import { logger } from "./logger";
 
 const PRIVATE_KEY = process.env.MULTIVERSX_PRIVATE_KEY;
 const SENDER_ADDRESS = process.env.MULTIVERSX_SENDER_ADDRESS;
@@ -282,7 +283,7 @@ export async function recordCertificationAsJob(
 
   const agentNonce = parseInt(XPROOF_AGENT_NONCE!);
   if (isNaN(agentNonce) || agentNonce < 1) {
-    console.error("[MX-8004] Invalid XPROOF_AGENT_NONCE value");
+    logger.error("Invalid XPROOF_AGENT_NONCE value", { component: "mx8004" });
     return;
   }
 

@@ -10,6 +10,7 @@ import {
   setupProcessErrorHandlers 
 } from "./reliability";
 import { startTxQueueWorker } from "./txQueue";
+import { requestIdMiddleware, logger } from "./logger";
 
 setupProcessErrorHandlers();
 
@@ -53,6 +54,8 @@ app.get("/api/health", healthCheck);
 app.use("/api", globalRateLimiter);
 app.use("/api", requestTimeout(30000));
 
+app.use(requestIdMiddleware);
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -90,7 +93,7 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    console.error(`[xproof] Error ${status}: ${message}`, err.stack || "");
+    logger.error(`Error ${status}: ${message}`, { stack: err.stack });
 
     if (!res.headersSent) {
       res.status(status).json({ message });

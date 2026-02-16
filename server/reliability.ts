@@ -1,10 +1,11 @@
 import { type Request, type Response, type NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { pool } from "./db";
-import { getMetrics } from "./metrics";
+import { getMetrics, getLatencyPercentiles } from "./metrics";
 import { isMX8004Configured } from "./mx8004";
 import { isMultiversXConfigured } from "./blockchain";
 import { execSync } from "child_process";
+import { logger } from "./logger";
 
 export const globalRateLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -94,6 +95,11 @@ export async function healthCheck(_req: Request, res: Response) {
   const statuses = Object.values(checks).map(c => c.status);
   const overallStatus = statuses.includes("down") ? "degraded" : statuses.every(s => s === "ok" || s === "not_configured") ? "healthy" : "degraded";
 
+  const latencyPercentiles = getLatencyPercentiles();
+  const failureRate = metrics.transactions.total_failed > 0 
+    ? Math.round((metrics.transactions.total_failed / (metrics.transactions.total_success + metrics.transactions.total_failed)) * 10000) / 100
+    : 0;
+
   res.status(overallStatus === "healthy" ? 200 : 503).json({
     status: overallStatus,
     service: "xproof",
@@ -103,6 +109,12 @@ export async function healthCheck(_req: Request, res: Response) {
     uptime_seconds: metrics.uptime_seconds,
     timestamp: new Date().toISOString(),
     checks,
+    blockchain_latency: {
+      avg_ms: metrics.transactions.avg_latency_ms,
+      p95_ms: latencyPercentiles.p95_ms,
+      queue_depth: metrics.mx8004.queue_size,
+      failure_rate: failureRate,
+    },
     transactions: metrics.transactions,
     mx8004_queue: metrics.mx8004,
   });
@@ -129,12 +141,12 @@ export function setupGracefulShutdown(server: import("http").Server) {
   const shutdown = (signal: string) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
-    console.log(`[xproof] ${signal} received, shutting down gracefully...`);
+    logger.info("Graceful shutdown initiated", { component: "reliability", signal });
 
     server.close(() => {
-      console.log("[xproof] HTTP server closed");
+      logger.info("HTTP server closed", { component: "reliability" });
       pool.end().then(() => {
-        console.log("[xproof] Database pool closed");
+        logger.info("Database pool closed", { component: "reliability" });
         process.exit(0);
       }).catch(() => {
         process.exit(1);
@@ -142,7 +154,7 @@ export function setupGracefulShutdown(server: import("http").Server) {
     });
 
     setTimeout(() => {
-      console.error("[xproof] Graceful shutdown timed out, forcing exit");
+      logger.error("Graceful shutdown timed out, forcing exit", { component: "reliability" });
       process.exit(1);
     }, 10000);
   };
@@ -153,10 +165,10 @@ export function setupGracefulShutdown(server: import("http").Server) {
 
 export function setupProcessErrorHandlers() {
   process.on("uncaughtException", (error) => {
-    console.error("[xproof] Uncaught exception:", error);
+    logger.error("Uncaught exception", { component: "reliability", error: error instanceof Error ? error.message : String(error) });
   });
 
   process.on("unhandledRejection", (reason) => {
-    console.error("[xproof] Unhandled rejection:", reason);
+    logger.error("Unhandled rejection", { component: "reliability", reason: reason instanceof Error ? reason.message : String(reason) });
   });
 }

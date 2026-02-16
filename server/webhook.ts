@@ -2,6 +2,26 @@ import crypto from "crypto";
 import { db } from "./db";
 import { certifications } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { logger } from "./logger";
+
+/**
+ * xProof Webhook Signature Contract
+ *
+ * Signature = HMAC-SHA256(secret, timestamp + "." + JSON.stringify(payload))
+ *
+ * Headers sent with each webhook:
+ *   X-xProof-Signature  — hex-encoded HMAC-SHA256
+ *   X-xProof-Timestamp  — unix epoch seconds (string)
+ *   X-xProof-Event      — event type (e.g. "proof.certified")
+ *   X-xProof-Delivery   — unique delivery ID (certification ID)
+ *
+ * Verification steps (in order):
+ *   1. Check X-xProof-Timestamp is present and valid integer
+ *   2. Reject if timestamp > now + 60s (clock skew)
+ *   3. Reject if timestamp < now - 300s (replay window)
+ *   4. Compute expected = HMAC-SHA256(secret, timestamp + "." + rawBody)
+ *   5. Compare signatures using timing-safe equality
+ */
 
 const MAX_WEBHOOK_ATTEMPTS = 3;
 const WEBHOOK_TIMEOUT_MS = 10000; // 10 seconds
@@ -31,6 +51,73 @@ function signPayload(payload: string, secret: string): string {
 }
 
 /**
+ * Verify webhook signature and timestamp validity
+ * 
+ * @param body - Raw request body string
+ * @param signature - Hex-encoded signature from X-xProof-Signature header
+ * @param timestamp - Unix epoch seconds from X-xProof-Timestamp header
+ * @param secret - Signing secret for HMAC verification
+ * @returns Object with valid boolean and optional error message
+ */
+export function verifyWebhookSignature(
+  body: string,
+  signature: string,
+  timestamp: string,
+  secret: string
+): { valid: boolean; error?: string } {
+  try {
+    // Step 1: Verify timestamp is present and parseable as a number
+    if (!timestamp) {
+      return { valid: false, error: "Timestamp is missing" };
+    }
+
+    const timestampNum = parseInt(timestamp, 10);
+    if (isNaN(timestampNum)) {
+      return { valid: false, error: "Timestamp is not a valid integer" };
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const skewThreshold = 60; // 1 minute in the future
+    const replayThreshold = 300; // 5 minutes in the past
+
+    // Step 2: Reject if timestamp is more than 1 minute in the future (clock skew protection)
+    if (timestampNum > now + skewThreshold) {
+      return { valid: false, error: "Timestamp is too far in the future" };
+    }
+
+    // Step 3: Reject if timestamp is more than 5 minutes in the past (replay protection)
+    if (timestampNum < now - replayThreshold) {
+      return { valid: false, error: "Timestamp is too old (replay attack protection)" };
+    }
+
+    // Step 4: Compute expected HMAC-SHA256 of timestamp + "." + body
+    const expectedSignature = signPayload(timestamp + "." + body, secret);
+
+    // Step 5: Compare signatures using timing-safe equality
+    try {
+      const signatureBuffer = Buffer.from(signature, "hex");
+      const expectedBuffer = Buffer.from(expectedSignature, "hex");
+
+      // Ensure buffers are the same length for safe comparison
+      if (signatureBuffer.length !== expectedBuffer.length) {
+        return { valid: false, error: "Signature verification failed" };
+      }
+
+      const isValid = crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
+      if (!isValid) {
+        return { valid: false, error: "Signature verification failed" };
+      }
+
+      return { valid: true };
+    } catch {
+      return { valid: false, error: "Signature verification failed" };
+    }
+  } catch (error: any) {
+    return { valid: false, error: `Verification error: ${error.message}` };
+  }
+}
+
+/**
  * Deliver a webhook notification to the agent's URL.
  * Called after a certification is recorded on-chain.
  * Uses the API key hash as the HMAC signing secret.
@@ -49,7 +136,7 @@ export async function deliverWebhook(
       .where(eq(certifications.id, certificationId));
 
     if (!cert) {
-      console.error(`[Webhook] Certification not found: ${certificationId}`);
+      logger.error("Certification not found", { component: "webhook", certificationId });
       return false;
     }
 
@@ -110,21 +197,21 @@ export async function deliverWebhook(
           .set({ webhookStatus: "delivered" })
           .where(eq(certifications.id, certificationId));
         
-        console.log(`[Webhook] Delivered to ${webhookUrl} for cert ${certificationId} (status: ${response.status})`);
+        logger.info("Webhook delivered", { component: "webhook", webhookUrl, certificationId, status: response.status });
         return true;
       } else {
-        console.warn(`[Webhook] Failed delivery to ${webhookUrl}: HTTP ${response.status}`);
+        logger.warn("Webhook delivery failed", { component: "webhook", webhookUrl, status: response.status });
         await markWebhookFailed(certificationId);
         return false;
       }
     } catch (fetchError: any) {
       clearTimeout(timeout);
-      console.warn(`[Webhook] Network error to ${webhookUrl}: ${fetchError.message}`);
+      logger.warn("Webhook network error", { component: "webhook", webhookUrl, error: fetchError.message });
       await markWebhookFailed(certificationId);
       return false;
     }
   } catch (error) {
-    console.error(`[Webhook] Error delivering for ${certificationId}:`, error);
+    logger.error("Webhook delivery error", { component: "webhook", certificationId });
     return false;
   }
 }

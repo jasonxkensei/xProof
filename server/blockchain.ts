@@ -4,6 +4,7 @@ import {
   Address,
 } from "@multiversx/sdk-core";
 import { recordTransaction } from "./metrics";
+import { logger } from "./logger";
 
 // MultiversX configuration from environment
 const PRIVATE_KEY = process.env.MULTIVERSX_PRIVATE_KEY;
@@ -74,8 +75,7 @@ export async function recordOnBlockchain(
 }> {
   // If MultiversX is not configured, return simulation (for development)
   if (!isMultiversXConfigured()) {
-    console.warn("⚠️ MultiversX not configured - using simulation mode");
-    console.warn("Set MULTIVERSX_PRIVATE_KEY and MULTIVERSX_SENDER_ADDRESS to use real blockchain");
+    logger.warn("MultiversX not configured, using simulation mode", { component: "blockchain" });
     
     const simulatedHash = `sim_${Date.now()}_${fileHash.substring(0, 8)}`;
     return {
@@ -129,7 +129,7 @@ export async function recordOnBlockchain(
     };
   } catch (error: any) {
     recordTransaction(false, Date.now() - txStart, "certification");
-    console.error("❌ MultiversX transaction error:", error);
+    logger.error("MultiversX transaction error", { component: "blockchain", error: error instanceof Error ? error.message : String(error) });
     throw new Error(`Failed to record on blockchain: ${error.message}`);
   }
 }
@@ -177,7 +177,7 @@ export async function broadcastSignedTransaction(signedTx: any): Promise<{
       explorerUrl: `${explorerBaseUrl}/transactions/${result.data.txHash}`,
     };
   } catch (error: any) {
-    console.error("❌ Broadcast error:", error);
+    logger.error("Broadcast error", { component: "blockchain", error: error instanceof Error ? error.message : String(error) });
     throw new Error(`Failed to broadcast transaction: ${error.message}`);
   }
 }
@@ -203,7 +203,7 @@ export async function verifyTransaction(txHash: string): Promise<{
       data: result,
     };
   } catch (error) {
-    console.error("Error verifying transaction:", error);
+    logger.error("Transaction verification error", { component: "blockchain", error: error instanceof Error ? error.message : String(error) });
     return { success: false };
   }
 }

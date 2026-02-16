@@ -8,18 +8,34 @@ interface TransactionRecord {
 }
 
 const recentTransactions: TransactionRecord[] = [];
-const MAX_RECORDS = 1000;
+const ROLLING_WINDOW_MS = 60 * 60 * 1000; // 1 hour rolling window
 
 let totalCertifications = 0;
 let totalFailed = 0;
 let totalRetries = 0;
 let mx8004QueueSize = 0;
 
-export function recordTransaction(success: boolean, latencyMs: number, type: "certification" | "mx8004" = "certification") {
-  recentTransactions.push({ timestamp: Date.now(), success, latencyMs, type });
-  if (recentTransactions.length > MAX_RECORDS) {
+function pruneOldRecords(): void {
+  const cutoff = Date.now() - ROLLING_WINDOW_MS;
+  while (recentTransactions.length > 0 && recentTransactions[0].timestamp < cutoff) {
     recentTransactions.shift();
   }
+  // Safety cap: keep only last 5000 if length > 10000
+  if (recentTransactions.length > 10000) {
+    const toRemove = recentTransactions.length - 5000;
+    recentTransactions.splice(0, toRemove);
+  }
+}
+
+function calculatePercentile(sortedValues: number[], percentile: number): number | null {
+  if (sortedValues.length === 0) return null;
+  const index = Math.ceil((percentile / 100) * sortedValues.length) - 1;
+  return sortedValues[Math.max(0, index)];
+}
+
+export function recordTransaction(success: boolean, latencyMs: number, type: "certification" | "mx8004" = "certification") {
+  pruneOldRecords();
+  recentTransactions.push({ timestamp: Date.now(), success, latencyMs, type });
   if (success) {
     totalCertifications++;
   } else {
@@ -35,7 +51,34 @@ export function setMx8004QueueSize(size: number) {
   mx8004QueueSize = size;
 }
 
+export function getLatencyPercentiles(): {
+  window_minutes: number;
+  sample_size: number;
+  p50_ms: number | null;
+  p95_ms: number | null;
+  p99_ms: number | null;
+  avg_ms: number | null;
+  min_ms: number | null;
+  max_ms: number | null;
+} {
+  pruneOldRecords();
+  const successTxs = recentTransactions.filter(t => t.success);
+  const latencies = successTxs.map(t => t.latencyMs).sort((a, b) => a - b);
+
+  return {
+    window_minutes: Math.floor(ROLLING_WINDOW_MS / 60000),
+    sample_size: latencies.length,
+    p50_ms: calculatePercentile(latencies, 50),
+    p95_ms: calculatePercentile(latencies, 95),
+    p99_ms: calculatePercentile(latencies, 99),
+    avg_ms: latencies.length > 0 ? Math.round(latencies.reduce((s, v) => s + v, 0) / latencies.length) : null,
+    min_ms: latencies.length > 0 ? latencies[0] : null,
+    max_ms: latencies.length > 0 ? latencies[latencies.length - 1] : null,
+  };
+}
+
 export function getMetrics() {
+  pruneOldRecords();
   const now = Date.now();
   const certTxs = recentTransactions.filter(t => t.type === "certification");
   const successTxs = certTxs.filter(t => t.success);
@@ -59,6 +102,7 @@ export function getMetrics() {
       avg_latency_ms: avgLatency,
       last_success_at: lastSuccess ? new Date(lastSuccess.timestamp).toISOString() : null,
       last_failed_at: lastFailed ? new Date(lastFailed.timestamp).toISOString() : null,
+      latency_percentiles: getLatencyPercentiles(),
     },
     mx8004: {
       queue_size: mx8004QueueSize,

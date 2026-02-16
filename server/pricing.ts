@@ -1,3 +1,5 @@
+import { logger } from "./logger";
+
 const CERTIFICATION_PRICE_USD = 0.05;
 
 let cachedPrice: { egldUsd: number; timestamp: number } | null = null;
@@ -25,13 +27,13 @@ export async function getEgldUsdPrice(): Promise<number> {
     }
 
     cachedPrice = { egldUsd, timestamp: Date.now() };
-    console.log(`💰 EGLD/USD price updated: $${egldUsd}`);
+    logger.info("EGLD/USD price updated", { component: "pricing", egldUsd });
     
     return egldUsd;
   } catch (error) {
-    console.error("Failed to fetch EGLD price:", error);
+    logger.error("Failed to fetch EGLD price", { component: "pricing" });
     if (cachedPrice) {
-      console.log("Using cached EGLD price as fallback");
+      logger.info("Using cached EGLD price as fallback", { component: "pricing" });
       return cachedPrice.egldUsd;
     }
     return 30; // Fallback price if no cache and API fails

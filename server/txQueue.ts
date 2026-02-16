@@ -10,6 +10,8 @@ import {
   appendResponse,
   resetNonce,
 } from "./mx8004";
+import { logger } from "./logger";
+import { checkAndAlert } from "./txAlerts";
 
 let workerInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -24,17 +26,18 @@ const VALIDATION_STEPS = [
 export async function enqueueTx(
   jobType: string,
   jobId: string,
-  payload: Record<string, any>
+  payload: Record<string, any>,
+  requestId?: string
 ): Promise<void> {
   await db.insert(txQueue).values({
     jobType,
     jobId,
-    payload: { ...payload, currentStep: 0 },
+    payload: { ...payload, currentStep: 0, ...(requestId && { requestId }) },
     status: "pending",
     attempts: 0,
     maxAttempts: 3,
   });
-  console.log(`[TX-Queue] Enqueued job: ${jobType} / ${jobId}`);
+  logger.info("Job enqueued", { component: "tx-queue", jobType, jobId, requestId });
 }
 
 async function updatePayload(taskId: string, updates: Record<string, any>): Promise<void> {
@@ -62,7 +65,8 @@ async function processNextTask(): Promise<void> {
 
     if (!task) return;
 
-    console.log(`[TX-Queue] Processing: ${task.jobType} / ${task.jobId} (attempt ${task.attempts + 1}/${task.maxAttempts})`);
+    const taskRequestId = (task.payload as any)?.requestId;
+    logger.info("Processing task", { component: "tx-queue", jobType: task.jobType, jobId: task.jobId, attempt: task.attempts + 1, maxAttempts: task.maxAttempts, requestId: taskRequestId });
 
     try {
       await executeTask(task.id, task.jobType, task.jobId, task.payload as Record<string, any>);
@@ -72,12 +76,12 @@ async function processNextTask(): Promise<void> {
         .set({ status: "completed", completedAt: new Date() })
         .where(eq(txQueue.id, task.id));
 
-      console.log(`[TX-Queue] Completed: ${task.jobType} / ${task.jobId}`);
+      logger.info("Task completed", { component: "tx-queue", jobType: task.jobType, jobId: task.jobId });
     } catch (err: any) {
       const newAttempts = task.attempts + 1;
       const errorMessage = err.message || String(err);
 
-      console.error(`[TX-Queue] Failed: ${task.jobType} / ${task.jobId} - ${errorMessage}`);
+      logger.error("Task failed", { component: "tx-queue", jobType: task.jobType, jobId: task.jobId, error: errorMessage });
 
       resetNonce();
 
@@ -91,7 +95,7 @@ async function processNextTask(): Promise<void> {
           })
           .where(eq(txQueue.id, task.id));
 
-        console.error(`[TX-Queue] Max attempts reached, marking as failed: ${task.jobId}`);
+        logger.error("Max attempts reached, marking as failed", { component: "tx-queue", jobId: task.jobId });
       } else {
         const backoffSeconds = [10, 30, 90][newAttempts - 1] || 90;
         const nextRetry = new Date(Date.now() + backoffSeconds * 1000);
@@ -106,13 +110,14 @@ async function processNextTask(): Promise<void> {
           })
           .where(eq(txQueue.id, task.id));
 
-        console.log(`[TX-Queue] Will retry in ${backoffSeconds}s: ${task.jobId}`);
+        logger.info("Will retry task", { component: "tx-queue", jobId: task.jobId, backoffSeconds });
       }
     }
 
     await updateQueueMetrics();
+    checkAndAlert().catch(() => {});
   } catch (err: any) {
-    console.error(`[TX-Queue] Worker error: ${err.message}`);
+    logger.error("Worker error", { component: "tx-queue", error: err.message });
   }
 }
 
@@ -140,38 +145,38 @@ async function executeTask(
       const certUrl = `https://xproof.app/api/certificates/${certificationId}.pdf`;
 
       if (startStep > 0) {
-        console.log(`[TX-Queue] Resuming ${jobId} from step ${startStep} (${VALIDATION_STEPS[startStep]})`);
+        logger.info("Resuming job", { component: "tx-queue", jobId, startStep, stepName: VALIDATION_STEPS[startStep] });
       } else {
-        console.log(`[TX-Queue] Registering job: ${jobId} for agent nonce ${agentNonce}`);
+        logger.info("Registering job", { component: "tx-queue", jobId, agentNonce });
       }
 
       if (startStep <= 0) {
         const txHash = await initJob(jobId, agentNonce);
-        console.log(`[TX-Queue] Step 1/5 init_job: ${txHash}`);
+        logger.info("Step completed", { component: "tx-queue", step: "1/5", action: "init_job", txHash });
         await updatePayload(taskId, { currentStep: 1 });
       }
 
       if (startStep <= 1) {
         const txHash = await submitProof(jobId, proof);
-        console.log(`[TX-Queue] Step 2/5 submit_proof: ${txHash}`);
+        logger.info("Step completed", { component: "tx-queue", step: "2/5", action: "submit_proof", txHash });
         await updatePayload(taskId, { currentStep: 2 });
       }
 
       if (startStep <= 2) {
         const txHash = await validationRequest(jobId, senderAddress, requestUri, requestHash);
-        console.log(`[TX-Queue] Step 3/5 validation_request: ${txHash}`);
+        logger.info("Step completed", { component: "tx-queue", step: "3/5", action: "validation_request", txHash });
         await updatePayload(taskId, { currentStep: 3 });
       }
 
       if (startStep <= 3) {
         const txHash = await validationResponse(requestHash, 100, responseUri, responseHash, "xproof-certification");
-        console.log(`[TX-Queue] Step 4/5 validation_response: ${txHash}`);
+        logger.info("Step completed", { component: "tx-queue", step: "4/5", action: "validation_response", txHash });
         await updatePayload(taskId, { currentStep: 4 });
       }
 
       if (startStep <= 4) {
         const txHash = await appendResponse(jobId, certUrl);
-        console.log(`[TX-Queue] Step 5/5 append_response: ${txHash}`);
+        logger.info("Step completed", { component: "tx-queue", step: "5/5", action: "append_response", txHash });
         await updatePayload(taskId, { currentStep: 5 });
       }
 
@@ -251,7 +256,7 @@ export async function getTxQueueStats(): Promise<{
 
 export function startTxQueueWorker(): void {
   if (workerInterval) return;
-  console.log("[TX-Queue] Worker started (polling every 2s)");
+  logger.info("Worker started", { component: "tx-queue", interval: "2s" });
   workerInterval = setInterval(processNextTask, 2000);
 }
 
@@ -259,6 +264,6 @@ export function stopTxQueueWorker(): void {
   if (workerInterval) {
     clearInterval(workerInterval);
     workerInterval = null;
-    console.log("[TX-Queue] Worker stopped");
+    logger.info("Worker stopped", { component: "tx-queue" });
   }
 }

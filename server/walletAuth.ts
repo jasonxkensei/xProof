@@ -2,6 +2,7 @@ import { RequestHandler } from "express";
 import crypto from "crypto";
 import { Address } from "@multiversx/sdk-core";
 import { UserVerifier } from "@multiversx/sdk-wallet/out/userVerifier";
+import { logger } from "./logger";
 
 // Store challenges temporarily (in production, use Redis)
 const challenges = new Map<string, { nonce: string; timestamp: number }>();
@@ -79,7 +80,7 @@ export function verifyWalletSignature(
     
     // In development mode with simulated wallet, skip signature verification
     if (process.env.NODE_ENV === 'development') {
-      console.log("🔧 Development mode: Accepting simulated wallet signature");
+      logger.info("Development mode: Accepting simulated wallet signature", { component: "auth" });
       // TODO: In production, implement full signature verification using XPortal wallet's real signatures
       // The XPortal browser extension provides ed25519 signatures that can be verified with UserVerifier
       // For now, we trust the development environment
@@ -88,7 +89,7 @@ export function verifyWalletSignature(
       // TODO: Implement proper MultiversX ed25519 signature verification
       // This requires using the official XPortal wallet extension which provides real signatures
       // For now, reject all signatures in production until proper verification is implemented
-      console.error("Production signature verification not yet implemented");
+      logger.error("Production signature verification not yet implemented", { component: "auth" });
       return false;
     }
 
@@ -96,7 +97,7 @@ export function verifyWalletSignature(
     challenges.delete(walletAddress);
     return true;
   } catch (error) {
-    console.error("Error verifying wallet signature:", error);
+    logger.error("Error verifying wallet signature", { component: "auth" });
     return false;
   }
 }

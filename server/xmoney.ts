@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { logger } from "./logger";
 
 // xMoney API Configuration
 const XMONEY_BASE_URL = process.env.NODE_ENV === "production" 
@@ -137,7 +138,7 @@ export async function getXMoneyOrderStatus(orderId: string): Promise<XMoneyOrder
  */
 export function verifyXMoneyWebhook(payload: string, signature: string): boolean {
   if (!XMONEY_WEBHOOK_SECRET) {
-    console.warn("xMoney webhook secret not configured");
+    logger.warn("xMoney webhook secret not configured", { component: "xmoney" });
     return false;
   }
 

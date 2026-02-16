@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "./db";
 import { certifications } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { logger } from "./logger";
 
 const CRAWLER_USER_AGENTS = [
   "ChatGPT", "GPTBot", "Googlebot", "Bingbot", "Twitterbot",
@@ -460,14 +461,14 @@ export function prerenderMiddleware() {
             return res.status(200).set("Content-Type", "text/html").send(renderProofPage(baseUrl, cert));
           }
         } catch (e) {
-          console.error("[prerender] Error fetching proof:", e);
+          logger.error("Error fetching proof", { component: "prerender" });
         }
         return res.status(404).set("Content-Type", "text/html").send(renderProofNotFound(baseUrl));
       }
 
       return next();
     } catch (error) {
-      console.error("[prerender] Error:", error);
+      logger.error("Prerender error", { component: "prerender" });
       return next();
     }
   };

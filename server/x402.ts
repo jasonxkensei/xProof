@@ -2,6 +2,7 @@ import { x402ResourceServer } from "@x402/express";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import type { Request, Response } from "express";
+import { logger } from "./logger";
 
 const X402_PAY_TO = process.env.X402_PAY_TO || "";
 const X402_NETWORK = process.env.X402_NETWORK || "eip155:8453";
@@ -86,14 +87,14 @@ export async function verifyX402Payment(req: Request, route: "proof" | "batch"):
           asset: "USDC",
         });
       } catch (settleErr: any) {
-        console.error("[x402] Settlement error (non-blocking):", settleErr.message);
+        logger.error("Settlement error (non-blocking)", { component: "x402", error: settleErr.message });
       }
       return { valid: true };
     }
 
     return { valid: false, error: "Payment verification failed" };
   } catch (err: any) {
-    console.error("[x402] Verification error:", err.message);
+    logger.error("Verification error", { component: "x402", error: err.message });
     return { valid: false, error: `Payment verification error: ${err.message}` };
   }
 }

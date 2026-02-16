@@ -7,6 +7,7 @@ import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
+import { logger } from "./logger";
 
 // In development, use localhost. In production, REPLIT_DOMAINS must be set
 const REPLIT_DOMAINS = process.env.REPLIT_DOMAINS || "localhost:5000";
@@ -29,7 +30,7 @@ export function getSession() {
     tableName: "sessions",
   });
   const isProduction = process.env.NODE_ENV === "production";
-  console.log(`🔐 Session config: production=${isProduction}, secure=${isProduction}`);
+  logger.info("Session config", { component: "auth", production: isProduction, secure: isProduction });
   
   return session({
     secret: process.env.SESSION_SECRET!,

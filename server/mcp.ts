@@ -6,6 +6,7 @@ import { certifications, apiKeys, users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { recordOnBlockchain } from "./blockchain";
 import { getCertificationPriceUsd } from "./pricing";
+import { logger } from "./logger";
 
 interface McpContext {
   baseUrl: string;
@@ -325,7 +326,7 @@ export async function authenticateApiKey(authHeader: string | undefined): Promis
     .set({ lastUsedAt: new Date(), requestCount: (apiKey.requestCount || 0) + 1 })
     .where(eq(apiKeys.id, apiKey.id))
     .execute()
-    .catch((err) => console.error("Failed to update API key stats:", err));
+    .catch((err) => logger.error("Failed to update API key stats", { error: err.message }));
 
   return { valid: true, keyHash, apiKeyId: apiKey.id };
 }

@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import crypto from "crypto";
 import { db } from "./db";
 import { storage } from "./storage";
+import { logger } from "./logger";
+import { getAlertConfig } from "./txAlerts";
 import { 
   certifications, 
   users, 
@@ -104,7 +106,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(user);
     } catch (error: any) {
-      console.error("Error during wallet sync:", error);
+      logger.withRequest(req).error("Wallet sync failed", { error: error.message });
       res.status(401).json({ 
         message: error.message || "Failed to verify authentication token" 
       });
@@ -122,7 +124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid MultiversX wallet address" });
       }
 
-      console.log("Simple sync for wallet:", walletAddress);
+      logger.withRequest(req).info("Simple wallet sync", { walletAddress });
 
       // Check if user exists, create if not
       let [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
@@ -146,7 +148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(user);
     } catch (error: any) {
-      console.error("Error during simple wallet sync:", error);
+      logger.withRequest(req).error("Simple wallet sync failed", { error: error.message });
       res.status(500).json({ message: "Failed to create session" });
     }
   });
@@ -163,7 +165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(user);
     } catch (error) {
-      console.error("Error fetching current user:", error);
+      logger.withRequest(req).error("Failed to fetch current user");
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
@@ -174,7 +176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await destroyWalletSession(req);
       res.json({ message: "Logged out successfully" });
     } catch (error: any) {
-      console.error("Error logging out:", error);
+      logger.withRequest(req).error("Logout failed");
       res.status(500).json({ message: "Failed to log out" });
     }
   });
@@ -226,7 +228,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Transaction already signed and broadcast by user's Extension Wallet
         transactionHash = data.transactionHash;
         transactionUrl = data.transactionUrl;
-        console.log("✅ Using client-signed transaction:", transactionHash);
+        logger.withRequest(req).info("Using client-signed transaction", { transactionHash });
       } else {
         // Fallback to server-side blockchain recording (simulation mode)
         const result = await recordOnBlockchain(
@@ -267,7 +269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid request data", errors: error.errors });
       }
-      console.error("Error creating certification:", error);
+      logger.withRequest(req).error("Failed to create certification");
       res.status(500).json({ message: "Failed to create certification" });
     }
   });
@@ -291,7 +293,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(userCertifications);
     } catch (error) {
-      console.error("Error fetching certifications:", error);
+      logger.withRequest(req).error("Failed to fetch certifications");
       res.status(500).json({ message: "Failed to fetch certifications" });
     }
   });
@@ -324,7 +326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         balance: data.data?.account?.balance || "0",
       });
     } catch (error: any) {
-      console.error("Error fetching account info:", error);
+      logger.withRequest(req).error("Failed to fetch account info", { error: error.message });
       res.status(500).json({ 
         message: "Failed to fetch account info",
         error: error.message 
@@ -418,7 +420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid certification data", errors: error.errors });
       }
-      console.error("Error broadcasting transaction:", error);
+      logger.withRequest(req).error("Failed to broadcast transaction", { error: error.message });
       res.status(500).json({ 
         message: "Failed to broadcast transaction",
         error: error.message 
@@ -442,7 +444,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(certification);
     } catch (error) {
-      console.error("Error fetching proof:", error);
+      logger.withRequest(req).error("Failed to fetch proof");
       res.status(500).json({ message: "Failed to fetch proof" });
     }
   });
@@ -484,7 +486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Content-Disposition', `attachment; filename="certificate-${certification.id}.pdf"`);
       res.send(pdfBuffer);
     } catch (error) {
-      console.error("Error generating certificate:", error);
+      logger.withRequest(req).error("Failed to generate certificate");
       res.status(500).json({ message: "Failed to generate certificate" });
     }
   });
@@ -530,7 +532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(order);
     } catch (error) {
-      console.error("Error creating xMoney payment:", error);
+      logger.withRequest(req).error("Failed to create xMoney payment");
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: error.errors[0].message });
       }
@@ -553,7 +555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orderStatus = await getXMoneyOrderStatus(orderId);
       res.json(orderStatus);
     } catch (error) {
-      console.error("Error fetching xMoney order status:", error);
+      logger.withRequest(req).error("Failed to fetch xMoney order status");
       res.status(500).json({ 
         message: error instanceof Error ? error.message : "Failed to fetch order status" 
       });
@@ -572,7 +574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Verify webhook signature
       if (!verifyXMoneyWebhook(payload, signature)) {
-        console.error("Invalid xMoney webhook signature");
+        logger.withRequest(req).error("Invalid xMoney webhook signature");
         return res.status(401).json({ message: "Invalid signature" });
       }
 
@@ -594,29 +596,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .where(eq(users.id, metadata.userId));
           }
 
-          console.log(`xMoney payment succeeded: ${orderId} / ${transactionId}`);
+          logger.withRequest(req).info("xMoney payment succeeded", { orderId, transactionId });
           break;
         }
 
         case "payment.failed": {
           const { orderId, reason } = event.data;
-          console.log(`xMoney payment failed: ${orderId} - ${reason}`);
+          logger.withRequest(req).info("xMoney payment failed", { orderId, reason });
           break;
         }
 
         case "refund.processed": {
           const { transactionId, refundId } = event.data;
-          console.log(`xMoney refund processed: ${transactionId} / ${refundId}`);
+          logger.withRequest(req).info("xMoney refund processed", { transactionId, refundId });
           break;
         }
 
         default:
-          console.log(`Unhandled xMoney webhook event: ${event.type}`);
+          logger.withRequest(req).warn("Unhandled xMoney webhook event", { eventType: event.type });
       }
 
       res.json({ received: true });
     } catch (error) {
-      console.error("xMoney webhook error:", error);
+      logger.withRequest(req).error("xMoney webhook error");
       res.status(400).json({ 
         message: error instanceof Error ? error.message : "Webhook processing failed" 
       });
@@ -656,7 +658,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
-      console.log(`🔑 API key created: ${keyPrefix} for user ${walletAddress.slice(0, 12)}...`);
+      logger.withRequest(req).info("API key created", { keyPrefix, walletAddress: walletAddress.slice(0, 12) });
 
       res.status(201).json({
         id: apiKey.id,
@@ -667,7 +669,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Save this key securely - it won't be shown again",
       });
     } catch (error) {
-      console.error("API key creation error:", error);
+      logger.withRequest(req).error("API key creation failed");
       res.status(500).json({ error: "Failed to create API key" });
     }
   });
@@ -696,7 +698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ keys });
     } catch (error) {
-      console.error("API keys list error:", error);
+      logger.withRequest(req).error("Failed to list API keys");
       res.status(500).json({ error: "Failed to list API keys" });
     }
   });
@@ -717,11 +719,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await db.delete(apiKeys).where(eq(apiKeys.id, keyId));
-      console.log(`🗑️ API key deleted: ${key.keyPrefix}`);
+      logger.withRequest(req).info("API key deleted", { keyPrefix: key.keyPrefix });
 
       res.json({ message: "API key deleted" });
     } catch (error) {
-      console.error("API key deletion error:", error);
+      logger.withRequest(req).error("API key deletion failed");
       res.status(500).json({ error: "Failed to delete API key" });
     }
   });
@@ -760,7 +762,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .where(eq(apiKeys.id, keyId));
 
-      console.log(`🔄 API key rotated: ${existingKey.keyPrefix} -> ${newKeyPrefix}`);
+      logger.withRequest(req).info("API key rotated", { oldPrefix: existingKey.keyPrefix, newPrefix: newKeyPrefix });
 
       res.json({
         id: keyId,
@@ -770,7 +772,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "New key generated. Previous key remains valid for 24 hours.",
       });
     } catch (error) {
-      console.error("API key rotation error:", error);
+      logger.withRequest(req).error("API key rotation failed");
       res.status(500).json({ error: "Failed to rotate API key" });
     }
   });
@@ -868,7 +870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       })
       .where(eq(apiKeys.id, apiKey.id))
       .execute()
-      .catch((err) => console.error("Failed to update API key stats:", err));
+      .catch((err) => logger.error("Failed to update API key stats", { error: err.message }));
 
     // Attach API key info to request
     (req as any).apiKey = apiKey;
@@ -944,7 +946,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .where(eq(apiKeys.id, apiKey.id))
           .execute()
-          .catch((err) => console.error("Failed to update API key stats:", err));
+          .catch((err) => logger.error("Failed to update API key stats", { error: err.message }));
 
         authMethod = "api_key";
       } else if (hasX402Payment && isX402Configured()) {
@@ -975,7 +977,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(certifications.fileHash, data.file_hash));
 
       if (existing) {
-        console.log(`[POST /api/proof] File already certified: ${data.file_hash} -> ${existing.id}`);
+        logger.withRequest(req).info("File already certified", { fileHash: data.file_hash, certificationId: existing.id });
         return res.status(200).json({
           proof_id: existing.id,
           status: "certified",
@@ -1028,13 +1030,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
-      console.log(`[POST /api/proof] Certified: ${data.file_hash} -> ${certification.id} (tx: ${result.transactionHash})`);
+      logger.withRequest(req).info("File certified", { fileHash: data.file_hash, certificationId: certification.id, txHash: result.transactionHash });
 
       recordCertificationAsJob(
         certification.id.toString(),
         data.file_hash,
         result.transactionHash
-      ).catch((err) => console.error("[MX-8004] Background job registration failed:", err));
+      ).catch((err) => logger.error("Background job registration failed", { component: "mx8004", error: err.message }));
 
       let webhookStatus: string = data.webhook_url ? "pending" : "not_requested";
       
@@ -1080,7 +1082,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           details: error.errors,
         });
       }
-      console.error("[POST /api/proof] Error:", error);
+      logger.withRequest(req).error("Proof creation failed");
       return res.status(500).json({
         error: "INTERNAL_ERROR",
         message: "Failed to create certification. Please try again.",
@@ -1156,7 +1158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .where(eq(apiKeys.id, apiKey.id))
           .execute()
-          .catch((err) => console.error("Failed to update API key stats:", err));
+          .catch((err) => logger.error("Failed to update API key stats", { error: err.message }));
 
         authMethod = "api_key";
       } else if (hasX402Payment && isX402Configured()) {
@@ -1252,7 +1254,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           certification.id.toString(),
           file.file_hash,
           result.transactionHash
-        ).catch((err) => console.error("[MX-8004] Background job registration failed:", err));
+        ).catch((err) => logger.error("Background job registration failed", { component: "mx8004", error: err.message }));
 
         if (data.webhook_url) {
           const { scheduleWebhookDelivery, isValidWebhookUrl } = await import("./webhook");
@@ -1266,7 +1268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      console.log(`[POST /api/batch] Batch ${batchId}: ${createdCount} created, ${existingCount} existing out of ${data.files.length} files`);
+      logger.withRequest(req).info("Batch certification completed", { batchId, created: createdCount, existing: existingCount, total: data.files.length });
 
       return res.status(201).json({
         batch_id: batchId,
@@ -1283,7 +1285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           details: error.errors,
         });
       }
-      console.error("[POST /api/batch] Error:", error);
+      logger.withRequest(req).error("Batch certification failed");
       return res.status(500).json({
         error: "INTERNAL_ERROR",
         message: "Failed to process batch certification. Please try again.",
@@ -1401,7 +1403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // xproof wallet address (receives certification fees)
       const xproofWallet = process.env.XPROOF_WALLET_ADDRESS || process.env.PROOFMINT_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS;
       if (!xproofWallet) {
-        console.error("⚠️ No XPROOF_WALLET_ADDRESS configured");
+        logger.withRequest(req).error("No XPROOF_WALLET_ADDRESS configured");
         return res.status(500).json({
           error: "CONFIGURATION_ERROR",
           message: "xproof wallet not configured",
@@ -1428,9 +1430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expires_at: expiresAt.toISOString(),
       };
 
-      console.log(`💰 ACP Checkout: $${pricing.priceUsd} = ${pricing.priceEgld} atomic EGLD (rate: $${pricing.egldUsdRate}/EGLD)`);
-
-      console.log(`📦 ACP Checkout created: ${checkout.id} for hash ${data.inputs.file_hash.slice(0, 16)}...`);
+      logger.withRequest(req).info("ACP checkout created", { checkoutId: checkout.id, priceUsd: pricing.priceUsd, priceEgld: pricing.priceEgld, egldUsdRate: pricing.egldUsdRate, fileHash: data.inputs.file_hash.slice(0, 16) });
       
       res.status(201).json(response);
     } catch (error) {
@@ -1441,7 +1441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           details: error.errors 
         });
       }
-      console.error("ACP Checkout error:", error);
+      logger.withRequest(req).error("ACP checkout failed");
       res.status(500).json({ 
         error: "CHECKOUT_FAILED",
         message: "Failed to create checkout" 
@@ -1509,7 +1509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           txVerified = txData.status === "success";
         }
       } catch (err) {
-        console.log(`⚠️ Could not verify tx ${data.tx_hash}, proceeding anyway`);
+        logger.withRequest(req).warn("Could not verify transaction, proceeding anyway", { txHash: data.tx_hash });
         // For MVP, we proceed even if verification fails
         // In production, you'd want stricter verification
         txVerified = true;
@@ -1570,7 +1570,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Certification successfully recorded on MultiversX blockchain",
       };
 
-      console.log(`✅ ACP Certification confirmed: ${certification.id}`);
+      logger.withRequest(req).info("ACP certification confirmed", { certificationId: certification.id });
 
       res.json(response);
     } catch (error) {
@@ -1581,7 +1581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           details: error.errors,
         });
       }
-      console.error("ACP Confirm error:", error);
+      logger.withRequest(req).error("ACP confirm failed");
       res.status(500).json({
         error: "CONFIRMATION_FAILED",
         message: "Failed to confirm certification",
@@ -1619,7 +1619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         confirmed_at: checkout.confirmedAt,
       });
     } catch (error) {
-      console.error("ACP Status error:", error);
+      logger.withRequest(req).error("ACP status check failed");
       res.status(500).json({
         error: "STATUS_CHECK_FAILED",
         message: "Failed to check checkout status",
@@ -2367,7 +2367,7 @@ This genesis certification demonstrates:
 
       res.json(proof);
     } catch (error) {
-      console.error("Error fetching proof JSON:", error);
+      logger.withRequest(req).error("Failed to fetch proof JSON");
       res.status(500).json({ error: "internal_error", message: "Failed to fetch proof" });
     }
   });
@@ -2447,7 +2447,7 @@ This genesis certification demonstrates:
       res.setHeader("Cache-Control", "max-age=300");
       res.send(svg);
     } catch (error) {
-      console.error("Error generating badge:", error);
+      logger.withRequest(req).error("Failed to generate badge");
       const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="24" role="img"><rect width="120" height="24" rx="5" fill="#1E1E1E"/><rect width="120" height="24" rx="5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="60" y="16" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11">xproof: Error</text></svg>`;
       res.setHeader("Content-Type", "image/svg+xml");
       res.status(500).send(fallbackSvg);
@@ -2476,7 +2476,7 @@ This genesis certification demonstrates:
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.send(markdown);
     } catch (error) {
-      console.error("Error generating badge markdown:", error);
+      logger.withRequest(req).error("Failed to generate badge markdown");
       res.status(500).send("Error generating badge markdown");
     }
   });
@@ -2562,7 +2562,7 @@ This proof is self-verifiable. Trust derives from the MultiversX blockchain, not
       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
       res.send(markdown);
     } catch (error) {
-      console.error("Error fetching proof markdown:", error);
+      logger.withRequest(req).error("Failed to fetch proof markdown");
       res.status(500).setHeader('Content-Type', 'text/markdown; charset=utf-8');
       res.send(`# Error\n\nFailed to fetch proof.`);
     }
@@ -3000,7 +3000,7 @@ Confirm certification after transaction.
         agents_explorer: getAgentsExplorerUrl(nonce),
       });
     } catch (error: any) {
-      console.error("[GET /api/agent/:nonce/reputation] Error:", error.message);
+      logger.withRequest(req).error("Failed to fetch agent reputation", { error: error.message });
       res.status(500).json({ error: "QUERY_FAILED", message: "Failed to fetch agent reputation" });
     }
   });
@@ -4112,7 +4112,7 @@ class XProofVerifyTool(BaseTool):
       await mcpServer.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      console.error("[MCP] Error:", error);
+      logger.withRequest(req).error("MCP error");
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: "2.0",
@@ -4244,10 +4244,11 @@ class XProofVerifyTool(BaseTool):
           last_success_at: metrics.transactions.last_success_at,
           last_failed_at: metrics.transactions.last_failed_at,
         },
+        txAlerts: getAlertConfig(),
         generated_at: now.toISOString(),
       });
     } catch (error) {
-      console.error("[Admin Stats] Error:", error);
+      logger.withRequest(req).error("Admin stats error");
       res.status(500).json({ error: "Failed to generate stats" });
     }
   });
