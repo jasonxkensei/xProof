@@ -3,8 +3,15 @@
 ## Overview
 xproof is a trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is API-first, composable, and built for both human users and autonomous agents. The project aims to provide a robust and verifiable proof system within the MultiversX ecosystem, catering to the growing needs of decentralized applications and agent-based systems.
 
+## Recent Changes (Feb 16, 2026)
+- **Webhook anti-replay**: Added `verifyWebhookSignature()` with asymmetric timestamp validation (+1min future / -5min past), timing-safe HMAC comparison, and documented signature contract.
+- **Structured JSON logging**: All backend logs now emit structured JSON (`server/logger.ts`) with timestamp, level, service, requestId, route, method, message, metadata. RequestId middleware correlates requests end-to-end including into tx_queue payloads.
+- **TX queue alerting**: New `server/txAlerts.ts` monitors failed transactions with threshold + cooldown (env: `TX_ALERT_THRESHOLD`, `TX_ALERT_COOLDOWN_MINUTES`, `TX_ALERT_WINDOW_MINUTES`, `TX_ALERT_WEBHOOK_URL`). Categorizes errors: nonce, gateway_timeout, contract_revert, unknown.
+- **Blockchain latency monitoring**: Rolling 1h window percentiles (p50/p95/p99) in `server/metrics.ts`. Health endpoint (`/health`) exposes `blockchain_latency` summary (avg_ms, p95_ms, queue_depth, failure_rate).
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
+Positioning tone: "Hybride stratégique" — precise, credible, strategic, mixing institutional authority with tech-forward language.
 
 ## System Architecture
 
