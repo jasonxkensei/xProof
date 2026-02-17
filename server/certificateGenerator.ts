@@ -125,9 +125,9 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
       const contentWidth = pageWidth - (margin * 2);
       
       const certificateNumber = generateCertificateNumber(certification);
-      const proofUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'https://xproof.app'}/proof/${certification.id}`;
       const explorerUrl = certification.transactionHash ? `https://explorer.multiversx.com/transactions/${certification.transactionHash}` : null;
-      const qrCodeDataUrl = await QRCode.toDataURL(proofUrl, { 
+      const qrTarget = explorerUrl || 'https://explorer.multiversx.com';
+      const qrCodeDataUrl = await QRCode.toDataURL(qrTarget, { 
         width: 200, 
         margin: 1,
         color: { dark: COLORS.primaryDark, light: '#ffffff' }
@@ -307,9 +307,7 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
       doc.image(qrImage, qrX, yPos + 10, { width: qrSize, height: qrSize });
       
       doc.fontSize(8).font('Helvetica').fillColor(COLORS.textMuted);
-      doc.text('Scan to verify online', rightBoxX, yPos + 100, { width: verifyBoxWidth, align: 'center' });
-      doc.fontSize(6).fillColor(COLORS.textMuted);
-      doc.text(proofUrl, rightBoxX + 5, yPos + 115, { width: verifyBoxWidth - 10, align: 'center' });
+      doc.text('Scan to view on Explorer', rightBoxX, yPos + 100, { width: verifyBoxWidth, align: 'center' });
 
       yPos += 145;
 
