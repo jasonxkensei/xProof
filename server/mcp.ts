@@ -274,6 +274,25 @@ export function createMcpServer(ctx: McpContext) {
               specification: `${baseUrl}/.well-known/xproof.md`,
             },
             authentication: { type: "bearer", prefix: "pm_", header: "Authorization: Bearer pm_YOUR_KEY" },
+            x402_payment: {
+              protocol: "x402 (HTTP 402 Payment Required)",
+              description: "Alternative to API key auth. Pay per request with USDC on Base. No account needed.",
+              network: "Base (eip155:8453)",
+              currency: "USDC",
+              price: "$0.05",
+              endpoints: { proof: `${baseUrl}/api/proof`, batch: `${baseUrl}/api/batch` },
+              facilitator: "https://openx402.ai"
+            },
+            integrations: {
+              mcp: `${baseUrl}/mcp`,
+              acp: `${baseUrl}/api/acp/products`,
+              openclaw_skill: "https://github.com/jasonxkensei/xproof-openclaw-skill",
+              github_action: "https://github.com/marketplace/actions/xproof-certify",
+              openai_plugin: `${baseUrl}/.well-known/ai-plugin.json`,
+              langchain: `${baseUrl}/tools/langchain.json`,
+              crewai: `${baseUrl}/tools/crewai.json`
+            },
+            compatible_agents: ["Conway Terminal", "OpenClaw", "Claude Code", "Codex", "LangChain", "CrewAI", "Any MCP/x402 agent"],
           }),
         }],
       };

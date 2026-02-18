@@ -8,7 +8,13 @@ import {
   CheckCircle,
   Upload,
   ArrowRight,
-  Play
+  Play,
+  Blocks,
+  CreditCard,
+  ShoppingCart,
+  Award,
+  Bot,
+  Cog
 } from "lucide-react";
 import { WalletLoginModal } from "@/components/wallet-login-modal";
 import {
@@ -227,6 +233,52 @@ export default function Landing() {
             </Card>
             
             <p className="mt-8 text-center text-sm text-muted-foreground">Payment in $EGLD when signing the transaction.</p>
+          </div>
+        </div>
+      </section>
+      {/* Universal Compatibility */}
+      <section id="integrations" className="py-20 md:py-28">
+        <div className="container">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-16 text-center">
+              <Badge variant="outline" className="mb-4">Universal compatibility</Badge>
+              <h2 className="mb-4 text-3xl md:text-4xl font-bold">
+                Works everywhere agents work.
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                One proof layer, every protocol. From autonomous agents to CI/CD pipelines.
+              </p>
+            </div>
+            
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+              {[
+                { icon: Blocks, name: "MCP", desc: "Model Context Protocol" },
+                { icon: CreditCard, name: "x402", desc: "HTTP-native payments" },
+                { icon: ShoppingCart, name: "ACP", desc: "Agent Commerce" },
+                { icon: Award, name: "MX-8004", desc: "Trustless Agents" },
+                { icon: Bot, name: "OpenClaw", desc: "Skill Marketplace" },
+                { icon: Cog, name: "GitHub Action", desc: "CI/CD Pipeline" },
+              ].map((item) => (
+                <Card key={item.name} className="text-center">
+                  <CardContent className="pt-6 pb-4">
+                    <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                      <item.icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <p className="font-semibold text-sm" data-testid={`text-protocol-${item.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`}>{item.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{item.desc}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            
+            <div className="mt-10 text-center">
+              <Button asChild variant="outline" data-testid="button-view-integrations">
+                <a href="/agents">
+                  View all integrations
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            </div>
           </div>
         </div>
       </section>

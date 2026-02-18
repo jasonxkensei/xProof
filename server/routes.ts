@@ -3116,7 +3116,7 @@ Sitemap: ${baseUrl}/sitemap.xml
       name_for_human: "xproof",
       name_for_model: "xproof",
       description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
-      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs $0.05 per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix).",
+      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs $0.05 per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed.",
       auth: {
         type: "service_http",
         authorization_type: "bearer",
@@ -3217,6 +3217,21 @@ Sitemap: ${baseUrl}/sitemap.xml
         amount: "0.05",
         currency: "USD",
         payment_method: "EGLD"
+      },
+      x402_payment: {
+        protocol: "x402 (HTTP 402 Payment Required)",
+        description: "Alternative to API key auth. Pay per request with USDC on Base. No account needed.",
+        network: "Base (eip155:8453)",
+        currency: "USDC",
+        price: "$0.05",
+        endpoints: [`${baseUrl}/api/proof`, `${baseUrl}/api/batch`],
+        facilitator: "https://openx402.ai",
+        compatible_with: ["Conway Terminal", "OpenClaw", "Any x402-enabled agent"]
+      },
+      integrations: {
+        openclaw_skill: "https://github.com/jasonxkensei/xproof-openclaw-skill",
+        github_action: "https://github.com/marketplace/actions/xproof-certify",
+        standards: ["MCP", "ACP", "x402", "MX-8004", "OpenAI Plugin"]
       }
     });
   });
@@ -3290,6 +3305,12 @@ Certified agents can prove originality, timestamp, and integrity. Non-certified 
 
 ## x402 Payment Protocol
 xproof supports x402 (HTTP 402 Payment Required) as an alternative to API key auth. Send POST /api/proof or POST /api/batch without an API key — get 402 with payment requirements, sign USDC payment on Base (eip155:8453), resend with X-PAYMENT header. Price: $0.05 per certification. No account needed.
+
+## Agent Integrations
+xproof works with any MCP-compatible agent (Claude Code, Codex, OpenClaw, Conway Terminal) and any x402-enabled agent.
+- OpenClaw Skill: https://github.com/jasonxkensei/xproof-openclaw-skill
+- GitHub Action: https://github.com/marketplace/actions/xproof-certify
+- Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI
 
 ## MX-8004 Integration (Trustless Agents Standard)
 xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard, with full ERC-8004 compliance.
@@ -3637,6 +3658,12 @@ curl -X POST ${baseUrl}/api/proof \\
 - x402 is an alternative to API key auth — both methods work for /api/proof and /api/batch
 - When x402 is configured, requests without any auth return 402 (with payment requirements) instead of 401
 - No account registration or API key needed — just sign and pay
+
+## Agent Integrations
+xproof works with any MCP-compatible agent (Claude Code, Codex, OpenClaw, Conway Terminal) and any x402-enabled agent.
+- OpenClaw Skill: https://github.com/jasonxkensei/xproof-openclaw-skill
+- GitHub Action: https://github.com/marketplace/actions/xproof-certify
+- Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI
 
 ## MX-8004 Integration (Trustless Agents Standard)
 
@@ -4055,6 +4082,18 @@ class XProofVerifyTool(BaseTool):
         mcp_endpoint: `${baseUrl}/mcp`,
         openai_plugin: `${baseUrl}/.well-known/ai-plugin.json`,
         llms_txt: `${baseUrl}/llms.txt`,
+        x402: `${baseUrl}/api/proof`,
+        openclaw_skill: "https://github.com/jasonxkensei/xproof-openclaw-skill",
+      },
+      alternative_payment: {
+        protocol: "x402",
+        description: "HTTP-native payments. No API key needed. Send request, get 402 with price, sign USDC payment on Base, resend with X-PAYMENT header.",
+        network: "Base (eip155:8453)",
+        currency: "USDC",
+        price_per_certification: "$0.05",
+        endpoints: [`${baseUrl}/api/proof`, `${baseUrl}/api/batch`],
+        facilitator: "https://openx402.ai",
+        compatible_with: ["Conway Terminal", "OpenClaw", "Any x402-enabled agent"]
       },
       authentication: {
         type: "bearer",

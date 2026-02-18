@@ -3,6 +3,13 @@
 ## Overview
 xproof is a trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is API-first, composable, and built for both human users and autonomous agents. The project aims to provide a robust and verifiable proof system within the MultiversX ecosystem, catering to the growing needs of decentralized applications and agent-based systems.
 
+## Recent Changes (Feb 18, 2026)
+- **Universal agent compatibility**: All discovery endpoints (`.well-known/agent.json`, `.well-known/mcp.json`, `ai-plugin.json`, MCP `discover_services`, `llms.txt`, `llms-full.txt`) now explicitly surface x402/openx402 compatibility, OpenClaw skill link, and full list of supported protocols (MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI).
+- **Agent Integrations page**: New `/agents` page listing all supported protocols and developer tools with links to docs, OpenClaw skill, GitHub Action, and REST API.
+- **Landing page "Universal Compatibility" section**: New section showcasing MCP, x402, ACP, MX-8004, OpenClaw, and GitHub Action with link to full integrations page.
+- **OpenClaw skill published**: `github.com/jasonxkensei/xproof-openclaw-skill` — ClawHub-standard skill with SKILL.md, certify.sh, API reference.
+- **Conway/openx402 positioning**: xProof is x402-compatible, meaning any Conway automaton or x402-enabled agent can pay and certify via HTTP 402 with USDC on Base — no API key needed.
+
 ## Recent Changes (Feb 16, 2026)
 - **Webhook anti-replay**: Added `verifyWebhookSignature()` with asymmetric timestamp validation (+1min future / -5min past), timing-safe HMAC comparison, and documented signature contract.
 - **Structured JSON logging**: All backend logs now emit structured JSON (`server/logger.ts`) with timestamp, level, service, requestId, route, method, message, metadata. RequestId middleware correlates requests end-to-end including into tx_queue payloads.
