@@ -43,12 +43,20 @@ function commonHead(title: string, description: string, canonicalUrl: string, og
 <meta property="og:description" content="${escapeHtml(description)}">
 <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
 <meta property="og:site_name" content="xproof">
+<meta property="og:image" content="https://xproof.app/icon-512.png">
 
-<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(description)}">
+<meta name="twitter:image" content="https://xproof.app/icon-512.png">
 
-<meta name="keywords" content="blockchain certification, proof of existence, MultiversX, file ownership, digital signature, NFT alternative, timestamp proof, SHA-256, AI agent API">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#10b981">
+
+<meta name="keywords" content="blockchain certification, proof of existence, MultiversX, AI agent, x402, MCP, proof of authorship, timestamp proof, SHA-256, agent commerce">
 <meta name="author" content="xproof">
 
 <link rel="ai-plugin" href="/.well-known/ai-plugin.json">
@@ -73,8 +81,8 @@ function escapeHtml(str: string): string {
 }
 
 function renderHomePage(baseUrl: string): string {
-  const title = "xproof - Blockchain Certification for Digital Files";
-  const description = "Create immutable blockchain proofs of file ownership. Certify documents, code, designs on MultiversX. $0.05 per proof. API for AI agents available.";
+  const title = "xproof — Proof primitive for AI agents & humans on MultiversX";
+  const description = "Verifiable proofs of existence, authorship, and agent output — anchored on MultiversX blockchain. API-first, x402-compatible, built for AI agents and humans. $0.05 per proof.";
 
   return `${commonHead(title, description, baseUrl)}
 <body>
@@ -162,8 +170,8 @@ ${JSON.stringify({
   "sameAs": [],
   "offers": {
     "@type": "Offer",
-    "name": "Blockchain Certification",
-    "description": "Immutable blockchain proof of file ownership on MultiversX",
+    "name": "Proof of Existence Certification",
+    "description": "Verifiable proof of existence, authorship, and agent output on MultiversX blockchain",
     "price": "0.05",
     "priceCurrency": "USD"
   }
@@ -307,8 +315,8 @@ function renderProofNotFound(baseUrl: string): string {
 }
 
 function renderAgentsPage(baseUrl: string): string {
-  const title = "AI Agent Integration - xproof";
-  const description = "The deterministic, blockchain-backed proof-of-existence API designed for autonomous systems. Integrate xproof certification into your AI agent pipelines. No human interaction required.";
+  const title = "Agent Integrations — xproof";
+  const description = "xproof works everywhere agents work. MCP, x402, ACP, MX-8004, OpenClaw, GitHub Action. One proof layer, every protocol. $0.05 per proof.";
 
   return `${commonHead(title, description, `${baseUrl}/agents`)}
 <body>
