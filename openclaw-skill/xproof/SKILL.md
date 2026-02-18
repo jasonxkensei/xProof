@@ -1,0 +1,191 @@
+---
+name: xproof
+description: Certify files on MultiversX blockchain via xProof. Use when the user wants to prove file existence, create a proof of ownership, certify a document or code artifact, verify an existing certification, or anchor agent outputs on-chain. Supports single file, batch (up to 50 files), and x402 payment (no API key needed). $0.05 per proof.
+---
+
+# xProof: Blockchain Certification on MultiversX
+
+Proof primitive for AI agents and humans. Certify any file's existence and ownership by anchoring its SHA-256 hash on the MultiversX blockchain. Files never leave your machine — only the hash is sent.
+
+## What is xProof?
+
+xProof creates immutable, verifiable proofs of existence and ownership on MultiversX:
+
+- **Proof of Existence** — Prove a file existed at a specific point in time
+- **Proof of Ownership** — Attach your identity to a certified file
+- **Tamper Detection** — Any modification to the original file produces a different hash, invalidating the proof
+- **Agent Provenance** — Agents can prove "I produced this output, at this time, unmodified"
+
+Website: https://xproof.app
+API Docs: https://xproof.app/docs
+
+## Protocols Supported
+
+| Protocol | Description |
+|----------|-------------|
+| **x402** | HTTP-native payment — no API key needed, pay per request in USDC on Base |
+| **ACP** | Agent Commerce Protocol (OpenAI + Stripe compatible) |
+| **MCP** | Model Context Protocol — JSON-RPC 2.0 at `POST /mcp` |
+| **MX-8004** | MultiversX Trustless Agents Standard — on-chain reputation |
+
+## Quick Start
+
+### 1. Certify a File (with API key)
+
+```bash
+# Get your API key at https://xproof.app (connect wallet > API Keys)
+./scripts/certify.sh path/to/file.pdf
+```
+
+### 2. Certify Without API Key (x402)
+
+```bash
+# x402 payment flow — no account needed
+FILE_HASH=$(sha256sum file.pdf | awk '{print $1}')
+
+curl -X POST https://xproof.app/api/proof \
+  -H "Content-Type: application/json" \
+  -d "{\"file_hash\": \"$FILE_HASH\", \"filename\": \"file.pdf\"}"
+
+# Returns 402 with payment requirements
+# Sign payment in USDC on Base, resend with X-PAYMENT header
+```
+
+### 3. Verify a Proof
+
+```bash
+curl -s https://xproof.app/proof/{proof_id}.json | jq .
+```
+
+### 4. Batch Certify (up to 50 files)
+
+```bash
+curl -X POST https://xproof.app/api/batch \
+  -H "Authorization: Bearer pm_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "files": [
+      {"file_hash": "abc123...", "filename": "report.pdf"},
+      {"file_hash": "def456...", "filename": "data.csv"}
+    ]
+  }'
+```
+
+## Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `XPROOF_API_KEY` | API key (format: `pm_xxx`). Get one at https://xproof.app | No (not needed with x402) |
+| `XPROOF_API_URL` | API base URL (default: `https://xproof.app`) | No |
+
+## API Reference
+
+### Certify a File
+
+```
+POST /api/proof
+Authorization: Bearer pm_xxx
+
+{
+  "file_hash": "sha256-hex-string (64 chars)",
+  "filename": "document.pdf",
+  "author_name": "Agent Name",
+  "webhook_url": "https://your-agent.example.com/webhooks/xproof"
+}
+```
+
+**Response:**
+```json
+{
+  "proof_id": "uuid",
+  "verify_url": "https://xproof.app/proof/uuid",
+  "blockchain": {
+    "transaction_hash": "abc123...",
+    "explorer_url": "https://explorer.multiversx.com/transactions/abc123..."
+  }
+}
+```
+
+### Verify a Proof
+
+```
+GET /proof/{proof_id}.json
+```
+
+Returns full proof details including file hash, timestamp, blockchain transaction, and verification status.
+
+### Batch Certify
+
+```
+POST /api/batch
+Authorization: Bearer pm_xxx
+
+{
+  "files": [
+    {"file_hash": "...", "filename": "..."},
+    {"file_hash": "...", "filename": "..."}
+  ]
+}
+```
+
+Certify up to 50 files in a single API call.
+
+### Discover Services
+
+```
+GET /api/acp/products
+```
+
+Returns available services, pricing, and capabilities. No authentication required.
+
+## How It Works
+
+1. **Hash locally** — SHA-256 hash is computed on your machine (file never leaves)
+2. **Send hash** — Only the 64-char hex hash + filename are sent to xProof
+3. **Anchor on-chain** — xProof records the hash on MultiversX blockchain
+4. **Get proof** — Receive verification URL, badge SVG, and attestation JSON
+
+## Costs
+
+- **$0.05 per certification**, paid in EGLD (with API key) or USDC on Base (with x402)
+- Free tier available for testing
+
+## Webhook Notifications
+
+xProof sends a POST to your `webhook_url` when the proof is confirmed on-chain:
+
+```json
+{
+  "event": "proof.confirmed",
+  "proof_id": "uuid",
+  "file_hash": "sha256...",
+  "verify_url": "https://xproof.app/proof/uuid",
+  "blockchain": {
+    "transaction_hash": "abc...",
+    "explorer_url": "https://explorer.multiversx.com/transactions/abc..."
+  }
+}
+```
+
+Signed with HMAC-SHA256 via `X-xProof-Signature` header.
+
+## MX-8004 Integration
+
+Every certification is automatically registered as a validated job in the MX-8004 registries, building verifiable on-chain reputation for your agent.
+
+## Verification Badge
+
+Embed a live verification badge in your README:
+
+```markdown
+[![xProof Verified](https://xproof.app/badge/{proof_id})](https://explorer.multiversx.com/transactions/{tx_hash})
+```
+
+## Links
+
+- [xProof Platform](https://xproof.app)
+- [API Documentation](https://xproof.app/docs)
+- [GitHub Action](https://github.com/marketplace/actions/xproof-certify)
+- [MCP Server](https://xproof.app/mcp) (JSON-RPC 2.0 over Streamable HTTP)
+- [OpenAPI Spec](https://xproof.app/openapi.json)
+- [MultiversX Explorer](https://explorer.multiversx.com)
