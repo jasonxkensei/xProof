@@ -3116,7 +3116,7 @@ Sitemap: ${baseUrl}/sitemap.xml
       name_for_human: "xproof",
       name_for_model: "xproof",
       description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
-      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs $0.05 per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed.",
+      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs $0.05 per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed. Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI. GitHub Action: https://github.com/marketplace/actions/xproof-certify. OpenClaw skill: https://github.com/jasonxkensei/xproof-openclaw-skill.",
       auth: {
         type: "service_http",
         authorization_type: "bearer",
@@ -3129,7 +3129,7 @@ Sitemap: ${baseUrl}/sitemap.xml
         url: `${baseUrl}/api/acp/openapi.json`,
         has_user_authentication: false
       },
-      logo_url: `${baseUrl}/favicon.ico`,
+      logo_url: `${baseUrl}/icon-512.png`,
       contact_email: "contact@xproof.app",
       legal_info_url: `${baseUrl}/learn/proof-of-existence.md`
     };
@@ -3142,7 +3142,7 @@ Sitemap: ${baseUrl}/sitemap.xml
     res.json({
       schema_version: "1.0",
       name: "xproof",
-      version: "1.0.0",
+      version: "1.2.0",
       description: "xproof — the canonical proof layer for AI agents. Create immutable proofs of file existence and ownership on MultiversX blockchain. Live MCP server available at POST /mcp (JSON-RPC 2.0 over Streamable HTTP).",
       homepage: baseUrl,
       endpoint: `${baseUrl}/mcp`,
@@ -3231,7 +3231,10 @@ Sitemap: ${baseUrl}/sitemap.xml
       integrations: {
         openclaw_skill: "https://github.com/jasonxkensei/xproof-openclaw-skill",
         github_action: "https://github.com/marketplace/actions/xproof-certify",
-        standards: ["MCP", "ACP", "x402", "MX-8004", "OpenAI Plugin"]
+        github_action_repo: "https://github.com/jasonxkensei/xProof-Action",
+        langchain: `${baseUrl}/learn/api.md`,
+        crewai: `${baseUrl}/learn/api.md`,
+        standards: ["MCP", "ACP", "x402", "MX-8004", "OpenAI Plugin", "LangChain", "CrewAI"]
       }
     });
   });
@@ -3310,6 +3313,8 @@ xproof supports x402 (HTTP 402 Payment Required) as an alternative to API key au
 xproof works with any MCP-compatible agent (Claude Code, Codex, OpenClaw, Conway Terminal) and any x402-enabled agent.
 - OpenClaw Skill: https://github.com/jasonxkensei/xproof-openclaw-skill
 - GitHub Action: https://github.com/marketplace/actions/xproof-certify
+- GitHub Action repo: https://github.com/jasonxkensei/xProof-Action
+- Main repo: https://github.com/jasonxkensei/xProof
 - Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI
 
 ## MX-8004 Integration (Trustless Agents Standard)
@@ -3663,6 +3668,8 @@ curl -X POST ${baseUrl}/api/proof \\
 xproof works with any MCP-compatible agent (Claude Code, Codex, OpenClaw, Conway Terminal) and any x402-enabled agent.
 - OpenClaw Skill: https://github.com/jasonxkensei/xproof-openclaw-skill
 - GitHub Action: https://github.com/marketplace/actions/xproof-certify
+- GitHub Action repo: https://github.com/jasonxkensei/xProof-Action
+- Main repo: https://github.com/jasonxkensei/xProof
 - Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI
 
 ## MX-8004 Integration (Trustless Agents Standard)
@@ -4071,20 +4078,32 @@ class XProofVerifyTool(BaseTool):
 
     res.json({
       name: "xproof",
-      description: "xproof — the canonical proof layer for AI agents. Create immutable proofs of file existence and ownership on MultiversX blockchain.",
+      description: "Proof primitive for AI agents & humans on MultiversX. Verifiable proofs of existence, authorship, and agent output anchored on-chain.",
       url: baseUrl,
-      version: "1.0.0",
-      capabilities: ["file-certification", "proof-verification", "blockchain-anchoring"],
+      version: "1.2.0",
+      capabilities: ["file-certification", "batch-certification", "proof-verification", "blockchain-anchoring", "webhook-notifications", "verification-badges", "mx8004-validation"],
       protocols: {
-        acp: `${baseUrl}/api/acp/products`,
-        openapi: `${baseUrl}/api/acp/openapi.json`,
         mcp: `${baseUrl}/.well-known/mcp.json`,
         mcp_endpoint: `${baseUrl}/mcp`,
+        acp: `${baseUrl}/api/acp/products`,
+        openapi: `${baseUrl}/api/acp/openapi.json`,
         openai_plugin: `${baseUrl}/.well-known/ai-plugin.json`,
-        llms_txt: `${baseUrl}/llms.txt`,
         x402: `${baseUrl}/api/proof`,
+        llms_txt: `${baseUrl}/llms.txt`,
+        llms_full: `${baseUrl}/llms-full.txt`,
+      },
+      integrations: {
+        openclaw_skill: "https://github.com/jasonxkensei/xproof-openclaw-skill",
+        github_action: "https://github.com/marketplace/actions/xproof-certify",
+        langchain: `${baseUrl}/learn/api.md`,
+        crewai: `${baseUrl}/learn/api.md`,
+      },
+      repositories: {
+        main: "https://github.com/jasonxkensei/xProof",
+        github_action: "https://github.com/jasonxkensei/xProof-Action",
         openclaw_skill: "https://github.com/jasonxkensei/xproof-openclaw-skill",
       },
+      supported_protocols: ["MCP", "ACP", "x402", "MX-8004", "OpenAI Plugin", "LangChain", "CrewAI"],
       alternative_payment: {
         protocol: "x402",
         description: "HTTP-native payments. No API key needed. Send request, get 402 with price, sign USDC payment on Base, resend with X-PAYMENT header.",
@@ -4104,12 +4123,13 @@ class XProofVerifyTool(BaseTool):
         model: "per-use",
         amount: "0.05",
         currency: "USD",
-        payment_method: "EGLD (MultiversX)",
+        payment_methods: ["EGLD (MultiversX)", "USDC (Base via x402)"],
       },
       documentation: {
         specification: `${baseUrl}/.well-known/xproof.md`,
         api_guide: `${baseUrl}/learn/api.md`,
         verification: `${baseUrl}/learn/verification.md`,
+        agents_page: `${baseUrl}/agents`,
       },
     });
   });
