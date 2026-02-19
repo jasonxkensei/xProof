@@ -35,8 +35,9 @@ npm-debug.log*
 # Build artifacts
 *.tsbuildinfo
 
-# MCP Registry token
+# MCP Registry tokens
 .mcpregistry_github_token
+.mcpregistry_registry_token
 
 # Attached assets (development only)
 attached_assets/
