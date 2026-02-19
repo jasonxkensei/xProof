@@ -231,9 +231,13 @@ Discover available xproof certification services, pricing, and capabilities. No 
 
 ## 3. PR MultiversX — Bloc technique d'intégration
 
-**Titre :** RFC: xProof as output integrity layer for MX agent validators
+**Titre :** xProof: output integrity layer built on MX-8004 — live implementation report
 
-### Integration point — Technical flow
+### Context
+
+We built xProof as a proof primitive for AI agents and humans on MultiversX. The service is live at xproof.app and implements the full MX-8004 validation lifecycle. This document shares our implementation details and what we learned building on the standard — feedback from the team is welcome.
+
+### What we built — Technical flow
 
 xProof implements the complete MX-8004 validation loop. Every certification triggers an asynchronous 5-step on-chain registration via a PostgreSQL-backed transaction queue with exponential backoff retry:
 
@@ -335,6 +339,23 @@ The transaction queue persists `currentStep` in PostgreSQL. If any step fails (n
 └─────────────────────────────────────────────────┘
 ```
 
+### What we learned building on MX-8004
+
+- The 5-step validation loop works well for certification use cases. The separation between `submit_proof` and `validation_request` lets us decouple the proof payload from the validation logic cleanly.
+- Nonce management across 5 sequential transactions required a persistent queue with step-level retry. Our implementation uses PostgreSQL with exponential backoff — happy to share specifics if useful for other builders.
+- Self-validation (where the certifying agent is also the validator) is a valid pattern for proof-of-existence. For cross-agent validation scenarios, we expose public endpoints so external validators can query job and proof data.
+- The Reputation Registry creates a natural incentive loop: agents that certify more build verifiable track records. We see this as a foundation for trust-based agent discovery.
+
+### Try it
+
+The service is live. You can test the full flow — from certification to on-chain verification — without an account using x402 (USDC on Base):
+
+```bash
+curl -X POST https://xproof.app/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"discover_services","arguments":{}}}'
+```
+
 ### Links
 
 - **Live service:** https://xproof.app
@@ -346,6 +367,8 @@ The transaction queue persists `currentStep` in PostgreSQL. If any step fails (n
 - **LLM documentation:** https://xproof.app/llms.txt
 - **MX-8004 spec:** https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md
 - **Agent explorer:** https://agents.multiversx.com
+
+We'd appreciate any feedback on our MX-8004 usage — especially around validation patterns, reputation integration, or areas where we could align more closely with the standard's direction.
 
 ---
 
