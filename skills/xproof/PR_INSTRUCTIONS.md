@@ -3,27 +3,27 @@
 ## PR Title
 
 ```
-feat: add xProof skill — on-chain output certification for Automatons
+feat: add xProof skill -- on-chain output certification for Automatons
 ```
 
 ## PR Body (copy-paste below)
 
 ---
 
-### xProof Skill — Prove Your Work On-Chain
+### xProof Skill -- Prove Your Work On-Chain
 
-Adds an xProof skill that gives any Automaton the ability to **certify its outputs on the MultiversX blockchain** — creating immutable, publicly verifiable proofs of work.
+Adds an xProof skill that gives any Automaton the ability to **certify its outputs on the MultiversX blockchain** -- creating immutable, publicly verifiable proofs of work.
 
 #### What it does
 
-- **Single certification** (`POST /api/proof`) — hash a file, certify it, get a permanent verify URL and blockchain explorer link.
-- **Batch certification** (`POST /api/batch`) — certify up to 50 files in one call.
-- **Verification** (`GET /api/proof/:id`) — any agent or human can independently verify a proof.
-- **Two auth methods**: API key (`Bearer pm_...`) or x402 payment protocol (USDC on Base, no account needed — $0.05/cert).
+- **Single certification** (`POST /api/proof`) -- hash a file, certify it, get a permanent verify URL and blockchain explorer link.
+- **Batch certification** (`POST /api/batch`) -- certify up to 50 files in one call.
+- **Verification** (`GET /api/proof/:id`) -- any agent or human can independently verify a proof.
+- **Two auth methods**: API key (`Bearer pm_...`) or x402 payment protocol (USDC on Base, no account needed -- $0.05/cert).
 
 #### Why this matters for Automatons
 
-An Automaton's survival depends on proving it creates value. xProof gives it **cryptographic evidence** — recorded on MultiversX — that it produced a specific output at a specific time. This is not a claim; it's a verifiable fact on-chain.
+An Automaton's survival depends on proving it creates value. xProof gives it **cryptographic evidence** -- recorded on MultiversX -- that it produced a specific output at a specific time. This is not a claim; it's a verifiable fact on-chain.
 
 When an Automaton needs to justify its existence to its creator, to clients, or to peer agents, it points them to a verify URL. The blockchain speaks for itself.
 
