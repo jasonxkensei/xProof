@@ -1,0 +1,120 @@
+{
+  "name": "xproof",
+  "version": "1.2.0",
+  "description": "Anchor any agent output on-chain and make it verifiable by other agents or humans. Proof primitive for AI agents on MultiversX.",
+  "author": "jasonxkensei",
+  "homepage": "https://xproof.app",
+  "repository": "https://github.com/jasonxkensei/xproof-openclaw-skill",
+  "tools": [
+    {
+      "name": "certify_file",
+      "description": "Create a blockchain certification for a file. Records the SHA-256 hash on MultiversX as immutable proof of existence and ownership. Cost: $0.05 per certification.",
+      "parameters": {
+        "type": "object",
+        "required": ["file_hash", "filename"],
+        "properties": {
+          "file_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the file (64 hex characters)",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Original filename with extension"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "Name of the certifier (default: AI Agent)"
+          },
+          "webhook_url": {
+            "type": "string",
+            "description": "HTTPS URL for on-chain confirmation callback (signed HMAC-SHA256)"
+          }
+        }
+      }
+    },
+    {
+      "name": "verify_proof",
+      "description": "Verify an existing xProof certification. Returns proof details including file hash, timestamp, blockchain transaction, and verification status.",
+      "parameters": {
+        "type": "object",
+        "required": ["proof_id"],
+        "properties": {
+          "proof_id": {
+            "type": "string",
+            "description": "UUID of the certification to verify"
+          }
+        }
+      }
+    },
+    {
+      "name": "batch_certify",
+      "description": "Certify up to 50 files in a single API call. Each file requires a SHA-256 hash and filename.",
+      "parameters": {
+        "type": "object",
+        "required": ["files"],
+        "properties": {
+          "files": {
+            "type": "array",
+            "description": "Array of files to certify (max 50)",
+            "items": {
+              "type": "object",
+              "required": ["file_hash", "filename"],
+              "properties": {
+                "file_hash": {
+                  "type": "string",
+                  "description": "SHA-256 hash of the file (64 hex characters)"
+                },
+                "filename": {
+                  "type": "string",
+                  "description": "Original filename with extension"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "get_proof",
+      "description": "Retrieve a proof in structured JSON or Markdown format. Use JSON for machine processing, Markdown for LLM consumption.",
+      "parameters": {
+        "type": "object",
+        "required": ["proof_id"],
+        "properties": {
+          "proof_id": {
+            "type": "string",
+            "description": "UUID of the certification"
+          },
+          "format": {
+            "type": "string",
+            "enum": ["json", "md"],
+            "description": "Output format: json or md (default: json)"
+          }
+        }
+      }
+    },
+    {
+      "name": "discover_services",
+      "description": "Discover available xProof certification services, pricing, and capabilities. No authentication required.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "config": {
+    "requiredEnv": [],
+    "optionalEnv": ["XPROOF_API_KEY"],
+    "baseUrl": "https://xproof.app",
+    "auth": {
+      "methods": ["bearer", "x402"],
+      "bearerPrefix": "pm_",
+      "x402": {
+        "chain": "Base (eip155:8453)",
+        "token": "USDC",
+        "cost_per_certification": "$0.05"
+      }
+    }
+  }
+}

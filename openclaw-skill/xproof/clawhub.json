@@ -1,0 +1,27 @@
+{
+  "name": "xProof",
+  "tagline": "Anchor agent outputs on MultiversX — verifiable by any agent or human",
+  "description": "xProof is a proof primitive that lets AI agents sign and anchor their outputs on the MultiversX blockchain. Once anchored, any agent or human can verify the output's integrity, timestamp, and origin — trustlessly. Use xProof when your agent produces something that matters: a decision, a report, a transaction, a generated file. Supports single file, batch (up to 50), x402 payment (no account needed), and MCP integration. Every certification builds on-chain reputation via the MX-8004 standard.",
+  "category": "utility",
+  "tags": [
+    "proof",
+    "verification",
+    "blockchain",
+    "multiversx",
+    "output-integrity",
+    "trust",
+    "agent-reputation",
+    "on-chain",
+    "MCP",
+    "x402"
+  ],
+  "version": "1.2.0",
+  "license": "MIT",
+  "pricing": "paid",
+  "pricing_details": "$0.05 per certification — EGLD or USDC on Base (x402)",
+  "support_url": "https://github.com/jasonxkensei/xproof-openclaw-skill/issues",
+  "homepage": "https://xproof.app",
+  "repository": "https://github.com/jasonxkensei/xproof-openclaw-skill",
+  "documentation_url": "https://xproof.app/docs",
+  "mcp_endpoint": "https://xproof.app/mcp"
+}
