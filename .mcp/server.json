@@ -1,12 +1,25 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.jasonxkensei/xproof",
+  "title": "xProof",
   "description": "Proof primitive for AI agents on MultiversX. Certify file existence and ownership by anchoring SHA-256 hashes on-chain. Tools: certify_file, verify_proof, get_proof, discover_services. Supports x402 payment (USDC on Base, no API key needed) and Bearer auth. $0.05 per certification.",
+  "repository": {
+    "url": "https://github.com/jasonxkensei/xProof",
+    "source": "github"
+  },
   "version": "1.2.0",
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://xproof.app/mcp"
+      "url": "https://xproof.app/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer API key (format: Bearer pm_xxx). Optional — x402 payment works without authentication.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
     }
   ]
 }
