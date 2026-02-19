@@ -97,10 +97,16 @@ This opens a browser. Go to https://github.com/login/device and enter the code s
 
 **Step 3 — Publish**
 
-From the project root (where `.mcp/server.json` is):
+The CLI looks for `server.json` in the current directory. Run from the `.mcp/` folder:
 
 ```bash
-mcp-publisher publish
+cd .mcp && mcp-publisher publish
+```
+
+Or specify the path explicitly:
+
+```bash
+mcp-publisher publish .mcp/server.json
 ```
 
 Expected output:
