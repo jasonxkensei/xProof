@@ -156,7 +156,7 @@ xProof sends a POST to your `webhook_url` when the proof is confirmed on-chain:
 
 ```json
 {
-  "event": "proof.confirmed",
+  "event": "proof.certified",
   "proof_id": "uuid",
   "file_hash": "sha256...",
   "verify_url": "https://xproof.app/proof/uuid",

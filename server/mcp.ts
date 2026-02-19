@@ -16,7 +16,7 @@ interface McpContext {
 export function createMcpServer(ctx: McpContext) {
   const server = new McpServer({
     name: "xproof",
-    version: "1.0.0",
+    version: "1.2.0",
   });
 
   const { baseUrl, auth } = ctx;
