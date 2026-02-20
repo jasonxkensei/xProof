@@ -168,12 +168,12 @@ export default function AgentsPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-2">
+          <a href="/" className="flex items-center gap-2" data-testid="link-logo-home">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
             <span className="text-xl font-bold tracking-tight">xproof</span>
-          </div>
+          </a>
           <nav className="hidden md:flex items-center gap-6">
             <a href="/#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-how-it-works">
               How it works
@@ -313,6 +313,7 @@ export default function AgentsPage() {
                   <li><a href="/#how-it-works" className="hover:text-foreground transition-colors">How it works</a></li>
                   <li><a href="/#faq" className="hover:text-foreground transition-colors">FAQ</a></li>
                   <li><a href="/agents" className="hover:text-foreground transition-colors" data-testid="link-footer-agents">For AI Agents</a></li>
+                  <li><a href="/stats" className="hover:text-foreground transition-colors" data-testid="link-footer-stats">Platform Stats</a></li>
                 </ul>
               </div>
 
