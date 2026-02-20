@@ -3278,7 +3278,10 @@ Sitemap: ${baseUrl}/sitemap.xml
 The canonical proof layer for AI agents. Immutable blockchain certification on MultiversX.
 
 ## About
-xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $${priceUsd} per certification, paid in EGLD.
+xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership.
+
+## Pricing
+Starting at $${priceUsd} per certification — price decreases as the network grows. Tiers: 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01. Current pricing and tier info: https://xproof.app/api/pricing
 
 ## API Documentation
 - [OpenAPI Specification](/api/acp/openapi.json)
@@ -3334,7 +3337,7 @@ The badge links to the MultiversX Explorer transaction for on-chain verification
 Certified agents can prove originality, timestamp, and integrity. Non-certified agents cannot.
 
 ## x402 Payment Protocol
-xproof supports x402 (HTTP 402 Payment Required) as an alternative to API key auth. Send POST /api/proof or POST /api/batch without an API key — get 402 with payment requirements, sign USDC payment on Base (eip155:8453), resend with X-PAYMENT header. Price: $${priceUsd} per certification. No account needed.
+xproof supports x402 (HTTP 402 Payment Required) as an alternative to API key auth. Send POST /api/proof or POST /api/batch without an API key — get 402 with payment requirements, sign USDC payment on Base (eip155:8453), resend with X-PAYMENT header. Starting at $${priceUsd} per certification — price decreases as the network grows. Current pricing: https://xproof.app/api/pricing. No account needed.
 
 ## Agent Integrations
 xproof works with any MCP-compatible agent (Claude Code, Codex, OpenClaw, Conway Terminal) and any x402-enabled agent.
@@ -3373,7 +3376,10 @@ Each certification follows the complete validation loop: init_job → submit_pro
 The canonical proof layer for AI agents. Immutable blockchain certification on MultiversX.
 
 ## About
-xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $${priceUsd} per certification, paid in EGLD.
+xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership.
+
+## Pricing
+Starting at $${priceUsd} per certification — price decreases as the network grows. Tiers: 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01. Current pricing and tier info: ${baseUrl}/api/pricing
 
 ## Why certify?
 Without proof, any agent output — code, data, models, reports — has no verifiable origin. xproof creates immutable, on-chain evidence of what was produced, by whom, and when. Certified agents can prove originality and integrity. Non-certified agents cannot.
@@ -3643,7 +3649,9 @@ xproof supports the x402 payment protocol as an alternative to API key authentic
 - \`POST ${baseUrl}/api/batch\` — batch certification (up to 50 files)
 
 ### Pricing
-- $${priceUsd} per certification in USDC
+- Starting at $${priceUsd} per certification in USDC — price decreases as the network grows
+- Tiers: 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01
+- Current pricing: ${baseUrl}/api/pricing
 - Network: Base (eip155:8453) for mainnet, Base Sepolia (eip155:84532) for testnet
 
 ### How it works
