@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Upload, FileText, ExternalLink, Download, Copy, LogOut, Settings as SettingsIcon } from "lucide-react";
+import { Shield, Upload, FileText, ExternalLink, Download, Copy, LogOut, Settings as SettingsIcon, Activity } from "lucide-react";
 import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { format } from "date-fns";
 import { Link } from "wouter";
@@ -17,6 +17,11 @@ export default function Dashboard() {
 
   const { data: certifications, isLoading: certsLoading } = useQuery<Certification[]>({
     queryKey: ["/api/certifications"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: authData } = useQuery<{ isAdmin?: boolean }>({
+    queryKey: ["/api/auth/me"],
     enabled: isAuthenticated,
   });
 
@@ -73,6 +78,14 @@ export default function Dashboard() {
             <span className="text-xl font-bold tracking-tight">xproof</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            {authData?.isAdmin && (
+              <Button asChild variant="ghost" size="sm" data-testid="button-admin">
+                <Link href="/admin">
+                  <Activity className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Admin</span>
+                </Link>
+              </Button>
+            )}
             <Button asChild variant="ghost" size="sm" data-testid="button-settings">
               <Link href="/settings">
                 <SettingsIcon className="h-4 w-4 sm:mr-2" />

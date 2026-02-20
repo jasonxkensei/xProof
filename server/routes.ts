@@ -163,7 +163,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
       
-      res.json(user);
+      // Check if user is admin
+      const adminWallets = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim()).filter(Boolean);
+      const isAdmin = adminWallets.includes(walletAddress || "");
+      
+      res.json({ ...user, isAdmin });
     } catch (error) {
       logger.withRequest(req).error("Failed to fetch current user");
       res.status(500).json({ message: "Failed to fetch user" });
