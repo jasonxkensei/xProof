@@ -55,3 +55,4 @@ integrations = [
 
 [userenv.shared]
 VITE_WALLETCONNECT_PROJECT_ID = "b4c11c7335da6e3e77753a17d466e4e2"
+ADMIN_WALLETS = "erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9"
