@@ -1,8 +1,14 @@
 import { Shield, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 
 export default function ConditionsUtilisation() {
+  const { data: pricing } = useQuery<{ current_price_usd: number }>({
+    queryKey: ["/api/pricing"],
+  });
+  const price = pricing ? `$${pricing.current_price_usd}` : "$0.05";
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -77,9 +83,9 @@ export default function ConditionsUtilisation() {
           <section>
             <h2 className="text-xl font-semibold mb-4">5. Pricing</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              The certification service is priced at <strong className="text-foreground">$0.05 per certification</strong>, 
+              The certification service is currently priced starting at <strong className="text-foreground">{price} per certification</strong>, 
               payable in EGLD (the native cryptocurrency of MultiversX) at the exchange rate in effect 
-              at the time of the transaction.
+              at the time of the transaction. Pricing is subject to change and may decrease as the network grows.
             </p>
             <p className="text-muted-foreground leading-relaxed">
               Blockchain network fees (gas fees) are included in this price when 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -141,6 +142,10 @@ function ProtocolCard({ item, testId }: { item: typeof protocols[0]; testId: str
 
 export default function AgentsPage() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const { data: pricing } = useQuery<{ current_price_usd: number }>({
+    queryKey: ["/api/pricing"],
+  });
+  const price = pricing ? `$${pricing.current_price_usd}` : "$0.05";
 
   const handleConnect = () => {
     setIsLoginModalOpen(true);
@@ -269,7 +274,7 @@ export default function AgentsPage() {
               Start integrating
             </h2>
             <p className="mb-8 text-lg text-muted-foreground" data-testid="text-cta-subtitle">
-              One API call. Every protocol. $0.05 per proof.
+              One API call. Every protocol. {price} per proof.
             </p>
             <Button
               asChild

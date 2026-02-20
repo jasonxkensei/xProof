@@ -3,12 +3,11 @@ import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import type { Request, Response } from "express";
 import { logger } from "./logger";
+import { getCertificationPriceUsd } from "./pricing";
 
 const X402_PAY_TO = process.env.X402_PAY_TO || "";
 const X402_NETWORK = process.env.X402_NETWORK || "eip155:8453";
 const X402_FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "https://www.x402.org/facilitator";
-const X402_PRICE_PROOF = process.env.X402_PRICE_PROOF || "$0.05";
-const X402_PRICE_BATCH = process.env.X402_PRICE_BATCH || "$0.05";
 
 let resourceServer: any = null;
 
@@ -27,8 +26,10 @@ export function isX402Configured(): boolean {
   return !!X402_PAY_TO;
 }
 
-export function getPaymentRequirements(route: "proof" | "batch") {
-  const price = route === "batch" ? X402_PRICE_BATCH : X402_PRICE_PROOF;
+export async function getPaymentRequirements(route: "proof" | "batch") {
+  const priceUsd = await getCertificationPriceUsd();
+  const envPrice = route === "batch" ? process.env.X402_PRICE_BATCH : process.env.X402_PRICE_PROOF;
+  const price = envPrice || `$${priceUsd}`;
   return {
     scheme: "exact",
     price,
@@ -41,8 +42,8 @@ export function getPaymentRequirements(route: "proof" | "batch") {
   };
 }
 
-export function build402Response(req: Request, route: "proof" | "batch") {
-  const requirements = getPaymentRequirements(route);
+export async function build402Response(req: Request, route: "proof" | "batch") {
+  const requirements = await getPaymentRequirements(route);
   const resource = `https://${req.get('host')}/api/${route === "batch" ? "batch" : "proof"}`;
 
   return {
@@ -66,7 +67,7 @@ export async function verifyX402Payment(req: Request, route: "proof" | "batch"):
 
   try {
     const server = getResourceServer();
-    const requirements = getPaymentRequirements(route);
+    const requirements = await getPaymentRequirements(route);
     const resource = `https://${req.get('host')}/api/${route === "batch" ? "batch" : "proof"}`;
 
     const paymentPayload = JSON.parse(
@@ -99,7 +100,7 @@ export async function verifyX402Payment(req: Request, route: "proof" | "batch"):
   }
 }
 
-export function send402Response(res: Response, req: Request, route: "proof" | "batch") {
-  const body = build402Response(req, route);
+export async function send402Response(res: Response, req: Request, route: "proof" | "batch") {
+  const body = await build402Response(req, route);
   res.status(402).json(body);
 }

@@ -13,7 +13,9 @@ interface McpContext {
   auth: { valid: boolean; keyHash?: string; apiKeyId?: number };
 }
 
-export function createMcpServer(ctx: McpContext) {
+export async function createMcpServer(ctx: McpContext) {
+  const currentPriceUsd = await getCertificationPriceUsd();
+  
   const server = new McpServer({
     name: "xproof",
     version: "1.2.0",
@@ -23,7 +25,7 @@ export function createMcpServer(ctx: McpContext) {
 
   server.tool(
     "certify_file",
-    "Create a blockchain certification for a file. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $0.05 per certification, paid in EGLD.",
+    `Create a blockchain certification for a file. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $${currentPriceUsd} per certification, paid in EGLD.`,
     {
       file_hash: z.string().length(64).regex(/^[a-fA-F0-9]+$/).describe("SHA-256 hash of the file (64 hex characters)"),
       filename: z.string().min(1).describe("Original filename with extension"),
@@ -216,7 +218,7 @@ export function createMcpServer(ctx: McpContext) {
     "Discover available xproof certification services, pricing, and capabilities. No authentication required.",
     {},
     async () => {
-      const priceUsd = getCertificationPriceUsd();
+      const priceUsd = await getCertificationPriceUsd();
       return {
         content: [{
           type: "text" as const,
@@ -226,7 +228,7 @@ export function createMcpServer(ctx: McpContext) {
             description: "Immutable blockchain certification on MultiversX. Anchor SHA-256 file hashes as proof of existence and ownership.",
             pricing: { amount: priceUsd.toString(), currency: "USD", payment_method: "EGLD", note: "Paid in EGLD at current exchange rate" },
             capabilities: [
-              "certify_file - Create blockchain proof ($0.05/cert)",
+              `certify_file - Create blockchain proof ($${currentPriceUsd}/cert)`,
               "verify_proof - Verify existing proof",
               "get_proof - Retrieve proof in JSON or Markdown",
             ],
@@ -279,7 +281,7 @@ export function createMcpServer(ctx: McpContext) {
               description: "Alternative to API key auth. Pay per request with USDC on Base. No account needed.",
               network: "Base (eip155:8453)",
               currency: "USDC",
-              price: "$0.05",
+              price: `$${currentPriceUsd}`,
               endpoints: { proof: `${baseUrl}/api/proof`, batch: `${baseUrl}/api/batch` },
               facilitator: "https://openx402.ai"
             },

@@ -17,7 +17,7 @@ import {
   type ACPCheckoutResponse,
   type ACPConfirmResponse,
 } from "@shared/schema";
-import { getCertificationPriceEgld, getCertificationPriceUsd } from "./pricing";
+import { getCertificationPriceEgld, getCertificationPriceUsd, getPricingInfo } from "./pricing";
 import { eq, desc, sql, and, gte, count } from "drizzle-orm";
 import { z } from "zod";
 import { getMetrics } from "./metrics";
@@ -495,6 +495,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get pricing information (public endpoint)
+  app.get("/api/pricing", async (req, res) => {
+    try {
+      const pricing = await getPricingInfo();
+      res.json({
+        protocol: "xproof",
+        version: "1.0",
+        ...pricing,
+        payment_methods: [
+          { method: "EGLD", description: "Pay in EGLD at current exchange rate on MultiversX" },
+          { method: "USDC", description: "Pay in USDC on Base via x402 protocol" },
+        ],
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to retrieve pricing information" });
+    }
+  });
+
   // xMoney payment routes
   
   // Create payment order
@@ -964,7 +982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authMethod = "x402";
         res.setHeader("X-Payment-Method", "x402");
       } else if (isX402Configured()) {
-        return send402Response(res, req, "proof");
+        return await send402Response(res, req, "proof");
       } else {
         return res.status(401).json({
           error: "UNAUTHORIZED",
@@ -1176,7 +1194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authMethod = "x402";
         res.setHeader("X-Payment-Method", "x402");
       } else if (isX402Configured()) {
-        return send402Response(res, req, "batch");
+        return await send402Response(res, req, "batch");
       } else {
         return res.status(401).json({
           error: "UNAUTHORIZED",
@@ -1305,7 +1323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ACP Products Discovery - Returns available services for AI agents
   app.get("/api/acp/products", async (req, res) => {
-    const priceUsd = getCertificationPriceUsd();
+    const priceUsd = await getCertificationPriceUsd();
     
     const products: ACPProduct[] = [
       {
@@ -1632,9 +1650,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // OpenAPI 3.0 Specification for ACP
-  app.get("/api/acp/openapi.json", (req, res) => {
+  app.get("/api/acp/openapi.json", async (req, res) => {
     const baseUrl = `https://${req.get("host")}`;
-    const priceUsd = getCertificationPriceUsd();
+    const priceUsd = await getCertificationPriceUsd();
 
     const openApiSpec = {
       openapi: "3.0.3",
@@ -1991,8 +2009,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // /.well-known/xproof.md - Canonical specification
-  app.get("/.well-known/xproof.md", (req, res) => {
+  app.get("/.well-known/xproof.md", async (req, res) => {
     const baseUrl = `https://${req.get('host')}`;
+    const priceUsd = await getCertificationPriceUsd();
     
     const spec = `# xproof Specification v1.0
 
@@ -2007,7 +2026,7 @@ xproof provides cryptographic proof of existence, authorship, and timestamp by a
 - **Name**: xproof
 - **Type**: Proof-as-a-Service
 - **Blockchain**: MultiversX (European, eco-friendly)
-- **Price**: $0.05 per certification (paid in EGLD)
+- **Price**: $${priceUsd} per certification (paid in EGLD)
 - **Website**: ${baseUrl}
 
 ## Guarantees
@@ -2151,7 +2170,7 @@ curl -X POST ${baseUrl}/api/acp/confirm \\
 
 1. **Discovery**: \`GET /api/acp/products\` - No auth required
 2. **Checkout**: \`POST /api/acp/checkout\` - Creates payment session
-3. **Sign**: User signs transaction on MultiversX ($0.05 in EGLD)
+3. **Sign**: User signs transaction on MultiversX ($${priceUsd} in EGLD)
 4. **Confirm**: \`POST /api/acp/confirm\` - Finalizes certification
 
 ### API Key
@@ -2173,7 +2192,7 @@ Use xproof when:
 xproof supports the x402 payment protocol (HTTP 402 Payment Required) as an alternative to API key authentication. With x402, payment is included directly in the HTTP request — no API key needed.
 
 - **Endpoints**: \`POST /api/proof\` and \`POST /api/batch\` accept x402 payments
-- **Price**: $0.05 per certification in USDC
+- **Price**: $${priceUsd} per certification in USDC
 - **Network**: Base (eip155:8453) for mainnet, Base Sepolia (eip155:84532) for testnet
 - **Header**: \`X-PAYMENT\` (base64-encoded signed payment payload)
 
@@ -2719,8 +2738,9 @@ You are NOT trusting:
   });
 
   // /learn/api.md
-  app.get("/learn/api.md", (req, res) => {
+  app.get("/learn/api.md", async (req, res) => {
     const baseUrl = `https://${req.get('host')}`;
+    const priceUsd = await getCertificationPriceUsd();
     
     const content = `# xproof API Documentation
 
@@ -2786,7 +2806,7 @@ Create a certification checkout session.
   "checkout_id": "uuid",
   "status": "pending_payment",
   "amount_egld": "0.00123",
-  "amount_usd": "0.05",
+  "amount_usd": "${priceUsd}",
   "recipient": "erd1...",
   "tx_payload": {
     "receiver": "erd1...",
@@ -3113,14 +3133,15 @@ Sitemap: ${baseUrl}/sitemap.xml
   });
 
   // OpenAI ChatGPT Plugin manifest (/.well-known/ai-plugin.json)
-  app.get("/.well-known/ai-plugin.json", (req, res) => {
+  app.get("/.well-known/ai-plugin.json", async (req, res) => {
     const baseUrl = `https://${req.get('host')}`;
+    const priceUsd = await getCertificationPriceUsd();
     const manifest = {
       schema_version: "v1",
       name_for_human: "xproof",
       name_for_model: "xproof",
       description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
-      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs $0.05 per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed. Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI. GitHub Action: https://github.com/marketplace/actions/xproof-certify. OpenClaw skill: https://github.com/jasonxkensei/xproof-openclaw-skill.",
+      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs $${priceUsd} per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed. Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI. GitHub Action: https://github.com/marketplace/actions/xproof-certify. OpenClaw skill: https://github.com/jasonxkensei/xproof-openclaw-skill.",
       auth: {
         type: "service_http",
         authorization_type: "bearer",
@@ -3141,8 +3162,9 @@ Sitemap: ${baseUrl}/sitemap.xml
   });
 
   // MCP (Model Context Protocol) server info endpoint
-  app.get("/.well-known/mcp.json", (req, res) => {
+  app.get("/.well-known/mcp.json", async (req, res) => {
     const baseUrl = `https://${req.get('host')}`;
+    const priceUsd = await getCertificationPriceUsd();
     res.json({
       schema_version: "1.0",
       name: "xproof",
@@ -3159,7 +3181,7 @@ Sitemap: ${baseUrl}/sitemap.xml
       tools: [
         {
           name: "certify_file",
-          description: "Create a blockchain certification for a file in a single API call via POST /api/proof. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $0.05 per certification.",
+          description: "Create a blockchain certification for a file in a single API call via POST /api/proof. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $${priceUsd} per certification.",
           inputSchema: {
             type: "object",
             required: ["file_hash", "filename"],
@@ -3218,7 +3240,7 @@ Sitemap: ${baseUrl}/sitemap.xml
         health: `${baseUrl}/api/acp/health`
       },
       pricing: {
-        amount: "0.05",
+        amount: priceUsd.toString(),
         currency: "USD",
         payment_method: "EGLD"
       },
@@ -3227,7 +3249,7 @@ Sitemap: ${baseUrl}/sitemap.xml
         description: "Alternative to API key auth. Pay per request with USDC on Base. No account needed.",
         network: "Base (eip155:8453)",
         currency: "USDC",
-        price: "$0.05",
+        price: `$${priceUsd}`,
         endpoints: [`${baseUrl}/api/proof`, `${baseUrl}/api/batch`],
         facilitator: "https://openx402.ai",
         compatible_with: ["Conway Terminal", "OpenClaw", "Any x402-enabled agent"]
@@ -3247,7 +3269,8 @@ Sitemap: ${baseUrl}/sitemap.xml
   // AI Agent Discovery Endpoints
   // ============================================
 
-  app.get("/llms.txt", (_req, res) => {
+  app.get("/llms.txt", async (_req, res) => {
+    const priceUsd = await getCertificationPriceUsd();
     const content = `# xproof
 
 > Every file an agent produces without proof is a file anyone can claim. xproof fixes that.
@@ -3255,7 +3278,7 @@ Sitemap: ${baseUrl}/sitemap.xml
 The canonical proof layer for AI agents. Immutable blockchain certification on MultiversX.
 
 ## About
-xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $0.05 per certification, paid in EGLD.
+xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $${priceUsd} per certification, paid in EGLD.
 
 ## API Documentation
 - [OpenAPI Specification](/api/acp/openapi.json)
@@ -3311,7 +3334,7 @@ The badge links to the MultiversX Explorer transaction for on-chain verification
 Certified agents can prove originality, timestamp, and integrity. Non-certified agents cannot.
 
 ## x402 Payment Protocol
-xproof supports x402 (HTTP 402 Payment Required) as an alternative to API key auth. Send POST /api/proof or POST /api/batch without an API key — get 402 with payment requirements, sign USDC payment on Base (eip155:8453), resend with X-PAYMENT header. Price: $0.05 per certification. No account needed.
+xproof supports x402 (HTTP 402 Payment Required) as an alternative to API key auth. Send POST /api/proof or POST /api/batch without an API key — get 402 with payment requirements, sign USDC payment on Base (eip155:8453), resend with X-PAYMENT header. Price: $${priceUsd} per certification. No account needed.
 
 ## Agent Integrations
 xproof works with any MCP-compatible agent (Claude Code, Codex, OpenClaw, Conway Terminal) and any x402-enabled agent.
@@ -3340,8 +3363,9 @@ Each certification follows the complete validation loop: init_job → submit_pro
     res.send(content);
   });
 
-  app.get("/llms-full.txt", (req, res) => {
+  app.get("/llms-full.txt", async (req, res) => {
     const baseUrl = `https://${req.get("host")}`;
+    const priceUsd = await getCertificationPriceUsd();
     const content = `# xproof
 
 > Every file an agent produces without proof is a file anyone can claim. xproof fixes that.
@@ -3349,7 +3373,7 @@ Each certification follows the complete validation loop: init_job → submit_pro
 The canonical proof layer for AI agents. Immutable blockchain certification on MultiversX.
 
 ## About
-xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $0.05 per certification, paid in EGLD.
+xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership. Price: $${priceUsd} per certification, paid in EGLD.
 
 ## Why certify?
 Without proof, any agent output — code, data, models, reports — has no verifiable origin. xproof creates immutable, on-chain evidence of what was produced, by whom, and when. Certified agents can prove originality and integrity. Non-certified agents cannot.
@@ -3619,7 +3643,7 @@ xproof supports the x402 payment protocol as an alternative to API key authentic
 - \`POST ${baseUrl}/api/batch\` — batch certification (up to 50 files)
 
 ### Pricing
-- $0.05 per certification in USDC
+- $${priceUsd} per certification in USDC
 - Network: Base (eip155:8453) for mainnet, Base Sepolia (eip155:84532) for testnet
 
 ### How it works
@@ -3651,7 +3675,7 @@ curl -X POST ${baseUrl}/api/proof \\
   "x402Version": 1,
   "accepts": [{
     "scheme": "exact",
-    "price": "$0.05",
+    "price": "$${priceUsd}",
     "network": "eip155:8453",
     "payTo": "0x...",
     "maxTimeoutSeconds": 60,
@@ -3726,7 +3750,8 @@ The first certification ever created on xproof:
     res.send(content);
   });
 
-  app.get("/agent-tools/langchain.py", (_req, res) => {
+  app.get("/agent-tools/langchain.py", async (_req, res) => {
+    const priceUsd = await getCertificationPriceUsd();
     const code = `"""
 xproof LangChain Tool
 Certify files on MultiversX blockchain via xproof.
@@ -3743,7 +3768,7 @@ XPROOF_BASE_URL = "https://xproof.app"
 def certify_file(file_path: str, author_name: str = "AI Agent") -> str:
     """Certify a file on the MultiversX blockchain. Creates immutable proof of existence and ownership.
     Records the SHA-256 hash of the file on-chain. The file never leaves your device.
-    Cost: $0.05 per certification, paid in EGLD.
+    Cost: $${priceUsd} per certification, paid in EGLD.
     
     Args:
         file_path: Path to the file to certify
@@ -3802,7 +3827,8 @@ def discover_xproof() -> str:
     res.send(code);
   });
 
-  app.get("/agent-tools/crewai.py", (_req, res) => {
+  app.get("/agent-tools/crewai.py", async (_req, res) => {
+    const priceUsd = await getCertificationPriceUsd();
     const code = `"""
 xproof CrewAI Tool
 Certify files on MultiversX blockchain via xproof.
@@ -3820,7 +3846,7 @@ class XProofCertifyTool(BaseTool):
     name: str = "xproof_certify"
     description: str = (
         "Certify a file on MultiversX blockchain. Creates immutable proof of existence "
-        "and ownership by recording its SHA-256 hash on-chain. Cost: $0.05 per certification. "
+        "and ownership by recording its SHA-256 hash on-chain. Cost: $${priceUsd} per certification. "
         "The file never leaves your device - only the hash is sent."
     )
 
@@ -3864,9 +3890,9 @@ class XProofVerifyTool(BaseTool):
     res.send(code);
   });
 
-  app.get("/agent-tools/openapi-actions.json", (req, res) => {
+  app.get("/agent-tools/openapi-actions.json", async (req, res) => {
     const baseUrl = `https://${req.get("host")}`;
-    const priceUsd = getCertificationPriceUsd();
+    const priceUsd = await getCertificationPriceUsd();
 
     const spec = {
       openapi: "3.0.3",
@@ -4077,8 +4103,9 @@ class XProofVerifyTool(BaseTool):
     res.json(spec);
   });
 
-  app.get("/.well-known/agent.json", (req, res) => {
+  app.get("/.well-known/agent.json", async (req, res) => {
     const baseUrl = `https://${req.get("host")}`;
+    const priceUsd = await getCertificationPriceUsd();
 
     res.json({
       name: "xproof",
@@ -4113,7 +4140,7 @@ class XProofVerifyTool(BaseTool):
         description: "HTTP-native payments. No API key needed. Send request, get 402 with price, sign USDC payment on Base, resend with X-PAYMENT header.",
         network: "Base (eip155:8453)",
         currency: "USDC",
-        price_per_certification: "$0.05",
+        price_per_certification: `$${priceUsd}`,
         endpoints: [`${baseUrl}/api/proof`, `${baseUrl}/api/batch`],
         facilitator: "https://openx402.ai",
         compatible_with: ["Conway Terminal", "OpenClaw", "Any x402-enabled agent"]
@@ -4125,7 +4152,7 @@ class XProofVerifyTool(BaseTool):
       },
       pricing: {
         model: "per-use",
-        amount: "0.05",
+        amount: priceUsd.toString(),
         currency: "USD",
         payment_methods: ["EGLD (MultiversX)", "USDC (Base via x402)"],
       },
@@ -4161,7 +4188,7 @@ class XProofVerifyTool(BaseTool):
         });
       }
 
-      const mcpServer = createMcpServer({ baseUrl, auth });
+      const mcpServer = await createMcpServer({ baseUrl, auth });
 
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,

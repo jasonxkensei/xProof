@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,10 @@ import {
 
 export default function Landing() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const { data: pricing } = useQuery<{ current_price_usd: number }>({
+    queryKey: ["/api/pricing"],
+  });
+  const price = pricing ? `$${pricing.current_price_usd}` : "$0.05";
 
   const handleConnect = () => {
     setIsLoginModalOpen(true);
@@ -103,7 +108,7 @@ export default function Landing() {
             </Button>
           </div>
           
-          <p className="mt-6 text-sm text-muted-foreground">$0.05 per certification • Unlimited</p>
+          <p className="mt-6 text-sm text-muted-foreground">{price} per certification • Unlimited</p>
         </div>
       </section>
       {/* How It Works */}
@@ -193,11 +198,12 @@ export default function Landing() {
               <CardContent className="pt-8 pb-8">
                 <div className="text-center mb-6">
                   <div className="mb-2">
-                    <span className="text-5xl font-bold">$0.05</span>
+                    <span className="text-5xl font-bold" data-testid="text-price">{price}</span>
                   </div>
                   <p className="text-muted-foreground">
                     per certification
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1">Starting at {price} — price decreases as the network grows.</p>
                 </div>
                 <ul className="mb-8 space-y-3 text-sm">
                   <li className="flex items-center gap-2">
@@ -371,7 +377,7 @@ export default function Landing() {
               Start anchoring trust
             </h2>
             <p className="mb-8 text-lg text-muted-foreground">
-              Verifiable proofs for developers, agents, and enterprises. $0.05 per proof.
+              Verifiable proofs for developers, agents, and enterprises. {price} per proof.
             </p>
             <Button 
               size="lg" 

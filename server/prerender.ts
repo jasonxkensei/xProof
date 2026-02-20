@@ -3,6 +3,7 @@ import { db } from "./db";
 import { certifications } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import { getCertificationPriceUsd } from "./pricing";
 
 const CRAWLER_USER_AGENTS = [
   "ChatGPT", "GPTBot", "Googlebot", "Bingbot", "Twitterbot",
@@ -80,9 +81,10 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function renderHomePage(baseUrl: string): string {
+async function renderHomePage(baseUrl: string): Promise<string> {
+  const priceUsd = await getCertificationPriceUsd();
   const title = "xproof — Proof primitive for AI agents & humans on MultiversX";
-  const description = "Verifiable proofs of existence, authorship, and agent output — anchored on MultiversX blockchain. API-first, x402-compatible, built for AI agents and humans. $0.05 per proof.";
+  const description = `Verifiable proofs of existence, authorship, and agent output — anchored on MultiversX blockchain. API-first, x402-compatible, built for AI agents and humans. $${priceUsd.toFixed(2)} per proof.`;
 
   return `${commonHead(title, description, baseUrl)}
 <body>
@@ -96,7 +98,7 @@ function renderHomePage(baseUrl: string): string {
   <section>
     <h1>Prove that's yours. Forever.</h1>
     <p>An irrefutable proof, recognized worldwide, impossible to falsify or delete.</p>
-    <p>$0.05 per certification - Unlimited</p>
+    <p>$${priceUsd.toFixed(2)} per certification - Unlimited</p>
     <a href="${baseUrl}/certify">Certify a file</a>
   </section>
 
@@ -121,7 +123,7 @@ function renderHomePage(baseUrl: string): string {
 
   <section>
     <h2>Simple pricing - One price. No subscription.</h2>
-    <p>$0.05 per certification. Pay only for what you use. No hidden fees, no commitment.</p>
+    <p>$${priceUsd.toFixed(2)} per certification. Pay only for what you use. No hidden fees, no commitment.</p>
     <ul>
       <li>Unlimited certifications</li>
       <li>Downloadable PDF certificate</li>
@@ -145,7 +147,7 @@ function renderHomePage(baseUrl: string): string {
 
   <section>
     <h2>Protect your first creation</h2>
-    <p>Join creators who secure their work. Only $0.05 per certification.</p>
+    <p>Join creators who secure their work. Only $${priceUsd.toFixed(2)} per certification.</p>
   </section>
 </main>
 
@@ -172,7 +174,7 @@ ${JSON.stringify({
     "@type": "Offer",
     "name": "Proof of Existence Certification",
     "description": "Verifiable proof of existence, authorship, and agent output on MultiversX blockchain",
-    "price": "0.05",
+    "price": "${priceUsd.toFixed(2)}",
     "priceCurrency": "USD"
   }
 }, null, 2)}
@@ -314,9 +316,10 @@ function renderProofNotFound(baseUrl: string): string {
 </html>`;
 }
 
-function renderAgentsPage(baseUrl: string): string {
+async function renderAgentsPage(baseUrl: string): Promise<string> {
+  const priceUsd = await getCertificationPriceUsd();
   const title = "Agent Integrations — xproof";
-  const description = "xproof works everywhere agents work. MCP, x402, ACP, MX-8004, OpenClaw, GitHub Action. One proof layer, every protocol. $0.05 per proof.";
+  const description = `xproof works everywhere agents work. MCP, x402, ACP, MX-8004, OpenClaw, GitHub Action. One proof layer, every protocol. $${priceUsd.toFixed(2)} per proof.`;
 
   return `${commonHead(title, description, `${baseUrl}/agents`)}
 <body>
@@ -337,7 +340,7 @@ function renderAgentsPage(baseUrl: string): string {
       <li>Deterministic (same input = same output)</li>
       <li>Verifiable without xproof (on-chain)</li>
       <li>Non-custodial (files never leave client)</li>
-      <li>$0.05 per certification in EGLD</li>
+      <li>$${priceUsd.toFixed(2)} per certification in EGLD</li>
     </ul>
   </section>
 
@@ -449,7 +452,7 @@ export function prerenderMiddleware() {
 
     try {
       if (path === "/" || path === "") {
-        return res.status(200).set("Content-Type", "text/html").send(renderHomePage(baseUrl));
+        return res.status(200).set("Content-Type", "text/html").send(await renderHomePage(baseUrl));
       }
 
       if (path === "/certify") {
@@ -457,7 +460,7 @@ export function prerenderMiddleware() {
       }
 
       if (path === "/agents") {
-        return res.status(200).set("Content-Type", "text/html").send(renderAgentsPage(baseUrl));
+        return res.status(200).set("Content-Type", "text/html").send(await renderAgentsPage(baseUrl));
       }
 
       const proofMatch = path.match(/^\/proof\/([^/]+)$/);
