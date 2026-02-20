@@ -4,10 +4,9 @@ import { certifications } from "@shared/schema";
 import { count } from "drizzle-orm";
 
 const PRICING_TIERS = [
-  { min: 0, max: 10000, priceUsd: 0.05 },
-  { min: 10001, max: 100000, priceUsd: 0.01 },
-  { min: 100001, max: 1000000, priceUsd: 0.005 },
-  { min: 1000001, max: Infinity, priceUsd: 0.0025 },
+  { min: 0, max: 100000, priceUsd: 0.05 },
+  { min: 100001, max: 1000000, priceUsd: 0.025 },
+  { min: 1000001, max: Infinity, priceUsd: 0.01 },
 ];
 
 let cachedPrice: { egldUsd: number; timestamp: number } | null = null;

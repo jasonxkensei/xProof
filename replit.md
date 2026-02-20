@@ -4,7 +4,7 @@
 xproof is a trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is API-first, composable, and built for both human users and autonomous agents. The project aims to provide a robust and verifiable proof system within the MultiversX ecosystem, catering to the growing needs of decentralized applications and agent-based systems.
 
 ## Recent Changes (Feb 20, 2026)
-- **Global tiered pricing**: Certification pricing is now dynamic and decreases globally as the platform grows. Tiers: 0-10K=$0.05, 10K-100K=$0.01, 100K-1M=$0.005, 1M+=$0.0025. Centralized in `server/pricing.ts` with 60s cached DB count. All endpoints, discovery docs, frontend pages, and prerender updated to use dynamic pricing.
+- **Global tiered pricing**: Certification pricing is now dynamic and decreases globally as the platform grows. Tiers: 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01. Centralized in `server/pricing.ts` with 60s cached DB count. All endpoints, discovery docs, frontend pages, and prerender updated to use dynamic pricing.
 - **Public pricing endpoint**: `GET /api/pricing` returns current price, tier info, total certifications, and all tier definitions.
 - **Admin dashboard access**: `/api/auth/me` now returns `isAdmin` boolean. Dashboard shows Admin button for wallets listed in `ADMIN_WALLETS` env var.
 
