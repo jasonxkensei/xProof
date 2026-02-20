@@ -130,7 +130,7 @@ The attestation JSON contains full provenance data:
 3. xProof anchors the hash on MultiversX blockchain
 4. Returns verification URLs, badges, and a JSON attestation file
 
-**Cost:** $0.05 per certification, paid in EGLD.
+**Cost:** Starting at $0.05 per certification — price decreases as the network grows. Current pricing: https://xproof.app/api/pricing
 
 **Get an API key:** Visit [xproof.app](https://xproof.app) and connect your wallet.
 
