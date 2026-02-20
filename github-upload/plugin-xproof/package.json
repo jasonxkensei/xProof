@@ -1,0 +1,49 @@
+{
+  "name": "@elizaos/plugin-xproof",
+  "version": "1.0.0",
+  "description": "xProof blockchain certification plugin for ElizaOS — anchor agent outputs to MultiversX with tamper-proof on-chain proof",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "tsc --noEmit"
+  },
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "XPROOF_API_KEY": {
+        "type": "string",
+        "description": "API key for xproof.app (pm_ prefix) — get one at https://xproof.app"
+      },
+      "XPROOF_BASE_URL": {
+        "type": "string",
+        "description": "Base URL for xProof API (default: https://xproof.app)"
+      }
+    }
+  },
+  "keywords": [
+    "elizaos",
+    "elizaos-plugins",
+    "blockchain",
+    "proof",
+    "certification",
+    "multiversx",
+    "agents",
+    "trust",
+    "audit",
+    "mx-8004"
+  ],
+  "author": "jasonxkensei",
+  "license": "MIT",
+  "peerDependencies": {
+    "@elizaos/core": "*"
+  },
+  "devDependencies": {
+    "@elizaos/core": "latest",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}
