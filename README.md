@@ -18,7 +18,7 @@
   <img src="https://img.shields.io/badge/protocol-x402-purple?style=flat-square" alt="x402" />
   <img src="https://img.shields.io/badge/protocol-ACP-orange?style=flat-square" alt="ACP" />
   <img src="https://img.shields.io/badge/standard-MX--8004-teal?style=flat-square" alt="MX-8004" />
-  <img src="https://img.shields.io/badge/price-$0.05%2Fcert-brightgreen?style=flat-square" alt="$0.05/cert" />
+  <img src="https://img.shields.io/badge/price-from%20%240.05%2Fcert-brightgreen?style=flat-square" alt="from $0.05/cert" />
 </p>
 
 ---
@@ -46,7 +46,15 @@ MultiversX is a European, carbon-negative blockchain with 6-second finality, neg
 
 ## Pricing
 
-**$0.05 per certification** -- pay-as-you-go. No subscriptions. No monthly fees.
+**Starting at $0.05 per certification** -- price decreases globally as the network grows. No subscriptions. No monthly fees.
+
+| Certifications | Price per cert |
+|---|---|
+| 0 -- 100,000 | $0.05 |
+| 100,001 -- 1,000,000 | $0.025 |
+| 1,000,001+ | $0.01 |
+
+Current pricing & tier info: **https://xproof.app/api/pricing**
 
 | Payment Method | Currency | Account Required |
 |---|---|---|
@@ -147,9 +155,9 @@ curl -X POST https://xproof.app/api/batch \
   -H "Authorization: Bearer pm_your_api_key" \
   -H "Content-Type: application/json" \
   -d '{
-    "files": [
-      {"file_hash": "<hash1>", "filename": "file1.txt"},
-      {"file_hash": "<hash2>", "filename": "file2.py"}
+    "files": [\
+      {"file_hash": "<hash1>", "filename": "file1.txt"},\
+      {"file_hash": "<hash2>", "filename": "file2.py"}\
     ],
     "author_name": "Agent Name"
   }'
@@ -203,7 +211,7 @@ Any agent can certify without an API key using the x402 payment protocol:
 3. Sign the payment and resend with `X-PAYMENT` header
 4. Receive the proof
 
-Cost: **$0.05 per certification**. No signup. No API key. No account.
+Starting at **$0.05 per certification** -- price decreases as the network grows. Current pricing: https://xproof.app/api/pricing. No signup. No API key. No account.
 
 ### MCP -- Model Context Protocol
 
@@ -341,6 +349,7 @@ Full documentation: [docs/api-reference.md](docs/api-reference.md)
 | `GET` | `/proof/:id` | Public | Human-readable proof page |
 | `GET` | `/api/certificates/:id.pdf` | Public | Download PDF certificate |
 | `GET` | `/badge/:id` | Public | Dynamic SVG badge |
+| `GET` | `/api/pricing` | Public | Current pricing & tier info |
 
 ### Authentication
 
@@ -364,122 +373,12 @@ Full documentation: [docs/api-reference.md](docs/api-reference.md)
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/keys` | Wallet | Generate API key |
-| `GET` | `/api/keys` | Wallet | List API keys |
-| `DELETE` | `/api/keys/:keyId` | Wallet | Revoke API key |
-
-### MCP Server
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/mcp` | API Key | JSON-RPC 2.0 (tools: `certify_file`, `verify_proof`) |
-
-### Discovery
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/.well-known/ai-plugin.json` | OpenAI plugin manifest |
-| `GET` | `/.well-known/mcp.json` | MCP manifest |
-| `GET` | `/.well-known/agent.json` | Agent Protocol manifest |
-| `GET` | `/llms.txt` | LLM-friendly summary |
-| `GET` | `/llms-full.txt` | Full LLM documentation |
-| `GET` | `/agent-tools/langchain.py` | LangChain tool definition |
-| `GET` | `/agent-tools/crewai.py` | CrewAI tool definition |
-
-### Health & Monitoring
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/acp/health` | Public | ACP health check |
-| `GET` | `/api/admin/stats` | Admin | Certification counts, API usage, queue stats |
+| `POST` | `/api/keys` | Session | Create API key |
+| `GET` | `/api/keys` | Session | List API keys |
+| `DELETE` | `/api/keys/:id` | Session | Revoke API key |
 
 ---
 
-## Tech Stack
+## License
 
-| Layer | Technology |
-|---|---|
-| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, Shadcn/ui, Wouter, TanStack Query v5 |
-| **Backend** | Node.js, Express.js, TypeScript |
-| **Database** | PostgreSQL (Neon), Drizzle ORM |
-| **Blockchain** | MultiversX SDK (sdk-core, sdk-dapp, sdk-network-providers, sdk-wallet) |
-| **Payments** | xMoney (EGLD), Stripe (fiat), x402 (USDC on Base) |
-| **Auth** | MultiversX Native Auth (cryptographic wallet signatures) |
-| **Agent Protocols** | MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI |
-| **PDF** | jsPDF with QR code generation |
-| **Monitoring** | Structured JSON logging, transaction latency percentiles, alerting |
-
----
-
-## Project Structure
-
-```
-xproof/
-  client/
-    src/
-      components/              # UI components (wallet modal, shadcn/ui)
-      lib/
-        hashFile.ts            # SHA-256 client-side hashing
-        generateProofPDF.ts    # PDF certificate generation
-        multiversxTransaction.ts  # Transaction building
-        walletAuth.ts          # Wallet authentication helpers
-      pages/
-        landing.tsx            # Homepage
-        certify.tsx            # File certification flow
-        dashboard.tsx          # User certifications history
-        proof.tsx              # Public proof verification page
-        agents.tsx             # Agent integration showcase
-        settings.tsx           # User settings & API keys
-        admin.tsx              # Admin dashboard
-  server/
-    index.ts                   # Express server entry point
-    routes.ts                  # All API routes (REST + ACP + MCP + discovery)
-    db.ts                      # Database connection (Drizzle + Neon)
-    blockchain.ts              # MultiversX blockchain interactions
-    mx8004.ts                  # MX-8004 Trustless Agents Standard
-    mcp.ts                     # MCP server implementation
-    x402.ts                    # x402 payment protocol
-    webhook.ts                 # HMAC-signed webhook delivery
-    txQueue.ts                 # Persistent transaction queue
-    txAlerts.ts                # Transaction failure alerting
-    metrics.ts                 # Blockchain latency monitoring
-    logger.ts                  # Structured JSON logging
-    certificateGenerator.ts    # Server-side PDF generation
-    nativeAuth.ts              # Native Auth token verification
-    walletAuth.ts              # Session & wallet middleware
-    pricing.ts                 # Dynamic pricing logic
-    xmoney.ts                  # xMoney payment integration
-    prerender.ts               # SEO pre-rendering for crawlers
-    reliability.ts             # Rate limiting
-  shared/
-    schema.ts                  # Database schema (Drizzle) + Zod validators + ACP types
-  github-action/               # Composite GitHub Action for CI/CD
-  openclaw-skill/              # OpenClaw ecosystem skill
-  skills/
-    xproof/                    # Conway/Automaton skill
-  docs/                        # Documentation
-```
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## Security
-
-See [SECURITY.md](SECURITY.md) for our security policy and how to report vulnerabilities.
-
-## Code of Conduct
-
-See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-
----
-
-## Legal
-
-Copyright (c) 2025-2026 xProof. All rights reserved.
-
-This software is proprietary. Unauthorized copying, modification, distribution, or use of this software, via any medium, is strictly prohibited without prior written permission from the copyright holder.
-
-For licensing inquiries, contact the repository owner.
+MIT. See [LICENSE](LICENSE).
