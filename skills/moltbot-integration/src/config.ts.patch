@@ -1,0 +1,7 @@
+// Add this block inside the CONFIG object in src/config.ts:
+
+  // xProof Certification (https://xproof.app)
+  XPROOF: {
+    BASE_URL: process.env.XPROOF_BASE_URL || 'https://xproof.app',
+    API_KEY: process.env.XPROOF_API_KEY || '',
+  },
