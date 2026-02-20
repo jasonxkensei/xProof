@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +7,6 @@ import {
   FileCheck, 
   Clock, 
   Activity, 
-  Key, 
   Webhook, 
   ArrowLeft,
   RefreshCw,
@@ -20,7 +18,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 
-interface AdminStats {
+interface PublicStats {
   certifications: {
     total: number;
     last_24h: number;
@@ -29,10 +27,6 @@ interface AdminStats {
     by_source: { api: number; user: number };
     by_status: Record<string, number>;
     daily: Array<{ date: string; count: number }>;
-  };
-  api_keys: {
-    total_active: number;
-    active_last_24h: number;
   };
   webhooks: {
     total: number;
@@ -45,8 +39,6 @@ interface AdminStats {
     avg_latency_ms: number;
     total_success: number;
     total_failed: number;
-    last_success_at: string | null;
-    last_failed_at: string | null;
   };
   generated_at: string;
 }
@@ -86,33 +78,25 @@ function StatusIndicator({ status }: { status: string }) {
 }
 
 export default function AdminDashboard() {
-  const { isAuthenticated, isLoading: authLoading } = useWalletAuth();
-
-  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<AdminStats>({
-    queryKey: ["/api/admin/stats"],
-    enabled: isAuthenticated,
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<PublicStats>({
+    queryKey: ["/api/stats"],
     refetchInterval: 30000,
   });
 
   const { data: health, isLoading: healthLoading } = useQuery<HealthData>({
     queryKey: ["/api/health"],
-    enabled: isAuthenticated,
     refetchInterval: 15000,
   });
 
-  if (authLoading || statsLoading || healthLoading) {
+  if (statsLoading || healthLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center" data-testid="admin-loading">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading admin dashboard...</p>
+          <p className="text-sm text-muted-foreground">Loading platform statistics...</p>
         </div>
       </div>
     );
-  }
-
-  if (!isAuthenticated) {
-    return null;
   }
 
   return (
@@ -120,14 +104,15 @@ export default function AdminDashboard() {
       <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-3">
-            <Link href="/dashboard">
-              <Button variant="ghost" size="icon" data-testid="button-back-dashboard">
+            <Link href="/">
+              <Button variant="ghost" size="icon" data-testid="button-back-home">
                 <ArrowLeft />
               </Button>
             </Link>
+            <Shield className="h-6 w-6 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
-              <p className="text-sm text-muted-foreground">System metrics and analytics</p>
+              <h1 className="text-2xl font-bold tracking-tight">Platform Statistics</h1>
+              <p className="text-sm text-muted-foreground">Real-time metrics for xproof.app</p>
             </div>
           </div>
           <Button variant="outline" onClick={() => refetchStats()} data-testid="button-refresh-stats">
@@ -175,12 +160,6 @@ export default function AdminDashboard() {
                 value={stats.certifications.last_7d}
                 subtitle={`${stats.certifications.last_30d} in last 30d`}
                 icon={TrendingUp}
-              />
-              <StatCard
-                title="Active API Keys"
-                value={stats.api_keys.total_active}
-                subtitle={`${stats.api_keys.active_last_24h} used in 24h`}
-                icon={Key}
               />
               <StatCard
                 title="Blockchain Latency"

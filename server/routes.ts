@@ -4234,6 +4234,101 @@ class XProofVerifyTool(BaseTool):
   });
 
   // ============================================
+  // Public Stats Endpoint (no auth required)
+  // ============================================
+  app.get("/api/stats", async (req: any, res) => {
+    try {
+      const now = new Date();
+      const h24 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const d7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const [totalRow] = await db.select({ count: count() }).from(certifications);
+      const [last24hRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, h24));
+      const [last7dRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, d7));
+      const [last30dRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, d30));
+
+      const systemUserId = "erd1acp00000000000000000000000000000000000000000000000000000agent";
+      const [systemUser] = await db.select().from(users).where(eq(users.walletAddress, systemUserId));
+      
+      let apiCerts = 0;
+      let userCerts = 0;
+      if (systemUser) {
+        const [apiRow] = await db.select({ count: count() }).from(certifications).where(eq(certifications.userId, systemUser.id));
+        apiCerts = apiRow.count;
+        userCerts = totalRow.count - apiCerts;
+      } else {
+        userCerts = totalRow.count;
+      }
+
+      const webhookStats = await db.execute(sql`
+        SELECT 
+          COUNT(*) FILTER (WHERE webhook_status = 'delivered') as delivered,
+          COUNT(*) FILTER (WHERE webhook_status = 'failed') as failed,
+          COUNT(*) FILTER (WHERE webhook_status = 'pending') as pending,
+          COUNT(*) FILTER (WHERE webhook_url IS NOT NULL) as total
+        FROM certifications
+      `);
+
+      const wh = (webhookStats.rows[0] as Record<string, string>) || {};
+      const whTotal = parseInt(wh.total || "0");
+      const whDelivered = parseInt(wh.delivered || "0");
+
+      const statusBreakdown = await db.execute(sql`
+        SELECT blockchain_status, COUNT(*) as count
+        FROM certifications
+        GROUP BY blockchain_status
+      `);
+
+      const byStatus: Record<string, number> = {};
+      for (const row of statusBreakdown.rows as Array<Record<string, string>>) {
+        byStatus[row.blockchain_status || "unknown"] = parseInt(row.count);
+      }
+
+      const dailyCerts = await db.execute(sql`
+        SELECT DATE(created_at) as day, COUNT(*) as count
+        FROM certifications
+        WHERE created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY DATE(created_at)
+        ORDER BY day DESC
+      `);
+
+      const metrics = getMetrics();
+
+      res.json({
+        certifications: {
+          total: totalRow.count,
+          last_24h: last24hRow.count,
+          last_7d: last7dRow.count,
+          last_30d: last30dRow.count,
+          by_source: { api: apiCerts, user: userCerts },
+          by_status: byStatus,
+          daily: dailyCerts.rows.map((r: any) => ({
+            date: r.day,
+            count: parseInt(r.count),
+          })),
+        },
+        webhooks: {
+          total: whTotal,
+          delivered: whDelivered,
+          failed: parseInt(wh.failed || "0"),
+          pending: parseInt(wh.pending || "0"),
+          success_rate: whTotal > 0 ? Math.round((whDelivered / whTotal) * 100) : null,
+        },
+        blockchain: {
+          avg_latency_ms: metrics.transactions.avg_latency_ms,
+          total_success: metrics.transactions.total_success,
+          total_failed: metrics.transactions.total_failed,
+        },
+        generated_at: now.toISOString(),
+      });
+    } catch (error) {
+      logger.withRequest(req).error("Public stats error");
+      res.status(500).json({ error: "Failed to generate stats" });
+    }
+  });
+
+  // ============================================
   // Admin Analytics Endpoint
   // ============================================
   function requireAdmin(req: any, res: express.Response, next: express.NextFunction) {

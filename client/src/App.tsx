@@ -44,6 +44,8 @@ function Router() {
         <Route path="/legal/privacy" component={PolitiqueConfidentialite} />
         <Route path="/legal/terms" component={ConditionsUtilisation} />
         <Route path="/agents" component={AgentsPage} />
+        <Route path="/stats" component={AdminDashboard} />
+        <Route path="/admin" component={AdminDashboard} />
         <Route>
           <Redirect to="/" />
         </Route>
@@ -57,6 +59,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/certify" component={Certify} />
       <Route path="/settings" component={Settings} />
+      <Route path="/stats" component={AdminDashboard} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/proof/:id" component={ProofPage} />
       <Route path="/legal/mentions" component={MentionsLegales} />

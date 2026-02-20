@@ -78,14 +78,12 @@ export default function Dashboard() {
             <span className="text-xl font-bold tracking-tight">xproof</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            {authData?.isAdmin && (
-              <Button asChild variant="ghost" size="sm" data-testid="button-admin">
-                <Link href="/admin">
-                  <Activity className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Admin</span>
-                </Link>
-              </Button>
-            )}
+            <Button asChild variant="ghost" size="sm" data-testid="button-stats">
+              <Link href="/stats">
+                <Activity className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Stats</span>
+              </Link>
+            </Button>
             <Button asChild variant="ghost" size="sm" data-testid="button-settings">
               <Link href="/settings">
                 <SettingsIcon className="h-4 w-4 sm:mr-2" />

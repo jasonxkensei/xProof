@@ -4,7 +4,7 @@
  * https://docs.multiversx.com/wallet/webhooks/
  */
 
-const WALLET_URL = 'https://devnet-wallet.multiversx.com';
+const WALLET_URL = 'https://wallet.multiversx.com';
 
 /**
  * Redirect user to MultiversX Web Wallet for login

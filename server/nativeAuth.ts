@@ -2,11 +2,13 @@ import { NativeAuthServer } from '@multiversx/sdk-native-auth-server';
 
 // Initialize Native Auth server for token verification
 const nativeAuthServer = new NativeAuthServer({
-  apiUrl: 'https://devnet-api.multiversx.com', // Devnet API
+  apiUrl: 'https://api.multiversx.com', // Mainnet API
   maxExpirySeconds: 86400, // 24 hours (must match client config)
   acceptedOrigins: [
     process.env.REPL_ID ? `https://${process.env.REPL_ID}.replit.dev` : 'http://localhost:5000',
     process.env.REPL_DOMAINS ? `https://${process.env.REPL_DOMAINS}` : undefined,
+    'https://xproof.app',
+    'https://www.xproof.app',
   ].filter(Boolean) as string[]
 });
 
