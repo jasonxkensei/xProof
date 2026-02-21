@@ -58,7 +58,7 @@ export default function PolitiqueConfidentialite() {
               </li>
               <li>
                 <strong className="text-foreground">Payment data:</strong> processed by 
-                our payment provider (xMoney). We never store your banking information.
+                our payment provider (Stripe). We never store your banking information.
               </li>
             </ul>
           </section>
@@ -151,7 +151,7 @@ export default function PolitiqueConfidentialite() {
                 <strong className="text-foreground">Replit, Inc.</strong> (hosting) - United States
               </li>
               <li>
-                <strong className="text-foreground">xMoney</strong> (crypto payments) - Europe
+                <strong className="text-foreground">Stripe</strong> (card payments) - Global
               </li>
               <li>
                 <strong className="text-foreground">Neon</strong> (database) - United States

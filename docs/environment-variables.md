@@ -25,15 +25,13 @@ On Replit, the `PG*` variables are auto-populated when you create a PostgreSQL d
 
 ---
 
-## xMoney (EGLD Payments)
+## Stripe (Card Payments)
 
 | Variable | Required | Description |
-|---|---|---|
-| `XMONEY_API_KEY` | Yes | xMoney API key for creating EGLD payment orders. |
-| `XMONEY_SITE_ID` | Yes | xMoney merchant site identifier. |
-| `XMONEY_WEBHOOK_SECRET` | Yes | Secret for verifying xMoney webhook signatures (HMAC SHA-256). |
+| --- | --- | --- |
+| (Managed by Replit) | - | Stripe API keys are managed via Replit's Stripe connector integration. No manual env vars needed. |
 
-Get your credentials from your [xMoney merchant dashboard](https://merchant.xmoney.com). Certifications cost $0.05, converted to EGLD at real-time market rate.
+Stripe is configured through Replit's built-in Stripe integration connector. Keys are automatically managed.
 
 ---
 
@@ -82,7 +80,4 @@ DATABASE_URL=postgresql://...
 SESSION_SECRET=<generated-secret>
 VITE_WALLETCONNECT_PROJECT_ID=<your-project-id>
 PROOFMINT_WALLET_ADDRESS=erd1...
-XMONEY_API_KEY=<your-xmoney-api-key>
-XMONEY_SITE_ID=<your-xmoney-site-id>
-XMONEY_WEBHOOK_SECRET=<your-xmoney-webhook-secret>
 ```

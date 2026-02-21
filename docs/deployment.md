@@ -6,7 +6,7 @@
 - **npm** 9 or later
 - **PostgreSQL** 14 or later (Neon recommended for managed hosting)
 - A **MultiversX wallet** with a private key for server-side transaction signing
-- **xMoney** merchant account (for EGLD payment processing)
+- **Stripe** account (for card payment processing, managed via Replit connector)
 - **WalletConnect** project ID (for mobile wallet connections)
 
 ---
@@ -94,9 +94,6 @@ Create a `.env` file in the project root (see the Environment Variables section 
 ```bash
 DATABASE_URL=postgresql://user:password@host:5432/xproof
 SESSION_SECRET=<random-64-char-string>
-XMONEY_API_KEY=<your-xmoney-api-key>
-XMONEY_SITE_ID=<your-xmoney-site-id>
-XMONEY_WEBHOOK_SECRET=<your-xmoney-webhook-secret>
 MULTIVERSX_PRIVATE_KEY=<hex-encoded-private-key>
 MULTIVERSX_SENDER_ADDRESS=erd1...
 MULTIVERSX_CHAIN_ID=1
@@ -171,9 +168,7 @@ server {
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `SESSION_SECRET` | Random string for signing session cookies (minimum 32 characters) |
-| `XMONEY_API_KEY` | xMoney API key for EGLD payment processing |
-| `XMONEY_SITE_ID` | xMoney merchant site identifier |
-| `XMONEY_WEBHOOK_SECRET` | Secret for verifying xMoney webhook signatures |
+| (Stripe) | Managed by Replit Stripe connector |
 | `MULTIVERSX_PRIVATE_KEY` | Hex-encoded ed25519 private key for server-side transaction signing |
 | `MULTIVERSX_SENDER_ADDRESS` | MultiversX wallet address corresponding to the private key (`erd1...`) |
 | `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect Cloud project ID for mobile wallet connections |
@@ -186,9 +181,6 @@ server {
 | `MULTIVERSX_CHAIN_ID` | `1` | Chain ID: `1` (mainnet), `D` (devnet), `T` (testnet) |
 | `MULTIVERSX_GATEWAY_URL` | `https://gateway.multiversx.com` | MultiversX gateway API URL |
 | `PROOFMINT_WALLET_ADDRESS` | (none) | Legacy wallet address (backward compatibility) |
-| `XMONEY_API_KEY` | (none) | xMoney merchant API key |
-| `XMONEY_SITE_ID` | (none) | xMoney site identifier |
-| `XMONEY_WEBHOOK_SECRET` | (none) | xMoney HMAC webhook signing secret |
 | `PGHOST` | (from DATABASE_URL) | PostgreSQL host |
 | `PGPORT` | (from DATABASE_URL) | PostgreSQL port |
 | `PGUSER` | (from DATABASE_URL) | PostgreSQL user |
@@ -279,7 +271,7 @@ xproof requires HTTPS in production for:
 - Secure session cookies (`secure: true`)
 - MultiversX Native Auth origin verification
 - WalletConnect relay connections
-- xMoney webhook signatures
+- Stripe webhook signatures
 
 On Replit, HTTPS is provided automatically. For self-hosted deployments, use a reverse proxy with TLS termination (see the nginx example above).
 

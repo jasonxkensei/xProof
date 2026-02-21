@@ -238,7 +238,7 @@ export default function Landing() {
               </CardContent>
             </Card>
             
-            <p className="mt-8 text-center text-sm text-muted-foreground">Payment in $EGLD when signing the transaction.</p>
+            <p className="mt-8 text-center text-sm text-muted-foreground">Payment in $EGLD, USDC, or credit card via Stripe.</p>
           </div>
         </div>
       </section>

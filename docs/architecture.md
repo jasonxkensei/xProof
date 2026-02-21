@@ -17,8 +17,8 @@ xproof is a blockchain certification service that anchors SHA-256 file hashes on
         |                           |       |
         |    +--------------+       |       |
         +--->| Web Crypto   |       |       |       +------------------+
-             | SHA-256 Hash |       |       +------>| xMoney API       |
-             +--------------+       |               | (EGLD Payments)  |
+             | SHA-256 Hash |       |       +------>| Stripe API       |
+             +--------------+       |               | (Card Payments)  |
                                     |               +------------------+
                               +-----+
                               |
@@ -128,7 +128,7 @@ client/
 - **Database:** PostgreSQL (Neon) with Drizzle ORM
 - **Session Store:** PostgreSQL-backed sessions (connect-pg-simple)
 - **Blockchain:** MultiversX SDK (sdk-core, sdk-wallet, sdk-native-auth-server)
-- **Payments:** xMoney REST API (EGLD)
+- **Payments:** Stripe (card payments)
 
 ### Directory Structure
 
@@ -143,7 +143,7 @@ server/
   nativeAuth.ts           # MultiversX Native Auth token verification
   walletAuth.ts           # Wallet session management and signature verification
   pricing.ts              # EGLD/USD pricing via CoinGecko API
-  xmoney.ts               # xMoney payment integration
+  stripeClient.ts          # Stripe payment integration
   replitAuth.ts           # Session middleware configuration
   vite.ts                 # Vite dev server integration and static file serving
 ```
@@ -195,8 +195,8 @@ Routes are organized into the following groups within `routes.ts`:
 | Blockchain | `/api/blockchain/*` | Wallet session | Account info and transaction broadcasting |
 | Proof | `/api/proof/:id` | None | Public proof verification |
 | Certificates | `/api/certificates/:id.pdf` | None | PDF certificate download |
-| Payments | `/api/xmoney/*` | Wallet session | EGLD payments via xMoney ($0.05/cert) |
-| Webhooks | `/api/webhooks/xmoney` | Signature verification | xMoney payment callbacks |
+| Payments | `/api/stripe/*` | Public | Card payments via Stripe |
+| Webhooks | `/api/stripe/webhook` | Signature verification | Stripe payment callbacks |
 | API Keys | `/api/keys` | Wallet session | API key management |
 | ACP | `/api/acp/*` | API key / None | Agent Commerce Protocol |
 | Discovery | `/.well-known/*`, `/llms.txt`, etc. | None | AI agent discovery endpoints |
@@ -407,24 +407,21 @@ Protected routes use the `isWalletAuthenticated` middleware, which checks for `r
 
 ## Payment Processing Flow
 
-### xMoney EGLD Payments
-
-Certifications cost $0.05, paid in EGLD at the real-time market rate (fetched from CoinGecko with a 5-minute cache).
+### Stripe Card Payments
 
 ```
-[1] POST /api/xmoney/create-payment
-    - Fetches current EGLD/USD rate from CoinGecko API (5-minute cache)
-    - Creates xMoney order with EGLD amount
-    - Returns payment URL for redirect
-      |
-[2] User redirected to xMoney payment page
-    - Pays in EGLD via MultiversX wallet
-      |
-[3] xMoney sends webhook to POST /api/webhooks/xmoney
-    - HMAC-SHA256 signature verification (constant-time comparison)
-    - On success: updates order status, triggers certification
-      |
-[4] GET /api/xmoney/order/:orderId polls for status (client-side fallback)
+[1] POST /api/stripe/create-checkout
+    - Creates Stripe Checkout Session with dynamic pricing
+    - Returns session URL for redirect
+
+[2] User redirected to Stripe Checkout page
+    - Completes card payment on Stripe's hosted page
+
+[3] Stripe sends webhook to POST /api/stripe/webhook
+    - stripe-replit-sync processes webhook automatically
+    - Payment confirmation handled by Stripe
+
+[4] GET /api/stripe/session/:sessionId polls for status (client-side)
 ```
 
 ---
@@ -501,7 +498,7 @@ Files never leave the user's browser. SHA-256 hashing is performed entirely clie
 
 ### Webhook Security
 
-- xMoney webhooks use HMAC-SHA256 signature verification with constant-time comparison to prevent timing attacks
+- Stripe webhooks are verified via stripe-replit-sync managed webhook processing
 - Webhook endpoints skip JSON body parsing to preserve raw payloads for signature verification
 
 ### Content Security Policy

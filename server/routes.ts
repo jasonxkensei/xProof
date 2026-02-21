@@ -23,7 +23,6 @@ import { z } from "zod";
 import { getMetrics } from "./metrics";
 import { isX402Configured, verifyX402Payment, send402Response } from "./x402";
 import { generateCertificatePDF } from "./certificateGenerator";
-import { createXMoneyOrder, getXMoneyOrderStatus, verifyXMoneyWebhook, isXMoneyConfigured } from "./xmoney";
 import { recordOnBlockchain, isMultiversXConfigured, broadcastSignedTransaction } from "./blockchain";
 import { createMcpServer, authenticateApiKey } from "./mcp";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -507,6 +506,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         payment_methods: [
           { method: "EGLD", description: "Pay in EGLD at current exchange rate on MultiversX" },
           { method: "USDC", description: "Pay in USDC on Base via x402 protocol" },
+          { method: "Card", description: "Pay by credit/debit card via Stripe" },
         ],
       });
     } catch (error) {
@@ -514,137 +514,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // xMoney payment routes
+  // ============================================
+  // Stripe Payment Routes (fiat/card payments)
+  // ============================================
   
-  // Create payment order
-  app.post("/api/xmoney/create-payment", paymentRateLimiter, isWalletAuthenticated, async (req: any, res) => {
+  app.get("/api/stripe/publishable-key", async (req, res) => {
     try {
-      if (!isXMoneyConfigured()) {
-        return res.status(503).json({ 
-          message: "xMoney payment service is not configured. Please contact support." 
-        });
-      }
-
-      const walletAddress = req.walletAddress;
-      const { amount, currency, description } = req.body;
-
-      // Validate input
-      const schema = z.object({
-        amount: z.number().positive(),
-        currency: z.string().min(3).max(3),
-        description: z.string().min(1),
-      });
-
-      const validatedData = schema.parse({ amount, currency, description });
-
-      // Get user email for payment
-      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Create xMoney order
-      const order = await createXMoneyOrder({
-        amount: validatedData.amount,
-        currency: validatedData.currency,
-        orderDescription: validatedData.description,
-        customerEmail: user.email || undefined,
-        returnUrl: `https://${req.get("host")}/payment/success`,
-        cancelUrl: `https://${req.get("host")}/payment/cancel`,
-      });
-
-      res.json(order);
+      const { getStripePublishableKeyForClient } = await import("./stripePayment");
+      const publishableKey = await getStripePublishableKeyForClient();
+      res.json({ publishableKey });
     } catch (error) {
-      logger.withRequest(req).error("Failed to create xMoney payment");
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: error.errors[0].message });
-      }
-      res.status(500).json({ 
-        message: error instanceof Error ? error.message : "Failed to create payment" 
-      });
+      logger.withRequest(req).error("Stripe not configured");
+      res.status(503).json({ error: "Stripe payments not available" });
     }
   });
 
-  // Get order status
-  app.get("/api/xmoney/order/:orderId", isWalletAuthenticated, async (req, res) => {
+  app.post("/api/stripe/create-checkout", paymentRateLimiter, async (req, res) => {
     try {
-      if (!isXMoneyConfigured()) {
-        return res.status(503).json({ 
-          message: "xMoney payment service is not configured." 
-        });
-      }
+      const { createCertificationCheckout } = await import("./stripePayment");
+      const { quantity, metadata } = req.body;
+      const host = req.get("host");
+      const protocol = req.protocol;
 
-      const { orderId } = req.params;
-      const orderStatus = await getXMoneyOrderStatus(orderId);
-      res.json(orderStatus);
-    } catch (error) {
-      logger.withRequest(req).error("Failed to fetch xMoney order status");
-      res.status(500).json({ 
-        message: error instanceof Error ? error.message : "Failed to fetch order status" 
+      const session = await createCertificationCheckout({
+        quantity: quantity || 1,
+        successUrl: `${protocol}://${host}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${protocol}://${host}/payment/cancel`,
+        metadata: metadata || {},
       });
+
+      res.json(session);
+    } catch (error: any) {
+      logger.withRequest(req).error("Failed to create Stripe checkout", { error: error.message });
+      res.status(500).json({ error: "Failed to create checkout session" });
     }
   });
 
-  // xMoney webhook
-  app.post("/api/webhooks/xmoney", express.raw({ type: "application/json" }), async (req, res) => {
+  app.get("/api/stripe/session/:sessionId", async (req, res) => {
     try {
-      const signature = req.headers["x-xmoney-signature"] as string;
-      const payload = req.body.toString();
-
-      if (!signature) {
-        return res.status(400).json({ message: "Missing webhook signature" });
-      }
-
-      // Verify webhook signature
-      if (!verifyXMoneyWebhook(payload, signature)) {
-        logger.withRequest(req).error("Invalid xMoney webhook signature");
-        return res.status(401).json({ message: "Invalid signature" });
-      }
-
-      const event = JSON.parse(payload);
-
-      // Handle different webhook events
-      switch (event.type) {
-        case "payment.succeeded": {
-          const { orderId, transactionId, amount, metadata } = event.data;
-          
-          // Update user subscription or certification status based on metadata
-          if (metadata?.userId && metadata?.plan) {
-            await db
-              .update(users)
-              .set({
-                subscriptionTier: metadata.plan,
-                subscriptionStatus: "active",
-              })
-              .where(eq(users.id, metadata.userId));
-          }
-
-          logger.withRequest(req).info("xMoney payment succeeded", { orderId, transactionId });
-          break;
-        }
-
-        case "payment.failed": {
-          const { orderId, reason } = event.data;
-          logger.withRequest(req).info("xMoney payment failed", { orderId, reason });
-          break;
-        }
-
-        case "refund.processed": {
-          const { transactionId, refundId } = event.data;
-          logger.withRequest(req).info("xMoney refund processed", { transactionId, refundId });
-          break;
-        }
-
-        default:
-          logger.withRequest(req).warn("Unhandled xMoney webhook event", { eventType: event.type });
-      }
-
-      res.json({ received: true });
-    } catch (error) {
-      logger.withRequest(req).error("xMoney webhook error");
-      res.status(400).json({ 
-        message: error instanceof Error ? error.message : "Webhook processing failed" 
+      const { getUncachableStripeClient } = await import("./stripeClient");
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(req.params.sessionId);
+      res.json({
+        status: session.payment_status,
+        amount_total: session.amount_total,
+        currency: session.currency,
+        metadata: session.metadata,
       });
+    } catch (error: any) {
+      logger.withRequest(req).error("Failed to get Stripe session", { error: error.message });
+      res.status(500).json({ error: "Failed to get session status" });
     }
   });
 
@@ -4199,7 +4118,7 @@ class XProofVerifyTool(BaseTool):
         model: "per-use",
         amount: priceUsd.toString(),
         currency: "USD",
-        payment_methods: ["EGLD (MultiversX)", "USDC (Base via x402)"],
+        payment_methods: ["EGLD (MultiversX)", "USDC (Base via x402)", "Card (Stripe)"],
       },
       documentation: {
         specification: `${baseUrl}/.well-known/xproof.md`,

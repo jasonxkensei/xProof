@@ -415,75 +415,56 @@ Download a PDF certificate for a certification.
 
 ## Payments
 
-### POST /api/xmoney/create-payment
+### GET /api/stripe/publishable-key
 
-Create an xMoney payment order for EGLD payment.
+Get Stripe publishable key for frontend initialization.
 
-**Auth:** Wallet session (required)
+**Authentication:** None
+
+**Response:**
+```json
+{
+  "publishableKey": "pk_test_..."
+}
+```
+
+### POST /api/stripe/create-checkout
+
+Create a Stripe Checkout session for certification payment.
+
+**Authentication:** None (public)
 
 **Request Body:**
+| Field | Type | Description |
+| --- | --- | --- |
+| quantity | number | Number of certifications (default: 1) |
+| metadata | object | Optional metadata (fileHash, fileName) |
 
+**Response:**
 ```json
 {
-  "certificationId": "uuid",
-  "returnUrl": "https://xproof.example.com/dashboard"
+  "sessionId": "cs_...",
+  "url": "https://checkout.stripe.com/..."
 }
 ```
 
-**Response (200):**
+### GET /api/stripe/session/:sessionId
 
+Check the status of a Stripe checkout session.
+
+**Response:**
 ```json
 {
-  "orderId": "xmoney-order-id",
-  "paymentUrl": "https://merchant.xmoney.com/pay/...",
-  "priceEgld": "1666666666666666",
-  "priceUsd": 0.05,
-  "egldUsdRate": 30.00
+  "status": "paid",
+  "amount_total": 5,
+  "currency": "usd",
+  "metadata": {}
 }
 ```
 
----
+### POST /api/stripe/webhook
 
-### GET /api/xmoney/order/:orderId
-
-Check the status of an xMoney payment order.
-
-**Auth:** Wallet session (required)
-
-**URL Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| orderId | string | xMoney order ID |
-
-**Response (200):**
-
-```json
-{
-  "orderId": "xmoney-order-id",
-  "status": "completed",
-  "amount": 0.05,
-  "currency": "USD"
-}
-```
-
----
-
-### POST /api/webhooks/xmoney
-
-xMoney webhook endpoint for payment notifications.
-
-**Auth:** HMAC-SHA256 signature verification
-
-The webhook payload signature is verified using constant-time comparison against the `XMONEY_WEBHOOK_SECRET`.
-
-**Response (200):**
-
-```json
-{
-  "received": true
-}
-```
+Stripe webhook endpoint for payment notifications. Managed automatically by stripe-replit-sync.
 
 ---
 

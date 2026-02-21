@@ -3,6 +3,9 @@
 ## Overview
 xproof is a trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is API-first, composable, and built for both human users and autonomous agents. The project aims to provide a robust and verifiable proof system within the MultiversX ecosystem, catering to the growing needs of decentralized applications and agent-based systems.
 
+## Recent Changes (Feb 21, 2026)
+- **Stripe replaces xMoney**: Replaced xMoney payment integration with Stripe for card/fiat payments. Stripe is managed via Replit's built-in connector. xMoney routes removed. Three active payment channels: EGLD (ACP), USDC on Base (x402), Card (Stripe).
+
 ## Recent Changes (Feb 20, 2026)
 - **Wallet auth fix (mainnet)**: Fixed critical bug where `server/nativeAuth.ts` pointed to DEVNET API while frontend used MAINNET. Updated to `https://api.multiversx.com` and added `xproof.app` to acceptedOrigins. Also fixed `client/src/lib/walletAuth.ts` wallet URL to mainnet.
 - **Public stats page**: Transformed `/admin` into public `/stats` page accessible without authentication. New `GET /api/stats` endpoint returns aggregate metrics (certifications, webhooks, blockchain) without sensitive data (no API keys or alert config). Dashboard "Stats" button visible to all users. `/admin` route kept for backward compatibility.
@@ -90,7 +93,7 @@ The platform offers comprehensive machine-readable documentation and endpoints f
 ## External Dependencies
 
 ### Payment Processing
-- **xMoney**: For MultiversX blockchain payments via REST API and webhooks.
+- **Stripe**: For card/fiat payments via Replit's Stripe connector integration.
 
 ### Blockchain Services
 - **MultiversX blockchain**: Core blockchain for proof-of-existence.
@@ -108,7 +111,6 @@ The platform offers comprehensive machine-readable documentation and endpoints f
 ### Environment Configuration
 - `DATABASE_URL`
 - `SESSION_SECRET`
-- `XMONEY_API_KEY`, `XMONEY_SITE_ID`, `XMONEY_WEBHOOK_SECRET`
 - `MULTIVERSX_PRIVATE_KEY`, `MULTIVERSX_SENDER_ADDRESS`, `MULTIVERSX_CHAIN_ID`, `MULTIVERSX_GATEWAY_URL`
 - `MX8004_IDENTITY_REGISTRY`, `MX8004_VALIDATION_REGISTRY`, `MX8004_REPUTATION_REGISTRY`, `MX8004_XPROOF_AGENT_NONCE`
 - `ADMIN_WALLETS`
