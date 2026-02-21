@@ -186,6 +186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create certification (unlimited, free service)
+  // Admin wallets (ADMIN_WALLETS env) are always exempt from any payment requirements
   app.post("/api/certifications", isWalletAuthenticated, async (req: any, res) => {
     try {
       const walletAddress = req.walletAddress;
@@ -899,6 +900,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   }
 
+  function isAdminWallet(walletAddress: string): boolean {
+    const adminWallets = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim()).filter(Boolean);
+    return adminWallets.includes(walletAddress);
+  }
+
+  async function getApiKeyOwnerWallet(apiKeyRecord: any): Promise<string | null> {
+    if (!apiKeyRecord?.userId) return null;
+    const [user] = await db.select().from(users).where(eq(users.id, apiKeyRecord.userId));
+    return user?.walletAddress || null;
+  }
+
   // Apply API key validation to ACP endpoints
   app.use("/api/acp", validateApiKey);
 
@@ -916,6 +928,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/proof", paymentRateLimiter, async (req, res) => {
     try {
       let authMethod: "api_key" | "x402" = "api_key";
+      let isAdminExempt = false;
       const authHeader = req.headers.authorization;
       const hasBearerToken = authHeader && authHeader.startsWith("Bearer ");
       const hasX402Payment = !!req.headers["x-payment"];
@@ -971,6 +984,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .catch((err) => logger.error("Failed to update API key stats", { error: err.message }));
 
         authMethod = "api_key";
+
+        const ownerWallet = await getApiKeyOwnerWallet(apiKey);
+        if (ownerWallet && isAdminWallet(ownerWallet)) {
+          isAdminExempt = true;
+          logger.withRequest(req).info("Admin wallet exempt from payment", { walletAddress: ownerWallet });
+        }
       } else if (hasX402Payment && isX402Configured()) {
         const x402Result = await verifyX402Payment(req, "proof");
         if (!x402Result.valid) {
@@ -1052,7 +1071,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
-      logger.withRequest(req).info("File certified", { fileHash: data.file_hash, certificationId: certification.id, txHash: result.transactionHash });
+      logger.withRequest(req).info("File certified", { fileHash: data.file_hash, certificationId: certification.id, txHash: result.transactionHash, authMethod, adminExempt: isAdminExempt });
 
       recordCertificationAsJob(
         certification.id.toString(),
@@ -1128,6 +1147,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/batch", paymentRateLimiter, async (req, res) => {
     try {
       let authMethod: "api_key" | "x402" = "api_key";
+      let isAdminExempt = false;
       const authHeader = req.headers.authorization;
       const hasBearerToken = authHeader && authHeader.startsWith("Bearer ");
       const hasX402Payment = !!req.headers["x-payment"];
@@ -1183,6 +1203,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .catch((err) => logger.error("Failed to update API key stats", { error: err.message }));
 
         authMethod = "api_key";
+
+        const ownerWallet = await getApiKeyOwnerWallet(apiKey);
+        if (ownerWallet && isAdminWallet(ownerWallet)) {
+          isAdminExempt = true;
+          logger.withRequest(req).info("Admin wallet exempt from payment (batch)", { walletAddress: ownerWallet });
+        }
       } else if (hasX402Payment && isX402Configured()) {
         const x402Result = await verifyX402Payment(req, "batch");
         if (!x402Result.valid) {
@@ -1290,7 +1316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      logger.withRequest(req).info("Batch certification completed", { batchId, created: createdCount, existing: existingCount, total: data.files.length });
+      logger.withRequest(req).info("Batch certification completed", { batchId, created: createdCount, existing: existingCount, total: data.files.length, authMethod, adminExempt: isAdminExempt });
 
       return res.status(201).json({
         batch_id: batchId,
@@ -1393,6 +1419,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Check if the API key owner is an admin wallet
+      let acpAdminExempt = false;
+      const acpApiKey = (req as any).apiKey;
+      if (acpApiKey?.userId) {
+        const ownerWallet = await getApiKeyOwnerWallet(acpApiKey);
+        if (ownerWallet && isAdminWallet(ownerWallet)) {
+          acpAdminExempt = true;
+          logger.withRequest(req).info("Admin wallet exempt from ACP payment", { walletAddress: ownerWallet });
+        }
+      }
+
       // Get current EGLD price and calculate payment
       const pricing = await getCertificationPriceEgld();
       
@@ -1422,10 +1459,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const chainId = process.env.MULTIVERSX_CHAIN_ID || "1"; // 1 = Mainnet
       
-      // xproof wallet address (receives certification fees)
-      const xproofWallet = process.env.XPROOF_WALLET_ADDRESS || process.env.PROOFMINT_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS;
+      // Receiver wallet for certification fees (admin wallet preferred)
+      const xproofWallet = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS;
       if (!xproofWallet) {
-        logger.withRequest(req).error("No XPROOF_WALLET_ADDRESS configured");
+        logger.withRequest(req).error("No receiver wallet configured");
         return res.status(500).json({
           error: "CONFIGURATION_ERROR",
           message: "xproof wallet not configured",
@@ -1435,24 +1472,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const response: ACPCheckoutResponse = {
         checkout_id: checkout.id,
         product_id: data.product_id,
-        amount: pricing.priceUsd.toFixed(2),
+        amount: acpAdminExempt ? "0.00" : pricing.priceUsd.toFixed(2),
         currency: "USD",
         status: "ready",
         execution: {
           type: "multiversx",
-          mode: "direct", // User/agent signs directly
+          mode: "direct",
           chain_id: chainId,
           tx_payload: {
             receiver: xproofWallet,
             data: dataField,
-            value: pricing.priceEgld, // Dynamic EGLD amount based on USD rate
+            value: acpAdminExempt ? "0" : pricing.priceEgld,
             gas_limit: 100000,
           },
         },
         expires_at: expiresAt.toISOString(),
       };
 
-      logger.withRequest(req).info("ACP checkout created", { checkoutId: checkout.id, priceUsd: pricing.priceUsd, priceEgld: pricing.priceEgld, egldUsdRate: pricing.egldUsdRate, fileHash: data.inputs.file_hash.slice(0, 16) });
+      logger.withRequest(req).info("ACP checkout created", { checkoutId: checkout.id, priceUsd: acpAdminExempt ? "0 (admin)" : pricing.priceUsd, priceEgld: acpAdminExempt ? "0 (admin)" : pricing.priceEgld, egldUsdRate: pricing.egldUsdRate, fileHash: data.inputs.file_hash.slice(0, 16), adminExempt: acpAdminExempt });
       
       res.status(201).json(response);
     } catch (error) {
