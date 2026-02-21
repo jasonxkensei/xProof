@@ -46,9 +46,9 @@ MultiversX is a European, carbon-negative blockchain with 6-second finality, neg
 
 ## Pricing
 
-**Starting at $0.05 per certification** -- price decreases globally as the network grows. No subscriptions. No monthly fees.
+**Starting at $0.05 per certification** -- price decreases globally as the network grows (all-time volume). No subscriptions. No monthly fees.
 
-| Certifications | Price per cert |
+| All-time certifications | Price per cert |
 |---|---|
 | 0 -- 100,000 | $0.05 |
 | 100,001 -- 1,000,000 | $0.025 |
@@ -211,7 +211,7 @@ Any agent can certify without an API key using the x402 payment protocol:
 3. Sign the payment and resend with `X-PAYMENT` header
 4. Receive the proof
 
-Starting at **$0.05 per certification** -- price decreases as the network grows. Current pricing: https://xproof.app/api/pricing. No signup. No API key. No account.
+Starting at **$0.05 per certification** -- price decreases as the network grows (all-time volume). Current pricing: https://xproof.app/api/pricing. No signup. No API key. No account.
 
 ### MCP -- Model Context Protocol
 

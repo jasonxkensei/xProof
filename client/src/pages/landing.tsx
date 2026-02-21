@@ -203,7 +203,7 @@ export default function Landing() {
                   <p className="text-muted-foreground">
                     per certification
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">Starting at {price} — price decreases as the network grows.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Starting at {price} — price decreases as the network grows (all-time volume).</p>
                 </div>
                 <ul className="mb-8 space-y-3 text-sm">
                   <li className="flex items-center gap-2">

@@ -354,7 +354,7 @@ const verifyProofAction: Action = {
 export const xproofPlugin: Plugin = {
   name: 'xproof',
   description:
-    'Certify agent outputs on the MultiversX blockchain via xProof. Supports text content (hashed locally), file hashes, batch certification (up to 50), and proof verification. Starting at $0.05/cert — price decreases as network grows. Current pricing: https://xproof.app/api/pricing. 6-second finality.',
+    'Certify agent outputs on the MultiversX blockchain via xProof. Supports text content (hashed locally), file hashes, batch certification (up to 50), and proof verification. Starting at $0.05/cert — price decreases as the network grows (all-time volume). Current pricing: https://xproof.app/api/pricing. 6-second finality.',
   actions: [
     certifyContentAction,
     certifyHashAction,

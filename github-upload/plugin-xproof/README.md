@@ -2,7 +2,7 @@
 
 Certify agent outputs on the **MultiversX blockchain** via [xProof](https://xproof.app).
 
-Anchor text, hashes, decisions, and reports with tamper-proof on-chain proof. Starting at $0.05/cert — price decreases as the network grows. 6-second finality.
+Anchor text, hashes, decisions, and reports with tamper-proof on-chain proof. Starting at $0.05/cert — price decreases as the network grows (all-time volume). 6-second finality.
 
 ## Actions
 
@@ -120,9 +120,9 @@ Verify: https://xproof.app/proof/abc123-def456
 
 ## Pricing
 
-Starting at $0.05 per certification — price decreases as the network grows.
+Starting at $0.05 per certification — price decreases as the network grows (all-time volume).
 
-| Certifications | Price per cert |
+| All-time certifications | Price per cert |
 |---|---|
 | 0 -- 100,000 | $0.05 |
 | 100,001 -- 1,000,000 | $0.025 |
