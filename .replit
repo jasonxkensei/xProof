@@ -56,5 +56,5 @@ integrations = [
 [userenv.shared]
 VITE_WALLETCONNECT_PROJECT_ID = "b4c11c7335da6e3e77753a17d466e4e2"
 ADMIN_WALLETS = "erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9"
-MULTIVERSX_SENDER_ADDRESS = "erd1v28er2cehjm7qztwmlcf4dnc6vjawl7dxqv4penk6v8rp75z0swqrxa55w"
+MULTIVERSX_SENDER_ADDRESS = "erd1u4acvvewj5qeqdtrdjhv874kymjkcmkuxme6s7tf6wjx3u99kd7ssuckcs"
 MULTIVERSX_RECEIVER_ADDRESS = "erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9"
