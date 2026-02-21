@@ -2026,7 +2026,7 @@ xproof provides cryptographic proof of existence, authorship, and timestamp by a
 - **Name**: xproof
 - **Type**: Proof-as-a-Service
 - **Blockchain**: MultiversX (European, eco-friendly)
-- **Price**: $${priceUsd} per certification (paid in EGLD)
+- **Price**: Starting at $${priceUsd} per certification (paid in EGLD or USDC via x402) — price decreases as the network grows (all-time volume)
 - **Website**: ${baseUrl}
 
 ## Guarantees
@@ -3141,7 +3141,7 @@ Sitemap: ${baseUrl}/sitemap.xml
       name_for_human: "xproof",
       name_for_model: "xproof",
       description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
-      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service costs $${priceUsd} per certification paid in EGLD cryptocurrency. Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed. Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI. GitHub Action: https://github.com/marketplace/actions/xproof-certify. OpenClaw skill: https://github.com/jasonxkensei/xproof-openclaw-skill.",
+      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service starts at $${priceUsd} per certification, paid in EGLD or USDC via x402 (all-time volume pricing). Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed. Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI. GitHub Action: https://github.com/marketplace/actions/xproof-certify. OpenClaw skill: https://github.com/jasonxkensei/xproof-openclaw-skill.",
       auth: {
         type: "service_http",
         authorization_type: "bearer",
@@ -3776,7 +3776,7 @@ XPROOF_BASE_URL = "https://xproof.app"
 def certify_file(file_path: str, author_name: str = "AI Agent") -> str:
     """Certify a file on the MultiversX blockchain. Creates immutable proof of existence and ownership.
     Records the SHA-256 hash of the file on-chain. The file never leaves your device.
-    Cost: $${priceUsd} per certification, paid in EGLD.
+    Cost: Starting at $${priceUsd} per certification, paid in EGLD or USDC via x402 (all-time volume pricing).
     
     Args:
         file_path: Path to the file to certify
