@@ -88,29 +88,6 @@ export const insertCertificationSchema = createInsertSchema(certifications).omit
 export type InsertCertification = z.infer<typeof insertCertificationSchema>;
 export type Certification = typeof certifications.$inferSelect;
 
-// Subscription tiers configuration (for reference)
-export const SUBSCRIPTION_TIERS = {
-  free: {
-    name: "Free",
-    price: 0,
-    monthlyLimit: 1,
-    features: ["1 certification per month", "xproof watermark on certificates", "Public verification page"],
-  },
-  pro: {
-    name: "Pro",
-    price: 9.99,
-    monthlyLimit: 20,
-    features: ["20 certifications per month", "No watermark", "Priority support", "Custom branding"],
-  },
-  business: {
-    name: "Business",
-    price: 39,
-    monthlyLimit: 200,
-    features: ["200 certifications per month", "No watermark", "API access", "Custom branding", "Dedicated support"],
-  },
-} as const;
-
-export type SubscriptionTier = keyof typeof SUBSCRIPTION_TIERS;
 
 // ============================================
 // ACP (Agent Commerce Protocol) Types
