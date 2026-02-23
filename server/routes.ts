@@ -3356,6 +3356,13 @@ Each certification follows the complete validation loop: init_job → submit_pro
 - Feedback: /api/mx8004/feedback/{agentNonce}/{clientAddress}/{index}
 - Spec: https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md
 - Explorer: https://agents.multiversx.com
+
+## Live Proof
+
+xProof has certified its own README on MultiversX mainnet.
+Transaction: https://explorer.multiversx.com/transactions/41f1ebd363d28de787a2328a2bc99f0b3bad2d73f91baff649ee8a6516e7cc95
+SHA-256: 285da2ed7cced35b4d039a80956a4df8907bd33f83aaac8551b6f66c31251bd1
+Date: 2026-02-23T09:49:00Z
 `;
     res.setHeader("Content-Type", "text/plain");
     res.send(content);
@@ -3748,6 +3755,13 @@ The first certification ever created on xproof:
 - Transaction: f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e
 - Explorer: https://explorer.multiversx.com/transactions/f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e
 - View: ${baseUrl}/proof/genesis
+
+## Live Proof
+
+xProof has certified its own README on MultiversX mainnet.
+Transaction: https://explorer.multiversx.com/transactions/41f1ebd363d28de787a2328a2bc99f0b3bad2d73f91baff649ee8a6516e7cc95
+SHA-256: 285da2ed7cced35b4d039a80956a4df8907bd33f83aaac8551b6f66c31251bd1
+Date: 2026-02-23T09:49:00Z
 `;
     res.setHeader("Content-Type", "text/plain");
     res.send(content);

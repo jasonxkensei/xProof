@@ -28,6 +28,20 @@
 
 ---
 
+## Live Proof
+
+The xProof README is certified on the MultiversX blockchain.
+
+- **File:** README.md
+- **SHA-256:** 285da2ed7cced35b4d039a80956a4df8907bd33f83aaac8551b6f66c31251bd1
+- **Date:** February 23, 2026 at 09:49 UTC
+- **Transaction:** [41f1ebd363d28de787a2328a2bc99f0b3bad2d73f91baff649ee8a6516e7cc95](https://explorer.multiversx.com/transactions/41f1ebd363d28de787a2328a2bc99f0b3bad2d73f91baff649ee8a6516e7cc95)
+- **Network:** MultiversX Mainnet
+
+> This is not a demo. A real payment, a real hash, a real immutable proof.
+
+---
+
 ## What is xProof?
 
 **xProof** is a trust primitive. It records SHA-256 file hashes on the [MultiversX](https://multiversx.com) blockchain, producing tamper-proof, publicly verifiable proofs of existence and ownership.
