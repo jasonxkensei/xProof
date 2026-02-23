@@ -11,10 +11,16 @@ import {
   ArrowLeft,
   RefreshCw,
   TrendingUp,
+  TrendingDown,
+  Minus,
   AlertTriangle,
   CheckCircle2,
   XCircle,
   Loader2,
+  Bot,
+  User,
+  Zap,
+  Timer,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -24,6 +30,8 @@ interface PublicStats {
     last_24h: number;
     last_7d: number;
     last_30d: number;
+    prev_7d: number;
+    last_5m: number;
     by_source: { api: number; user: number };
     by_status: Record<string, number>;
     daily: Array<{ date: string; count: number }>;
@@ -36,9 +44,10 @@ interface PublicStats {
     success_rate: number | null;
   };
   blockchain: {
-    avg_latency_ms: number;
+    avg_latency_ms: number | null;
     total_success: number;
     total_failed: number;
+    last_success_at: string | null;
   };
   generated_at: string;
 }
@@ -75,6 +84,42 @@ function StatusIndicator({ status }: { status: string }) {
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }
+}
+
+function formatTimeAgo(isoDate: string): string {
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ${mins % 60}m ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  return `${hours}h ${mins}m`;
+}
+
+function TrendIndicator({ current, previous }: { current: number; previous: number }) {
+  if (previous === 0 && current === 0) {
+    return <span className="text-xs text-muted-foreground flex items-center gap-1"><Minus className="h-3 w-3" /> No change</span>;
+  }
+  if (previous === 0 && current > 0) {
+    return <span className="text-xs text-chart-2 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> New activity</span>;
+  }
+  const change = ((current - previous) / previous) * 100;
+  if (Math.abs(change) < 1) {
+    return <span className="text-xs text-muted-foreground flex items-center gap-1"><Minus className="h-3 w-3" /> Stable</span>;
+  }
+  if (change > 0) {
+    return <span className="text-xs text-chart-2 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> +{Math.round(change)}% vs prev 7d</span>;
+  }
+  return <span className="text-xs text-destructive flex items-center gap-1"><TrendingDown className="h-3 w-3" /> {Math.round(change)}% vs prev 7d</span>;
 }
 
 export default function AdminDashboard() {
@@ -122,28 +167,57 @@ export default function AdminDashboard() {
         </div>
 
         {health && (
-          <Card className="mb-6" data-testid="card-system-health">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">System Health</CardTitle>
-              <StatusIndicator status={health.status} />
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-4">
-                {Object.entries(health.components || {}).map(([name, comp]) => (
-                  <div key={name} className="flex items-center gap-2">
-                    <StatusIndicator status={comp.status} />
-                    <span className="text-sm capitalize">{name}</span>
-                    {comp.latency_ms !== undefined && (
-                      <span className="text-xs text-muted-foreground">({comp.latency_ms}ms)</span>
-                    )}
-                  </div>
-                ))}
-                <div className="text-xs text-muted-foreground ml-auto">
-                  Uptime: {Math.floor(health.uptime_seconds / 3600)}h {Math.floor((health.uptime_seconds % 3600) / 60)}m
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+            <Card data-testid="card-system-health">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">System Health</CardTitle>
+                <StatusIndicator status={health.status} />
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-4">
+                  {Object.entries(health.components || {}).map(([name, comp]) => (
+                    <div key={name} className="flex items-center gap-2">
+                      <StatusIndicator status={comp.status} />
+                      <span className="text-sm capitalize">{name}</span>
+                      {comp.latency_ms !== undefined && (
+                        <span className="text-xs text-muted-foreground">({comp.latency_ms}ms)</span>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            <Card data-testid="card-uptime">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Uptime</CardTitle>
+                <Timer className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatUptime(health.uptime_seconds)}</div>
+                <p className="text-xs text-muted-foreground mt-1">Since last restart</p>
+              </CardContent>
+            </Card>
+
+            {stats && (
+              <Card data-testid="card-live-activity">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    Live
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-chart-2 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-chart-2" />
+                    </span>
+                  </CardTitle>
+                  <Zap className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.certifications.last_5m}</div>
+                  <p className="text-xs text-muted-foreground mt-1">Certifications in last 5 min</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         )}
 
         {stats && (
@@ -155,19 +229,55 @@ export default function AdminDashboard() {
                 subtitle={`${stats.certifications.last_24h} in last 24h`}
                 icon={FileCheck}
               />
+              <Card data-testid="stat-card-last-7-days">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Last 7 Days</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.certifications.last_7d}</div>
+                  <div className="mt-1">
+                    <TrendIndicator current={stats.certifications.last_7d} previous={stats.certifications.prev_7d} />
+                  </div>
+                </CardContent>
+              </Card>
               <StatCard
-                title="Last 7 Days"
-                value={stats.certifications.last_7d}
-                subtitle={`${stats.certifications.last_30d} in last 30d`}
-                icon={TrendingUp}
+                title="Certified by Agents"
+                value={stats.certifications.by_source.api}
+                subtitle={stats.certifications.total > 0 ? `${Math.round((stats.certifications.by_source.api / stats.certifications.total) * 100)}% of total` : "No certifications yet"}
+                icon={Bot}
               />
               <StatCard
-                title="Blockchain Latency"
-                value={stats.blockchain.avg_latency_ms > 0 ? `${stats.blockchain.avg_latency_ms}ms` : "N/A"}
-                subtitle={`${stats.blockchain.total_success} success / ${stats.blockchain.total_failed} failed`}
-                icon={Activity}
+                title="Certified by Humans"
+                value={stats.certifications.by_source.user}
+                subtitle={stats.certifications.total > 0 ? `${Math.round((stats.certifications.by_source.user / stats.certifications.total) * 100)}% of total` : "No certifications yet"}
+                icon={User}
               />
             </div>
+
+            {(stats.blockchain.avg_latency_ms !== null || stats.blockchain.last_success_at) && (
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+                <Card data-testid="stat-card-blockchain-latency">
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Blockchain Latency</CardTitle>
+                    <Activity className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {stats.blockchain.avg_latency_ms !== null ? `${stats.blockchain.avg_latency_ms}ms` : "---"}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {stats.blockchain.avg_latency_ms !== null
+                        ? `${stats.blockchain.total_success} success / ${stats.blockchain.total_failed} failed`
+                        : stats.blockchain.last_success_at
+                          ? `Last measured ${formatTimeAgo(stats.blockchain.last_success_at)}`
+                          : "No transactions recorded yet"
+                      }
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 mb-6">
               <Card data-testid="card-source-breakdown">
@@ -177,7 +287,7 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">API / Agent</span>
+                      <span className="text-sm text-muted-foreground flex items-center gap-2"><Bot className="h-4 w-4" /> API / Agent</span>
                       <span className="font-medium">{stats.certifications.by_source.api}</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
@@ -187,7 +297,7 @@ export default function AdminDashboard() {
                       />
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">User (Wallet)</span>
+                      <span className="text-sm text-muted-foreground flex items-center gap-2"><User className="h-4 w-4" /> User (Wallet)</span>
                       <span className="font-medium">{stats.certifications.by_source.user}</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">

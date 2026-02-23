@@ -4197,12 +4197,20 @@ class XProofVerifyTool(BaseTool):
 
       const metrics = getMetrics();
 
+      const m5 = new Date(now.getTime() - 5 * 60 * 1000);
+      const [recent5mRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, m5));
+
+      const d14 = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+      const [prev7dRow] = await db.select({ count: count() }).from(certifications).where(and(gte(certifications.createdAt, d14), sql`created_at < ${d7}`));
+
       res.json({
         certifications: {
           total: totalRow.count,
           last_24h: last24hRow.count,
           last_7d: last7dRow.count,
           last_30d: last30dRow.count,
+          prev_7d: prev7dRow.count,
+          last_5m: recent5mRow.count,
           by_source: { api: apiCerts, user: userCerts },
           by_status: byStatus,
           daily: dailyCerts.rows.map((r: any) => ({
@@ -4221,6 +4229,7 @@ class XProofVerifyTool(BaseTool):
           avg_latency_ms: metrics.transactions.avg_latency_ms,
           total_success: metrics.transactions.total_success,
           total_failed: metrics.transactions.total_failed,
+          last_success_at: metrics.transactions.last_success_at,
         },
         generated_at: now.toISOString(),
       });
