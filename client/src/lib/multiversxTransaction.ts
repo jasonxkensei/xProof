@@ -22,9 +22,9 @@ const RESOLVED_TTL_MS = 300_000;
 
 function cleanupResolved() {
   const now = Date.now();
-  for (const [hash, ts] of RESOLVED_TX) {
+  RESOLVED_TX.forEach((ts, hash) => {
     if (now - ts > RESOLVED_TTL_MS) RESOLVED_TX.delete(hash);
-  }
+  });
 }
 
 export function watchTransaction(txHash: string, callback: TransactionStatusCallback): () => void {
