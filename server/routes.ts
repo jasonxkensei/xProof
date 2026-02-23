@@ -227,14 +227,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use transaction from frontend (Extension Wallet signature) or fallback to server mode
       let transactionHash: string;
       let transactionUrl: string;
+      let blockchainStatus: string = "confirmed";
       
       if (data.transactionHash && data.transactionUrl) {
-        // Transaction already signed and broadcast by user's Extension Wallet
         transactionHash = data.transactionHash;
         transactionUrl = data.transactionUrl;
         logger.withRequest(req).info("Using client-signed transaction", { transactionHash });
+
+        const { verifyTransactionOnChain } = await import("./verifyTransaction");
+
+        const expectedReceiver = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS || "";
+        const ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
+        const isAdmin = ADMIN_WALLETS.includes(walletAddress.toLowerCase());
+
+        let expectedMinValue = "0";
+        if (!isAdmin) {
+          const { priceEgld } = await getCertificationPriceEgld();
+          expectedMinValue = priceEgld;
+        }
+
+        const verificationResult = await verifyTransactionOnChain(transactionHash, expectedReceiver, expectedMinValue);
+
+        if (verificationResult.error === "pending") {
+          blockchainStatus = "pending";
+          logger.withRequest(req).info("Transaction pending on-chain, creating certification with pending status", { transactionHash });
+        } else if (!verificationResult.verified) {
+          logger.withRequest(req).warn("Payment verification failed", { transactionHash, error: verificationResult.error });
+          return res.status(402).json({ message: "Payment verification failed", error: verificationResult.error });
+        } else {
+          blockchainStatus = "confirmed";
+        }
       } else {
-        // Fallback to server-side blockchain recording (simulation mode)
         const result = await recordOnBlockchain(
           data.fileHash,
           data.fileName,
@@ -257,7 +280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           authorSignature: data.authorSignature,
           transactionHash,
           transactionUrl,
-          blockchainStatus: "confirmed", // In production, this would be "pending" initially
+          blockchainStatus,
           isPublic: true,
         })
         .returning();
@@ -383,10 +406,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // Broadcast transaction to MultiversX
         const { txHash, explorerUrl } = await broadcastSignedTransaction(signedTransaction);
 
-        // Create certification record
+        const { verifyTransactionOnChain } = await import("./verifyTransaction");
+        const expectedReceiver = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS || "";
+        const BROADCAST_ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
+        const isBroadcastAdmin = BROADCAST_ADMIN_WALLETS.includes(walletAddress.toLowerCase());
+
+        let broadcastExpectedMinValue = "0";
+        if (!isBroadcastAdmin) {
+          const { priceEgld } = await getCertificationPriceEgld();
+          broadcastExpectedMinValue = priceEgld;
+        }
+
+        const broadcastVerification = await verifyTransactionOnChain(txHash, expectedReceiver, broadcastExpectedMinValue);
+        let broadcastBlockchainStatus = "pending";
+        if (broadcastVerification.verified) {
+          broadcastBlockchainStatus = "confirmed";
+        } else if (broadcastVerification.error !== "pending") {
+          logger.withRequest(req).warn("Broadcast payment verification failed", { txHash, error: broadcastVerification.error });
+          return res.status(402).json({ message: "Payment verification failed", error: broadcastVerification.error });
+        }
+
         const [certification] = await db
           .insert(certifications)
           .values({
@@ -399,7 +440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             authorSignature: validatedData.authorSignature,
             transactionHash: txHash,
             transactionUrl: explorerUrl,
-            blockchainStatus: "pending", // Will be confirmed later
+            blockchainStatus: broadcastBlockchainStatus,
             isPublic: true,
           })
           .returning();
@@ -465,6 +506,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!certification) {
         return res.status(404).json({ message: "Certificate not found" });
+      }
+
+      if (certification.blockchainStatus === "pending") {
+        return res.status(402).json({ message: "Certificate not yet available — payment is still pending blockchain confirmation" });
       }
 
       // Get user to determine subscription tier

@@ -4,6 +4,7 @@
 xproof is a trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is API-first, composable, and built for both human users and autonomous agents. The project aims to provide a robust and verifiable proof system within the MultiversX ecosystem, catering to the growing needs of decentralized applications and agent-based systems.
 
 ## Recent Changes (Feb 23, 2026)
+- **Server-side payment verification**: Added on-chain transaction verification before confirming certifications. Server now calls the MultiversX API to verify: transaction exists, status is "success", receiver is the xproof wallet, and payment value matches the certification price (2% tolerance). Both `/api/certifications` and `/api/blockchain/broadcast` routes enforce verification. PDF certificate download blocked for pending payments. Files: `server/verifyTransaction.ts`, `server/routes.ts`.
 - **Transaction confirmation notifications**: Added blockchain transaction status polling and notification system. After certifying a file, the app now polls the MultiversX API every 3s (up to 3 min) and shows a toast + visual indicator when the transaction is confirmed or fails. Uses scoped `watchTransaction()` to avoid cross-transaction interference and `notifyOnce` deduplication. Files: `client/src/lib/multiversxTransaction.ts`, `client/src/pages/certify.tsx`.
 
 ## Recent Changes (Feb 21, 2026)
