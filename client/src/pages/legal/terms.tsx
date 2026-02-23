@@ -57,7 +57,7 @@ export default function ConditionsUtilisation() {
             <h2 className="text-xl font-semibold mb-4">3. Registration and authentication</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
               Access to the service requires a connection via a compatible MultiversX wallet 
-              (xPortal, Extension, Web Wallet). The user is responsible for the security of 
+              (MultiversX DeFi Wallet Extension). The user is responsible for the security of 
               their wallet and private keys.
             </p>
             <p className="text-muted-foreground leading-relaxed">

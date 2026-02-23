@@ -362,7 +362,7 @@ export default function Landing() {
                 <AccordionContent className="text-muted-foreground">
                   The wallet is used to securely identify you and to sign 
                   your certifications. It works like an ultra-secure electronic signature. 
-                  You can use the MultiversX DeFi Wallet browser extension or the xPortal app.
+                  You can use the MultiversX DeFi Wallet browser extension.
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
