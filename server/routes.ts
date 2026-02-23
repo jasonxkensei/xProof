@@ -47,8 +47,8 @@ setInterval(() => {
   });
 }, 30000);
 
-const SKIP_VISIT_PATHS = /^\/api\/|^\/.well-known\/|^\/mcp|^\/health/;
-const SKIP_VISIT_EXT = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json|xml|txt|pdf|zip|webp|avif|mp4|webm)$/i;
+const SKIP_VISIT_PATHS = /^\/api\/|^\/.well-known\/|^\/mcp|^\/health|^\/src\/|^\/@fs\/|^\/@vite\/|^\/@id\/|^\/node_modules\//;
+const SKIP_VISIT_EXT = /\.(js|mjs|cjs|ts|tsx|jsx|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json|xml|txt|pdf|zip|webp|avif|mp4|webm)$/i;
 const AGENT_UA_PATTERNS = ["chatgpt", "gptbot", "googlebot", "bingbot", "bot", "crawler", "spider", "curl", "wget", "python-requests", "axios", "node-fetch", "httpx", "scrapy", "postmanruntime", "semrushbot", "ahrefsbot", "slurp", "duckduckbot", "baiduspider", "yandexbot"];
 
 export async function registerRoutes(app: Express): Promise<Server> {
