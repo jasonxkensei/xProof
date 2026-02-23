@@ -255,7 +255,7 @@ export default function AdminDashboard() {
               />
             </div>
 
-            {(stats.blockchain.avg_latency_ms !== null || stats.blockchain.last_success_at) && (
+            {(stats.blockchain.avg_latency_ms !== null || stats.blockchain.last_known_latency_ms !== null || stats.blockchain.last_success_at) && (
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
                 <Card data-testid="stat-card-blockchain-latency">
                   <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
@@ -264,14 +264,20 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      {stats.blockchain.avg_latency_ms !== null ? `${stats.blockchain.avg_latency_ms}ms` : "---"}
+                      {stats.blockchain.avg_latency_ms !== null
+                        ? `${stats.blockchain.avg_latency_ms}ms`
+                        : stats.blockchain.last_known_latency_ms !== null
+                          ? `${stats.blockchain.last_known_latency_ms}ms`
+                          : "No data"}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
                       {stats.blockchain.avg_latency_ms !== null
                         ? `${stats.blockchain.total_success} success / ${stats.blockchain.total_failed} failed`
-                        : stats.blockchain.last_success_at
-                          ? `Last measured ${formatTimeAgo(stats.blockchain.last_success_at)}`
-                          : "No transactions recorded yet"
+                        : stats.blockchain.last_known_latency_at
+                          ? `Last measured ${formatTimeAgo(stats.blockchain.last_known_latency_at)}`
+                          : stats.blockchain.last_success_at
+                            ? `Last tx ${formatTimeAgo(stats.blockchain.last_success_at)}`
+                            : "No transactions recorded yet"
                       }
                     </p>
                   </CardContent>

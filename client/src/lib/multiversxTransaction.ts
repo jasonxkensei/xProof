@@ -14,6 +14,8 @@ export interface TransactionParams {
   fileHash: string;
   fileName: string;
   authorName?: string;
+  receiverAddress?: string;
+  valueInAtomicUnits?: string;
 }
 
 const MAINNET_EXPLORER = "https://explorer.multiversx.com";
@@ -52,9 +54,9 @@ export async function createCertificationTransaction(params: TransactionParams):
   
   const transaction = new Transaction({
     nonce: BigInt(nonce),
-    value: BigInt(0),
+    value: BigInt(params.valueInAtomicUnits || "0"),
     sender: Address.newFromBech32(userAddress),
-    receiver: Address.newFromBech32(userAddress),
+    receiver: Address.newFromBech32(params.receiverAddress || userAddress),
     gasLimit: BigInt(gasLimit),
     gasPrice: BigInt(GAS_PRICE),
     data: dataBytes,

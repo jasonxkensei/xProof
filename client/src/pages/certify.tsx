@@ -164,13 +164,19 @@ export default function Certify() {
       let explorerUrl: string | undefined;
 
       if (isWalletConnected) {
-        setSignatureStep("Check your wallet to sign (enter the 2FA code if enabled)...");
+        setSignatureStep("Fetching certification price...");
+        const priceResponse = await fetch(`/api/certification-price?wallet=${encodeURIComponent(user.walletAddress)}`);
+        const priceData = await priceResponse.json();
+
+        setSignatureStep(`Check your wallet to sign ($${priceData.price_usd} in EGLD)...`);
         
         const txResult = await sendCertificationTransaction({
           userAddress: user.walletAddress,
           fileHash,
           fileName: file.name,
           authorName,
+          receiverAddress: priceData.receiver_address,
+          valueInAtomicUnits: priceData.price_egld,
         });
         txHash = txResult.txHash;
         explorerUrl = txResult.explorerUrl;

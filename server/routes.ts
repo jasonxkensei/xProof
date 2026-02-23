@@ -513,6 +513,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/certification-price", async (req, res) => {
+    try {
+      const wallet = (req.query.wallet as string || "").trim().toLowerCase();
+      const ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
+      const isAdmin = wallet && ADMIN_WALLETS.includes(wallet);
+
+      if (isAdmin) {
+        const receiverAddress = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS || "";
+        return res.json({
+          price_usd: 0,
+          price_egld: "0",
+          egld_usd_rate: 0,
+          receiver_address: receiverAddress,
+        });
+      }
+
+      const { priceUsd, priceEgld, egldUsdRate } = await getCertificationPriceEgld();
+      const receiverAddress = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS || "";
+
+      res.json({
+        price_usd: priceUsd,
+        price_egld: priceEgld,
+        egld_usd_rate: egldUsdRate,
+        receiver_address: receiverAddress,
+      });
+    } catch (error) {
+      logger.error("Failed to get certification price");
+      res.status(500).json({ error: "Failed to retrieve certification price" });
+    }
+  });
+
   // ============================================
   // API Keys Management Endpoints
   // ============================================
@@ -4227,6 +4258,8 @@ class XProofVerifyTool(BaseTool):
         },
         blockchain: {
           avg_latency_ms: metrics.transactions.avg_latency_ms,
+          last_known_latency_ms: metrics.transactions.last_known_latency_ms,
+          last_known_latency_at: metrics.transactions.last_known_latency_at,
           total_success: metrics.transactions.total_success,
           total_failed: metrics.transactions.total_failed,
           last_success_at: metrics.transactions.last_success_at,
@@ -4343,6 +4376,8 @@ class XProofVerifyTool(BaseTool):
         },
         blockchain: {
           avg_latency_ms: metrics.transactions.avg_latency_ms,
+          last_known_latency_ms: metrics.transactions.last_known_latency_ms,
+          last_known_latency_at: metrics.transactions.last_known_latency_at,
           total_success: metrics.transactions.total_success,
           total_failed: metrics.transactions.total_failed,
           last_success_at: metrics.transactions.last_success_at,

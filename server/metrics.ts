@@ -14,6 +14,7 @@ let totalCertifications = 0;
 let totalFailed = 0;
 let totalRetries = 0;
 let mx8004QueueSize = 0;
+let lastKnownLatency: { latencyMs: number; timestamp: number } | null = null;
 
 function pruneOldRecords(): void {
   const cutoff = Date.now() - ROLLING_WINDOW_MS;
@@ -38,6 +39,7 @@ export function recordTransaction(success: boolean, latencyMs: number, type: "ce
   recentTransactions.push({ timestamp: Date.now(), success, latencyMs, type });
   if (success) {
     totalCertifications++;
+    lastKnownLatency = { latencyMs, timestamp: Date.now() };
   } else {
     totalFailed++;
   }
@@ -100,6 +102,8 @@ export function getMetrics() {
       total_failed: totalFailed,
       total_retries: totalRetries,
       avg_latency_ms: avgLatency,
+      last_known_latency_ms: lastKnownLatency?.latencyMs ?? null,
+      last_known_latency_at: lastKnownLatency ? new Date(lastKnownLatency.timestamp).toISOString() : null,
       last_success_at: lastSuccess ? new Date(lastSuccess.timestamp).toISOString() : null,
       last_failed_at: lastFailed ? new Date(lastFailed.timestamp).toISOString() : null,
       latency_percentiles: getLatencyPercentiles(),
