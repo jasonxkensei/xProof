@@ -490,6 +490,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/proof/check", async (req, res) => {
+    try {
+      const hash = req.query.hash as string;
+      if (!hash || !/^[a-f0-9]{64}$/i.test(hash)) {
+        return res.status(400).json({ error: "Valid SHA-256 hash required" });
+      }
+
+      const [existing] = await db
+        .select()
+        .from(certifications)
+        .where(eq(certifications.fileHash, hash.toLowerCase()));
+
+      if (existing) {
+        return res.json({
+          exists: true,
+          proof_id: existing.id,
+          proof_url: `/proof/${existing.id}`,
+          certified_at: existing.createdAt,
+        });
+      }
+
+      return res.json({ exists: false });
+    } catch (error: any) {
+      logger.error("Proof check error", { error: error.message });
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get public proof (no auth required)
   app.get("/api/proof/:id", async (req, res) => {
     try {

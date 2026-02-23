@@ -211,9 +211,24 @@ export default function Certify() {
 
     setIsSigning(true);
     setTxConfirmed(false);
-    setSignatureStep("Creating the transaction...");
+    setSignatureStep("Checking if file is already certified...");
 
     try {
+      const checkRes = await fetch(`/api/proof/check?hash=${encodeURIComponent(fileHash)}`);
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData.exists) {
+          setIsSigning(false);
+          setSignatureStep("");
+          toast({
+            title: "File already certified",
+            description: "This file is already on the blockchain. No payment was made. Redirecting to existing proof...",
+          });
+          setLocation(checkData.proof_url);
+          return;
+        }
+      }
+
       let txHash: string | undefined;
       let explorerUrl: string | undefined;
 
@@ -275,11 +290,34 @@ export default function Certify() {
       });
     } catch (error: any) {
       console.error("Certification error:", error);
-      toast({
-        title: "Certification failed",
-        description: error.message || "An error occurred during certification",
-        variant: "destructive",
-      });
+
+      if (error.status === 409 || error.message?.includes("already been certified")) {
+        try {
+          const checkRes = await fetch(`/api/proof/check?hash=${encodeURIComponent(fileHash)}`);
+          if (checkRes.ok) {
+            const checkData = await checkRes.json();
+            if (checkData.exists) {
+              toast({
+                title: "File already certified",
+                description: "This file is already on the blockchain. Redirecting to existing proof...",
+              });
+              setLocation(checkData.proof_url);
+              return;
+            }
+          }
+        } catch {}
+        toast({
+          title: "File already certified",
+          description: "This file is already on the blockchain.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Certification failed",
+          description: error.message || "An error occurred during certification",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsSigning(false);
       setSignatureStep("");
