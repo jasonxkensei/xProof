@@ -86,7 +86,7 @@ function StatCard({ title, value, subtitle, icon: Icon }: { title: string; value
 function StatusIndicator({ status }: { status: string }) {
   switch (status) {
     case "ok":
-      return <Badge variant="default"><CheckCircle2 className="h-3 w-3 mr-1" /> OK</Badge>;
+      return <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/25"><CheckCircle2 className="h-3 w-3 mr-1" /> OK</Badge>;
     case "degraded":
       return <Badge variant="secondary"><AlertTriangle className="h-3 w-3 mr-1" /> Degraded</Badge>;
     case "down":
