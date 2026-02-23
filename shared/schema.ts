@@ -3,6 +3,7 @@ import {
   index,
   jsonb,
   pgTable,
+  serial,
   timestamp,
   varchar,
   text,
@@ -229,3 +230,12 @@ export const txQueue = pgTable("tx_queue", {
 
 export type TxQueueItem = typeof txQueue.$inferSelect;
 export type InsertTxQueueItem = typeof txQueue.$inferInsert;
+
+export const visits = pgTable("visits", {
+  id: serial("id").primaryKey(),
+  ipHash: varchar("ip_hash", { length: 64 }).notNull(),
+  userAgent: text("user_agent"),
+  isAgent: boolean("is_agent").default(false).notNull(),
+  path: varchar("path", { length: 512 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});

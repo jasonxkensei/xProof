@@ -11,6 +11,7 @@ import {
   acpCheckouts,
   apiKeys,
   txQueue as txQueueTable,
+  visits,
   acpCheckoutRequestSchema,
   acpConfirmRequestSchema,
   type ACPProduct,
@@ -38,9 +39,39 @@ import { authRateLimiter, paymentRateLimiter, apiKeyCreationRateLimiter } from "
 import { recordCertificationAsJob, isMX8004Configured, getReputationScore, getAgentDetails, getContractAddresses, getJobData, getValidationStatus, hasGivenFeedback, getAgentResponse, readFeedback, getAgentsExplorerUrl } from "./mx8004";
 import { getTxQueueStats } from "./txQueue";
 
+const recentVisits = new Map<string, number>();
+setInterval(() => {
+  const now = Date.now();
+  recentVisits.forEach((ts, key) => {
+    if (now - ts > 60000) recentVisits.delete(key);
+  });
+}, 30000);
+
+const SKIP_VISIT_PATHS = /^\/api\/|^\/.well-known\/|^\/mcp|^\/health/;
+const SKIP_VISIT_EXT = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json|xml|txt|pdf|zip|webp|avif|mp4|webm)$/i;
+const AGENT_UA_PATTERNS = ["chatgpt", "gptbot", "googlebot", "bingbot", "bot", "crawler", "spider", "curl", "wget", "python-requests", "axios", "node-fetch", "httpx", "scrapy", "postmanruntime", "semrushbot", "ahrefsbot", "slurp", "duckduckbot", "baiduspider", "yandexbot"];
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply session middleware
   app.use(getSession());
+
+  app.use((req, res, next) => {
+    next();
+    const path = req.path;
+    if (SKIP_VISIT_PATHS.test(path) || SKIP_VISIT_EXT.test(path)) return;
+
+    const ip = req.ip || req.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
+    const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
+    const dedupeKey = `${ipHash}:${path}`;
+    const now = Date.now();
+    if (recentVisits.has(dedupeKey) && now - recentVisits.get(dedupeKey)! < 60000) return;
+    recentVisits.set(dedupeKey, now);
+
+    const ua = (req.get("user-agent") || "").toLowerCase();
+    const isAgent = AGENT_UA_PATTERNS.some(p => ua.includes(p));
+
+    db.insert(visits).values({ ipHash, userAgent: req.get("user-agent") || null, isAgent, path }).catch(() => {});
+  });
   
   // DEPRECATED: Legacy endpoint - SECURITY VULNERABILITY
   // This endpoint allows wallet impersonation (accepts any wallet address without signature)
@@ -4356,6 +4387,11 @@ class XProofVerifyTool(BaseTool):
       const d14 = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
       const [prev7dRow] = await db.select({ count: count() }).from(certifications).where(and(gte(certifications.createdAt, d14), sql`created_at < ${d7}`));
 
+      const [totalVisitsRow] = await db.select({ count: count() }).from(visits);
+      const [uniqueIpsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits);
+      const [humanVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, false));
+      const [agentVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, true));
+
       res.json({
         certifications: {
           total: totalRow.count,
@@ -4385,6 +4421,12 @@ class XProofVerifyTool(BaseTool):
           total_success: metrics.transactions.total_success,
           total_failed: metrics.transactions.total_failed,
           last_success_at: metrics.transactions.last_success_at,
+        },
+        traffic: {
+          total_visits: totalVisitsRow.count,
+          unique_ips: Number(uniqueIpsRow.count) || 0,
+          human_visitors: Number(humanVisitsRow.count) || 0,
+          agent_visitors: Number(agentVisitsRow.count) || 0,
         },
         generated_at: now.toISOString(),
       });

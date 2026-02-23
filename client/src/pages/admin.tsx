@@ -21,6 +21,8 @@ import {
   User,
   Zap,
   Timer,
+  Eye,
+  Globe,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -50,6 +52,12 @@ interface PublicStats {
     total_success: number;
     total_failed: number;
     last_success_at: string | null;
+  };
+  traffic?: {
+    total_visits: number;
+    unique_ips: number;
+    human_visitors: number;
+    agent_visitors: number;
   };
   generated_at: string;
 }
@@ -256,6 +264,53 @@ export default function AdminDashboard() {
                 icon={User}
               />
             </div>
+
+            {stats?.traffic && (
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+                <StatCard
+                  title="Total Visits"
+                  value={stats.traffic.total_visits}
+                  subtitle="All page views"
+                  icon={Eye}
+                />
+                <StatCard
+                  title="Unique IPs"
+                  value={stats.traffic.unique_ips}
+                  subtitle={`${stats.traffic.human_visitors} humans, ${stats.traffic.agent_visitors} agents`}
+                  icon={Globe}
+                />
+                <Card data-testid="stat-card-visitor-breakdown">
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Visitors</CardTitle>
+                    <User className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground flex items-center gap-2"><User className="h-3 w-3" /> Humans</span>
+                        <span className="font-medium">{stats.traffic.human_visitors}</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div
+                          className="bg-chart-2 h-2 rounded-full transition-all"
+                          style={{ width: `${stats.traffic.unique_ips > 0 ? (stats.traffic.human_visitors / stats.traffic.unique_ips) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground flex items-center gap-2"><Bot className="h-3 w-3" /> Agents</span>
+                        <span className="font-medium">{stats.traffic.agent_visitors}</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div
+                          className="bg-primary h-2 rounded-full transition-all"
+                          style={{ width: `${stats.traffic.unique_ips > 0 ? (stats.traffic.agent_visitors / stats.traffic.unique_ips) * 100 : 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {(stats.blockchain.avg_latency_ms !== null || stats.blockchain.last_known_latency_ms !== null || stats.blockchain.last_success_at) && (
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
