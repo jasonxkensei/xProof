@@ -9,6 +9,87 @@ export interface MultiversXTransactionResult {
   explorerUrl: string;
 }
 
+export type TransactionStatusCallback = (status: 'success' | 'failed', txHash: string) => void;
+
+interface TxWatcher {
+  callback: TransactionStatusCallback;
+  txHash: string;
+}
+
+const TX_WATCHERS: TxWatcher[] = [];
+const RESOLVED_TX = new Map<string, number>();
+const RESOLVED_TTL_MS = 300_000;
+
+function cleanupResolved() {
+  const now = Date.now();
+  for (const [hash, ts] of RESOLVED_TX) {
+    if (now - ts > RESOLVED_TTL_MS) RESOLVED_TX.delete(hash);
+  }
+}
+
+export function watchTransaction(txHash: string, callback: TransactionStatusCallback): () => void {
+  const watcher: TxWatcher = { callback, txHash };
+  TX_WATCHERS.push(watcher);
+  return () => {
+    const idx = TX_WATCHERS.indexOf(watcher);
+    if (idx >= 0) TX_WATCHERS.splice(idx, 1);
+  };
+}
+
+function notifyWatchers(status: 'success' | 'failed', txHash: string) {
+  TX_WATCHERS.forEach(w => {
+    if (w.txHash === txHash) {
+      try { w.callback(status, txHash); } catch (e) { /* ignore */ }
+    }
+  });
+}
+
+function notifyOnce(status: 'success' | 'failed', txHash: string) {
+  cleanupResolved();
+  if (RESOLVED_TX.has(txHash)) return;
+  RESOLVED_TX.set(txHash, Date.now());
+  notifyWatchers(status, txHash);
+}
+
+const MAINNET_API = "https://api.multiversx.com";
+const TX_POLL_INTERVAL_MS = 3000;
+const TX_POLL_MAX_ATTEMPTS = 60;
+
+export function pollTransactionStatus(txHash: string): void {
+  let attempts = 0;
+
+  const poll = async () => {
+    if (RESOLVED_TX.has(txHash)) return;
+    attempts++;
+    if (attempts > TX_POLL_MAX_ATTEMPTS) {
+      logger.log("Transaction polling timed out for:", txHash);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${MAINNET_API}/transactions/${txHash}?fields=status`);
+      if (!res.ok) {
+        setTimeout(poll, TX_POLL_INTERVAL_MS);
+        return;
+      }
+      const data = await res.json();
+      if (data.status === "success") {
+        notifyOnce('success', txHash);
+        return;
+      }
+      if (data.status === "fail" || data.status === "invalid") {
+        notifyOnce('failed', txHash);
+        return;
+      }
+      setTimeout(poll, TX_POLL_INTERVAL_MS);
+    } catch {
+      setTimeout(poll, TX_POLL_INTERVAL_MS);
+    }
+  };
+
+  setTimeout(poll, TX_POLL_INTERVAL_MS);
+}
+
 export interface TransactionParams {
   userAddress: string;
   fileHash: string;
@@ -158,20 +239,29 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
       );
     }
     
-    logger.log("✅ Transaction sent! Hash:", txHash);
+    logger.log("Transaction sent! Hash:", txHash);
     
-    // Optionally track for toast notifications
     try {
       await txManager.track(sentTransactions, {
         transactionsDisplayInfo: {
           processingMessage: 'Certification in progress...',
           successMessage: 'File certified on blockchain!',
           errorMessage: 'Certification failed'
+        },
+        onSuccess: async () => {
+          logger.log("Transaction confirmed via SDK tracking:", txHash);
+          notifyOnce('success', txHash);
+        },
+        onFail: async () => {
+          logger.log("Transaction failed via SDK tracking:", txHash);
+          notifyOnce('failed', txHash);
         }
       });
     } catch (trackError) {
-      logger.log("⚠️ Track error (non-fatal):", trackError);
+      logger.log("SDK track unavailable, using API polling fallback:", trackError);
     }
+    
+    pollTransactionStatus(txHash);
     
     return {
       txHash,

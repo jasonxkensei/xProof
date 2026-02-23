@@ -12,7 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, Upload, File, CheckCircle, Loader2, ArrowLeft, Download, ExternalLink, Wallet, AlertTriangle } from "lucide-react";
 import { hashFile } from "@/lib/hashFile";
 import { generateProofPDF } from "@/lib/generateProofPDF";
-import { sendCertificationTransaction } from "@/lib/multiversxTransaction";
+import { sendCertificationTransaction, watchTransaction } from "@/lib/multiversxTransaction";
 import { Link, useLocation } from "wouter";
 import { WalletLoginModal } from "@/components/wallet-login-modal";
 
@@ -43,12 +43,36 @@ export default function Certify() {
   const [isSigning, setIsSigning] = useState(false);
   const [signatureStep, setSignatureStep] = useState<string>("");
   const [showWalletModal, setShowWalletModal] = useState(false);
+  const [txConfirmed, setTxConfirmed] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
       setLocation("/");
     }
   }, [isAuthenticated, setLocation]);
+
+  useEffect(() => {
+    const txHash = certificationResult?.txHash;
+    if (!txHash || txConfirmed) return;
+
+    const unsubscribe = watchTransaction(txHash, (status) => {
+      if (status === 'success') {
+        setTxConfirmed(true);
+        toast({
+          title: "Transaction confirmed!",
+          description: "Your certification has been confirmed on the blockchain.",
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/certifications"] });
+      } else if (status === 'failed') {
+        toast({
+          title: "Transaction failed",
+          description: "The blockchain transaction failed. Please try again.",
+          variant: "destructive",
+        });
+      }
+    });
+    return unsubscribe;
+  }, [certificationResult?.txHash, txConfirmed, toast, queryClient]);
 
   useEffect(() => {
     if (user?.firstName && user?.lastName) {
@@ -157,6 +181,7 @@ export default function Certify() {
     }
 
     setIsSigning(true);
+    setTxConfirmed(false);
     setSignatureStep("Creating the transaction...");
 
     try {
@@ -298,6 +323,18 @@ export default function Certify() {
             <p className="mb-8 text-muted-foreground">
               Your file has been certified on the MultiversX blockchain
             </p>
+            {certificationResult.txHash && !txConfirmed && (
+              <div className="mb-6 flex items-center justify-center gap-2 text-sm text-muted-foreground" data-testid="status-tx-pending">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Waiting for blockchain confirmation...</span>
+              </div>
+            )}
+            {txConfirmed && (
+              <div className="mb-6 flex items-center justify-center gap-2 text-sm text-primary" data-testid="status-tx-confirmed">
+                <CheckCircle className="h-4 w-4" />
+                <span>Transaction confirmed on blockchain</span>
+              </div>
+            )}
           </div>
 
           <Card className="mb-6">
@@ -358,6 +395,7 @@ export default function Certify() {
               variant="outline"
               onClick={() => {
                 setCertificationResult(null);
+                setTxConfirmed(false);
                 setFile(null);
                 setFileHash("");
                 setHashProgress(0);
