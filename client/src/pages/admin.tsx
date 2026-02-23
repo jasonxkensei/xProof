@@ -59,6 +59,10 @@ interface PublicStats {
     human_visitors: number;
     agent_visitors: number;
   };
+  agents?: {
+    unique_active: number;
+    total_api_keys: number;
+  };
   generated_at: string;
 }
 
@@ -271,36 +275,36 @@ export default function AdminDashboard() {
                   icon={Eye}
                 />
                 <StatCard
-                  title="Unique IPs"
-                  value={stats.traffic.unique_ips}
-                  subtitle={`incl. ${stats.traffic.human_visitors} human, ${stats.traffic.agent_visitors} agent`}
+                  title="Unique Visitors"
+                  value={stats.traffic.human_visitors}
+                  subtitle="Distinct human IPs"
                   icon={Globe}
                 />
                 <Card data-testid="stat-card-visitor-breakdown">
                   <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Visitors</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Audience</CardTitle>
                     <User className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground flex items-center gap-2"><User className="h-3 w-3" /> Humans</span>
-                        <span className="font-medium">{stats.traffic.human_visitors}</span>
+                        <span className="font-medium">{stats.traffic.human_visitors} IPs</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
                         <div
                           className="bg-chart-2 h-2 rounded-full transition-all"
-                          style={{ width: `${(stats.traffic.human_visitors + stats.traffic.agent_visitors) > 0 ? (stats.traffic.human_visitors / (stats.traffic.human_visitors + stats.traffic.agent_visitors)) * 100 : 0}%` }}
+                          style={{ width: `${(stats.traffic.human_visitors + (stats.agents?.unique_active || 0)) > 0 ? (stats.traffic.human_visitors / (stats.traffic.human_visitors + (stats.agents?.unique_active || 0))) * 100 : 0}%` }}
                         />
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground flex items-center gap-2"><Bot className="h-3 w-3" /> Agents</span>
-                        <span className="font-medium">{stats.traffic.agent_visitors}</span>
+                        <span className="font-medium">{stats.agents?.unique_active || 0} API keys</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
                         <div
                           className="bg-primary h-2 rounded-full transition-all"
-                          style={{ width: `${(stats.traffic.human_visitors + stats.traffic.agent_visitors) > 0 ? (stats.traffic.agent_visitors / (stats.traffic.human_visitors + stats.traffic.agent_visitors)) * 100 : 0}%` }}
+                          style={{ width: `${(stats.traffic.human_visitors + (stats.agents?.unique_active || 0)) > 0 ? ((stats.agents?.unique_active || 0) / (stats.traffic.human_visitors + (stats.agents?.unique_active || 0))) * 100 : 0}%` }}
                         />
                       </div>
                     </div>

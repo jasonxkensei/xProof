@@ -19,7 +19,7 @@ import {
   type ACPConfirmResponse,
 } from "@shared/schema";
 import { getCertificationPriceEgld, getCertificationPriceUsd, getPricingInfo } from "./pricing";
-import { eq, desc, sql, and, gte, count } from "drizzle-orm";
+import { eq, desc, sql, and, gte, gt, count } from "drizzle-orm";
 import { z } from "zod";
 import { getMetrics } from "./metrics";
 import { isX402Configured, verifyX402Payment, send402Response } from "./x402";
@@ -4392,6 +4392,9 @@ class XProofVerifyTool(BaseTool):
       const [humanVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, false));
       const [agentVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, true));
 
+      const [uniqueAgentsRow] = await db.select({ count: count() }).from(apiKeys).where(and(eq(apiKeys.isActive, true), gt(apiKeys.requestCount, 0)));
+      const [totalApiKeysRow] = await db.select({ count: count() }).from(apiKeys).where(eq(apiKeys.isActive, true));
+
       res.json({
         certifications: {
           total: totalRow.count,
@@ -4427,6 +4430,10 @@ class XProofVerifyTool(BaseTool):
           unique_ips: Number(uniqueIpsRow.count) || 0,
           human_visitors: Number(humanVisitsRow.count) || 0,
           agent_visitors: Number(agentVisitsRow.count) || 0,
+        },
+        agents: {
+          unique_active: uniqueAgentsRow.count,
+          total_api_keys: totalApiKeysRow.count,
         },
         generated_at: now.toISOString(),
       });
