@@ -52,8 +52,9 @@ export default function Certify() {
   }, [isAuthenticated, setLocation]);
 
   useEffect(() => {
+    const certId = certificationResult?.id;
     const txHash = certificationResult?.txHash;
-    if (!txHash || txConfirmed) return;
+    if (!certId || !txHash || txConfirmed) return;
 
     const unsubscribe = watchTransaction(txHash, (status) => {
       if (status === 'success') {
@@ -71,8 +72,36 @@ export default function Certify() {
         });
       }
     });
-    return unsubscribe;
-  }, [certificationResult?.txHash, txConfirmed, toast, queryClient]);
+
+    const pollServer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/proof/${certId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.blockchainStatus === "confirmed") {
+          setTxConfirmed(true);
+          toast({
+            title: "Transaction confirmed!",
+            description: "Your certification has been confirmed on the blockchain.",
+          });
+          queryClient.invalidateQueries({ queryKey: ["/api/certifications"] });
+          clearInterval(pollServer);
+        } else if (data.blockchainStatus === "failed") {
+          toast({
+            title: "Transaction failed",
+            description: "The blockchain transaction failed. Please try again.",
+            variant: "destructive",
+          });
+          clearInterval(pollServer);
+        }
+      } catch {}
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollServer);
+    };
+  }, [certificationResult?.id, certificationResult?.txHash, txConfirmed, toast, queryClient]);
 
   useEffect(() => {
     if (user?.firstName && user?.lastName) {
@@ -236,6 +265,10 @@ export default function Certify() {
         explorerUrl: data.transactionUrl || explorerUrl,
       });
 
+      if (data.blockchainStatus === "confirmed") {
+        setTxConfirmed(true);
+      }
+
       toast({
         title: "Success!",
         description: "Your file has been certified on the MultiversX blockchain",
@@ -316,24 +349,34 @@ export default function Certify() {
 
         <div className="container mx-auto max-w-3xl py-12">
           <div className="text-center">
-            <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-              <CheckCircle className="h-10 w-10 text-primary" />
-            </div>
-            <h1 className="mb-4 text-3xl font-bold tracking-tight">Certification successful!</h1>
-            <p className="mb-8 text-muted-foreground">
-              Your file has been certified on the MultiversX blockchain
-            </p>
-            {certificationResult.txHash && !txConfirmed && (
-              <div className="mb-6 flex items-center justify-center gap-2 text-sm text-muted-foreground" data-testid="status-tx-pending">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Waiting for blockchain confirmation...</span>
-              </div>
-            )}
-            {txConfirmed && (
-              <div className="mb-6 flex items-center justify-center gap-2 text-sm text-primary" data-testid="status-tx-confirmed">
-                <CheckCircle className="h-4 w-4" />
-                <span>Transaction confirmed on blockchain</span>
-              </div>
+            {txConfirmed ? (
+              <>
+                <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+                  <CheckCircle className="h-10 w-10 text-primary" />
+                </div>
+                <h1 className="mb-4 text-3xl font-bold tracking-tight" data-testid="text-cert-title">Certification successful!</h1>
+                <p className="mb-8 text-muted-foreground">
+                  Your file has been certified on the MultiversX blockchain
+                </p>
+                <div className="mb-6 flex items-center justify-center gap-2 text-sm text-primary" data-testid="status-tx-confirmed">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Transaction confirmed on blockchain</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-muted">
+                  <Loader2 className="h-10 w-10 text-muted-foreground animate-spin" />
+                </div>
+                <h1 className="mb-4 text-3xl font-bold tracking-tight" data-testid="text-cert-title">Certification submitted</h1>
+                <p className="mb-8 text-muted-foreground">
+                  Your transaction has been sent — waiting for blockchain confirmation
+                </p>
+                <div className="mb-6 flex items-center justify-center gap-2 text-sm text-muted-foreground" data-testid="status-tx-pending">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Waiting for blockchain confirmation...</span>
+                </div>
+              </>
             )}
           </div>
 
@@ -386,10 +429,11 @@ export default function Certify() {
             <Button
               onClick={handleDownloadPDF}
               className="flex-1"
+              disabled={!txConfirmed}
               data-testid="button-download-pdf"
             >
               <Download className="mr-2 h-4 w-4" />
-              Download PDF certificate
+              {txConfirmed ? "Download PDF certificate" : "PDF available after confirmation"}
             </Button>
             <Button
               variant="outline"
