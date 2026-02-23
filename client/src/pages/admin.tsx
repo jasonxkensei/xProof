@@ -171,10 +171,6 @@ export default function AdminDashboard() {
               <p className="text-sm text-muted-foreground">Real-time metrics for xproof.app</p>
             </div>
           </div>
-          <Button variant="outline" onClick={() => refetchStats()} data-testid="button-refresh-stats">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
         </div>
 
         {health && (
@@ -464,8 +460,14 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            <div className="text-xs text-muted-foreground text-center">
-              Last updated: {new Date(stats.generated_at).toLocaleString()} — Auto-refreshes every 30s
+            <div className="flex flex-col items-center gap-2">
+              <Button variant="outline" onClick={() => refetchStats()} data-testid="button-refresh-stats">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Last updated: {new Date(stats.generated_at).toLocaleString()} — Auto-refreshes every 30s
+              </p>
             </div>
           </>
         )}
