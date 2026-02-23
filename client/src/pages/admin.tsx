@@ -289,7 +289,7 @@ export default function AdminDashboard() {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground flex items-center gap-2"><User className="h-3 w-3" /> Humans</span>
-                        <span className="font-medium">{stats.traffic.human_visitors} IPs</span>
+                        <span className="font-medium">{stats.traffic.human_visitors}</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
                         <div
