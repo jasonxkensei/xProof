@@ -45,6 +45,8 @@ interface PublicStats {
   };
   blockchain: {
     avg_latency_ms: number | null;
+    last_known_latency_ms: number | null;
+    last_known_latency_at: string | null;
     total_success: number;
     total_failed: number;
     last_success_at: string | null;
