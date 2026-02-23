@@ -248,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const verificationResult = await verifyTransactionOnChain(transactionHash, expectedReceiver, expectedMinValue);
 
-        if (verificationResult.error === "pending") {
+        if (verificationResult.error === "pending" || verificationResult.error === "Transaction not found on blockchain") {
           blockchainStatus = "pending";
           logger.withRequest(req).info("Transaction pending on-chain, creating certification with pending status", { transactionHash });
         } else if (!verificationResult.verified) {
@@ -285,7 +285,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
-      // Certificate will be generated on-demand when downloaded
+      if (blockchainStatus === "pending") {
+        const { scheduleVerificationRetry } = await import("./verifyTransaction");
+        const retryReceiver = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS || "";
+        const RETRY_ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
+        const retryIsAdmin = RETRY_ADMIN_WALLETS.includes(walletAddress.toLowerCase());
+        let retryMinValue = "0";
+        if (!retryIsAdmin) {
+          const { priceEgld } = await getCertificationPriceEgld();
+          retryMinValue = priceEgld;
+        }
+        scheduleVerificationRetry(certification.id, transactionHash, retryReceiver, retryMinValue);
+      }
+
       const certificateUrl = `/api/certificates/${certification.id}.pdf`;
 
       res.status(201).json({
@@ -423,7 +435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let broadcastBlockchainStatus = "pending";
         if (broadcastVerification.verified) {
           broadcastBlockchainStatus = "confirmed";
-        } else if (broadcastVerification.error !== "pending") {
+        } else if (broadcastVerification.error !== "pending" && broadcastVerification.error !== "Transaction not found on blockchain") {
           logger.withRequest(req).warn("Broadcast payment verification failed", { txHash, error: broadcastVerification.error });
           return res.status(402).json({ message: "Payment verification failed", error: broadcastVerification.error });
         }
@@ -444,6 +456,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isPublic: true,
           })
           .returning();
+
+        if (broadcastBlockchainStatus === "pending") {
+          const { scheduleVerificationRetry } = await import("./verifyTransaction");
+          scheduleVerificationRetry(certification.id, txHash, expectedReceiver, broadcastExpectedMinValue);
+        }
 
         res.json({
           success: true,

@@ -1,6 +1,12 @@
 import { logger } from "./logger";
+import { db } from "./db";
+import { certifications } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 const API_URL = process.env.MULTIVERSX_API_URL || "https://api.multiversx.com";
+
+const RETRY_DELAY_MS = 10_000;
+const MAX_RETRIES = 3;
 
 export interface VerificationResult {
   verified: boolean;
@@ -114,4 +120,79 @@ export async function verifyTransactionOnChain(
       error: `Verification failed: ${error.message}`,
     };
   }
+}
+
+export function scheduleVerificationRetry(
+  certificationId: string,
+  txHash: string,
+  expectedReceiver: string,
+  expectedMinValue: string
+): void {
+  let attempt = 0;
+
+  const retry = async () => {
+    attempt++;
+    logger.info("Background verification retry", {
+      component: "verifyTransaction",
+      certificationId,
+      txHash,
+      attempt,
+      maxRetries: MAX_RETRIES,
+    });
+
+    const result = await verifyTransactionOnChain(txHash, expectedReceiver, expectedMinValue);
+
+    if (result.verified) {
+      await db
+        .update(certifications)
+        .set({ blockchainStatus: "confirmed" })
+        .where(eq(certifications.id, certificationId));
+      logger.info("Background verification succeeded — certification confirmed", {
+        component: "verifyTransaction",
+        certificationId,
+        txHash,
+        attempt,
+      });
+      return;
+    }
+
+    if (result.error === "pending" || result.error === "Transaction not found on blockchain") {
+      if (attempt < MAX_RETRIES) {
+        setTimeout(retry, RETRY_DELAY_MS);
+        return;
+      }
+    }
+
+    if (attempt >= MAX_RETRIES) {
+      const isStillIndexing = result.error === "pending" || result.error === "Transaction not found on blockchain";
+      const finalStatus = isStillIndexing ? "pending" : "failed";
+      await db
+        .update(certifications)
+        .set({ blockchainStatus: finalStatus })
+        .where(eq(certifications.id, certificationId));
+      logger.warn("Background verification exhausted retries", {
+        component: "verifyTransaction",
+        certificationId,
+        txHash,
+        attempt,
+        finalStatus,
+        error: result.error,
+      });
+      return;
+    }
+
+    await db
+      .update(certifications)
+      .set({ blockchainStatus: "failed" })
+      .where(eq(certifications.id, certificationId));
+    logger.warn("Background verification failed — certification marked failed", {
+      component: "verifyTransaction",
+      certificationId,
+      txHash,
+      attempt,
+      error: result.error,
+    });
+  };
+
+  setTimeout(retry, RETRY_DELAY_MS);
 }
