@@ -276,7 +276,7 @@ export default function AdminDashboard() {
                 <StatCard
                   title="Unique IPs"
                   value={stats.traffic.unique_ips}
-                  subtitle={`${stats.traffic.human_visitors} humans, ${stats.traffic.agent_visitors} agents`}
+                  subtitle={`incl. ${stats.traffic.human_visitors} human, ${stats.traffic.agent_visitors} agent`}
                   icon={Globe}
                 />
                 <Card data-testid="stat-card-visitor-breakdown">
@@ -293,7 +293,7 @@ export default function AdminDashboard() {
                       <div className="w-full bg-muted rounded-full h-2">
                         <div
                           className="bg-chart-2 h-2 rounded-full transition-all"
-                          style={{ width: `${stats.traffic.unique_ips > 0 ? (stats.traffic.human_visitors / stats.traffic.unique_ips) * 100 : 0}%` }}
+                          style={{ width: `${(stats.traffic.human_visitors + stats.traffic.agent_visitors) > 0 ? (stats.traffic.human_visitors / (stats.traffic.human_visitors + stats.traffic.agent_visitors)) * 100 : 0}%` }}
                         />
                       </div>
                       <div className="flex items-center justify-between">
@@ -303,7 +303,7 @@ export default function AdminDashboard() {
                       <div className="w-full bg-muted rounded-full h-2">
                         <div
                           className="bg-primary h-2 rounded-full transition-all"
-                          style={{ width: `${stats.traffic.unique_ips > 0 ? (stats.traffic.agent_visitors / stats.traffic.unique_ips) * 100 : 0}%` }}
+                          style={{ width: `${(stats.traffic.human_visitors + stats.traffic.agent_visitors) > 0 ? (stats.traffic.agent_visitors / (stats.traffic.human_visitors + stats.traffic.agent_visitors)) * 100 : 0}%` }}
                         />
                       </div>
                     </div>
