@@ -299,7 +299,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground flex items-center gap-2"><Bot className="h-3 w-3" /> Agents</span>
-                        <span className="font-medium">{stats.agents?.unique_active || 0} API keys</span>
+                        <span className="font-medium">{stats.agents?.unique_active || 0}</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
                         <div
