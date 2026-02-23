@@ -27,6 +27,7 @@ const CHAIN_ID = '1';
 interface WalletLoginModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  redirectTo?: string;
 }
 
 const isMobileDevice = () => {
@@ -34,7 +35,7 @@ const isMobileDevice = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 };
 
-export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) {
+export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLoginModalProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [waitingForConnection, setWaitingForConnection] = useState(false);
@@ -81,7 +82,7 @@ export function WalletLoginModal({ open, onOpenChange }: WalletLoginModalProps) 
         });
         
         onOpenChange(false);
-        navigate('/dashboard');
+        navigate(redirectTo || '/dashboard');
         
         return true;
       } else {

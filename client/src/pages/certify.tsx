@@ -160,14 +160,23 @@ export default function Certify() {
     setSignatureStep("Creating the transaction...");
 
     try {
-      setSignatureStep("Check your wallet to sign (enter the 2FA code if enabled)...");
-      
-      const txResult = await sendCertificationTransaction({
-        userAddress: user.walletAddress,
-        fileHash,
-        fileName: file.name,
-        authorName,
-      });
+      let txHash: string | undefined;
+      let explorerUrl: string | undefined;
+
+      if (isWalletConnected) {
+        setSignatureStep("Check your wallet to sign (enter the 2FA code if enabled)...");
+        
+        const txResult = await sendCertificationTransaction({
+          userAddress: user.walletAddress,
+          fileHash,
+          fileName: file.name,
+          authorName,
+        });
+        txHash = txResult.txHash;
+        explorerUrl = txResult.explorerUrl;
+      } else {
+        setSignatureStep("Server-side signing in progress...");
+      }
 
       setSignatureStep("Recording the certification...");
 
@@ -177,8 +186,7 @@ export default function Certify() {
         fileType: file.type || "unknown",
         fileSize: file.size,
         authorName,
-        transactionHash: txResult.txHash,
-        transactionUrl: txResult.explorerUrl,
+        ...(txHash && explorerUrl ? { transactionHash: txHash, transactionUrl: explorerUrl } : {}),
       });
 
       const data = await response.json();
@@ -193,8 +201,8 @@ export default function Certify() {
         fileType: file.type || "unknown",
         fileSize: file.size,
         authorName,
-        txHash: txResult.txHash,
-        explorerUrl: txResult.explorerUrl,
+        txHash: data.transactionHash || txHash,
+        explorerUrl: data.transactionUrl || explorerUrl,
       });
 
       toast({
@@ -400,25 +408,28 @@ export default function Certify() {
             <AlertTitle>Wallet disconnected</AlertTitle>
             <AlertDescription className="flex flex-col gap-3">
               <span>
-                Your wallet session has expired. Reconnect to sign transactions.
+                Your wallet session has expired. Reconnect to sign with your wallet, or certify directly (server-side signing).
               </span>
-              <Button 
-                onClick={() => setShowWalletModal(true)}
-                variant="outline"
-                size="sm"
-                className="w-fit"
-                data-testid="button-reconnect-wallet"
-              >
-                <Wallet className="mr-2 h-4 w-4" />
-                Reconnect wallet
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button 
+                  onClick={() => setShowWalletModal(true)}
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  data-testid="button-reconnect-wallet"
+                >
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Reconnect wallet
+                </Button>
+              </div>
             </AlertDescription>
           </Alert>
         )}
 
         <WalletLoginModal 
           open={showWalletModal} 
-          onOpenChange={setShowWalletModal} 
+          onOpenChange={setShowWalletModal}
+          redirectTo="/certify"
         />
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -547,7 +558,7 @@ export default function Certify() {
               </Button>
               <Button
                 type="submit"
-                disabled={!authorName || isSigning || !isWalletConnected}
+                disabled={!authorName || isSigning}
                 data-testid="button-certify-submit"
               >
                 {isSigning ? (
@@ -557,8 +568,8 @@ export default function Certify() {
                   </>
                 ) : !isWalletConnected ? (
                   <>
-                    <AlertTriangle className="mr-2 h-4 w-4" />
-                    Wallet not connected
+                    <Shield className="mr-2 h-4 w-4" />
+                    Certify (server-side)
                   </>
                 ) : (
                   <>

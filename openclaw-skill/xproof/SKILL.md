@@ -24,7 +24,7 @@ API Docs: https://xproof.app/docs
 | Protocol | Description |
 |----------|-------------|
 | **x402** | HTTP-native payment — no API key needed, pay per request in USDC on Base |
-| **ACP** | Agent Commerce Protocol (OpenAI + Stripe compatible) |
+| **ACP** | Agent Commerce Protocol — discover, checkout, confirm with EGLD |
 | **MCP** | Model Context Protocol — JSON-RPC 2.0 at `POST /mcp` |
 | **MX-8004** | MultiversX Trustless Agents Standard — on-chain reputation |
 

@@ -15,11 +15,11 @@ xproof is a blockchain certification service that anchors SHA-256 file hashes on
 +-------------------+        +-------------------+        +---------------------+
         |                           |       |
         |                           |       |
-        |    +--------------+       |       |
-        +--->| Web Crypto   |       |       |       +------------------+
-             | SHA-256 Hash |       |       +------>| Stripe API       |
-             +--------------+       |               | (Card Payments)  |
-                                    |               +------------------+
+        |    +--------------+       |
+        +--->| Web Crypto   |       |
+             | SHA-256 Hash |       |
+             +--------------+       |
+                                    |
                               +-----+
                               |
                      +--------v-------+
@@ -128,7 +128,7 @@ client/
 - **Database:** PostgreSQL (Neon) with Drizzle ORM
 - **Session Store:** PostgreSQL-backed sessions (connect-pg-simple)
 - **Blockchain:** MultiversX SDK (sdk-core, sdk-wallet, sdk-native-auth-server)
-- **Payments:** Stripe (card payments)
+
 
 ### Directory Structure
 
@@ -143,7 +143,6 @@ server/
   nativeAuth.ts           # MultiversX Native Auth token verification
   walletAuth.ts           # Wallet session management and signature verification
   pricing.ts              # EGLD/USD pricing via CoinGecko API
-  stripeClient.ts          # Stripe payment integration
   replitAuth.ts           # Session middleware configuration
   vite.ts                 # Vite dev server integration and static file serving
 ```
@@ -195,8 +194,6 @@ Routes are organized into the following groups within `routes.ts`:
 | Blockchain | `/api/blockchain/*` | Wallet session | Account info and transaction broadcasting |
 | Proof | `/api/proof/:id` | None | Public proof verification |
 | Certificates | `/api/certificates/:id.pdf` | None | PDF certificate download |
-| Payments | `/api/stripe/*` | Public | Card payments via Stripe |
-| Webhooks | `/api/stripe/webhook` | Signature verification | Stripe payment callbacks |
 | API Keys | `/api/keys` | Wallet session | API key management |
 | ACP | `/api/acp/*` | API key / None | Agent Commerce Protocol |
 | Discovery | `/.well-known/*`, `/llms.txt`, etc. | None | AI agent discovery endpoints |
@@ -405,27 +402,6 @@ Protected routes use the `isWalletAuthenticated` middleware, which checks for `r
 
 ---
 
-## Payment Processing Flow
-
-### Stripe Card Payments
-
-```
-[1] POST /api/stripe/create-checkout
-    - Creates Stripe Checkout Session with dynamic pricing
-    - Returns session URL for redirect
-
-[2] User redirected to Stripe Checkout page
-    - Completes card payment on Stripe's hosted page
-
-[3] Stripe sends webhook to POST /api/stripe/webhook
-    - stripe-replit-sync processes webhook automatically
-    - Payment confirmation handled by Stripe
-
-[4] GET /api/stripe/session/:sessionId polls for status (client-side)
-```
-
----
-
 ## Agent Commerce Protocol (ACP) Flow
 
 The ACP enables AI agents to programmatically purchase certifications using API keys.
@@ -498,7 +474,6 @@ Files never leave the user's browser. SHA-256 hashing is performed entirely clie
 
 ### Webhook Security
 
-- Stripe webhooks are verified via stripe-replit-sync managed webhook processing
 - Webhook endpoints skip JSON body parsing to preserve raw payloads for signature verification
 
 ### Content Security Policy

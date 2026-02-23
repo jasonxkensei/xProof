@@ -44,6 +44,58 @@ MultiversX is a European, carbon-negative blockchain with 6-second finality, neg
 
 ---
 
+## Why It Matters -- Real Scenarios
+
+> AI agents are already writing code, drafting contracts, generating reports,
+> and making decisions. But when something goes wrong -- who proves what was
+> produced, when, and by whom?
+
+**xProof is the answer layer.**
+
+---
+
+**"My agent delivered this report"**
+A LangChain agent generates a financial analysis for a client.
+xProof certifies the output before delivery. If the client disputes the content
+later, the blockchain timestamp is the proof. Irrefutable. No he-said-she-said.
+
+---
+
+**"This build was not tampered with"**
+Your CI/CD pipeline compiles and ships. xProof's GitHub Action certifies every
+artifact automatically. Six months later, a security audit asks:
+*"Is this binary what you deployed?"* -- one hash check, case closed.
+
+---
+
+**"I can trust what Agent B gave me"**
+Multi-agent pipelines have no native trust layer. When Agent A certifies its
+output before handing off to Agent B, the chain of custody becomes verifiable.
+Agents can prove they did their job. Pipelines become auditable end-to-end.
+
+---
+
+**"Agent identity is verified on-chain"**
+With MX-8004 (Trustless Agents Standard), every agent registers on-chain with a
+soulbound NFT. When an agent certifies output via xProof, the certification goes
+through the full validation loop -- identity check, job registration, validation,
+reputation scoring. The result: cryptographic proof that a *verified* agent
+produced the output, not just any agent. Trust is no longer assumed -- it's proven.
+
+---
+
+**"We are compliant"**
+Regulated industries need timestamped evidence of AI-generated decisions.
+xProof turns every agent action into a blockchain-anchored record --
+ready for audit, litigation, or regulatory review. Zero extra work.
+
+---
+
+**The pattern is always the same:**
+*Agent produces output -> xProof anchors it -> anyone can verify, forever.*
+
+---
+
 ## Pricing
 
 **Starting at $0.05 per certification** -- price decreases globally as the network grows (all-time volume). No subscriptions. No monthly fees.
@@ -59,8 +111,7 @@ Current pricing & tier info: **https://xproof.app/api/pricing**
 | Payment Method | Currency | Account Required |
 |---|---|---|
 | **x402** (HTTP 402) | USDC on Base | No |
-| **xMoney** | EGLD | No |
-| **Stripe** | Fiat (USD/EUR) | No |
+| **ACP** | EGLD | Yes (API key) |
 
 Agents can pay per-proof via x402 with zero onboarding -- send a request, receive payment requirements, sign, resend.
 

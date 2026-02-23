@@ -25,16 +25,6 @@ On Replit, the `PG*` variables are auto-populated when you create a PostgreSQL d
 
 ---
 
-## Stripe (Card Payments)
-
-| Variable | Required | Description |
-| --- | --- | --- |
-| (Managed by Replit) | - | Stripe API keys are managed via Replit's Stripe connector integration. No manual env vars needed. |
-
-Stripe is configured through Replit's built-in Stripe integration connector. Keys are automatically managed.
-
----
-
 ## MultiversX Blockchain
 
 | Variable | Required | Description |

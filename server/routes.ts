@@ -506,64 +506,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         payment_methods: [
           { method: "EGLD", description: "Pay in EGLD at current exchange rate on MultiversX" },
           { method: "USDC", description: "Pay in USDC on Base via x402 protocol" },
-          { method: "Card", description: "Pay by credit/debit card via Stripe" },
         ],
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to retrieve pricing information" });
-    }
-  });
-
-  // ============================================
-  // Stripe Payment Routes (fiat/card payments)
-  // ============================================
-  
-  app.get("/api/stripe/publishable-key", async (req, res) => {
-    try {
-      const { getStripePublishableKeyForClient } = await import("./stripePayment");
-      const publishableKey = await getStripePublishableKeyForClient();
-      res.json({ publishableKey });
-    } catch (error) {
-      logger.withRequest(req).error("Stripe not configured");
-      res.status(503).json({ error: "Stripe payments not available" });
-    }
-  });
-
-  app.post("/api/stripe/create-checkout", paymentRateLimiter, async (req, res) => {
-    try {
-      const { createCertificationCheckout } = await import("./stripePayment");
-      const { quantity, metadata } = req.body;
-      const host = req.get("host");
-      const protocol = req.protocol;
-
-      const session = await createCertificationCheckout({
-        quantity: quantity || 1,
-        successUrl: `${protocol}://${host}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${protocol}://${host}/payment/cancel`,
-        metadata: metadata || {},
-      });
-
-      res.json(session);
-    } catch (error: any) {
-      logger.withRequest(req).error("Failed to create Stripe checkout", { error: error.message });
-      res.status(500).json({ error: "Failed to create checkout session" });
-    }
-  });
-
-  app.get("/api/stripe/session/:sessionId", async (req, res) => {
-    try {
-      const { getUncachableStripeClient } = await import("./stripeClient");
-      const stripe = await getUncachableStripeClient();
-      const session = await stripe.checkout.sessions.retrieve(req.params.sessionId);
-      res.json({
-        status: session.payment_status,
-        amount_total: session.amount_total,
-        currency: session.currency,
-        metadata: session.metadata,
-      });
-    } catch (error: any) {
-      logger.withRequest(req).error("Failed to get Stripe session", { error: error.message });
-      res.status(500).json({ error: "Failed to get session status" });
     }
   });
 
@@ -4118,7 +4064,7 @@ class XProofVerifyTool(BaseTool):
         model: "per-use",
         amount: priceUsd.toString(),
         currency: "USD",
-        payment_methods: ["EGLD (MultiversX)", "USDC (Base via x402)", "Card (Stripe)"],
+        payment_methods: ["EGLD (MultiversX)", "USDC (Base via x402)"],
       },
       documentation: {
         specification: `${baseUrl}/.well-known/xproof.md`,

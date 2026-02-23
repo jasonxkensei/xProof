@@ -57,8 +57,7 @@ export default function PolitiqueConfidentialite() {
                 certification date, author name (if provided).
               </li>
               <li>
-                <strong className="text-foreground">Payment data:</strong> processed by 
-                our payment provider (Stripe). We never store your banking information.
+                <strong className="text-foreground">Payment data:</strong> Payment transactions are processed via blockchain (MultiversX for EGLD, Base for USDC). We never store your banking information.
               </li>
             </ul>
           </section>
@@ -149,9 +148,6 @@ export default function PolitiqueConfidentialite() {
             <ul className="space-y-3 text-muted-foreground">
               <li>
                 <strong className="text-foreground">Replit, Inc.</strong> (hosting) - United States
-              </li>
-              <li>
-                <strong className="text-foreground">Stripe</strong> (card payments) - Global
               </li>
               <li>
                 <strong className="text-foreground">Neon</strong> (database) - United States

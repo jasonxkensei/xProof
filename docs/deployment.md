@@ -6,7 +6,6 @@
 - **npm** 9 or later
 - **PostgreSQL** 14 or later (Neon recommended for managed hosting)
 - A **MultiversX wallet** with a private key for server-side transaction signing
-- **Stripe** account (for card payment processing, managed via Replit connector)
 - **WalletConnect** project ID (for mobile wallet connections)
 
 ---
@@ -168,7 +167,6 @@ server {
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `SESSION_SECRET` | Random string for signing session cookies (minimum 32 characters) |
-| (Stripe) | Managed by Replit Stripe connector |
 | `MULTIVERSX_PRIVATE_KEY` | Hex-encoded ed25519 private key for server-side transaction signing |
 | `MULTIVERSX_SENDER_ADDRESS` | MultiversX wallet address corresponding to the private key (`erd1...`) |
 | `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect Cloud project ID for mobile wallet connections |
@@ -271,8 +269,6 @@ xproof requires HTTPS in production for:
 - Secure session cookies (`secure: true`)
 - MultiversX Native Auth origin verification
 - WalletConnect relay connections
-- Stripe webhook signatures
-
 On Replit, HTTPS is provided automatically. For self-hosted deployments, use a reverse proxy with TLS termination (see the nginx example above).
 
 ### Trust Proxy

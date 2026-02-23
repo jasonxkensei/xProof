@@ -4,7 +4,7 @@
 xproof is a trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is API-first, composable, and built for both human users and autonomous agents. The project aims to provide a robust and verifiable proof system within the MultiversX ecosystem, catering to the growing needs of decentralized applications and agent-based systems.
 
 ## Recent Changes (Feb 21, 2026)
-- **Stripe replaces xMoney**: Replaced xMoney payment integration with Stripe for card/fiat payments. Stripe is managed via Replit's built-in connector. xMoney routes removed. Three active payment channels: EGLD (ACP), USDC on Base (x402), Card (Stripe).
+- **Stripe removed**: Removed Stripe/card payment integration. Two active payment channels: EGLD (ACP), USDC on Base (x402).
 
 ## Recent Changes (Feb 20, 2026)
 - **Wallet auth fix (mainnet)**: Fixed critical bug where `server/nativeAuth.ts` pointed to DEVNET API while frontend used MAINNET. Updated to `https://api.multiversx.com` and added `xproof.app` to acceptedOrigins. Also fixed `client/src/lib/walletAuth.ts` wallet URL to mainnet.
@@ -93,7 +93,7 @@ The platform offers comprehensive machine-readable documentation and endpoints f
 ## External Dependencies
 
 ### Payment Processing
-- **Stripe**: For card/fiat payments via Replit's Stripe connector integration.
+- **EGLD & USDC**: Payments via EGLD (ACP on MultiversX) and USDC on Base (x402).
 
 ### Blockchain Services
 - **MultiversX blockchain**: Core blockchain for proof-of-existence.
