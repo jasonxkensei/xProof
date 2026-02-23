@@ -316,7 +316,7 @@ export default function AgentsPage() {
                   <li><a href="/#how-it-works" className="hover:text-foreground transition-colors">How it works</a></li>
                   <li><a href="/#faq" className="hover:text-foreground transition-colors">FAQ</a></li>
                   <li><a href="/agents" className="hover:text-foreground transition-colors" data-testid="link-footer-agents">For AI Agents</a></li>
-                  <li><a href="/stats" className="hover:text-foreground transition-colors" data-testid="link-footer-stats">Platform Stats</a></li>
+                  <li><a href="/stats" className="hover:text-foreground transition-colors" data-testid="link-footer-stats">Metrics</a></li>
                 </ul>
               </div>
 
