@@ -205,7 +205,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatUptime(health.uptime_seconds)}</div>
-                <p className="text-xs text-muted-foreground mt-1">Since last restart</p>
+                <p className="text-xs text-muted-foreground mt-1">Since last update</p>
               </CardContent>
             </Card>
 
