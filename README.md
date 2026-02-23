@@ -446,4 +446,4 @@ Full documentation: [docs/api-reference.md](docs/api-reference.md)
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Proprietary — source available. See [LICENSE](LICENSE).

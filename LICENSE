@@ -1,0 +1,16 @@
+Copyright (c) 2026 Jason xKensei. All rights reserved.
+
+The source code of xProof is made publicly available for transparency, 
+security audit, and verification purposes only.
+
+You may NOT:
+- Use this code, in whole or in part, to build a competing service
+- Redistribute or sublicense this code commercially
+- Deploy this code as a service without explicit written permission
+
+You MAY:
+- Read and audit the code
+- Contribute via pull requests
+- Use the public API at xproof.app
+
+For commercial licensing, contact: [ton email]
