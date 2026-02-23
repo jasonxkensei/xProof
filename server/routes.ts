@@ -3357,6 +3357,15 @@ Each certification follows the complete validation loop: init_job → submit_pro
 - Spec: https://github.com/sasurobert/mx-8004/blob/master/docs/specification.md
 - Explorer: https://agents.multiversx.com
 
+## Why It Matters
+
+AI agents produce code, reports, contracts, and decisions — but without proof, none of it is verifiable.
+
+- **Prove delivery**: An agent generates a report for a client. xProof certifies it before delivery. If disputed, the blockchain timestamp is the proof.
+- **Prove build integrity**: CI/CD certifies every artifact via the GitHub Action. Months later, a security audit checks one hash — case closed.
+- **Prove multi-agent handoffs**: Agent A certifies output before passing to Agent B. The chain of custody becomes verifiable end-to-end.
+- **Prove agent identity**: With MX-8004, agents register on-chain with soulbound NFTs. Certifications go through full validation — identity, job, reputation. Trust is proven, not assumed.
+
 ## Live Proof
 
 xProof has certified its own README on MultiversX mainnet.
@@ -3755,6 +3764,15 @@ The first certification ever created on xproof:
 - Transaction: f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e
 - Explorer: https://explorer.multiversx.com/transactions/f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e
 - View: ${baseUrl}/proof/genesis
+
+## Why It Matters
+
+AI agents produce code, reports, contracts, and decisions — but without proof, none of it is verifiable.
+
+- **Prove delivery**: An agent generates a report for a client. xProof certifies it before delivery. If disputed, the blockchain timestamp is the proof.
+- **Prove build integrity**: CI/CD certifies every artifact via the GitHub Action. Months later, a security audit checks one hash — case closed.
+- **Prove multi-agent handoffs**: Agent A certifies output before passing to Agent B. The chain of custody becomes verifiable end-to-end.
+- **Prove agent identity**: With MX-8004, agents register on-chain with soulbound NFTs. Certifications go through full validation — identity, job, reputation. Trust is proven, not assumed.
 
 ## Live Proof
 
