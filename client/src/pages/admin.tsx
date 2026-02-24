@@ -289,7 +289,6 @@ export default function AdminDashboard() {
                 <StatCard
                   title="Active Agents"
                   value={stats.agents?.unique_active || 0}
-                  subtitle="Unique API keys"
                   icon={Bot}
                 />
               </div>
