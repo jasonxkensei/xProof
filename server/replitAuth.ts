@@ -41,7 +41,6 @@ export function getSession() {
       httpOnly: true,
       secure: isProduction,
       sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000,
     },
   });
 }
