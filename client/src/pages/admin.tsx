@@ -132,9 +132,9 @@ function TrendIndicator({ current, previous }: { current: number; previous: numb
     return <span className="text-xs text-muted-foreground flex items-center gap-1"><Minus className="h-3 w-3" /> Stable</span>;
   }
   if (change > 0) {
-    return <span className="text-xs text-chart-2 flex items-center gap-1"><TrendingUp className="h-3 w-3" /> +{Math.round(change)}% vs prev 7d</span>;
+    return <span className="text-xs text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> +{Math.round(change)}% vs prev 7d</span>;
   }
-  return <span className="text-xs text-destructive flex items-center gap-1"><TrendingDown className="h-3 w-3" /> {Math.round(change)}% vs prev 7d</span>;
+  return <span className="text-xs text-muted-foreground flex items-center gap-1"><TrendingDown className="h-3 w-3" /> {Math.round(change)}% vs prev 7d</span>;
 }
 
 export default function AdminDashboard() {
