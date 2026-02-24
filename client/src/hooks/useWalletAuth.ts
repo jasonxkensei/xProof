@@ -66,7 +66,7 @@ export function useWalletAuth() {
   const { address: sdkAddress } = useGetAccount();
   const isLoggedInSdk = useGetIsLoggedIn();
   
-  const savedAddress = typeof window !== 'undefined' ? localStorage.getItem('walletAddress') : null;
+  const savedAddress = typeof window !== 'undefined' ? sessionStorage.getItem('walletAddress') : null;
   const address = sdkAddress || savedAddress || '';
   const isLoggedIn = isLoggedInSdk || !!savedAddress;
   
@@ -165,7 +165,7 @@ export function useWalletAuth() {
           logger.log('✅ Session ready, enabling queries');
           setSessionReady(true);
           setSyncFailed(false);
-          localStorage.setItem('walletAddress', address);
+          sessionStorage.setItem('walletAddress', address);
           // Invalidate queries so they refetch with the new session
           queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
           queryClient.invalidateQueries({ queryKey: ['/api/certifications'] });
@@ -184,7 +184,7 @@ export function useWalletAuth() {
       lastSyncedAddress = null;
       setSessionReady(false);
       setSyncFailed(false);
-      localStorage.removeItem('walletAddress');
+      sessionStorage.removeItem('walletAddress');
     }
   }, [isLoggedIn, address, sessionReady, syncWalletSession]);
 
@@ -202,8 +202,8 @@ export function useWalletAuth() {
           const userData = await response.json();
           logger.log('✅ User authenticated from existing session:', userData.walletAddress?.slice(0, 15));
           
-          if (userData.walletAddress && !localStorage.getItem('walletAddress')) {
-            localStorage.setItem('walletAddress', userData.walletAddress);
+          if (userData.walletAddress && !sessionStorage.getItem('walletAddress')) {
+            sessionStorage.setItem('walletAddress', userData.walletAddress);
           }
           
           return userData;
@@ -256,7 +256,7 @@ export function useWalletAuth() {
       return { success: true };
     },
     onSuccess: () => {
-      localStorage.removeItem('walletAddress');
+      sessionStorage.removeItem('walletAddress');
       localStorage.removeItem('loginInfo');
       localStorage.removeItem('nativeAuthToken');
       localStorage.removeItem('loginToken');
