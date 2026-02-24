@@ -132,9 +132,9 @@ function TrendIndicator({ current, previous }: { current: number; previous: numb
     return <span className="text-xs text-muted-foreground flex items-center gap-1"><Minus className="h-3 w-3" /> Stable</span>;
   }
   if (change > 0) {
-    return <span className="text-xs text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> +{Math.round(change)}% vs prev 7d</span>;
+    return <span className="text-xs text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> +{Math.round(change)}% prev 7d</span>;
   }
-  return <span className="text-xs text-muted-foreground flex items-center gap-1"><TrendingDown className="h-3 w-3" /> {Math.round(change)}% vs prev 7d</span>;
+  return <span className="text-xs text-muted-foreground flex items-center gap-1"><TrendingDown className="h-3 w-3" /> {Math.round(change)}% prev 7d</span>;
 }
 
 export default function AdminDashboard() {
@@ -279,6 +279,12 @@ export default function AdminDashboard() {
                   value={stats.traffic.human_visitors}
                   subtitle="Distinct human IPs"
                   icon={Globe}
+                />
+                <StatCard
+                  title="Active Agents"
+                  value={stats.agents?.unique_active || 0}
+                  subtitle="Unique API keys"
+                  icon={Bot}
                 />
                 <Card data-testid="stat-card-visitor-breakdown">
                   <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
