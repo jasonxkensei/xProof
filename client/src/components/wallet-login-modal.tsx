@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ProviderFactory } from '@multiversx/sdk-dapp/out/providers/ProviderFactory';
 import { ProviderTypeEnum } from '@multiversx/sdk-dapp/out/providers/types/providerFactory.types';
-import { loginAction } from '@multiversx/sdk-dapp/out/store/actions/sharedActions/sharedActions';
+import { loginAction, logoutAction } from '@multiversx/sdk-dapp/out/store/actions/sharedActions/sharedActions';
 import { useGetIsLoggedIn } from '@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn';
 import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
 import { Shield, Wallet, Loader2 } from "lucide-react";
@@ -125,41 +125,56 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
     syncAttempted.current = false;
     
     try {
+      console.log('[wallet] Clearing SDK state before login...');
+      try { logoutAction(); } catch (e) { console.log('[wallet] logoutAction cleanup (non-fatal):', e); }
+      
+      console.log('[wallet] Creating extension provider...');
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.extension 
       });
       providerRef.current = provider;
+      console.log('[wallet] Provider created:', typeof provider);
       
       if (typeof provider.init === 'function') {
+        console.log('[wallet] Initializing provider...');
         await provider.init();
       }
       
+      console.log('[wallet] Calling provider.login()...');
       const loginResult = await provider.login();
+      console.log('[wallet] Login result:', JSON.stringify(loginResult, null, 2));
       
       let walletAddress = '';
       
       if (loginResult && typeof loginResult === 'object' && 'address' in loginResult) {
         walletAddress = (loginResult as any).address;
+        console.log('[wallet] Address from loginResult:', walletAddress);
       }
       
       if (!walletAddress) {
         try {
           if (typeof (provider as any).getAddress === 'function') {
             walletAddress = await (provider as any).getAddress();
+            console.log('[wallet] Address from getAddress():', walletAddress);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.log('[wallet] getAddress() failed:', e);
+        }
       }
       
       if (!walletAddress && (provider as any).account?.address) {
         walletAddress = (provider as any).account.address;
+        console.log('[wallet] Address from provider.account:', walletAddress);
       }
       
       if (walletAddress && walletAddress.startsWith('erd1')) {
+        console.log('[wallet] Got address immediately, syncing:', walletAddress);
         await syncAndRedirect(walletAddress);
       } else {
+        console.log('[wallet] No address yet, starting polling...');
         setWaitingForConnection(true);
         let attempts = 0;
-        const maxAttempts = 10;
+        const maxAttempts = 30;
         const checkAddress = setInterval(async () => {
           attempts++;
           let addr = '';
@@ -169,20 +184,26 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
             }
           } catch (e) {}
           
+          if (!addr && (provider as any).account?.address) {
+            addr = (provider as any).account.address;
+          }
+          
           if (addr && addr.startsWith('erd1')) {
+            console.log('[wallet] Polling found address at attempt', attempts, ':', addr);
             clearInterval(checkAddress);
             setWaitingForConnection(false);
             await syncAndRedirect(addr);
           } else if (attempts >= maxAttempts) {
+            console.log('[wallet] Polling timed out after', maxAttempts, 'attempts');
             clearInterval(checkAddress);
             setWaitingForConnection(false);
             setLoading(false);
-            setError('Connection timed out. Please try again.');
+            setError('Connection timed out. Please refresh the page and try again.');
           }
         }, 500);
       }
     } catch (err: any) {
-      console.error('Extension login error:', err);
+      console.error('[wallet] Extension login error:', err);
       const errorMsg = err.message || "Please install the MultiversX DeFi Wallet extension";
       setError(`Error: ${errorMsg}`);
       toast({
