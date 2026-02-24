@@ -381,23 +381,34 @@ export default function AdminDashboard() {
               </Card>
 
               <Card data-testid="card-blockchain-status">
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">Blockchain Status Breakdown</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                  <CardTitle className="text-sm font-medium">Blockchain Status</CardTitle>
+                  <Activity className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
-                    {Object.entries(stats.certifications.by_status).map(([status, statusCount]) => (
-                      <div key={status} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {status === "confirmed" && <CheckCircle2 className="h-4 w-4 text-chart-2" />}
-                          {status === "pending" && <Clock className="h-4 w-4 text-yellow-500" />}
-                          {status === "failed" && <XCircle className="h-4 w-4 text-destructive" />}
-                          {!["confirmed", "pending", "failed"].includes(status) && <Activity className="h-4 w-4 text-muted-foreground" />}
-                          <span className="text-sm capitalize">{status}</span>
-                        </div>
-                        <span className="font-medium">{statusCount}</span>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Total</span>
+                      <span className="font-medium">{stats.certifications.total}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
+                        <CheckCircle2 className="h-3 w-3 text-chart-2" /> Verified
+                      </span>
+                      <span className="font-medium text-chart-2">{stats.certifications.by_status.confirmed || 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
+                        <Clock className="h-3 w-3 text-yellow-500" /> Pending
+                      </span>
+                      <span className="font-medium">{stats.certifications.by_status.pending || 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
+                        <XCircle className="h-3 w-3 text-destructive" /> Failed
+                      </span>
+                      <span className="font-medium text-destructive">{stats.certifications.by_status.failed || 0}</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
