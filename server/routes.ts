@@ -3430,9 +3430,9 @@ AI agents produce code, reports, contracts, and decisions — but without proof,
 ## Live Proof
 
 xProof has certified its own README on MultiversX mainnet.
-Transaction: https://explorer.multiversx.com/transactions/41f1ebd363d28de787a2328a2bc99f0b3bad2d73f91baff649ee8a6516e7cc95
-SHA-256: 285da2ed7cced35b4d039a80956a4df8907bd33f83aaac8551b6f66c31251bd1
-Date: 2026-02-23T09:49:00Z
+Transaction: a642f64c5ac46dd1c09dffba6cf6556f9f6ce0d8fc642f5f4118c145cd04cf14
+SHA-256: a642f64c5ac46dd1c09dffba6cf6556f9f6ce0d8fc642f5f4118c145cd04cf14
+Date: 2026-02-24T21:08:24Z
 `;
     res.setHeader("Content-Type", "text/plain");
     res.send(content);
@@ -3838,9 +3838,9 @@ AI agents produce code, reports, contracts, and decisions — but without proof,
 ## Live Proof
 
 xProof has certified its own README on MultiversX mainnet.
-Transaction: https://explorer.multiversx.com/transactions/41f1ebd363d28de787a2328a2bc99f0b3bad2d73f91baff649ee8a6516e7cc95
-SHA-256: 285da2ed7cced35b4d039a80956a4df8907bd33f83aaac8551b6f66c31251bd1
-Date: 2026-02-23T09:49:00Z
+Transaction: a642f64c5ac46dd1c09dffba6cf6556f9f6ce0d8fc642f5f4118c145cd04cf14
+SHA-256: a642f64c5ac46dd1c09dffba6cf6556f9f6ce0d8fc642f5f4118c145cd04cf14
+Date: 2026-02-24T21:08:24Z
 `;
     res.setHeader("Content-Type", "text/plain");
     res.send(content);
