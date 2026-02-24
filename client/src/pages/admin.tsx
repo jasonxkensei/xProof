@@ -267,7 +267,7 @@ export default function AdminDashboard() {
             </div>
 
             {stats?.traffic && (
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
                 <StatCard
                   title="Total Visits"
                   value={stats.traffic.total_visits}
@@ -281,11 +281,22 @@ export default function AdminDashboard() {
                   icon={Globe}
                 />
                 <StatCard
+                  title="Agent Visits"
+                  value={stats.traffic.agent_visitors}
+                  subtitle="Bot/Crawler IPs"
+                  icon={Bot}
+                />
+                <StatCard
                   title="Active Agents"
                   value={stats.agents?.unique_active || 0}
                   subtitle="Unique API keys"
                   icon={Bot}
                 />
+              </div>
+            )}
+
+            <div className="grid gap-4 grid-cols-1 lg:grid-cols-3 mb-6">
+              {stats?.traffic && (
                 <Card data-testid="stat-card-visitor-breakdown">
                   <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-muted-foreground">Audience</CardTitle>
@@ -300,56 +311,24 @@ export default function AdminDashboard() {
                       <div className="w-full bg-muted rounded-full h-2">
                         <div
                           className="bg-chart-2 h-2 rounded-full transition-all"
-                          style={{ width: `${(stats.traffic.human_visitors + (stats.agents?.unique_active || 0)) > 0 ? (stats.traffic.human_visitors / (stats.traffic.human_visitors + (stats.agents?.unique_active || 0))) * 100 : 0}%` }}
+                          style={{ width: `${(stats.traffic.human_visitors + stats.traffic.agent_visitors) > 0 ? (stats.traffic.human_visitors / (stats.traffic.human_visitors + stats.traffic.agent_visitors)) * 100 : 0}%` }}
                         />
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground flex items-center gap-2"><Bot className="h-3 w-3" /> Agents</span>
-                        <span className="font-medium">{stats.agents?.unique_active || 0}</span>
+                        <span className="font-medium">{stats.traffic.agent_visitors}</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
                         <div
                           className="bg-primary h-2 rounded-full transition-all"
-                          style={{ width: `${(stats.traffic.human_visitors + (stats.agents?.unique_active || 0)) > 0 ? ((stats.agents?.unique_active || 0) / (stats.traffic.human_visitors + (stats.agents?.unique_active || 0))) * 100 : 0}%` }}
+                          style={{ width: `${(stats.traffic.human_visitors + stats.traffic.agent_visitors) > 0 ? (stats.traffic.agent_visitors / (stats.traffic.human_visitors + stats.traffic.agent_visitors)) * 100 : 0}%` }}
                         />
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-            )}
+              )}
 
-            {(stats.blockchain.avg_latency_ms !== null || stats.blockchain.last_known_latency_ms !== null || stats.blockchain.last_success_at) && (
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-                <Card data-testid="stat-card-blockchain-latency">
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Blockchain Latency</CardTitle>
-                    <Activity className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {stats.blockchain.avg_latency_ms !== null
-                        ? `${stats.blockchain.avg_latency_ms}ms`
-                        : stats.blockchain.last_known_latency_ms !== null
-                          ? `${stats.blockchain.last_known_latency_ms}ms`
-                          : "No data"}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {stats.blockchain.avg_latency_ms !== null
-                        ? `${stats.blockchain.total_success} success / ${stats.blockchain.total_failed} failed`
-                        : stats.blockchain.last_known_latency_at
-                          ? `Last measured ${formatTimeAgo(stats.blockchain.last_known_latency_at)}`
-                          : stats.blockchain.last_success_at
-                            ? `Last tx ${formatTimeAgo(stats.blockchain.last_success_at)}`
-                            : "No transactions recorded yet"
-                      }
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 mb-6">
               <Card data-testid="card-source-breakdown">
                 <CardHeader>
                   <CardTitle className="text-sm font-medium">Certification Source</CardTitle>
@@ -413,6 +392,36 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {(stats.blockchain.avg_latency_ms !== null || stats.blockchain.last_known_latency_ms !== null || stats.blockchain.last_success_at) && (
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+                <Card data-testid="stat-card-blockchain-latency">
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Blockchain Latency</CardTitle>
+                    <Activity className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {stats.blockchain.avg_latency_ms !== null
+                        ? `${stats.blockchain.avg_latency_ms}ms`
+                        : stats.blockchain.last_known_latency_ms !== null
+                          ? `${stats.blockchain.last_known_latency_ms}ms`
+                          : "No data"}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {stats.blockchain.avg_latency_ms !== null
+                        ? `${stats.blockchain.total_success} success / ${stats.blockchain.total_failed} failed`
+                        : stats.blockchain.last_known_latency_at
+                          ? `Last measured ${formatTimeAgo(stats.blockchain.last_known_latency_at)}`
+                          : stats.blockchain.last_success_at
+                            ? `Last tx ${formatTimeAgo(stats.blockchain.last_success_at)}`
+                            : "No transactions recorded yet"
+                      }
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 mb-6">
               <Card data-testid="card-webhook-stats">
