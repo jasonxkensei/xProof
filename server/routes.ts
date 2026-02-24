@@ -50,6 +50,7 @@ setInterval(() => {
 const SKIP_VISIT_PATHS = /^\/api\/|^\/.well-known\/|^\/mcp|^\/health|^\/src\/|^\/@|^\/node_modules\//;
 const SKIP_VISIT_EXT = /\.(js|mjs|cjs|ts|tsx|jsx|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json|xml|txt|pdf|zip|webp|avif|mp4|webm|php|webmanifest)$/i;
 const AGENT_UA_PATTERNS = ["chatgpt", "gptbot", "googlebot", "bingbot", "bot", "crawler", "spider", "curl", "wget", "python-requests", "axios", "node-fetch", "httpx", "scrapy", "postmanruntime", "semrushbot", "ahrefsbot", "slurp", "duckduckbot", "baiduspider", "yandexbot"];
+const EXCLUDED_IP_HASHES = new Set((process.env.EXCLUDE_IP_HASHES || "").split(",").map(h => h.trim()).filter(Boolean));
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply session middleware
@@ -62,6 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const ip = req.ip || req.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
     const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
+    if (EXCLUDED_IP_HASHES.has(ipHash)) return;
     const dedupeKey = `${ipHash}:${path}`;
     const now = Date.now();
     if (recentVisits.has(dedupeKey) && now - recentVisits.get(dedupeKey)! < 60000) return;
@@ -4561,6 +4563,23 @@ class XProofVerifyTool(BaseTool):
       logger.withRequest(req).error("Admin stats error");
       res.status(500).json({ error: "Failed to generate stats" });
     }
+  });
+
+  app.get("/api/admin/my-ip-hash", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
+    const ip = req.ip || req.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
+    const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
+    const excluded = EXCLUDED_IP_HASHES.has(ipHash);
+    const [visitCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(visits).where(eq(visits.ipHash, ipHash));
+    res.json({ ip_hash: ipHash, excluded, visit_count: visitCount?.count || 0 });
+  });
+
+  app.delete("/api/admin/visits/:ipHash", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
+    const { ipHash } = req.params;
+    if (!/^[a-f0-9]{64}$/.test(ipHash)) {
+      return res.status(400).json({ error: "Invalid IP hash format" });
+    }
+    const result = await db.delete(visits).where(eq(visits.ipHash, ipHash));
+    res.json({ deleted: true, ip_hash: ipHash });
   });
 
   app.get("/api/admin/tx-queue", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
