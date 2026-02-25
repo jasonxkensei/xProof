@@ -1,0 +1,127 @@
+{
+  "name": "io.github.jasonxkensei/xproof",
+  "version": "1.2.0",
+  "description": "Trust primitive for AI agents & humans. Certify file hashes on MultiversX blockchain with immutable, verifiable proofs of existence and ownership. Supports ACP (EGLD), x402 (USDC on Base), and native API key auth.",
+  "repository": "https://github.com/jasonxkensei/xProof",
+  "homepage": "https://xproof.app",
+  "license": "Proprietary",
+  "mcp_endpoint": "https://xproof.app/mcp",
+  "transport": "streamable-http",
+  "protocol_version": "2025-03-26",
+  "capabilities": {
+    "tools": true,
+    "resources": true
+  },
+  "tools": [
+    {
+      "name": "certify_file",
+      "description": "Create a blockchain certification for a file in a single API call via POST /api/proof. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $0.05 per certification.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["file_hash", "filename"],
+        "properties": {
+          "file_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the file (64 hex characters)"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Original filename with extension"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "Name of the certifier",
+            "default": "AI Agent"
+          },
+          "webhook_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional HTTPS URL to receive a POST notification when the proof is confirmed on-chain. Payload is signed with HMAC-SHA256 (X-xProof-Signature header)."
+          }
+        }
+      }
+    },
+    {
+      "name": "verify_proof",
+      "description": "Verify an existing xproof certification. Returns proof details including file hash, timestamp, blockchain transaction, and verification status.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["proof_id"],
+        "properties": {
+          "proof_id": {
+            "type": "string",
+            "description": "UUID of the certification to verify"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_proof",
+      "description": "Retrieve a proof in structured format (JSON or Markdown). Use json for machine processing, md for LLM consumption.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["proof_id"],
+        "properties": {
+          "proof_id": {
+            "type": "string",
+            "description": "UUID of the certification"
+          },
+          "format": {
+            "type": "string",
+            "enum": ["json", "md"],
+            "default": "json",
+            "description": "Output format: json for machine processing, md for LLM consumption"
+          }
+        }
+      }
+    },
+    {
+      "name": "discover_services",
+      "description": "Discover available xproof certification services, pricing, and capabilities. No authentication required.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "https://xproof.app/api/acp/products",
+      "name": "Service catalog",
+      "mimeType": "application/json"
+    },
+    {
+      "uri": "https://xproof.app/api/acp/openapi.json",
+      "name": "OpenAPI specification",
+      "mimeType": "application/json"
+    },
+    {
+      "uri": "https://xproof.app/.well-known/mcp.json",
+      "name": "MCP manifest",
+      "mimeType": "application/json"
+    },
+    {
+      "uri": "https://xproof.app/llms.txt",
+      "name": "LLM summary",
+      "mimeType": "text/plain"
+    }
+  ],
+  "authentication": {
+    "type": "bearer",
+    "token_prefix": "pm_",
+    "instructions": "Obtain an API key by authenticating with a MultiversX wallet at https://xproof.app, then POST to /api/keys. Alternatively, use x402 payment protocol (USDC on Base) for keyless per-request access."
+  },
+  "pricing": {
+    "amount": "0.05",
+    "currency": "USD",
+    "per": "certification",
+    "payment_protocols": ["ACP (EGLD on MultiversX)", "x402 (USDC on Base)"]
+  },
+  "tags": ["blockchain", "proof-of-existence", "multiversx", "ai-agents", "certification", "x402", "mcp"],
+  "links": {
+    "mcp_manifest": "https://xproof.app/.well-known/mcp.json",
+    "openapi": "https://xproof.app/api/acp/openapi.json",
+    "llms_txt": "https://xproof.app/llms.txt",
+    "stats": "https://xproof.app/stats"
+  }
+}
