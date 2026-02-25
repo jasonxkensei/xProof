@@ -172,7 +172,7 @@ export default function AgentsPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold tracking-tight">xproof</span>
+            <span className="text-xl font-bold tracking-tight">xProof</span>
           </a>
           <nav className="hidden md:flex items-center gap-6">
             <a href="/#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-how-it-works">
@@ -198,7 +198,6 @@ export default function AgentsPage() {
           </div>
         </div>
       </header>
-
       <section className="container py-20 md:py-28">
         <div className="mx-auto max-w-5xl text-center">
           <Badge variant="secondary" className="mb-6 px-4 py-1.5" data-testid="badge-universal-compatibility">
@@ -217,7 +216,6 @@ export default function AgentsPage() {
           </p>
         </div>
       </section>
-
       <section className="border-y bg-muted/30 py-20 md:py-28">
         <div className="container">
           <div className="mx-auto max-w-5xl">
@@ -243,7 +241,6 @@ export default function AgentsPage() {
           </div>
         </div>
       </section>
-
       <section className="py-20 md:py-28">
         <div className="container">
           <div className="mx-auto max-w-5xl">
@@ -269,7 +266,6 @@ export default function AgentsPage() {
           </div>
         </div>
       </section>
-
       <section className="border-t bg-primary/5 py-20 md:py-28">
         <div className="container">
           <div className="mx-auto max-w-3xl text-center">
@@ -293,7 +289,6 @@ export default function AgentsPage() {
           </div>
         </div>
       </section>
-
       <footer className="border-t py-12">
         <div className="container">
           <div className="mx-auto max-w-5xl">
@@ -349,7 +344,6 @@ export default function AgentsPage() {
           </div>
         </div>
       </footer>
-
       <WalletLoginModal
         open={isLoginModalOpen}
         onOpenChange={setIsLoginModalOpen}
