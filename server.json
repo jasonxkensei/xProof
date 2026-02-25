@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.jasonxkensei/xproof",
-  "description": "Certify file hashes on MultiversX blockchain as immutable proofs of existence.",
+  "description": "Proof primitive for AI agents on MultiversX. Anchor file hashes on-chain as verifiable proofs.",
   "title": "xProof",
   "websiteUrl": "https://xproof.app",
   "repository": {
@@ -12,7 +12,14 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://xproof.app/mcp"
+      "url": "https://xproof.app/mcp",
+      "headers": [
+        {
+          "description": "Bearer API key (format: Bearer pm_xxx). Optional — x402 payment works without authentication.",
+          "isSecret": true,
+          "name": "Authorization"
+        }
+      ]
     }
   ]
 }
