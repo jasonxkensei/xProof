@@ -302,7 +302,7 @@ export default function AdminDashboard() {
                               {stats.pricing.total_certifications.toLocaleString()} / {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()} certifications
                             </span>
                             <span className="text-muted-foreground">
-                              {stats.pricing.certifications_until_next_tier.toLocaleString()} to go
+                              {((stats.pricing.current_tier.max ?? stats.pricing.next_tier.min) - stats.pricing.total_certifications).toLocaleString()} to go
                             </span>
                           </div>
                           <div className="w-full bg-muted rounded-full h-3">
