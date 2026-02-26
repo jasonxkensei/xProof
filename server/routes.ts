@@ -952,7 +952,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const REGISTER_RATE_LIMIT_MAX = 3;
   const REGISTER_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 
-  app.get("/api/trial", (_req, res) => {
+  const trialInfoHandler = (_req: any, res: any) => {
     const baseUrl = `https://${_req.get('host')}`;
     res.json({
       name: "xproof Agent Trial",
@@ -970,7 +970,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       batch_endpoint: `POST ${baseUrl}/api/batch`,
       docs: `${baseUrl}/llms.txt`,
     });
-  });
+  };
+  app.get("/api/trial", trialInfoHandler);
+  app.get("/api/agent", trialInfoHandler);
 
   const agentRegisterSchema = z.object({
     agent_name: z.string().min(1, "Agent name is required").max(100),
@@ -1169,9 +1171,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (isX402Configured()) {
         return await send402Response(res, req, "proof");
       } else {
+        const baseUrl = `https://${req.get('host')}`;
         return res.status(401).json({
-          error: "UNAUTHORIZED",
-          message: "API key required. Include 'Authorization: Bearer pm_xxx' header. Or register for a free trial: POST /api/agent/register",
+          error: "AUTH_REQUIRED",
+          message: "Authentication required to certify files.",
+          options: [
+            { type: "free_trial", method: "POST", url: `${baseUrl}/api/agent/register`, body: { agent_name: "your-agent-name" }, free_certifications: TRIAL_QUOTA, description: `${TRIAL_QUOTA} free certifications, no wallet needed` },
+            { type: "api_key", header: "Authorization: Bearer pm_xxx", description: "Use an existing API key" },
+            { type: "x402", price: "$0.05", network: "Base (USDC)", description: "Pay per use, no account needed" },
+          ],
         });
       }
 
@@ -1416,9 +1424,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (isX402Configured()) {
         return await send402Response(res, req, "batch");
       } else {
+        const baseUrl = `https://${req.get('host')}`;
         return res.status(401).json({
-          error: "UNAUTHORIZED",
-          message: "API key required. Include 'Authorization: Bearer pm_xxx' header. Or register for a free trial: POST /api/agent/register",
+          error: "AUTH_REQUIRED",
+          message: "Authentication required to certify files.",
+          options: [
+            { type: "free_trial", method: "POST", url: `${baseUrl}/api/agent/register`, body: { agent_name: "your-agent-name" }, free_certifications: TRIAL_QUOTA, description: `${TRIAL_QUOTA} free certifications, no wallet needed` },
+            { type: "api_key", header: "Authorization: Bearer pm_xxx", description: "Use an existing API key" },
+            { type: "x402", price: "$0.05", network: "Base (USDC)", description: "Pay per use, no account needed" },
+          ],
         });
       }
 
