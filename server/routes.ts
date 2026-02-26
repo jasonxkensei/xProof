@@ -3393,6 +3393,11 @@ Sitemap: ${baseUrl}/sitemap.xml
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
+  <url>
+    <loc>${baseUrl}/.well-known/xproof.json</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
 </urlset>`;
     res.setHeader('Content-Type', 'application/xml');
     res.send(content);
@@ -4419,6 +4424,64 @@ class XProofVerifyTool(BaseTool):
     res.json(spec);
   });
 
+  // /.well-known/xproof.json — Unified discovery entry point
+  // Compact, machine-readable, fully actionable. No prose.
+  app.get("/.well-known/xproof.json", async (req, res) => {
+    const baseUrl = `https://${req.get("host")}`;
+    const priceUsd = await getCertificationPriceUsd();
+    res.json({
+      v: "1.0",
+      service: "xproof",
+      chain: "MultiversX Mainnet",
+      quickstart: {
+        trial: {
+          note: `${TRIAL_QUOTA} free certifications — no wallet, no payment, no browser`,
+          step1: { method: "POST", url: `${baseUrl}/api/agent/register`, body: { agent_name: "your-agent-name" }, returns: "api_key (pm_xxx)" },
+          step2: { method: "POST", url: `${baseUrl}/api/proof`, headers: { Authorization: "Bearer {api_key}", "Content-Type": "application/json" }, body: { file_hash: "64-char SHA-256 hex", filename: "document.pdf" } },
+        },
+        x402: {
+          note: "Pay per use — no account needed",
+          step1: { method: "POST", url: `${baseUrl}/api/proof`, body: { file_hash: "...", filename: "..." }, returns: "402 with USDC payment requirements on Base" },
+          step2: "Sign payment and resend with X-PAYMENT header",
+        },
+        api_key: {
+          note: "Use an existing API key",
+          header: "Authorization: Bearer pm_xxx",
+          endpoints: [`${baseUrl}/api/proof`, `${baseUrl}/api/batch`],
+        },
+      },
+      endpoints: {
+        certify: `POST ${baseUrl}/api/proof`,
+        batch: `POST ${baseUrl}/api/batch`,
+        verify: `GET ${baseUrl}/proof/{id}.json`,
+        register_trial: `POST ${baseUrl}/api/agent/register`,
+        trial_info: `GET ${baseUrl}/api/trial`,
+        health: `GET ${baseUrl}/api/acp/health`,
+        pricing: `GET ${baseUrl}/api/pricing`,
+      },
+      pricing: {
+        current: `$${priceUsd} per certification`,
+        model: "per-use",
+        payment: ["EGLD (MultiversX ACP)", "USDC on Base (x402)"],
+      },
+      protocols: {
+        rest: `${baseUrl}/api/proof`,
+        mcp: `${baseUrl}/mcp`,
+        acp: `${baseUrl}/api/acp/products`,
+        x402: `${baseUrl}/api/proof`,
+        openapi: `${baseUrl}/api/acp/openapi.json`,
+      },
+      docs: {
+        llms: `${baseUrl}/llms.txt`,
+        full: `${baseUrl}/llms-full.txt`,
+        spec: `${baseUrl}/.well-known/xproof.md`,
+        agent: `${baseUrl}/.well-known/agent.json`,
+        openai_plugin: `${baseUrl}/.well-known/ai-plugin.json`,
+        mcp_manifest: `${baseUrl}/.well-known/mcp.json`,
+      },
+    });
+  });
+
   app.get("/.well-known/agent.json", async (req, res) => {
     const baseUrl = `https://${req.get("host")}`;
     const priceUsd = await getCertificationPriceUsd();
@@ -4483,6 +4546,7 @@ class XProofVerifyTool(BaseTool):
         api_guide: `${baseUrl}/learn/api.md`,
         verification: `${baseUrl}/learn/verification.md`,
         agents_page: `${baseUrl}/agents`,
+        compact_discovery: `${baseUrl}/.well-known/xproof.json`,
       },
     });
   });

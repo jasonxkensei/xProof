@@ -4,6 +4,10 @@
 xproof is a trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is API-first, composable, and built for both human users and autonomous agents. The project aims to provide a robust and verifiable proof system within the MultiversX ecosystem, catering to the growing needs of decentralized applications and agent-based systems.
 
 ## Recent Changes (Feb 26, 2026)
+- **Unified discovery entry point**: New `/.well-known/xproof.json` — compact, machine-readable JSON with `quickstart` (trial/x402/api_key step-by-step), all endpoints, protocols, pricing, and docs. Referenced from sitemap and `agent.json`. Priority 0.9 in sitemap.
+- **Improved agent discoverability**: `GET /api/trial` and `GET /api/agent` endpoints return trial registration instructions. 402 responses include `free_trial` hint. 401 responses include structured `options` array (trial/api_key/x402). `llms.txt` now opens with "Free Trial — Start Here" as 2nd section.
+- **Blockchain signing fixed**: `@noble/ed25519` v3 requires explicit SHA-512 config — fixed in `server/blockchain.ts`. Nonce bug fixed: switched from `/address/` (gateway path) to `/accounts/` (API path) returning correct nonce at top level.
+- **Stats/metrics fixed**: Certification `by_source` now correctly separates `api` (system agent), `trial` (trial users), and `user` (wallet users). Admin dashboard shows 3-way breakdown. Active Agents counter excludes trial users.
 - **Agent trial mode**: New `POST /api/agent/register` endpoint for zero-friction agent onboarding. Agents send `{"agent_name": "..."}`, receive an API key (`pm_xxx`) with 10 free certifications. No wallet, no browser, no payment needed. Trial quota tracked in `users` table (`is_trial`, `trial_quota`, `trial_used`). Both `/api/proof` and `/api/batch` enforce quota checks. When trial exhausted, returns 402 with upgrade instructions (x402 or ACP). Discovery documents (`agent.json`, `llms.txt`, `llms-full.txt`) updated with trial info. Admin dashboard shows trial agent count. Rate limited: 3 registrations/hour/IP.
 
 ## Recent Changes (Feb 23, 2026)
