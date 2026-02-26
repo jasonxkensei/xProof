@@ -39,6 +39,9 @@ export const users = pgTable("users", {
   usageResetDate: timestamp("usage_reset_date").defaultNow(),
   companyName: varchar("company_name"),
   companyLogoUrl: varchar("company_logo_url"),
+  isTrial: boolean("is_trial").default(false),
+  trialQuota: integer("trial_quota").default(0),
+  trialUsed: integer("trial_used").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

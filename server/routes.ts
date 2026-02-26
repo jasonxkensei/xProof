@@ -930,6 +930,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return user?.walletAddress || null;
   }
 
+  async function getTrialUser(apiKeyRecord: any): Promise<{ isTrial: boolean; remaining: number; userId: string } | null> {
+    if (!apiKeyRecord?.userId) return null;
+    const [user] = await db.select().from(users).where(eq(users.id, apiKeyRecord.userId));
+    if (!user || !user.isTrial) return null;
+    return {
+      isTrial: true,
+      remaining: (user.trialQuota || 0) - (user.trialUsed || 0),
+      userId: user.id,
+    };
+  }
+
+  async function consumeTrialCredit(userId: string, count: number = 1): Promise<void> {
+    await db.update(users)
+      .set({ trialUsed: sql`trial_used + ${count}` })
+      .where(eq(users.id, userId));
+  }
+
+  const TRIAL_QUOTA = 10;
+  const registerRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+  const REGISTER_RATE_LIMIT_MAX = 3;
+  const REGISTER_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+
+  const agentRegisterSchema = z.object({
+    agent_name: z.string().min(1, "Agent name is required").max(100),
+    description: z.string().max(500).optional(),
+  });
+
+  app.post("/api/agent/register", paymentRateLimiter, async (req, res) => {
+    try {
+      const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
+      const ipHash = crypto.createHash("sha256").update(ip).digest("hex").slice(0, 16);
+
+      const now = Date.now();
+      const entry = registerRateLimitMap.get(ipHash);
+      if (entry && now < entry.resetAt && entry.count >= REGISTER_RATE_LIMIT_MAX) {
+        return res.status(429).json({
+          error: "RATE_LIMIT_EXCEEDED",
+          message: `Maximum ${REGISTER_RATE_LIMIT_MAX} trial registrations per hour per IP. Try again later.`,
+          retry_after: Math.ceil((entry.resetAt - now) / 1000),
+        });
+      }
+      if (!entry || now >= entry.resetAt) {
+        registerRateLimitMap.set(ipHash, { count: 1, resetAt: now + REGISTER_RATE_LIMIT_WINDOW_MS });
+      } else {
+        entry.count++;
+      }
+
+      const data = agentRegisterSchema.parse(req.body);
+
+      const trialWallet = `erd1trial${crypto.randomBytes(24).toString("hex")}`;
+
+      const [trialUser] = await db.insert(users).values({
+        walletAddress: trialWallet,
+        subscriptionTier: "free",
+        subscriptionStatus: "active",
+        isTrial: true,
+        trialQuota: TRIAL_QUOTA,
+        trialUsed: 0,
+        companyName: data.agent_name,
+      }).returning();
+
+      const rawKey = `pm_${crypto.randomBytes(32).toString("hex")}`;
+      const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+      const keyPrefix = rawKey.slice(0, 10);
+
+      await db.insert(apiKeys).values({
+        keyHash,
+        keyPrefix,
+        userId: trialUser.id,
+        name: `Trial: ${data.agent_name}`,
+        isActive: true,
+      });
+
+      logger.withRequest(req).info("Agent trial registered", {
+        agentName: data.agent_name,
+        userId: trialUser.id,
+        ipHash,
+      });
+
+      const baseUrl = `https://${req.get('host')}`;
+
+      return res.status(201).json({
+        api_key: rawKey,
+        agent_name: data.agent_name,
+        trial: {
+          quota: TRIAL_QUOTA,
+          used: 0,
+          remaining: TRIAL_QUOTA,
+        },
+        endpoints: {
+          certify: `POST ${baseUrl}/api/proof`,
+          batch: `POST ${baseUrl}/api/batch`,
+          verify: `GET ${baseUrl}/proof/{proof_id}`,
+        },
+        usage: `Include header: Authorization: Bearer ${rawKey}`,
+        message: `Trial account created with ${TRIAL_QUOTA} free certifications. No wallet or payment needed. After trial, pay per certification via x402 (USDC on Base) or EGLD (ACP).`,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          error: "VALIDATION_ERROR",
+          message: "Invalid request data",
+          details: error.errors,
+        });
+      }
+      logger.withRequest(req).error("Agent registration failed", { error: (error as Error).message });
+      return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to create trial account" });
+    }
+  });
+
   // Apply API key validation to ACP endpoints
   app.use("/api/acp", validateApiKey);
 
@@ -951,6 +1061,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const authHeader = req.headers.authorization;
       const hasBearerToken = authHeader && authHeader.startsWith("Bearer ");
       const hasX402Payment = !!req.headers["x-payment"];
+
+      let trialInfo: { isTrial: boolean; remaining: number; userId: string } | null = null;
 
       if (hasBearerToken) {
         const rawKey = authHeader!.slice(7);
@@ -1004,10 +1116,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         authMethod = "api_key";
 
-        const ownerWallet = await getApiKeyOwnerWallet(apiKey);
-        if (ownerWallet && isAdminWallet(ownerWallet)) {
-          isAdminExempt = true;
-          logger.withRequest(req).info("Admin wallet exempt from payment", { walletAddress: ownerWallet });
+        trialInfo = await getTrialUser(apiKey);
+        if (trialInfo) {
+          if (trialInfo.remaining <= 0) {
+            return res.status(402).json({
+              error: "TRIAL_EXHAUSTED",
+              message: `Trial quota exhausted (${TRIAL_QUOTA}/${TRIAL_QUOTA} used). Pay per certification via x402 (USDC on Base) or EGLD (ACP).`,
+              trial: { quota: TRIAL_QUOTA, used: TRIAL_QUOTA, remaining: 0 },
+              upgrade: {
+                x402: "Send POST /api/proof without auth header to get x402 payment instructions",
+                acp: "Use POST /api/acp/checkout for EGLD payment on MultiversX",
+              },
+            });
+          }
+        } else {
+          const ownerWallet = await getApiKeyOwnerWallet(apiKey);
+          if (ownerWallet && isAdminWallet(ownerWallet)) {
+            isAdminExempt = true;
+            logger.withRequest(req).info("Admin wallet exempt from payment", { walletAddress: ownerWallet });
+          }
         }
       } else if (hasX402Payment && isX402Configured()) {
         const x402Result = await verifyX402Payment(req, "proof");
@@ -1024,7 +1151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         return res.status(401).json({
           error: "UNAUTHORIZED",
-          message: "API key required. Include 'Authorization: Bearer pm_xxx' header",
+          message: "API key required. Include 'Authorization: Bearer pm_xxx' header. Or register for a free trial: POST /api/agent/register",
         });
       }
 
@@ -1059,26 +1186,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const result = await recordOnBlockchain(data.file_hash, data.filename, data.author_name || "AI Agent");
 
-      let [systemUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+      const certUserId = trialInfo ? trialInfo.userId : null;
+      let ownerUserId = certUserId;
 
-      if (!systemUser) {
-        [systemUser] = await db
-          .insert(users)
-          .values({
-            walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
-            subscriptionTier: "business",
-            subscriptionStatus: "active",
-          })
-          .returning();
+      if (!ownerUserId) {
+        let [systemUser] = await db
+          .select()
+          .from(users)
+          .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+
+        if (!systemUser) {
+          [systemUser] = await db
+            .insert(users)
+            .values({
+              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+              subscriptionTier: "business",
+              subscriptionStatus: "active",
+            })
+            .returning();
+        }
+        ownerUserId = systemUser.id!;
+      }
+
+      if (trialInfo) {
+        await consumeTrialCredit(trialInfo.userId);
       }
 
       const [certification] = await db
         .insert(certifications)
         .values({
-          userId: systemUser.id!,
+          userId: ownerUserId,
           fileName: data.filename,
           fileHash: data.file_hash,
           fileType: data.filename.split(".").pop() || "unknown",
@@ -1132,6 +1269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         timestamp: certification.createdAt?.toISOString() || new Date().toISOString(),
         webhook_status: webhookStatus,
+        ...(trialInfo ? { trial: { remaining: trialInfo.remaining - 1 } } : {}),
         message: "File certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
       });
     } catch (error) {
@@ -1170,6 +1308,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const authHeader = req.headers.authorization;
       const hasBearerToken = authHeader && authHeader.startsWith("Bearer ");
       const hasX402Payment = !!req.headers["x-payment"];
+
+      let trialInfo: { isTrial: boolean; remaining: number; userId: string } | null = null;
 
       if (hasBearerToken) {
         const rawKey = authHeader!.slice(7);
@@ -1223,10 +1363,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         authMethod = "api_key";
 
-        const ownerWallet = await getApiKeyOwnerWallet(apiKey);
-        if (ownerWallet && isAdminWallet(ownerWallet)) {
-          isAdminExempt = true;
-          logger.withRequest(req).info("Admin wallet exempt from payment (batch)", { walletAddress: ownerWallet });
+        trialInfo = await getTrialUser(apiKey);
+        if (trialInfo) {
+          if (trialInfo.remaining <= 0) {
+            return res.status(402).json({
+              error: "TRIAL_EXHAUSTED",
+              message: `Trial quota exhausted (${TRIAL_QUOTA}/${TRIAL_QUOTA} used). Pay per certification via x402 (USDC on Base) or EGLD (ACP).`,
+              trial: { quota: TRIAL_QUOTA, used: TRIAL_QUOTA, remaining: 0 },
+              upgrade: {
+                x402: "Send POST /api/batch without auth header to get x402 payment instructions",
+                acp: "Use POST /api/acp/checkout for EGLD payment on MultiversX",
+              },
+            });
+          }
+        } else {
+          const ownerWallet = await getApiKeyOwnerWallet(apiKey);
+          if (ownerWallet && isAdminWallet(ownerWallet)) {
+            isAdminExempt = true;
+            logger.withRequest(req).info("Admin wallet exempt from payment (batch)", { walletAddress: ownerWallet });
+          }
         }
       } else if (hasX402Payment && isX402Configured()) {
         const x402Result = await verifyX402Payment(req, "batch");
@@ -1243,7 +1398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         return res.status(401).json({
           error: "UNAUTHORIZED",
-          message: "API key required. Include 'Authorization: Bearer pm_xxx' header",
+          message: "API key required. Include 'Authorization: Bearer pm_xxx' header. Or register for a free trial: POST /api/agent/register",
         });
       }
 
@@ -1251,20 +1406,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const baseUrl = `https://${req.get('host')}`;
       const batchId = crypto.randomUUID();
 
-      let [systemUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+      const certUserId = trialInfo ? trialInfo.userId : null;
+      let ownerUserId = certUserId;
 
-      if (!systemUser) {
-        [systemUser] = await db
-          .insert(users)
-          .values({
-            walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
-            subscriptionTier: "business",
-            subscriptionStatus: "active",
-          })
-          .returning();
+      if (!ownerUserId) {
+        let [systemUser] = await db
+          .select()
+          .from(users)
+          .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+
+        if (!systemUser) {
+          [systemUser] = await db
+            .insert(users)
+            .values({
+              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+              subscriptionTier: "business",
+              subscriptionStatus: "active",
+            })
+            .returning();
+        }
+        ownerUserId = systemUser.id!;
       }
 
       const results: any[] = [];
@@ -1272,6 +1433,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let existingCount = 0;
 
       for (const file of data.files) {
+        if (trialInfo && trialInfo.remaining - createdCount <= 0) {
+          results.push({
+            file_hash: file.file_hash,
+            filename: file.filename,
+            status: "skipped",
+            reason: "Trial quota exhausted",
+          });
+          continue;
+        }
+
         const [existing] = await db
           .select()
           .from(certifications)
@@ -1295,7 +1466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const [certification] = await db
           .insert(certifications)
           .values({
-            userId: systemUser.id!,
+            userId: ownerUserId!,
             fileName: file.filename,
             fileHash: file.file_hash,
             fileType: file.filename.split(".").pop() || "unknown",
@@ -1335,7 +1506,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      logger.withRequest(req).info("Batch certification completed", { batchId, created: createdCount, existing: existingCount, total: data.files.length, authMethod, adminExempt: isAdminExempt });
+      if (trialInfo && createdCount > 0) {
+        await consumeTrialCredit(trialInfo.userId, createdCount);
+      }
+
+      logger.withRequest(req).info("Batch certification completed", { batchId, created: createdCount, existing: existingCount, total: data.files.length, authMethod, adminExempt: isAdminExempt, trial: !!trialInfo });
 
       return res.status(201).json({
         batch_id: batchId,
@@ -1343,6 +1518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         created: createdCount,
         existing: existingCount,
         results,
+        ...(trialInfo ? { trial: { remaining: trialInfo.remaining - createdCount } } : {}),
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -3353,6 +3529,15 @@ Starting at $${priceUsd} per certification — price decreases as the network gr
 - [OpenAI Plugin](/.well-known/ai-plugin.json)
 - [Full Specification](/.well-known/xproof.md)
 
+## Free Trial (for AI agents)
+Get ${TRIAL_QUOTA} free certifications instantly. No wallet, no payment, no browser:
+\\\`\\\`\\\`bash
+curl -X POST https://xproof.app/api/agent/register \\\\
+  -H "Content-Type: application/json" \\\\
+  -d '{"agent_name": "my-agent"}'
+\\\`\\\`\\\`
+Returns an API key (pm_xxx). Use it immediately to certify files.
+
 ## Quick Start (for AI agents)
 
 ### REST API
@@ -3469,6 +3654,15 @@ Without proof, any agent output — code, data, models, reports — has no verif
 - [MCP Manifest](${baseUrl}/.well-known/mcp.json)
 - [OpenAI Plugin](${baseUrl}/.well-known/ai-plugin.json)
 - [Full Specification](${baseUrl}/.well-known/xproof.md)
+
+## Free Trial (for AI agents)
+Get ${TRIAL_QUOTA} free certifications instantly. No wallet, no payment, no browser:
+\`\`\`bash
+curl -X POST ${baseUrl}/api/agent/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent_name": "my-agent"}'
+\`\`\`
+Returns an API key (pm_xxx). Use it immediately to certify files.
 
 ## Quick Start (for AI agents)
 
@@ -4246,6 +4440,12 @@ class XProofVerifyTool(BaseTool):
         token_prefix: "pm_",
         public_endpoints: ["/api/acp/products", "/api/acp/openapi.json", "/api/acp/health", "/llms.txt", "/llms-full.txt"],
       },
+      free_trial: {
+        register: `POST ${baseUrl}/api/agent/register`,
+        body: '{"agent_name": "your-agent-name"}',
+        free_certifications: TRIAL_QUOTA,
+        description: `Register for ${TRIAL_QUOTA} free certifications. No wallet, no payment, no browser. Pure HTTP.`,
+      },
       pricing: {
         model: "per-use",
         amount: priceUsd.toString(),
@@ -4396,6 +4596,8 @@ class XProofVerifyTool(BaseTool):
 
       const [uniqueAgentsRow] = await db.select({ count: count() }).from(apiKeys).where(and(eq(apiKeys.isActive, true), gt(apiKeys.requestCount, 0)));
       const [totalApiKeysRow] = await db.select({ count: count() }).from(apiKeys).where(eq(apiKeys.isActive, true));
+      const [trialAgentsRow] = await db.select({ count: count() }).from(users).where(eq(users.isTrial, true));
+      const [trialUsedRow] = await db.select({ total: sql<number>`COALESCE(SUM(trial_used), 0)` }).from(users).where(eq(users.isTrial, true));
 
       res.json({
         certifications: {
@@ -4436,6 +4638,8 @@ class XProofVerifyTool(BaseTool):
         agents: {
           unique_active: uniqueAgentsRow.count,
           total_api_keys: totalApiKeysRow.count,
+          trial_agents: trialAgentsRow.count,
+          trial_certifications_used: Number(trialUsedRow.total) || 0,
         },
         pricing: await getPricingInfo(),
         generated_at: now.toISOString(),

@@ -325,7 +325,7 @@ export default function AdminDashboard() {
             )}
 
             {stats?.traffic && (
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-6">
                 <StatCard
                   title="Total Visits"
                   value={stats.traffic.total_visits}
@@ -348,6 +348,12 @@ export default function AdminDashboard() {
                   title="Active Agents"
                   value={stats.agents?.unique_active || 0}
                   subtitle="API keys"
+                  icon={Bot}
+                />
+                <StatCard
+                  title="Trial Agents"
+                  value={stats.agents?.trial_agents || 0}
+                  subtitle={`${stats.agents?.trial_certifications_used || 0} certs used`}
                   icon={Bot}
                 />
               </div>
