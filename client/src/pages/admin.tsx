@@ -299,7 +299,7 @@ export default function AdminDashboard() {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">
-                              {stats.pricing.total_certifications.toLocaleString()} / {stats.pricing.next_tier.min.toLocaleString()} certifications
+                              {stats.pricing.total_certifications.toLocaleString()} / {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()} certifications
                             </span>
                             <span className="text-muted-foreground">
                               {stats.pricing.certifications_until_next_tier.toLocaleString()} to go
@@ -308,12 +308,12 @@ export default function AdminDashboard() {
                           <div className="w-full bg-muted rounded-full h-3">
                             <div
                               className="bg-primary h-3 rounded-full transition-all"
-                              style={{ width: `${Math.min(100, Math.max(1, (stats.pricing.total_certifications / stats.pricing.next_tier.min) * 100))}%` }}
+                              style={{ width: `${Math.min(100, Math.max(1, (stats.pricing.total_certifications / (stats.pricing.current_tier.max ?? stats.pricing.next_tier.min)) * 100))}%` }}
                               data-testid="progress-tier"
                             />
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Next tier: ${stats.pricing.next_tier.price_usd}/cert at {stats.pricing.next_tier.min.toLocaleString()} certifications
+                            Next tier: ${stats.pricing.next_tier.price_usd}/cert after {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()} certifications
                           </p>
                         </div>
                       </>
