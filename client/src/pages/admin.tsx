@@ -23,8 +23,15 @@ import {
   Timer,
   Eye,
   Globe,
+  Target,
 } from "lucide-react";
 import { Link } from "wouter";
+
+interface PricingTier {
+  min: number;
+  max: number | null;
+  price_usd: number;
+}
 
 interface PublicStats {
   certifications: {
@@ -52,6 +59,14 @@ interface PublicStats {
     total_success: number;
     total_failed: number;
     last_success_at: string | null;
+  };
+  pricing?: {
+    current_price_usd: number;
+    current_tier: PricingTier;
+    total_certifications: number;
+    tiers: PricingTier[];
+    next_tier: PricingTier | null;
+    certifications_until_next_tier: number | null;
   };
   traffic?: {
     total_visits: number;
@@ -265,6 +280,64 @@ export default function AdminDashboard() {
                 icon={User}
               />
             </div>
+
+            {stats?.pricing && (
+              <Card className="mb-6" data-testid="card-pricing-tier">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                  <CardTitle className="text-sm font-medium">Pricing Tier Progress</CardTitle>
+                  <Target className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Current price</span>
+                      <span className="text-2xl font-bold" data-testid="text-current-price">${stats.pricing.current_price_usd}</span>
+                    </div>
+
+                    {stats.pricing.next_tier && stats.pricing.certifications_until_next_tier !== null && (
+                      <>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              {stats.pricing.total_certifications.toLocaleString()} / {stats.pricing.next_tier.min.toLocaleString()} certifications
+                            </span>
+                            <span className="text-muted-foreground">
+                              {stats.pricing.certifications_until_next_tier.toLocaleString()} to go
+                            </span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-3">
+                            <div
+                              className="bg-primary h-3 rounded-full transition-all"
+                              style={{ width: `${Math.min(100, Math.max(1, (stats.pricing.total_certifications / stats.pricing.next_tier.min) * 100))}%` }}
+                              data-testid="progress-tier"
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Next tier: ${stats.pricing.next_tier.price_usd}/cert at {stats.pricing.next_tier.min.toLocaleString()} certifications
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                      {stats.pricing.tiers.map((tier, i) => {
+                        const isCurrent = tier.min === stats.pricing!.current_tier.min;
+                        return (
+                          <Badge
+                            key={i}
+                            variant={isCurrent ? "default" : "secondary"}
+                            data-testid={`badge-tier-${i}`}
+                          >
+                            ${tier.price_usd} — {tier.min === 0 ? "0" : tier.min.toLocaleString()}
+                            {tier.max ? `–${tier.max.toLocaleString()}` : "+"}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {stats?.traffic && (
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">

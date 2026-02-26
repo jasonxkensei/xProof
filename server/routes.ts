@@ -4437,6 +4437,7 @@ class XProofVerifyTool(BaseTool):
           unique_active: uniqueAgentsRow.count,
           total_api_keys: totalApiKeysRow.count,
         },
+        pricing: await getPricingInfo(),
         generated_at: now.toISOString(),
       });
     } catch (error) {
