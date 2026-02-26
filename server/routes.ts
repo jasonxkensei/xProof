@@ -4540,14 +4540,13 @@ class XProofVerifyTool(BaseTool):
       const [systemUser] = await db.select().from(users).where(eq(users.walletAddress, systemUserId));
       
       let apiCerts = 0;
-      let userCerts = 0;
       if (systemUser) {
         const [apiRow] = await db.select({ count: count() }).from(certifications).where(eq(certifications.userId, systemUser.id));
         apiCerts = apiRow.count;
-        userCerts = totalRow.count - apiCerts;
-      } else {
-        userCerts = totalRow.count;
       }
+      const [trialCertsRow] = await db.select({ count: count() }).from(certifications).innerJoin(users, eq(certifications.userId, users.id)).where(sql`${users.isTrial} IS TRUE`);
+      const trialCerts = trialCertsRow.count;
+      const userCerts = Math.max(0, totalRow.count - apiCerts - trialCerts);
 
       const webhookStats = await db.execute(sql`
         SELECT 
@@ -4607,7 +4606,7 @@ class XProofVerifyTool(BaseTool):
           last_30d: last30dRow.count,
           prev_7d: prev7dRow.count,
           last_5m: recent5mRow.count,
-          by_source: { api: apiCerts, user: userCerts },
+          by_source: { api: apiCerts, trial: trialCerts, user: userCerts },
           by_status: byStatus,
           daily: dailyCerts.rows.map((r: any) => ({
             date: r.day,
@@ -4678,14 +4677,13 @@ class XProofVerifyTool(BaseTool):
       const [systemUser] = await db.select().from(users).where(eq(users.walletAddress, systemUserId));
       
       let apiCerts = 0;
-      let userCerts = 0;
       if (systemUser) {
         const [apiRow] = await db.select({ count: count() }).from(certifications).where(eq(certifications.userId, systemUser.id));
         apiCerts = apiRow.count;
-        userCerts = totalRow.count - apiCerts;
-      } else {
-        userCerts = totalRow.count;
       }
+      const [trialCertsRow] = await db.select({ count: count() }).from(certifications).innerJoin(users, eq(certifications.userId, users.id)).where(sql`${users.isTrial} IS TRUE`);
+      const trialCerts = trialCertsRow.count;
+      const userCerts = Math.max(0, totalRow.count - apiCerts - trialCerts);
 
       const [activeKeysRow] = await db.select({ count: count() }).from(apiKeys).where(eq(apiKeys.isActive, true));
 
@@ -4734,7 +4732,7 @@ class XProofVerifyTool(BaseTool):
           last_24h: last24hRow.count,
           last_7d: last7dRow.count,
           last_30d: last30dRow.count,
-          by_source: { api: apiCerts, user: userCerts },
+          by_source: { api: apiCerts, trial: trialCerts, user: userCerts },
           by_status: byStatus,
           daily: dailyCerts.rows.map((r: any) => ({
             date: r.day,

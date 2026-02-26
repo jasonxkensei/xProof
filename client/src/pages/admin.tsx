@@ -41,7 +41,7 @@ interface PublicStats {
     last_30d: number;
     prev_7d: number;
     last_5m: number;
-    by_source: { api: number; user: number };
+    by_source: { api: number; trial: number; user: number };
     by_status: Record<string, number>;
     daily: Array<{ date: string; count: number }>;
   };
@@ -269,14 +269,14 @@ export default function AdminDashboard() {
               </Card>
               <StatCard
                 title="Certified by Agents"
-                value={stats.certifications.by_source.api}
-                subtitle={stats.certifications.total > 0 ? `${Math.round((stats.certifications.by_source.api / stats.certifications.total) * 100)}% of total` : "No certifications yet"}
+                value={(stats.certifications.by_source.api || 0) + (stats.certifications.by_source.trial || 0)}
+                subtitle={stats.certifications.total > 0 ? `${Math.round(((stats.certifications.by_source.api || 0) + (stats.certifications.by_source.trial || 0)) / stats.certifications.total * 100)}% of total` : "No certifications yet"}
                 icon={Bot}
               />
               <StatCard
                 title="Certified by Humans"
-                value={stats.certifications.by_source.user}
-                subtitle={stats.certifications.total > 0 ? `${Math.round((stats.certifications.by_source.user / stats.certifications.total) * 100)}% of total` : "No certifications yet"}
+                value={stats.certifications.by_source.user || 0}
+                subtitle={stats.certifications.total > 0 ? `${Math.round((stats.certifications.by_source.user || 0) / stats.certifications.total * 100)}% of total` : "No certifications yet"}
                 icon={User}
               />
             </div>
@@ -401,22 +401,32 @@ export default function AdminDashboard() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground flex items-center gap-2"><Bot className="h-4 w-4" /> API / Agent</span>
-                      <span className="font-medium">{stats.certifications.by_source.api}</span>
+                      <span className="font-medium">{stats.certifications.by_source.api || 0}</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
                       <div
                         className="bg-primary h-2 rounded-full transition-all"
-                        style={{ width: `${stats.certifications.total > 0 ? (stats.certifications.by_source.api / stats.certifications.total) * 100 : 0}%` }}
+                        style={{ width: `${stats.certifications.total > 0 ? ((stats.certifications.by_source.api || 0) / stats.certifications.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2"><Bot className="h-4 w-4" /> Trial</span>
+                      <span className="font-medium">{stats.certifications.by_source.trial || 0}</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div
+                        className="bg-chart-4 h-2 rounded-full transition-all"
+                        style={{ width: `${stats.certifications.total > 0 ? ((stats.certifications.by_source.trial || 0) / stats.certifications.total) * 100 : 0}%` }}
                       />
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground flex items-center gap-2"><User className="h-4 w-4" /> User (Wallet)</span>
-                      <span className="font-medium">{stats.certifications.by_source.user}</span>
+                      <span className="font-medium">{stats.certifications.by_source.user || 0}</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
                       <div
                         className="bg-chart-2 h-2 rounded-full transition-all"
-                        style={{ width: `${stats.certifications.total > 0 ? (stats.certifications.by_source.user / stats.certifications.total) * 100 : 0}%` }}
+                        style={{ width: `${stats.certifications.total > 0 ? ((stats.certifications.by_source.user || 0) / stats.certifications.total) * 100 : 0}%` }}
                       />
                     </div>
                   </div>
