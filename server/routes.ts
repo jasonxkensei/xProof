@@ -347,26 +347,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user's certifications
-  app.get("/api/certifications", isWalletAuthenticated, async (req: any, res) => {
+  app.get("/api/certifications", async (req: any, res) => {
     try {
-      const walletAddress = req.walletAddress;
-      
-      // Get user first to get their ID
-      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
-      if (!user) {
+      let userId: string | null = null;
+
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        const rawKey = authHeader.slice(7);
+        if (!rawKey.startsWith("pm_")) {
+          return res.status(401).json({ error: "INVALID_API_KEY", message: "API key must start with 'pm_' prefix" });
+        }
+        const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+        const [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+        if (!apiKey || !apiKey.isActive) {
+          return res.status(401).json({ error: "INVALID_API_KEY", message: "Invalid or expired API key" });
+        }
+        userId = apiKey.userId || null;
+      } else {
+        const walletAddress = req.session?.walletAddress;
+        if (!walletAddress) {
+          return res.status(401).json({
+            error: "AUTH_REQUIRED",
+            message: "Provide a wallet session or Bearer API key",
+            options: [
+              { type: "api_key", header: "Authorization: Bearer pm_xxx" },
+              { type: "wallet", description: "Connect via MultiversX wallet" },
+            ],
+          });
+        }
+        const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+        userId = user?.id || null;
+      }
+
+      if (!userId) {
         return res.status(404).json({ message: "User not found" });
       }
 
       const userCertifications = await db
         .select()
         .from(certifications)
-        .where(eq(certifications.userId, user.id!))
+        .where(eq(certifications.userId, userId))
         .orderBy(desc(certifications.createdAt));
 
       res.json(userCertifications);
     } catch (error) {
       logger.withRequest(req).error("Failed to fetch certifications");
       res.status(500).json({ message: "Failed to fetch certifications" });
+    }
+  });
+
+  // GET /api/me — identity + quota for API key holders
+  app.get("/api/me", async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({
+          error: "AUTH_REQUIRED",
+          message: "Provide Authorization: Bearer pm_xxx",
+          hint: "GET /api/me returns your key status, trial quota, and certification count",
+        });
+      }
+
+      const rawKey = authHeader.slice(7);
+      if (!rawKey.startsWith("pm_")) {
+        return res.status(401).json({ error: "INVALID_API_KEY", message: "API key must start with 'pm_' prefix" });
+      }
+
+      const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+      const [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+      if (!apiKey || !apiKey.isActive) {
+        return res.status(401).json({ error: "INVALID_API_KEY", message: "Invalid or expired API key" });
+      }
+
+      const [user] = apiKey.userId
+        ? await db.select().from(users).where(eq(users.id, apiKey.userId))
+        : [];
+
+      const certCount = user
+        ? await db.select({ value: count() }).from(certifications).where(eq(certifications.userId, user.id))
+        : [{ value: 0 }];
+
+      const isTrial = user?.isTrial ?? false;
+      const trialQuota = user?.trialQuota ?? 0;
+      const trialUsed = user?.trialUsed ?? 0;
+
+      res.json({
+        key_id: apiKey.id,
+        key_prefix: rawKey.slice(0, 8) + "...",
+        is_active: apiKey.isActive,
+        created_at: apiKey.createdAt?.toISOString(),
+        last_used_at: apiKey.lastUsedAt?.toISOString() ?? null,
+        request_count: apiKey.requestCount ?? 0,
+        account: {
+          is_trial: isTrial,
+          ...(isTrial ? {
+            trial_quota: trialQuota,
+            trial_used: trialUsed,
+            trial_remaining: Math.max(0, trialQuota - trialUsed),
+            upgrade: {
+              x402: "Send requests without API key — pay per use via USDC on Base",
+              acp: "Contact xproof for full API access with EGLD payments",
+            },
+          } : {}),
+        },
+        certifications: {
+          total: certCount[0]?.value ?? 0,
+        },
+      });
+    } catch (error) {
+      logger.withRequest(req).error("Failed to fetch API key identity");
+      res.status(500).json({ message: "Failed to fetch identity" });
     }
   });
 
@@ -1285,6 +1375,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      if (trialInfo) {
+        res.setHeader("X-Trial-Remaining", Math.max(0, trialInfo.remaining - 1).toString());
+      }
+
       return res.status(201).json({
         proof_id: certification.id,
         status: "certified",
@@ -1300,7 +1394,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         timestamp: certification.createdAt?.toISOString() || new Date().toISOString(),
         webhook_status: webhookStatus,
-        ...(trialInfo ? { trial: { remaining: trialInfo.remaining - 1 } } : {}),
+        ...(trialInfo ? { trial: { remaining: Math.max(0, trialInfo.remaining - 1) } } : {}),
         message: "File certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
       });
     } catch (error) {
@@ -1549,13 +1643,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       logger.withRequest(req).info("Batch certification completed", { batchId, created: createdCount, existing: existingCount, total: data.files.length, authMethod, adminExempt: isAdminExempt, trial: !!trialInfo });
 
+      if (trialInfo) {
+        res.setHeader("X-Trial-Remaining", Math.max(0, trialInfo.remaining - createdCount).toString());
+      }
+
       return res.status(201).json({
         batch_id: batchId,
         total: data.files.length,
         created: createdCount,
         existing: existingCount,
         results,
-        ...(trialInfo ? { trial: { remaining: trialInfo.remaining - createdCount } } : {}),
+        ...(trialInfo ? { trial: { remaining: Math.max(0, trialInfo.remaining - createdCount) } } : {}),
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -3563,6 +3661,12 @@ curl -X POST https://xproof.app/api/agent/register \\\\
 \\\`\\\`\\\`
 Returns an API key (pm_xxx). Use it immediately to certify files.
 
+Check quota and your certifications at any time:
+\\\`\\\`\\\`bash
+curl https://xproof.app/api/me -H "Authorization: Bearer pm_YOUR_API_KEY"
+\\\`\\\`\\\`
+Returns: trial_remaining, trial_used, total certifications. Each POST /api/proof response also includes an \\\`X-Trial-Remaining\\\` header.
+
 ## Quick Start (for AI agents)
 
 ### REST API
@@ -3681,6 +3785,12 @@ curl -X POST ${baseUrl}/api/agent/register \\
   -d '{"agent_name": "my-agent"}'
 \`\`\`
 Returns an API key (pm_xxx). Use it immediately to certify files.
+
+Check quota and your certifications at any time:
+\`\`\`bash
+curl ${baseUrl}/api/me -H "Authorization: Bearer pm_YOUR_API_KEY"
+\`\`\`
+Returns: trial_remaining, trial_used, total certifications. Each POST /api/proof response also includes an \`X-Trial-Remaining\` header.
 
 ## Quick Start (for AI agents)
 
@@ -4459,6 +4569,8 @@ class XProofVerifyTool(BaseTool):
         verify: `GET ${baseUrl}/proof/{id}.json`,
         register_trial: `POST ${baseUrl}/api/agent/register`,
         trial_info: `GET ${baseUrl}/api/trial`,
+        me: `GET ${baseUrl}/api/me`,
+        certifications: `GET ${baseUrl}/api/certifications`,
         health: `GET ${baseUrl}/api/acp/health`,
         pricing: `GET ${baseUrl}/api/pricing`,
       },
