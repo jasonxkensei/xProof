@@ -319,21 +319,6 @@ export default function AdminDashboard() {
                       </>
                     )}
 
-                    <div className="flex items-center gap-2 flex-wrap pt-1">
-                      {stats.pricing.tiers.map((tier, i) => {
-                        const isCurrent = tier.min === stats.pricing!.current_tier.min;
-                        return (
-                          <Badge
-                            key={i}
-                            variant={isCurrent ? "default" : "secondary"}
-                            data-testid={`badge-tier-${i}`}
-                          >
-                            ${tier.price_usd} — {tier.min === 0 ? "0" : tier.min.toLocaleString()}
-                            {tier.max ? `–${tier.max.toLocaleString()}` : "+"}
-                          </Badge>
-                        );
-                      })}
-                    </div>
                   </div>
                 </CardContent>
               </Card>
