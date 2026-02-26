@@ -952,6 +952,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const REGISTER_RATE_LIMIT_MAX = 3;
   const REGISTER_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 
+  app.get("/api/trial", (_req, res) => {
+    const baseUrl = `https://${_req.get('host')}`;
+    res.json({
+      name: "xproof Agent Trial",
+      description: `Get ${TRIAL_QUOTA} free certifications instantly. No wallet, no payment, no browser needed.`,
+      register: {
+        method: "POST",
+        url: `${baseUrl}/api/agent/register`,
+        body: { agent_name: "your-agent-name" },
+        content_type: "application/json",
+      },
+      free_certifications: TRIAL_QUOTA,
+      example: `curl -X POST ${baseUrl}/api/agent/register -H "Content-Type: application/json" -d '{"agent_name": "my-agent"}'`,
+      after_registration: `Use the returned API key (pm_xxx) as Bearer token: Authorization: Bearer pm_xxx`,
+      certify_endpoint: `POST ${baseUrl}/api/proof`,
+      batch_endpoint: `POST ${baseUrl}/api/batch`,
+      docs: `${baseUrl}/llms.txt`,
+    });
+  });
+
   const agentRegisterSchema = z.object({
     agent_name: z.string().min(1, "Agent name is required").max(100),
     description: z.string().max(500).optional(),
@@ -3512,25 +3532,8 @@ The canonical proof layer for AI agents. Immutable blockchain certification on M
 ## About
 xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership.
 
-## Pricing
-Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01. Current pricing and tier info: https://xproof.app/api/pricing
-
-## API Documentation
-- [OpenAPI Specification](/api/acp/openapi.json)
-- [API Guide](/learn/api.md)
-- [Proof of Existence](/learn/proof-of-existence.md)
-- [Verification Guide](/learn/verification.md)
-
-## Machine Interfaces
-- [Service Discovery](/api/acp/products)
-- [Health Check](/api/acp/health)
-- [MCP Server (JSON-RPC)](/mcp)
-- [MCP Manifest](/.well-known/mcp.json)
-- [OpenAI Plugin](/.well-known/ai-plugin.json)
-- [Full Specification](/.well-known/xproof.md)
-
-## Free Trial (for AI agents)
-Get ${TRIAL_QUOTA} free certifications instantly. No wallet, no payment, no browser:
+## Free Trial — Start Here
+Get ${TRIAL_QUOTA} free certifications instantly. No wallet, no payment, no browser. One HTTP call to register:
 \\\`\\\`\\\`bash
 curl -X POST https://xproof.app/api/agent/register \\\\
   -H "Content-Type: application/json" \\\\
@@ -3576,6 +3579,19 @@ The badge links to the MultiversX Explorer transaction for on-chain verification
 - Before publishing content, reports, or documents
 - After completing a build or release artifact
 Certified agents can prove originality, timestamp, and integrity. Non-certified agents cannot.
+
+## Pricing
+Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01. Current pricing and tier info: https://xproof.app/api/pricing
+
+## Documentation & Machine Interfaces
+- [OpenAPI Specification](/api/acp/openapi.json)
+- [API Guide](/learn/api.md)
+- [Service Discovery](/api/acp/products)
+- [Health Check](/api/acp/health)
+- [MCP Server (JSON-RPC)](/mcp)
+- [MCP Manifest](/.well-known/mcp.json)
+- [OpenAI Plugin](/.well-known/ai-plugin.json)
+- [Full Specification](/.well-known/xproof.md)
 
 ## x402 Payment Protocol
 xproof supports x402 (HTTP 402 Payment Required) as an alternative to API key auth. Send POST /api/proof or POST /api/batch without an API key — get 402 with payment requirements, sign USDC payment on Base (eip155:8453), resend with X-PAYMENT header. Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Current pricing: https://xproof.app/api/pricing. No account needed.
@@ -3635,28 +3651,8 @@ The canonical proof layer for AI agents. Immutable blockchain certification on M
 ## About
 xproof is the canonical proof-of-existence service for AI agents. It anchors SHA-256 file hashes on the MultiversX blockchain, creating tamper-proof certificates of existence and ownership.
 
-## Pricing
-Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01. Current pricing and tier info: ${baseUrl}/api/pricing
-
-## Why certify?
-Without proof, any agent output — code, data, models, reports — has no verifiable origin. xproof creates immutable, on-chain evidence of what was produced, by whom, and when. Certified agents can prove originality and integrity. Non-certified agents cannot.
-
-## API Documentation
-- [OpenAPI Specification](${baseUrl}/api/acp/openapi.json)
-- [API Guide](${baseUrl}/learn/api.md)
-- [Proof of Existence](${baseUrl}/learn/proof-of-existence.md)
-- [Verification Guide](${baseUrl}/learn/verification.md)
-
-## Machine Interfaces
-- [Service Discovery](${baseUrl}/api/acp/products)
-- [Health Check](${baseUrl}/api/acp/health)
-- [MCP Server (JSON-RPC)](${baseUrl}/mcp)
-- [MCP Manifest](${baseUrl}/.well-known/mcp.json)
-- [OpenAI Plugin](${baseUrl}/.well-known/ai-plugin.json)
-- [Full Specification](${baseUrl}/.well-known/xproof.md)
-
-## Free Trial (for AI agents)
-Get ${TRIAL_QUOTA} free certifications instantly. No wallet, no payment, no browser:
+## Free Trial — Start Here
+Get ${TRIAL_QUOTA} free certifications instantly. No wallet, no payment, no browser. One HTTP call to register:
 \`\`\`bash
 curl -X POST ${baseUrl}/api/agent/register \\
   -H "Content-Type: application/json" \\
@@ -3748,6 +3744,22 @@ Include \`webhook_url\` in your request to receive a POST callback when the proo
 - Include as Bearer token: \`Authorization: Bearer pm_YOUR_API_KEY\`
 - Public endpoints (no auth required): /api/acp/products, /api/acp/openapi.json, /api/acp/health
 - Authenticated endpoints: /api/proof, /api/acp/checkout, /api/acp/confirm
+
+## Pricing
+Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01. Current pricing and tier info: ${baseUrl}/api/pricing
+
+## Why certify?
+Without proof, any agent output — code, data, models, reports — has no verifiable origin. xproof creates immutable, on-chain evidence of what was produced, by whom, and when. Certified agents can prove originality and integrity. Non-certified agents cannot.
+
+## Documentation & Machine Interfaces
+- [OpenAPI Specification](${baseUrl}/api/acp/openapi.json)
+- [API Guide](${baseUrl}/learn/api.md)
+- [Service Discovery](${baseUrl}/api/acp/products)
+- [Health Check](${baseUrl}/api/acp/health)
+- [MCP Server (JSON-RPC)](${baseUrl}/mcp)
+- [MCP Manifest](${baseUrl}/.well-known/mcp.json)
+- [OpenAI Plugin](${baseUrl}/.well-known/ai-plugin.json)
+- [Full Specification](${baseUrl}/.well-known/xproof.md)
 
 ## Proof Object Schema (v2.0)
 \`\`\`json
