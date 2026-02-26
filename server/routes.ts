@@ -4594,8 +4594,8 @@ class XProofVerifyTool(BaseTool):
       const [humanVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, false));
       const [agentVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, true));
 
-      const [uniqueAgentsRow] = await db.select({ count: count() }).from(apiKeys).where(and(eq(apiKeys.isActive, true), gt(apiKeys.requestCount, 0)));
-      const [totalApiKeysRow] = await db.select({ count: count() }).from(apiKeys).where(eq(apiKeys.isActive, true));
+      const [uniqueAgentsRow] = await db.select({ count: count() }).from(apiKeys).innerJoin(users, eq(apiKeys.userId, users.id)).where(and(eq(apiKeys.isActive, true), gt(apiKeys.requestCount, 0), sql`${users.isTrial} IS NOT TRUE`));
+      const [totalApiKeysRow] = await db.select({ count: count() }).from(apiKeys).innerJoin(users, eq(apiKeys.userId, users.id)).where(and(eq(apiKeys.isActive, true), sql`${users.isTrial} IS NOT TRUE`));
       const [trialAgentsRow] = await db.select({ count: count() }).from(users).where(eq(users.isTrial, true));
       const [trialUsedRow] = await db.select({ total: sql<number>`COALESCE(SUM(trial_used), 0)` }).from(users).where(eq(users.isTrial, true));
 
