@@ -21,12 +21,12 @@ export function isMultiversXConfigured(): boolean {
 
 // Get account nonce from MultiversX API
 async function getAccountNonce(address: string): Promise<bigint> {
-  const response = await fetch(`${API_URL}/address/${address}`);
+  const response = await fetch(`${API_URL}/accounts/${address}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch account nonce: ${response.statusText}`);
   }
   const data = await response.json();
-  return BigInt(data.nonce || 0);
+  return BigInt(data.nonce ?? 0);
 }
 
 // Submit signed transaction to MultiversX gateway
