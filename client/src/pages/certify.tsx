@@ -234,7 +234,7 @@ export default function Certify() {
 
       if (isWalletConnected) {
         setSignatureStep("Fetching certification price...");
-        const priceResponse = await fetch(`/api/certification-price?wallet=${encodeURIComponent(user.walletAddress)}`);
+        const priceResponse = await fetch(`/api/pricing?wallet=${encodeURIComponent(user.walletAddress)}`);
         const priceData = await priceResponse.json();
 
         setSignatureStep(`Check your wallet to sign ($${priceData.price_usd} in EGLD)...`);
