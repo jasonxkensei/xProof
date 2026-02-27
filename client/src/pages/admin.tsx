@@ -420,7 +420,7 @@ export default function AdminDashboard() {
                       />
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground flex items-center gap-2"><User className="h-4 w-4" /> User (Wallet)</span>
+                      <span className="text-sm text-muted-foreground flex items-center gap-2"><User className="h-4 w-4" /> Humans</span>
                       <span className="font-medium">{stats.certifications.by_source.user || 0}</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
