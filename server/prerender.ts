@@ -19,8 +19,13 @@ const SKIP_EXTENSIONS = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|m
 const SKIP_PATHS = ["/api/", "/.well-known/", "/mcp", "/llms.txt", "/llms-full.txt", "/robots.txt", "/sitemap.xml", "/learn/", "/dashboard", "/settings", "/agent-tools/", "/genesis.proof.json"];
 
 function isCrawler(userAgent: string): boolean {
+  if (!userAgent) return false;
   const ua = userAgent.toLowerCase();
-  return CRAWLER_USER_AGENTS.some(bot => ua.includes(bot.toLowerCase()));
+  if (CRAWLER_USER_AGENTS.some(bot => ua.includes(bot.toLowerCase()))) return true;
+  // Any non-browser HTTP client (no "mozilla" = not a real browser)
+  // Catches: python-requests, httpx, curl, Go-http-client, node-fetch, axios, LLM web_fetch tools, etc.
+  if (!ua.includes("mozilla")) return true;
+  return false;
 }
 
 function shouldSkip(path: string): boolean {
@@ -450,17 +455,28 @@ export function prerenderMiddleware() {
 
     const baseUrl = `${req.protocol}://${req.get("host")}`;
 
+    const agentLinks = `</skill.md>; rel="agent-skill", </.well-known/xproof.json>; rel="agent-info", </llms.txt>; rel="describedby"`;
+
     try {
       if (path === "/" || path === "") {
-        return res.status(200).set("Content-Type", "text/html").send(await renderHomePage(baseUrl));
+        return res.status(200)
+          .set("Content-Type", "text/html")
+          .set("Link", agentLinks)
+          .send(await renderHomePage(baseUrl));
       }
 
       if (path === "/certify") {
-        return res.status(200).set("Content-Type", "text/html").send(renderCertifyPage(baseUrl));
+        return res.status(200)
+          .set("Content-Type", "text/html")
+          .set("Link", agentLinks)
+          .send(renderCertifyPage(baseUrl));
       }
 
       if (path === "/agents") {
-        return res.status(200).set("Content-Type", "text/html").send(await renderAgentsPage(baseUrl));
+        return res.status(200)
+          .set("Content-Type", "text/html")
+          .set("Link", agentLinks)
+          .send(await renderAgentsPage(baseUrl));
       }
 
       const proofMatch = path.match(/^\/proof\/([^/]+)$/);
