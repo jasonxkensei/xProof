@@ -123,11 +123,13 @@ export async function recordOnBlockchain(
       ? "https://testnet-explorer.multiversx.com"
       : "https://explorer.multiversx.com";
 
-    recordTransaction(true, Date.now() - txStart, "certification");
+    const latencyMs = Date.now() - txStart;
+    recordTransaction(true, latencyMs, "certification");
 
     return {
       transactionHash: result.txHash,
       transactionUrl: `${explorerBaseUrl}/transactions/${result.txHash}`,
+      latencyMs,
     };
   } catch (error: any) {
     recordTransaction(false, Date.now() - txStart, "certification");

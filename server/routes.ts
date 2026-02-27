@@ -19,9 +19,9 @@ import {
   type ACPConfirmResponse,
 } from "@shared/schema";
 import { getCertificationPriceEgld, getCertificationPriceUsd, getPricingInfo } from "./pricing";
-import { eq, desc, sql, and, gte, gt, count } from "drizzle-orm";
+import { eq, desc, sql, and, gte, gt, count, isNotNull } from "drizzle-orm";
 import { z } from "zod";
-import { getMetrics } from "./metrics";
+import { getMetrics, bootstrapMetricsFromDb } from "./metrics";
 import { isX402Configured, verifyX402Payment, send402Response } from "./x402";
 import { generateCertificatePDF } from "./certificateGenerator";
 import { recordOnBlockchain, isMultiversXConfigured, broadcastSignedTransaction } from "./blockchain";
@@ -53,6 +53,29 @@ const AGENT_UA_PATTERNS = ["chatgpt", "gptbot", "googlebot", "bingbot", "bot", "
 const EXCLUDED_IP_HASHES = new Set((process.env.EXCLUDE_IP_HASHES || "").split(",").map(h => h.trim()).filter(Boolean));
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Bootstrap blockchain latency metrics from DB (persists across deployments)
+  try {
+    const cutoff = new Date(Date.now() - 60 * 60 * 1000);
+    // Rolling window certs (last 1h) for avg/percentile stats
+    const rollingCerts = await db
+      .select({ blockchainLatencyMs: certifications.blockchainLatencyMs, createdAt: certifications.createdAt })
+      .from(certifications)
+      .where(and(isNotNull(certifications.blockchainLatencyMs), gte(certifications.createdAt, cutoff)))
+      .orderBy(desc(certifications.createdAt));
+    // Most recent cert ever (for lastKnownLatency, regardless of window)
+    const [latestCert] = await db
+      .select({ blockchainLatencyMs: certifications.blockchainLatencyMs, createdAt: certifications.createdAt })
+      .from(certifications)
+      .where(isNotNull(certifications.blockchainLatencyMs))
+      .orderBy(desc(certifications.createdAt))
+      .limit(1);
+    // Merge: include latestCert in rolling list if not already there (for lastKnownLatency)
+    const allCerts = rollingCerts.length > 0 ? rollingCerts : (latestCert ? [latestCert] : []);
+    bootstrapMetricsFromDb(allCerts, latestCert ?? null);
+  } catch (_e) {
+    // Non-blocking: if DB is unavailable at startup, metrics start from zero
+  }
+
   // Apply session middleware
   app.use(getSession());
 
@@ -261,6 +284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let transactionHash: string;
       let transactionUrl: string;
       let blockchainStatus: string = "confirmed";
+      let blockchainLatencyMs: number | null = null;
       
       if (data.transactionHash && data.transactionUrl) {
         transactionHash = data.transactionHash;
@@ -298,6 +322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         transactionHash = result.transactionHash;
         transactionUrl = result.transactionUrl;
+        blockchainLatencyMs = result.latencyMs ?? null;
       }
 
       // Create certification
@@ -315,6 +340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionUrl,
           blockchainStatus,
           isPublic: true,
+          ...(blockchainLatencyMs !== null ? { blockchainLatencyMs } : {}),
         })
         .returning();
 
@@ -1345,6 +1371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionUrl: result.transactionUrl,
           blockchainStatus: "confirmed",
           isPublic: true,
+          ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
         })
         .returning();
 
@@ -1606,6 +1633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             transactionUrl: result.transactionUrl,
             blockchainStatus: "confirmed",
             isPublic: true,
+            ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
           })
           .returning();
 

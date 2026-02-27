@@ -68,6 +68,7 @@ export const certifications = pgTable("certifications", {
   webhookStatus: varchar("webhook_status"),
   webhookLastAttempt: timestamp("webhook_last_attempt"),
   webhookAttempts: integer("webhook_attempts").default(0),
+  blockchainLatencyMs: integer("blockchain_latency_ms"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

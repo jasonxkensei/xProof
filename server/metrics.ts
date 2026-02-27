@@ -119,3 +119,23 @@ export function getMetrics() {
 export function getUptimeSeconds(): number {
   return Math.floor((Date.now() - startTime) / 1000);
 }
+
+export function bootstrapMetricsFromDb(
+  recentCerts: Array<{ blockchainLatencyMs: number | null; createdAt: Date | null }>,
+  latestEver: { blockchainLatencyMs: number | null; createdAt: Date | null } | null = null,
+): void {
+  const cutoff = Date.now() - ROLLING_WINDOW_MS;
+
+  for (const cert of recentCerts) {
+    if (cert.blockchainLatencyMs == null || cert.createdAt == null) continue;
+    const ts = cert.createdAt.getTime();
+    if (ts < cutoff) continue;
+    recentTransactions.push({ timestamp: ts, success: true, latencyMs: cert.blockchainLatencyMs, type: "certification" });
+  }
+
+  // lastKnownLatency = most recent cert with latency, regardless of rolling window
+  const anchor = latestEver ?? recentCerts[0] ?? null;
+  if (anchor?.blockchainLatencyMs != null && anchor.createdAt != null && lastKnownLatency === null) {
+    lastKnownLatency = { latencyMs: anchor.blockchainLatencyMs, timestamp: anchor.createdAt.getTime() };
+  }
+}
