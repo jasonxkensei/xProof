@@ -7,6 +7,9 @@ interface TransactionRecord {
   type: "certification" | "mx8004";
 }
 
+// Persist metrics across restarts in memory or let them be initialized from the DB if needed
+// For now, we keep a separate variable for the very last known latency that doesn't get pruned
+let lastKnownLatency: { latencyMs: number; timestamp: number } | null = null;
 const recentTransactions: TransactionRecord[] = [];
 const ROLLING_WINDOW_MS = 60 * 60 * 1000; // 1 hour rolling window
 
@@ -14,7 +17,6 @@ let totalCertifications = 0;
 let totalFailed = 0;
 let totalRetries = 0;
 let mx8004QueueSize = 0;
-let lastKnownLatency: { latencyMs: number; timestamp: number } | null = null;
 
 function pruneOldRecords(): void {
   const cutoff = Date.now() - ROLLING_WINDOW_MS;
