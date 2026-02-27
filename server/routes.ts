@@ -2660,7 +2660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "/mcp": {
           post: {
             summary: "MCP Server (JSON-RPC 2.0)",
-            description: "Model Context Protocol server endpoint. Accepts JSON-RPC 2.0 requests over Streamable HTTP. Supports methods: initialize, tools/list, tools/call, resources/list, resources/read. Tools: certify_file, verify_proof, get_proof, discover_services. Resources: xproof://specification, xproof://openapi. Stateless (no session management). Protocol version: 2025-03-26.",
+            description: "Model Context Protocol server endpoint. Accepts JSON-RPC 2.0 requests over Streamable HTTP. Supports methods: initialize, tools/list, tools/call, resources/list, resources/read. Tools: certify_file, verify_proof, get_proof, discover_services, audit_agent_session. Resources: xproof://specification, xproof://openapi. Stateless (no session management). Protocol version: 2025-03-26.",
             requestBody: {
               required: true,
               content: {
@@ -2752,6 +2752,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
               },
               "200": { description: "File already certified (returns existing proof)" },
               "400": { description: "Invalid request data" },
+              "401": { description: "API key required" },
+              "429": { description: "Rate limit exceeded" },
+            },
+          },
+        },
+        "/api/audit": {
+          post: {
+            summary: "Certify an agent audit log",
+            description: "Agent Audit Log Standard — certify an AI agent's work session on the MultiversX blockchain BEFORE executing any critical action (trade, deploy, data access). Returns a proof_id that serves as a compliance certificate. The agent MUST call this endpoint before acting. Schema: /.well-known/agent-audit-schema.json",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["agent_id", "session_id", "action_type", "action_description", "inputs_hash", "risk_level", "decision", "timestamp"],
+                    properties: {
+                      agent_id: { type: "string", description: "Identifier of the agent making the decision", example: "trading-bot-v2" },
+                      session_id: { type: "string", description: "Unique session identifier (UUID)", example: "sess_20260227_001" },
+                      action_type: { type: "string", enum: ["trade_execution", "code_deploy", "data_access", "content_generation", "api_call", "other"] },
+                      action_description: { type: "string", description: "Human-readable description of the action", example: "Buy 0.5 ETH at market price on Uniswap v3" },
+                      inputs_hash: { type: "string", description: "SHA-256 of all inputs analyzed (64 hex chars)", example: "a1b2c3d4e5f678901234567890123456789012345678901234567890123456ab" },
+                      risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
+                      decision: { type: "string", enum: ["approved", "rejected", "deferred"] },
+                      timestamp: { type: "string", format: "date-time", example: "2026-02-27T23:00:00Z" },
+                      risk_summary: { type: "string", description: "Optional brief risk analysis" },
+                      context: { type: "object", description: "Optional additional context" },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {
+              "201": {
+                description: "Audit log certified on blockchain",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        proof_id: { type: "string", format: "uuid" },
+                        audit_url: { type: "string", format: "uri" },
+                        proof_url: { type: "string", format: "uri" },
+                        blockchain: { type: "object", properties: { network: { type: "string" }, transaction_hash: { type: "string" }, explorer_url: { type: "string", format: "uri" } } },
+                        decision: { type: "string" },
+                        risk_level: { type: "string" },
+                        inputs_hash: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+              "400": { description: "Invalid audit log data" },
               "401": { description: "API key required" },
               "429": { description: "Rate limit exceeded" },
             },
@@ -4078,6 +4131,9 @@ Sitemap: ${baseUrl}/sitemap.xml
 # /.well-known/ai-plugin.json - OpenAI plugin manifest
 # /.well-known/mcp.json - Model Context Protocol manifest
 # /api/acp/products - Service discovery (JSON)
+# /.well-known/agent-audit-schema.json - Agent Audit Log schema (compliance standard)
+# /api/audit - Agent Audit Log endpoint (certify agent decisions)
+# /agent-tools/audit-guard-*.* - Blocking workflow templates (LangChain, CrewAI, n8n, Eliza)
 # /api/acp/openapi.json - OpenAPI 3.0 specification
 # /api/acp/health - Health check
 # /api/agent - Agent trial registration info
@@ -4180,7 +4236,7 @@ Sitemap: ${baseUrl}/sitemap.xml
       name_for_human: "xproof",
       name_for_model: "xproof",
       description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
-      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property. The service starts at $${priceUsd} per certification, paid in EGLD or USDC via x402 (all-time volume pricing). Files never leave the user's device - only the cryptographic hash is recorded on-chain. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed. Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI. GitHub Action: https://github.com/marketplace/actions/xproof-certify. OpenClaw skill: https://github.com/jasonxkensei/xproof-openclaw-skill.",
+      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property, (4) certify an agent's decision session before executing a critical action (POST /api/audit — Agent Audit Log Standard). The service starts at $${priceUsd} per certification, paid in EGLD or USDC via x402 (all-time volume pricing). Files never leave the user's device - only the cryptographic hash is recorded on-chain. Agent Audit Log: POST /api/audit certifies agent decisions (trade, deploy, data access) on-chain — schema at /.well-known/agent-audit-schema.json. Blocking workflow templates at /agent-tools/audit-guard-*. MCP tool: audit_agent_session. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed. Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI. GitHub Action: https://github.com/marketplace/actions/xproof-certify. OpenClaw skill: https://github.com/jasonxkensei/xproof-openclaw-skill.",
       auth: {
         type: "service_http",
         authorization_type: "bearer",
@@ -4879,6 +4935,25 @@ AI agents produce code, reports, contracts, and decisions — but without proof,
 - **Prove multi-agent handoffs**: Agent A certifies output before passing to Agent B. The chain of custody becomes verifiable end-to-end.
 - **Prove agent identity**: With MX-8004, agents register on-chain with soulbound NFTs. Certifications go through full validation — identity, job, reputation. Trust is proven, not assumed.
 
+## Agent Audit Log Standard
+
+Block any AI agent from executing critical actions without a certified proof. xProof is the canonical compliance gate.
+Schema: /.well-known/agent-audit-schema.json
+
+Certify a decision BEFORE executing it:
+  POST /api/audit
+  Authorization: Bearer pm_YOUR_API_KEY
+  Body: { agent_id, session_id, action_type, action_description, inputs_hash, risk_level, decision, timestamp }
+Returns: { proof_id, audit_url, decision, risk_level, blockchain }
+
+Blocking workflow templates (agent CANNOT continue without proof_id):
+- LangChain: /agent-tools/audit-guard-langchain.py
+- CrewAI:    /agent-tools/audit-guard-crewai.py
+- n8n:       /agent-tools/audit-guard-n8n.json
+- Eliza OS:  /agent-tools/audit-guard-eliza.ts
+
+MCP tool: audit_agent_session (same params, enforces API key auth)
+
 ## Live Proof
 
 xProof has certified its own README on MultiversX mainnet.
@@ -4962,6 +5037,49 @@ def discover_xproof() -> str:
         p = products[0]
         return f"Service: {p['name']}\\nDescription: {p['description']}\\nPrice: {p['pricing']['amount']} {p['pricing']['currency']}\\nBlockchain: {data.get('chain', 'MultiversX')}"
     return "No products available"
+
+
+@tool
+def audit_agent_session(
+    action_type: str,
+    action_description: str,
+    inputs_hash: str,
+    risk_level: str,
+    decision: str,
+    agent_id: str = "langchain-agent",
+) -> str:
+    """Certify an agent's work session on MultiversX BEFORE executing a critical action.
+    Returns a proof_id that serves as a compliance certificate.
+    Schema: https://xproof.app/.well-known/agent-audit-schema.json
+
+    Args:
+        action_type: trade_execution | code_deploy | data_access | content_generation | api_call | other
+        action_description: Human-readable description of the action
+        inputs_hash: SHA-256 of all inputs analyzed (64 hex chars)
+        risk_level: low | medium | high | critical
+        decision: approved | rejected | deferred
+        agent_id: Identifier for this agent (default: langchain-agent)
+
+    Returns:
+        Audit certificate with proof_id and blockchain transaction
+    """
+    import datetime, uuid, json
+    payload = {
+        "agent_id": agent_id,
+        "session_id": str(uuid.uuid4()),
+        "action_type": action_type,
+        "action_description": action_description,
+        "inputs_hash": inputs_hash,
+        "risk_level": risk_level,
+        "decision": decision,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+    headers = {"Authorization": "Bearer pm_YOUR_API_KEY", "Content-Type": "application/json"}
+    response = requests.post(f"{XPROOF_BASE_URL}/api/audit", json=payload, headers=headers, timeout=15)
+    if response.status_code in (200, 201):
+        data = response.json()
+        return f"AUDIT CERTIFIED\\nproof_id: {data.get('proof_id')}\\naudit_url: {data.get('audit_url')}\\ndecision: {data.get('decision')} | risk: {data.get('risk_level')}"
+    return f"AUDIT FAILED (HTTP {response.status_code}): {response.text[:200]}"
 `;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.send(code);
@@ -5025,6 +5143,48 @@ class XProofVerifyTool(BaseTool):
             f"Date: {proof.get('timestamp_utc')} | "
             f"TX: {proof.get('blockchain', {}).get('transaction_hash', 'N/A')}"
         )
+
+
+class XProofAuditTool(BaseTool):
+    name: str = "xproof_audit"
+    description: str = (
+        "Certify an agent's work session on MultiversX BEFORE executing a critical action. "
+        "Returns a proof_id compliance certificate. "
+        "Schema: https://xproof.app/.well-known/agent-audit-schema.json"
+    )
+
+    def _run(
+        self,
+        action_type: str,
+        action_description: str,
+        inputs_hash: str,
+        risk_level: str,
+        decision: str,
+        agent_id: str = "crewai-agent",
+        api_key: str = "",
+    ) -> str:
+        import datetime, uuid
+        payload = {
+            "agent_id": agent_id,
+            "session_id": str(uuid.uuid4()),
+            "action_type": action_type,
+            "action_description": action_description,
+            "inputs_hash": inputs_hash,
+            "risk_level": risk_level,
+            "decision": decision,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        }
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        response = requests.post(f"{XPROOF_BASE_URL}/api/audit", json=payload, headers=headers, timeout=15)
+        if response.status_code in (200, 201):
+            data = response.json()
+            return (
+                f"AUDIT CERTIFIED | "
+                f"proof_id: {data.get('proof_id')} | "
+                f"audit_url: {data.get('audit_url')} | "
+                f"decision: {data.get('decision')} | risk: {data.get('risk_level')}"
+            )
+        return f"AUDIT FAILED (HTTP {response.status_code}): {response.text[:200]}"
 `;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.send(code);
@@ -5772,6 +5932,7 @@ export const xproofAuditPlugin: Plugin = {
       endpoints: {
         certify: `POST ${baseUrl}/api/proof`,
         batch: `POST ${baseUrl}/api/batch`,
+        audit: `POST ${baseUrl}/api/audit`,
         verify: `GET ${baseUrl}/proof/{id}.json`,
         register_trial: `POST ${baseUrl}/api/agent/register`,
         trial_info: `GET ${baseUrl}/api/trial`,
@@ -5779,6 +5940,19 @@ export const xproofAuditPlugin: Plugin = {
         certifications: `GET ${baseUrl}/api/certifications`,
         health: `GET ${baseUrl}/api/acp/health`,
         pricing: `GET ${baseUrl}/api/pricing`,
+      },
+      audit_log: {
+        description: "Agent Audit Log Standard — certify agent decisions before execution",
+        endpoint: `POST ${baseUrl}/api/audit`,
+        schema: `${baseUrl}/.well-known/agent-audit-schema.json`,
+        view: `${baseUrl}/audit/{proof_id}`,
+        templates: {
+          langchain: `${baseUrl}/agent-tools/audit-guard-langchain.py`,
+          crewai: `${baseUrl}/agent-tools/audit-guard-crewai.py`,
+          n8n: `${baseUrl}/agent-tools/audit-guard-n8n.json`,
+          eliza: `${baseUrl}/agent-tools/audit-guard-eliza.ts`,
+        },
+        mcp_tool: "audit_agent_session",
       },
       pricing: {
         current: `$${priceUsd} per certification`,
@@ -5812,7 +5986,7 @@ export const xproofAuditPlugin: Plugin = {
       description: "Proof primitive for AI agents & humans on MultiversX. Verifiable proofs of existence, authorship, and agent output anchored on-chain.",
       url: baseUrl,
       version: "1.2.0",
-      capabilities: ["file-certification", "batch-certification", "proof-verification", "blockchain-anchoring", "webhook-notifications", "verification-badges", "mx8004-validation"],
+      capabilities: ["file-certification", "batch-certification", "proof-verification", "blockchain-anchoring", "webhook-notifications", "verification-badges", "mx8004-validation", "agent-audit-log"],
       protocols: {
         mcp: `${baseUrl}/.well-known/mcp.json`,
         mcp_endpoint: `${baseUrl}/mcp`,
@@ -5826,8 +6000,20 @@ export const xproofAuditPlugin: Plugin = {
       integrations: {
         openclaw_skill: "https://github.com/jasonxkensei/xproof-openclaw-skill",
         github_action: "https://github.com/marketplace/actions/xproof-certify",
-        langchain: `${baseUrl}/learn/api.md`,
-        crewai: `${baseUrl}/learn/api.md`,
+        langchain: `${baseUrl}/agent-tools/langchain.py`,
+        crewai: `${baseUrl}/agent-tools/crewai.py`,
+        audit_guard_langchain: `${baseUrl}/agent-tools/audit-guard-langchain.py`,
+        audit_guard_crewai: `${baseUrl}/agent-tools/audit-guard-crewai.py`,
+        audit_guard_n8n: `${baseUrl}/agent-tools/audit-guard-n8n.json`,
+        audit_guard_eliza: `${baseUrl}/agent-tools/audit-guard-eliza.ts`,
+      },
+      audit_log: {
+        standard: "Agent Audit Log Standard",
+        description: "Compliance gate for AI agents — certify decisions before execution. No proof_id, no action.",
+        endpoint: `POST ${baseUrl}/api/audit`,
+        schema: `${baseUrl}/.well-known/agent-audit-schema.json`,
+        view: `${baseUrl}/audit/{proof_id}`,
+        mcp_tool: "audit_agent_session",
       },
       repositories: {
         main: "https://github.com/jasonxkensei/xProof",
