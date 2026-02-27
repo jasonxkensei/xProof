@@ -46,11 +46,20 @@ Dynamic SVG badges display certification status. A Composite GitHub Action integ
 ### Webhook Notifications
 xProof sends POST notifications to specified `webhook_url`s upon on-chain proof confirmation, with HMAC-SHA256 signed headers and a retry policy.
 
+### Agent Audit Log Standard
+xProof is the canonical implementation of the Agent Audit Log Standard — a compliance primitive for AI agents. Before executing any critical action (trade, deploy, data access), an agent MUST certify its session. No `proof_id` → no execution. Key components:
+-   **Endpoint**: `POST /api/audit` — validates `AgentAuditLog` schema (agent_id, session_id, action_type, inputs_hash, risk_level, decision, etc.), computes canonical SHA-256, records on blockchain, stores in `certifications.metadata`.
+-   **Canonical Schema**: `GET /.well-known/agent-audit-schema.json` — JSON Schema 2020-12 citeable by agents.
+-   **Audit View**: `/audit/{proof_id}` — frontend page showing structured audit log with badges (action_type, risk_level, decision) and blockchain proof.
+-   **Blocking Templates**: 4 workflow templates where agent RAISES EXCEPTION if `proof_id` absent: `/agent-tools/audit-guard-langchain.py`, `/agent-tools/audit-guard-crewai.py`, `/agent-tools/audit-guard-n8n.json`, `/agent-tools/audit-guard-eliza.ts`.
+-   **MCP Tool**: `audit_agent_session` — callable via `/mcp` JSON-RPC.
+-   **Discovery**: Section in `llms.txt`, `/.well-known/xproof.md`, and sitemap.
+
 ### LLM-Ready Routes & AI Agent Discovery
 The platform offers machine-readable documentation and endpoints for AI agent discovery:
--   **MCP Server**: Live MCP JSON-RPC 2.0 endpoint with tools.
--   **Discovery Endpoints**: `.well-known` files for canonical specification, OpenAI ChatGPT plugin manifest, Model Context Protocol manifest, Agent Protocol manifest, and LLM-friendly summaries.
--   **Agent Tool Integrations**: LangChain, CrewAI, and OpenAPI tool definitions.
+-   **MCP Server**: Live MCP JSON-RPC 2.0 endpoint with tools: `certify_file`, `verify_proof`, `get_proof`, `discover_services`, `audit_agent_session`.
+-   **Discovery Endpoints**: `.well-known` files for canonical specification, OpenAI ChatGPT plugin manifest, Model Context Protocol manifest, Agent Protocol manifest, LLM-friendly summaries, and `agent-audit-schema.json`.
+-   **Agent Tool Integrations**: LangChain, CrewAI, n8n, Eliza OS integrations (standard + audit guard variants).
 
 ### Monitoring & Admin
 A health endpoint provides structured component checks and operational metrics. A metrics module tracks transaction latency, success/failure rates, and MX-8004 queue size. An admin dashboard provides certification counts, source breakdown, blockchain status, API key usage, and webhook delivery stats, protected by wallet authentication. Structured JSON logging is used for all backend logs.

@@ -20,6 +20,7 @@ import {
   type ACPConfirmResponse,
 } from "@shared/schema";
 import { CREDIT_PACKAGES, getPackage, verifyUsdcOnBase } from "./credits";
+import { auditLogSchema, AUDIT_LOG_JSON_SCHEMA, type AgentAuditLog } from "./auditSchema";
 import { getCertificationPriceEgld, getCertificationPriceUsd, getPricingInfo } from "./pricing";
 import { eq, desc, sql, and, gte, gt, count, isNotNull } from "drizzle-orm";
 import { z } from "zod";
@@ -1640,6 +1641,198 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================
+  // Agent Audit Log Endpoint
+  // Certify an agent's session of work before
+  // executing a critical action (trade, deploy, etc.)
+  // ============================================
+  app.post("/api/audit", paymentRateLimiter, async (req, res) => {
+    try {
+      const baseUrl = `https://${req.get("host")}`;
+      let authMethod: "api_key" | "x402" = "api_key";
+      let isAdminExempt = false;
+      const authHeader = req.headers.authorization;
+      const hasBearerToken = authHeader && authHeader.startsWith("Bearer ");
+      const hasX402Payment = !!req.headers["x-payment"];
+
+      let trialInfo: { isTrial: boolean; remaining: number; userId: string } | null = null;
+      let creditInfo: { userId: string; balance: number } | null = null;
+      let ownerUserId: string | null = null;
+
+      if (hasBearerToken) {
+        const rawKey = authHeader!.slice(7);
+        if (!rawKey.startsWith("pm_")) {
+          return res.status(401).json({ error: "INVALID_API_KEY", message: "API key must start with 'pm_'" });
+        }
+        const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+        const [apiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+        if (!apiKey) return res.status(401).json({ error: "INVALID_API_KEY", message: "Invalid or expired API key" });
+        if (!apiKey.isActive) return res.status(403).json({ error: "API_KEY_DISABLED", message: "This API key has been disabled" });
+
+        const rateLimit = checkRateLimit(apiKey.id);
+        res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
+        res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
+        res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
+        if (!rateLimit.allowed) {
+          return res.status(429).json({ error: "RATE_LIMIT_EXCEEDED", message: "Too many requests.", retry_after: Math.ceil((rateLimit.resetAt - Date.now()) / 1000) });
+        }
+
+        db.update(apiKeys).set({ lastUsedAt: new Date(), requestCount: (apiKey.requestCount || 0) + 1 }).where(eq(apiKeys.id, apiKey.id)).execute().catch(() => {});
+        authMethod = "api_key";
+
+        trialInfo = await getTrialUser(apiKey);
+        if (trialInfo) {
+          if (trialInfo.remaining <= 0) {
+            const balance = apiKey.userId ? await getUserCreditBalance(apiKey.userId) : 0;
+            if (balance > 0 && apiKey.userId) {
+              creditInfo = { userId: apiKey.userId, balance };
+              trialInfo = null;
+            } else {
+              return res.status(402).json({
+                error: "TRIAL_EXHAUSTED",
+                message: `Trial quota exhausted (${TRIAL_QUOTA}/${TRIAL_QUOTA} used). Purchase prepaid credits or pay per request via x402.`,
+                trial: { quota: TRIAL_QUOTA, used: TRIAL_QUOTA, remaining: 0 },
+                upgrade: {
+                  credits: `POST ${baseUrl}/api/credits/purchase — prepaid packs (100/$5, 1000/$40, 10k/$300 USDC on Base)`,
+                  x402: "Send POST /api/audit without auth header to pay per request via x402 (USDC on Base)",
+                },
+              });
+            }
+          }
+        } else {
+          const ownerWallet = await getApiKeyOwnerWallet(apiKey);
+          if (ownerWallet && isAdminWallet(ownerWallet)) {
+            isAdminExempt = true;
+          }
+        }
+        if (apiKey.userId) ownerUserId = apiKey.userId;
+      } else if (hasX402Payment && isX402Configured()) {
+        const x402Result = await verifyX402Payment(req, "proof");
+        if (!x402Result.valid) {
+          return res.status(402).json({ error: "PAYMENT_FAILED", message: x402Result.error || "Payment verification failed" });
+        }
+        authMethod = "x402";
+      } else if (!isAdminExempt) {
+        if (isX402Configured()) {
+          return send402Response(res, req, "proof");
+        }
+        return res.status(402).json({
+          error: "PAYMENT_REQUIRED",
+          message: "Provide Authorization: Bearer pm_xxx (API key) or x402 payment header",
+          options: [
+            { method: "api_key", description: "Bearer token", how: "POST /api/agent/register for a free trial key" },
+            { method: "x402", description: "Per-request USDC payment on Base", how: "Include x-payment header" },
+          ],
+        });
+      }
+
+      // Parse + validate audit log
+      const data = auditLogSchema.parse(req.body);
+
+      // Compute canonical hash (sorted keys, deterministic)
+      const canonicalJson = JSON.stringify(data, Object.keys(data).sort());
+      const fileHash = crypto.createHash("sha256").update(canonicalJson).digest("hex");
+      const fileName = `audit-log-${data.session_id}.json`;
+
+      // Check duplicate (same audit log already certified)
+      const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
+      if (existing) {
+        return res.status(200).json({
+          status: "already_certified",
+          proof_id: existing.id,
+          audit_url: `${baseUrl}/audit/${existing.id}`,
+          proof_url: `${baseUrl}/proof/${existing.id}`,
+          file_hash: fileHash,
+          message: "This exact audit log was already certified. Returning existing proof.",
+        });
+      }
+
+      if (!isMultiversXConfigured()) {
+        return res.status(503).json({ error: "BLOCKCHAIN_UNAVAILABLE", message: "MultiversX is not configured on this server." });
+      }
+
+      // Record on blockchain
+      const result = await recordOnBlockchain(fileHash, fileName);
+      if (!result.success) {
+        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: result.error || "Failed to record on blockchain" });
+      }
+
+      // Consume auth credit
+      if (trialInfo) {
+        await consumeTrialCredit(trialInfo.userId);
+      } else if (creditInfo) {
+        await consumeCredit(creditInfo.userId);
+      }
+
+      // Store certification with full audit log in metadata
+      const [certification] = await db
+        .insert(certifications)
+        .values({
+          userId: ownerUserId,
+          fileName,
+          fileHash,
+          fileType: "json",
+          authorName: data.agent_id,
+          transactionHash: result.transactionHash,
+          transactionUrl: result.transactionUrl,
+          blockchainStatus: "confirmed",
+          isPublic: true,
+          metadata: data as Record<string, any>,
+          ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+        })
+        .returning();
+
+      logger.withRequest(req).info("Agent audit log certified", {
+        certificationId: certification.id,
+        agentId: data.agent_id,
+        sessionId: data.session_id,
+        actionType: data.action_type,
+        decision: data.decision,
+        riskLevel: data.risk_level,
+        txHash: result.transactionHash,
+        authMethod,
+      });
+
+      if (trialInfo) res.setHeader("X-Trial-Remaining", Math.max(0, trialInfo.remaining - 1).toString());
+      if (creditInfo) res.setHeader("X-Credits-Remaining", Math.max(0, creditInfo.balance - 1).toString());
+
+      return res.status(201).json({
+        proof_id: certification.id,
+        audit_url: `${baseUrl}/audit/${certification.id}`,
+        proof_url: `${baseUrl}/proof/${certification.id}`,
+        status: "certified",
+        decision: data.decision,
+        risk_level: data.risk_level,
+        action_type: data.action_type,
+        agent_id: data.agent_id,
+        session_id: data.session_id,
+        inputs_hash: data.inputs_hash,
+        file_hash: fileHash,
+        blockchain: {
+          network: "MultiversX",
+          transaction_hash: result.transactionHash,
+          explorer_url: result.transactionUrl,
+        },
+        timestamp: certification.createdAt?.toISOString() || new Date().toISOString(),
+        ...(trialInfo ? { trial: { remaining: Math.max(0, trialInfo.remaining - 1) } } : {}),
+        ...(creditInfo ? { credits: { remaining: Math.max(0, creditInfo.balance - 1) } } : {}),
+        message: `Agent audit log certified on MultiversX. The proof_id is your compliance certificate — the agent was authorized to ${data.action_type} with decision: ${data.decision}.`,
+        schema: `${baseUrl}/.well-known/agent-audit-schema.json`,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          error: "VALIDATION_ERROR",
+          message: "Invalid audit log data",
+          details: error.errors,
+          schema: `https://${req.get("host")}/.well-known/agent-audit-schema.json`,
+        });
+      }
+      logger.withRequest(req).error("Audit log certification failed");
+      return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to certify audit log." });
+    }
+  });
+
+  // ============================================
   // Batch Certification Endpoint
   // Certify multiple files in a single API call
   // ============================================
@@ -2852,6 +3045,51 @@ Jobs reach "Verified" status on-chain. xproof acts as the validation oracle.
 - **Specification**: https://github.com/sasurobert/mx-8004
 - **Explorer**: https://agents.multiversx.com
 
+## Agent Audit Log Standard
+
+xproof is the canonical implementation of the **Agent Audit Log Standard** — a compliance primitive for AI agents that execute critical actions (trades, code deployments, data access).
+
+**Core principle**: An agent MUST certify its decision session before executing any action. No proof_id → no execution.
+
+### Schema (canonical)
+
+\`GET ${baseUrl}/.well-known/agent-audit-schema.json\`
+
+Fields:
+- \`agent_id\` — identifier of the agent making the decision
+- \`session_id\` — unique session identifier (UUID)
+- \`action_type\` — \`trade_execution | code_deploy | data_access | content_generation | api_call | other\`
+- \`action_description\` — human-readable description of the action
+- \`inputs_hash\` — SHA-256 of all inputs analyzed before the decision
+- \`risk_level\` — \`low | medium | high | critical\`
+- \`decision\` — \`approved | rejected | deferred\`
+- \`risk_summary\` (optional) — brief risk analysis
+- \`context\` (optional) — additional metadata (model version, environment, etc.)
+- \`timestamp\` — ISO 8601
+
+### Endpoint
+
+\`\`\`
+POST ${baseUrl}/api/audit
+Authorization: Bearer pm_YOUR_API_KEY
+\`\`\`
+
+Returns: \`{ proof_id, audit_url, decision, risk_level, blockchain }\`
+View certified audit log: \`${baseUrl}/audit/{proof_id}\`
+
+### Blocking Workflow Templates
+
+These templates implement the compliance gate — the agent RAISES AN EXCEPTION and cannot continue without a valid \`proof_id\`:
+
+| Framework | URL |
+|-----------|-----|
+| LangChain | \`GET ${baseUrl}/agent-tools/audit-guard-langchain.py\` |
+| CrewAI    | \`GET ${baseUrl}/agent-tools/audit-guard-crewai.py\` |
+| n8n       | \`GET ${baseUrl}/agent-tools/audit-guard-n8n.json\` |
+| Eliza OS  | \`GET ${baseUrl}/agent-tools/audit-guard-eliza.ts\` |
+
+MCP tool: \`audit_agent_session\` — same semantics, enforces API key auth.
+
 ## Genesis
 
 xproof's first certification (self-referential proof of concept):
@@ -2874,6 +3112,13 @@ Website: ${baseUrl}
   // /.well-known/proofmint.md - Redirect to xproof.md for backwards compatibility
   app.get("/.well-known/proofmint.md", (req, res) => {
     res.redirect(301, "/.well-known/xproof.md");
+  });
+
+  // /.well-known/agent-audit-schema.json - Canonical Agent Audit Log JSON Schema
+  app.get("/.well-known/agent-audit-schema.json", (req, res) => {
+    res.setHeader("Content-Type", "application/schema+json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.json(AUDIT_LOG_JSON_SCHEMA);
   });
 
   // /genesis.md - Genesis document in markdown
@@ -3767,12 +4012,46 @@ curl -X POST ${baseUrl}/api/proof -d '{"file_hash":"...","filename":"..."}'
 # 2. Pay USDC on Base, resend with X-PAYMENT header
 \`\`\`
 
+## Agent Audit Log Standard — Compliance Gate for AI Agents
+Block any AI agent from executing critical actions without a certified proof.
+Schema: ${baseUrl}/.well-known/agent-audit-schema.json
+
+Certify a decision BEFORE executing it:
+\`\`\`bash
+curl -X POST ${baseUrl}/api/audit \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "agent_id": "my-trading-agent",
+    "session_id": "sess_20260227_001",
+    "action_type": "trade_execution",
+    "action_description": "Buy 0.5 ETH at market price on Uniswap v3",
+    "inputs_hash": "a3f1c7d2e9b4...64-char-sha256-of-analyzed-inputs",
+    "risk_level": "high",
+    "decision": "approved",
+    "timestamp": "2026-02-27T23:00:00Z",
+    "risk_summary": "Slippage < 0.5%, liquidity verified on 3 pools"
+  }'
+\`\`\`
+Returns: { "proof_id": "...", "audit_url": "${baseUrl}/audit/{id}", "decision": "approved", "risk_level": "high" }
+
+Use the returned proof_id as compliance certificate. View at /audit/{proof_id}.
+
+Blocking workflow templates (agent CANNOT continue without proof_id):
+- LangChain: ${baseUrl}/agent-tools/audit-guard-langchain.py
+- CrewAI:    ${baseUrl}/agent-tools/audit-guard-crewai.py
+- n8n:       ${baseUrl}/agent-tools/audit-guard-n8n.json
+- Eliza OS:  ${baseUrl}/agent-tools/audit-guard-eliza.ts
+
+MCP tool: audit_agent_session (same params, enforces auth)
+
 ## More
 - Compact discovery: ${baseUrl}/.well-known/xproof.json
 - Full docs: ${baseUrl}/llms.txt
 - Specification: ${baseUrl}/.well-known/xproof.md
 - OpenAPI: ${baseUrl}/api/acp/openapi.json
 - MCP endpoint: ${baseUrl}/mcp
+- Audit Log Schema: ${baseUrl}/.well-known/agent-audit-schema.json
 `;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(content);
@@ -3861,6 +4140,31 @@ Sitemap: ${baseUrl}/sitemap.xml
     <loc>${baseUrl}/.well-known/xproof.json</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/.well-known/agent-audit-schema.json</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/agent-tools/audit-guard-langchain.py</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/agent-tools/audit-guard-crewai.py</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/agent-tools/audit-guard-n8n.json</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/agent-tools/audit-guard-eliza.ts</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
 </urlset>`;
     res.setHeader('Content-Type', 'application/xml');
@@ -3955,6 +4259,26 @@ Sitemap: ${baseUrl}/sitemap.xml
           name: "discover_services",
           description: "Discover available xproof certification services, pricing, and capabilities. No authentication required.",
           inputSchema: { type: "object", properties: {} }
+        },
+        {
+          name: "audit_agent_session",
+          description: "Certify an AI agent's work session on the MultiversX blockchain BEFORE executing any critical action (trade, deploy, data access). Returns a proof_id that serves as a compliance certificate. The agent MUST call this tool before acting. Schema: /.well-known/agent-audit-schema.json",
+          inputSchema: {
+            type: "object",
+            required: ["agent_id", "session_id", "action_type", "action_description", "inputs_hash", "risk_level", "decision", "timestamp"],
+            properties: {
+              agent_id: { type: "string", description: "Identifier of the agent making the decision (e.g. 'langchain-agent-v2', 'trading-bot-prod')" },
+              session_id: { type: "string", description: "Unique session identifier (UUID or timestamp-based)" },
+              action_type: { type: "string", enum: ["trade_execution", "code_deploy", "data_access", "content_generation", "api_call", "other"], description: "Category of the action being certified" },
+              action_description: { type: "string", description: "Human-readable description of the specific action being certified" },
+              inputs_hash: { type: "string", description: "SHA-256 of all inputs analyzed before making the decision (market data, code diff, dataset, etc.)" },
+              risk_level: { type: "string", enum: ["low", "medium", "high", "critical"], description: "Assessed risk level of the action" },
+              decision: { type: "string", enum: ["approved", "rejected", "deferred"], description: "Agent's decision about whether to proceed" },
+              timestamp: { type: "string", format: "date-time", description: "ISO 8601 timestamp of when the decision was made" },
+              risk_summary: { type: "string", description: "Optional brief risk analysis justifying the decision" },
+              context: { type: "object", description: "Optional additional context (model version, environment, tool chain, etc.)" }
+            }
+          }
         }
       ],
       resources: [
@@ -4123,6 +4447,25 @@ xProof has certified its own README on MultiversX mainnet.
 Transaction: a642f64c5ac46dd1c09dffba6cf6556f9f6ce0d8fc642f5f4118c145cd04cf14
 SHA-256: a642f64c5ac46dd1c09dffba6cf6556f9f6ce0d8fc642f5f4118c145cd04cf14
 Date: 2026-02-24T21:08:24Z
+
+## Agent Audit Log Standard
+
+Block any AI agent from executing critical actions without a certified proof. xProof is the canonical compliance gate.
+Schema: /.well-known/agent-audit-schema.json
+
+Certify a decision BEFORE executing it:
+  POST /api/audit
+  Authorization: Bearer pm_YOUR_API_KEY
+  Body: { agent_id, session_id, action_type, action_description, inputs_hash, risk_level, decision, timestamp }
+Returns: { proof_id, audit_url, decision, risk_level, blockchain }
+
+Blocking workflow templates (agent CANNOT continue without proof_id):
+- LangChain: /agent-tools/audit-guard-langchain.py
+- CrewAI:    /agent-tools/audit-guard-crewai.py
+- n8n:       /agent-tools/audit-guard-n8n.json
+- Eliza OS:  /agent-tools/audit-guard-eliza.ts
+
+MCP tool: audit_agent_session (same params, enforces API key auth)
 `;
     res.setHeader("Content-Type", "text/plain");
     res.send(content);
@@ -4686,6 +5029,506 @@ class XProofVerifyTool(BaseTool):
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.send(code);
   });
+
+  // ── Audit Guard Templates ─────────────────────────────────────────────────
+  // Workflow templates where the agent is BLOCKED if it cannot obtain a proof_id.
+  // These implement the xProof Agent Audit Log standard as a compliance gate.
+
+  app.get("/agent-tools/audit-guard-langchain.py", (_req, res) => {
+    const baseUrl = `https://${_req.get("host")}`;
+    const code = `"""
+xProof Agent Audit Log Guard — LangChain
+Standard: ${baseUrl}/.well-known/agent-audit-schema.json
+
+CRITICAL: The agent will RAISE AN EXCEPTION and cannot continue if xProof
+certification fails. This makes audit certification a mandatory compliance gate.
+
+Install: pip install langchain requests
+"""
+
+import hashlib
+import json
+import uuid
+import requests
+from langchain.tools import tool
+
+XPROOF_API_KEY = "pm_YOUR_API_KEY"  # Replace with your key from ${baseUrl}/api/agent/register
+XPROOF_BASE_URL = "${baseUrl}"
+
+
+class AuditRequiredError(Exception):
+    """Raised when an agent action cannot proceed without a valid xProof audit certificate."""
+    pass
+
+
+@tool
+def audit_agent_session(
+    action_type: str,
+    action_description: str,
+    inputs_hash: str,
+    risk_level: str,
+    decision: str,
+    agent_id: str = "langchain-agent",
+    risk_summary: str = "",
+) -> dict:
+    """
+    Certify an agent's work session on the MultiversX blockchain BEFORE executing any action.
+    
+    Returns a proof_id that serves as the compliance certificate.
+    The agent MUST call this tool before executing any critical action.
+    
+    Args:
+        action_type: One of: trade_execution, code_deploy, data_access, content_generation, api_call, other
+        action_description: Human-readable description of what the agent is about to do
+        inputs_hash: SHA-256 of all inputs analyzed (market data, code diff, dataset, etc.)
+        risk_level: One of: low, medium, high, critical
+        decision: One of: approved, rejected, deferred
+        agent_id: Identifier of this agent (default: langchain-agent)
+        risk_summary: Optional brief risk analysis
+    
+    Returns:
+        dict with proof_id, audit_url, decision, risk_level
+    
+    Raises:
+        AuditRequiredError: If certification fails (blocks execution)
+    """
+    import datetime
+    payload = {
+        "agent_id": agent_id,
+        "session_id": str(uuid.uuid4()),
+        "action_type": action_type,
+        "action_description": action_description,
+        "inputs_hash": inputs_hash,
+        "risk_level": risk_level,
+        "decision": decision,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+    }
+    if risk_summary:
+        payload["risk_summary"] = risk_summary
+
+    try:
+        response = requests.post(
+            f"{XPROOF_BASE_URL}/api/audit",
+            json=payload,
+            headers={"Authorization": f"Bearer {XPROOF_API_KEY}", "Content-Type": "application/json"},
+            timeout=15,
+        )
+        if response.status_code in (200, 201):
+            data = response.json()
+            proof_id = data.get("proof_id")
+            if not proof_id:
+                raise AuditRequiredError(f"xProof returned no proof_id: {data}")
+            return {
+                "proof_id": proof_id,
+                "audit_url": data.get("audit_url"),
+                "decision": data.get("decision"),
+                "risk_level": data.get("risk_level"),
+            }
+        else:
+            raise AuditRequiredError(
+                f"xProof certification failed (HTTP {response.status_code}): {response.text[:200]}"
+            )
+    except requests.RequestException as e:
+        raise AuditRequiredError(f"Cannot reach xProof API: {e}") from e
+
+
+def compute_inputs_hash(*inputs) -> str:
+    """Compute SHA-256 of all inputs the agent analyzed before making a decision."""
+    canonical = json.dumps([str(i) for i in inputs], sort_keys=True)
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+# ── Example usage ─────────────────────────────────────────────────────────────
+# In your LangChain chain or agent, always call audit_agent_session FIRST:
+#
+# inputs_hash = compute_inputs_hash(market_data, risk_params, strategy_config)
+# audit_result = audit_agent_session.invoke({
+#     "action_type": "trade_execution",
+#     "action_description": "Buy 0.5 ETH at market price on Uniswap v3",
+#     "inputs_hash": inputs_hash,
+#     "risk_level": "high",
+#     "decision": "approved",
+#     "risk_summary": "Slippage < 0.5%, liquidity verified",
+# })
+# proof_id = audit_result["proof_id"]
+# # Only after audit_agent_session succeeds, execute the actual action:
+# execute_trade(...)
+`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send(code);
+  });
+
+  app.get("/agent-tools/audit-guard-crewai.py", (_req, res) => {
+    const baseUrl = `https://${_req.get("host")}`;
+    const code = `"""
+xProof Agent Audit Log Guard — CrewAI
+Standard: ${baseUrl}/.well-known/agent-audit-schema.json
+
+CRITICAL: AuditGuardTool will RAISE AN EXCEPTION if xProof certification fails.
+Add it as the FIRST tool in your crew's tool list.
+
+Install: pip install crewai crewai-tools requests
+"""
+
+import hashlib
+import json
+import uuid
+import datetime
+import requests
+from crewai_tools import BaseTool
+
+XPROOF_API_KEY = "pm_YOUR_API_KEY"  # Replace with your key from ${baseUrl}/api/agent/register
+XPROOF_BASE_URL = "${baseUrl}"
+
+
+class AuditRequiredError(Exception):
+    """Raised when execution is blocked due to missing xProof audit certificate."""
+    pass
+
+
+class AuditGuardTool(BaseTool):
+    """
+    xProof Audit Guard — Certifies the agent's decision on MultiversX before execution.
+    
+    Add this as the FIRST tool in your CrewAI agent's tools list.
+    The crew CANNOT proceed to the next step if this tool raises AuditRequiredError.
+    
+    Usage:
+        tools = [AuditGuardTool(), your_other_tools...]
+    """
+    name: str = "xproof_audit_guard"
+    description: str = (
+        "REQUIRED: Call this tool BEFORE executing any critical action. "
+        "Certifies the agent's decision on the MultiversX blockchain. "
+        "Returns a proof_id compliance certificate. "
+        "BLOCKS execution if certification fails."
+    )
+
+    def _run(
+        self,
+        action_type: str,
+        action_description: str,
+        inputs_hash: str,
+        risk_level: str,
+        decision: str,
+        agent_id: str = "crewai-agent",
+        risk_summary: str = "",
+    ) -> str:
+        payload = {
+            "agent_id": agent_id,
+            "session_id": str(uuid.uuid4()),
+            "action_type": action_type,
+            "action_description": action_description,
+            "inputs_hash": inputs_hash,
+            "risk_level": risk_level,
+            "decision": decision,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        }
+        if risk_summary:
+            payload["risk_summary"] = risk_summary
+
+        try:
+            response = requests.post(
+                f"{XPROOF_BASE_URL}/api/audit",
+                json=payload,
+                headers={"Authorization": f"Bearer {XPROOF_API_KEY}", "Content-Type": "application/json"},
+                timeout=15,
+            )
+            if response.status_code in (200, 201):
+                data = response.json()
+                proof_id = data.get("proof_id")
+                if not proof_id:
+                    raise AuditRequiredError("xProof returned no proof_id — execution blocked.")
+                return (
+                    f"AUDIT CERTIFIED. proof_id={proof_id}\\n"
+                    f"audit_url={data.get('audit_url')}\\n"
+                    f"decision={data.get('decision')} | risk={data.get('risk_level')}\\n"
+                    f"You may now proceed with: {action_description}"
+                )
+            else:
+                raise AuditRequiredError(
+                    f"EXECUTION BLOCKED. xProof certification failed (HTTP {response.status_code}). "
+                    f"Agent cannot proceed without audit certificate."
+                )
+        except requests.RequestException as e:
+            raise AuditRequiredError(f"EXECUTION BLOCKED. Cannot reach xProof API: {e}") from e
+
+
+def compute_inputs_hash(*inputs) -> str:
+    """Compute SHA-256 of all inputs the agent analyzed."""
+    canonical = json.dumps([str(i) for i in inputs], sort_keys=True)
+    return hashlib.sha256(canonical.encode()).hexdigest()
+`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send(code);
+  });
+
+  app.get("/agent-tools/audit-guard-n8n.json", (_req, res) => {
+    const baseUrl = `https://${_req.get("host")}`;
+    const workflow = {
+      name: "xProof Agent Audit Guard",
+      nodes: [
+        {
+          parameters: {
+            assignments: {
+              assignments: [
+                { id: "1", name: "agent_id", value: "={{ $json.agent_id || 'n8n-agent' }}", type: "string" },
+                { id: "2", name: "session_id", value: "={{ $now.toMillis().toString() }}", type: "string" },
+                { id: "3", name: "action_type", value: "={{ $json.action_type }}", type: "string" },
+                { id: "4", name: "action_description", value: "={{ $json.action_description }}", type: "string" },
+                { id: "5", name: "inputs_hash", value: "={{ $json.inputs_hash }}", type: "string" },
+                { id: "6", name: "risk_level", value: "={{ $json.risk_level || 'high' }}", type: "string" },
+                { id: "7", name: "decision", value: "approved", type: "string" },
+                { id: "8", name: "timestamp", value: "={{ $now.toISO() }}", type: "string" },
+              ],
+            },
+          },
+          id: "node-1",
+          name: "Prepare Audit Log",
+          type: "n8n-nodes-base.set",
+          typeVersion: 3.4,
+          position: [240, 300],
+        },
+        {
+          parameters: {
+            method: "POST",
+            url: `${baseUrl}/api/audit`,
+            authentication: "genericCredentialType",
+            genericAuthType: "httpHeaderAuth",
+            sendHeaders: true,
+            headerParameters: {
+              parameters: [{ name: "Content-Type", value: "application/json" }],
+            },
+            sendBody: true,
+            specifyBody: "json",
+            jsonBody: `={
+  "agent_id": "{{ $json.agent_id }}",
+  "session_id": "{{ $json.session_id }}",
+  "action_type": "{{ $json.action_type }}",
+  "action_description": "{{ $json.action_description }}",
+  "inputs_hash": "{{ $json.inputs_hash }}",
+  "risk_level": "{{ $json.risk_level }}",
+  "decision": "{{ $json.decision }}",
+  "timestamp": "{{ $json.timestamp }}"
+}`,
+            options: { timeout: 15000 },
+          },
+          id: "node-2",
+          name: "xProof Certify",
+          type: "n8n-nodes-base.httpRequest",
+          typeVersion: 4.2,
+          position: [460, 300],
+          notes: `POST to xProof. API key must be set in HTTP Header Auth credential (Authorization: Bearer pm_xxx). Register at ${baseUrl}/api/agent/register`,
+        },
+        {
+          parameters: {
+            conditions: {
+              options: { caseSensitive: true },
+              combinator: "and",
+              conditions: [
+                {
+                  id: "cond-1",
+                  leftValue: "={{ $json.proof_id }}",
+                  rightValue: "",
+                  operator: { type: "string", operation: "notEmpty" },
+                },
+              ],
+            },
+          },
+          id: "node-3",
+          name: "Has proof_id?",
+          type: "n8n-nodes-base.if",
+          typeVersion: 2,
+          position: [680, 300],
+          notes: "GATE: Only proceeds if xProof returned a valid proof_id",
+        },
+        {
+          parameters: {
+            mode: "passthrough",
+            notes: `Execution authorized.\nproof_id={{ $json.proof_id }}\naudit_url={{ $json.audit_url }}\n\nProceed with your action nodes here.`,
+          },
+          id: "node-4",
+          name: "Execute Action",
+          type: "n8n-nodes-base.noOp",
+          typeVersion: 1,
+          position: [900, 200],
+          notes: "Replace this node with your actual action (HTTP Request, database write, etc.)",
+        },
+        {
+          parameters: {
+            errorMessage: "EXECUTION BLOCKED: xProof audit certification failed or proof_id missing. Agent cannot proceed without a valid compliance certificate.",
+          },
+          id: "node-5",
+          name: "STOP — No Audit Certificate",
+          type: "n8n-nodes-base.stopAndError",
+          typeVersion: 1,
+          position: [900, 400],
+          notes: "Execution halted. Check xProof API key and payload.",
+        },
+      ],
+      connections: {
+        "Prepare Audit Log": { main: [[{ node: "xProof Certify", type: "main", index: 0 }]] },
+        "xProof Certify": { main: [[{ node: "Has proof_id?", type: "main", index: 0 }]] },
+        "Has proof_id?": {
+          main: [
+            [{ node: "Execute Action", type: "main", index: 0 }],
+            [{ node: "STOP — No Audit Certificate", type: "main", index: 0 }],
+          ],
+        },
+      },
+      settings: { executionOrder: "v1" },
+      meta: {
+        templateCredsSetupCompleted: false,
+        description: `xProof Agent Audit Guard workflow. The agent is BLOCKED if xProof certification fails.\nSchema: ${baseUrl}/.well-known/agent-audit-schema.json\nRegister for a free API key: ${baseUrl}/api/agent/register`,
+      },
+    };
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="xproof-audit-guard.json"');
+    res.json(workflow);
+  });
+
+  app.get("/agent-tools/audit-guard-eliza.ts", (_req, res) => {
+    const baseUrl = `https://${_req.get("host")}`;
+    const code = `/**
+ * xProof Agent Audit Log Guard — Eliza OS Plugin
+ * Standard: ${baseUrl}/.well-known/agent-audit-schema.json
+ *
+ * CRITICAL: The AUDIT_BEFORE_EXECUTE action will THROW if xProof certification fails.
+ * Register this plugin BEFORE any action plugin that executes critical operations.
+ *
+ * Usage:
+ *   import { xproofAuditPlugin } from "./audit-guard-eliza";
+ *   const agent = new AgentRuntime({ plugins: [xproofAuditPlugin, ...yourOtherPlugins] });
+ */
+
+import type { Action, IAgentRuntime, Memory, State, HandlerCallback, Plugin } from "@elizaos/core";
+import crypto from "crypto";
+
+const XPROOF_API_KEY = process.env.XPROOF_API_KEY ?? "pm_YOUR_API_KEY";
+const XPROOF_BASE_URL = process.env.XPROOF_BASE_URL ?? "${baseUrl}";
+
+export class AuditRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuditRequiredError";
+  }
+}
+
+/**
+ * Certify an audit log with xProof. Throws AuditRequiredError if certification fails.
+ */
+async function certifyAuditLog(params: {
+  agentId: string;
+  actionType: string;
+  actionDescription: string;
+  inputsHash: string;
+  riskLevel: string;
+  decision: string;
+  riskSummary?: string;
+}): Promise<{ proofId: string; auditUrl: string }> {
+  const payload = {
+    agent_id: params.agentId,
+    session_id: crypto.randomUUID(),
+    action_type: params.actionType,
+    action_description: params.actionDescription,
+    inputs_hash: params.inputsHash,
+    risk_level: params.riskLevel,
+    decision: params.decision,
+    risk_summary: params.riskSummary,
+    timestamp: new Date().toISOString(),
+  };
+
+  const response = await fetch(\`\${XPROOF_BASE_URL}/api/audit\`, {
+    method: "POST",
+    headers: {
+      Authorization: \`Bearer \${XPROOF_API_KEY}\`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new AuditRequiredError(
+      \`EXECUTION BLOCKED: xProof certification failed (HTTP \${response.status}). \${text.slice(0, 200)}\`
+    );
+  }
+
+  const data = (await response.json()) as { proof_id?: string; audit_url?: string };
+  if (!data.proof_id) {
+    throw new AuditRequiredError("EXECUTION BLOCKED: xProof returned no proof_id.");
+  }
+
+  return { proofId: data.proof_id, auditUrl: data.audit_url ?? "" };
+}
+
+const auditBeforeExecute: Action = {
+  name: "AUDIT_BEFORE_EXECUTE",
+  similes: ["CERTIFY_ACTION", "XPROOF_AUDIT", "COMPLIANCE_GATE"],
+  description:
+    "Certify this agent's work session with xProof BEFORE executing any critical action. " +
+    "Throws AuditRequiredError if certification fails — blocking the action.",
+  validate: async (_runtime: IAgentRuntime, _message: Memory): Promise<boolean> => true,
+  handler: async (
+    runtime: IAgentRuntime,
+    message: Memory,
+    state: State | undefined,
+    options: {
+      actionType: string;
+      actionDescription: string;
+      inputsHash: string;
+      riskLevel: "low" | "medium" | "high" | "critical";
+      decision: "approved" | "rejected" | "deferred";
+      riskSummary?: string;
+    },
+    callback?: HandlerCallback
+  ): Promise<boolean> => {
+    const agentId = runtime.agentId ?? "eliza-agent";
+
+    // Throws AuditRequiredError if certification fails — execution is blocked
+    const { proofId, auditUrl } = await certifyAuditLog({
+      agentId,
+      actionType: options.actionType,
+      actionDescription: options.actionDescription,
+      inputsHash: options.inputsHash,
+      riskLevel: options.riskLevel,
+      decision: options.decision,
+      riskSummary: options.riskSummary,
+    });
+
+    if (callback) {
+      await callback({
+        text: \`Audit certified. proof_id: \${proofId}\\naudit_url: \${auditUrl}\\nDecision: \${options.decision} | Risk: \${options.riskLevel}\`,
+        attachments: [],
+      });
+    }
+
+    // Store proof_id in state for downstream actions
+    if (state) {
+      (state as any).xproofProofId = proofId;
+      (state as any).xproofAuditUrl = auditUrl;
+    }
+
+    return true;
+  },
+  examples: [],
+};
+
+export const xproofAuditPlugin: Plugin = {
+  name: "xproof-audit-guard",
+  description:
+    "xProof Agent Audit Log — certifies agent decisions on MultiversX before execution. " +
+    "Schema: \${XPROOF_BASE_URL}/.well-known/agent-audit-schema.json",
+  actions: [auditBeforeExecute],
+  providers: [],
+  evaluators: [],
+};
+`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send(code);
+  });
+  // ─────────────────────────────────────────────────────────────────────────
 
   app.get("/agent-tools/openapi-actions.json", async (req, res) => {
     const baseUrl = `https://${req.get("host")}`;

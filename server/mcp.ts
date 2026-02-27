@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { recordOnBlockchain } from "./blockchain";
 import { getCertificationPriceUsd } from "./pricing";
 import { logger } from "./logger";
+import { auditLogSchema } from "./auditSchema";
 
 interface McpContext {
   baseUrl: string;
@@ -298,6 +299,84 @@ export async function createMcpServer(ctx: McpContext) {
           }),
         }],
       };
+    }
+  );
+
+  server.tool(
+    "audit_agent_session",
+    `Certify an AI agent's work session on the MultiversX blockchain BEFORE executing any critical action (trade, deploy, data access). Returns a proof_id compliance certificate. The agent MUST call this tool before acting — certification failure blocks execution. Schema: ${baseUrl}/.well-known/agent-audit-schema.json`,
+    {
+      agent_id: z.string().min(1).describe("Identifier of the agent making the decision"),
+      session_id: z.string().min(1).describe("Unique session identifier (UUID or timestamp-based)"),
+      action_type: z.enum(["trade_execution", "code_deploy", "data_access", "content_generation", "api_call", "other"]).describe("Category of the action being certified"),
+      action_description: z.string().min(1).describe("Human-readable description of the specific action"),
+      inputs_hash: z.string().length(64).regex(/^[a-fA-F0-9]+$/).describe("SHA-256 of all inputs analyzed before making the decision"),
+      risk_level: z.enum(["low", "medium", "high", "critical"]).describe("Assessed risk level of the action"),
+      decision: z.enum(["approved", "rejected", "deferred"]).describe("Agent's decision about whether to proceed"),
+      timestamp: z.string().describe("ISO 8601 timestamp of when the decision was made"),
+      risk_summary: z.string().optional().describe("Optional brief risk analysis justifying the decision"),
+      context: z.record(z.unknown()).optional().describe("Optional additional context (model version, environment, tool chain, etc.)"),
+    },
+    async (params) => {
+      try {
+        if (!auth.valid || !auth.keyHash) {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "Valid API key required for audit_agent_session. Include Authorization: Bearer pm_xxx header." }) }],
+            isError: true,
+          };
+        }
+
+        const canonicalJson = JSON.stringify(params, Object.keys(params).sort());
+        const fileHash = crypto.createHash("sha256").update(canonicalJson).digest("hex");
+        const fileName = `audit-log-${params.session_id}.json`;
+
+        let [systemUser] = await db.select().from(users)
+          .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+        if (!systemUser) {
+          [systemUser] = await db.insert(users).values({
+            walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+            subscriptionTier: "business",
+            subscriptionStatus: "active",
+          }).returning();
+        }
+
+        const result = await recordOnBlockchain(fileHash, fileName, params.agent_id);
+
+        const [certification] = await db.insert(certifications).values({
+          userId: systemUser.id!,
+          fileName,
+          fileHash,
+          fileType: "json",
+          authorName: params.agent_id,
+          transactionHash: result.transactionHash,
+          transactionUrl: result.transactionUrl,
+          blockchainStatus: "confirmed",
+          isPublic: true,
+          metadata: params,
+        }).returning();
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              proof_id: certification.id,
+              audit_url: `${baseUrl}/audit/${certification.id}`,
+              proof_url: `${baseUrl}/proof/${certification.id}`,
+              blockchain: { network: "MultiversX", transaction_hash: result.transactionHash, explorer_url: result.transactionUrl },
+              decision: params.decision,
+              risk_level: params.risk_level,
+              inputs_hash: params.inputs_hash,
+              timestamp: certification.createdAt?.toISOString(),
+              message: "Agent audit session certified on MultiversX blockchain. Compliance certificate is immutable and publicly verifiable.",
+            }),
+          }],
+        };
+      } catch (error: any) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "AUDIT_CERTIFICATION_FAILED", message: error.message || "Failed to certify audit session" }) }],
+          isError: true,
+        };
+      }
     }
   );
 
