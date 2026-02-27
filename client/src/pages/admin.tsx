@@ -467,33 +467,31 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
 
-              {(stats.blockchain.avg_latency_ms !== null || stats.blockchain.last_known_latency_ms !== null || stats.blockchain.last_success_at) && (
-                <Card data-testid="stat-card-blockchain-latency">
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Blockchain Latency</CardTitle>
-                    <Activity className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {stats.blockchain.avg_latency_ms !== null
-                        ? `${stats.blockchain.avg_latency_ms}ms`
-                        : stats.blockchain.last_known_latency_ms !== null
-                          ? `${stats.blockchain.last_known_latency_ms}ms`
-                          : "No data"}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {stats.blockchain.avg_latency_ms !== null
-                        ? `${stats.blockchain.total_success} success / ${stats.blockchain.total_failed} failed`
-                        : stats.blockchain.last_known_latency_at
-                          ? `Last measured ${formatTimeAgo(stats.blockchain.last_known_latency_at)}`
-                          : stats.blockchain.last_success_at
-                            ? `Last tx ${formatTimeAgo(stats.blockchain.last_success_at)}`
-                            : "No transactions recorded yet"
-                      }
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
+              <Card data-testid="stat-card-blockchain-latency">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Blockchain Latency</CardTitle>
+                  <Activity className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {stats.blockchain.avg_latency_ms !== null
+                      ? `${stats.blockchain.avg_latency_ms}ms`
+                      : stats.blockchain.last_known_latency_ms !== null
+                        ? `${stats.blockchain.last_known_latency_ms}ms`
+                        : "No data"}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {stats.blockchain.avg_latency_ms !== null
+                      ? `${stats.blockchain.total_success} success / ${stats.blockchain.total_failed} failed`
+                      : stats.blockchain.last_known_latency_at
+                        ? `Last measured ${formatTimeAgo(stats.blockchain.last_known_latency_at)}`
+                        : stats.blockchain.last_success_at
+                          ? `Last tx ${formatTimeAgo(stats.blockchain.last_success_at)}`
+                          : "No transactions recorded yet"
+                    }
+                  </p>
+                </CardContent>
+              </Card>
             </div>
 
             <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 mb-6">
