@@ -28,6 +28,9 @@ xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Stan
 ### Data Storage
 PostgreSQL, hosted on Neon, is used for data persistence with Drizzle ORM for type-safe operations. Key tables include `users`, `certifications`, `sessions`, and `tx_queue`. Drizzle Kit manages database migrations.
 
+### Prepaid Credits System
+Trial users who exhaust their 10-cert quota can purchase prepaid credit packs (USDC on Base) without needing a wallet session. Three packages: Starter (100 certs/$5), Pro (1000/$40), Business (10k/$300). Flow: `GET /api/credits/packages` → `POST /api/credits/purchase` → send USDC on Base → `POST /api/credits/confirm` with tx_hash. Server verifies the USDC Transfer event on Base mainnet via viem, records the purchase in `credit_purchases` table (unique tx_hash prevents double-claim), and increments `users.credit_balance`. Credits are consumed at `/api/proof` and `/api/batch` before falling back to x402. Response header `X-Credits-Remaining` tracks balance in real time. Logic lives in `server/credits.ts` (package constants + Base verification).
+
 ### Agent Commerce Protocol (ACP)
 xproof implements the ACP for programmatic interaction by AI agents, providing endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. It includes API key management for secure agent access and rate limiting.
 

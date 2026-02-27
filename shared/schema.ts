@@ -42,6 +42,7 @@ export const users = pgTable("users", {
   isTrial: boolean("is_trial").default(false),
   trialQuota: integer("trial_quota").default(0),
   trialUsed: integer("trial_used").default(0),
+  creditBalance: integer("credit_balance").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -243,3 +244,18 @@ export const visits = pgTable("visits", {
   path: varchar("path", { length: 512 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Credit purchases — tracks prepaid certification credits for API key users
+export const creditPurchases = pgTable("credit_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  packageId: varchar("package_id").notNull(),
+  txHash: varchar("tx_hash").notNull().unique(), // Base transaction hash (prevents double-claim)
+  creditsAdded: integer("credits_added").notNull(),
+  priceUsdc: varchar("price_usdc").notNull(),
+  network: varchar("network").default("eip155:8453"), // Base mainnet
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type CreditPurchase = typeof creditPurchases.$inferSelect;
+export type InsertCreditPurchase = typeof creditPurchases.$inferInsert;
