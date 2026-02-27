@@ -2992,7 +2992,7 @@ Proof of Existence is a cryptographic method to prove that a specific digital ar
 
 - European blockchain with strong regulatory compliance
 - Extremely low transaction costs (~0.002€)
-- Fast finality (seconds, not minutes)
+- Sub-second blockchain response (~600ms measured)
 - Eco-friendly (low energy consumption)
 
 ## Related
