@@ -3415,6 +3415,125 @@ Confirm certification after transaction.
     });
   });
 
+  // /skill.md — Agent skill manifest (plain text, no JS, moltbook-compatible convention)
+  app.get("/skill.md", async (_req, res) => {
+    const baseUrl = `https://${_req.get('host')}`;
+    const priceUsd = await getCertificationPriceUsd();
+    const content = `---
+name: xproof
+description: Blockchain proof-of-existence for AI agents. Certify any file or output on MultiversX mainnet. Immutable, timestamped, publicly verifiable.
+version: 1.0.0
+author: xproof.app
+license: public
+---
+
+# xproof Agent Skill
+
+## What This Does
+xproof anchors a SHA-256 hash on the MultiversX blockchain.
+After certification, the proof is public and permanently verifiable.
+Any agent, human, or third party can verify the file was certified at that exact moment.
+
+## Authentication — Free Trial (Start Here)
+No wallet. No browser. No payment. One HTTP call.
+
+Step 1 — Register and get an API key:
+\`\`\`bash
+curl -X POST ${baseUrl}/api/agent/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent_name": "your-agent-name"}'
+\`\`\`
+Returns: { "api_key": "pm_xxx", "trial": { "quota": 10, "remaining": 10 } }
+
+Step 2 — Use the key immediately. No further setup needed.
+
+## Certify a File
+\`\`\`bash
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "file_hash": "64-char-sha256-hex",
+    "filename": "document.pdf"
+  }'
+\`\`\`
+Returns:
+\`\`\`json
+{
+  "proof_id": "...",
+  "status": "certified",
+  "verify_url": "${baseUrl}/proof/{proof_id}",
+  "blockchain": {
+    "network": "MultiversX",
+    "transaction_hash": "...",
+    "explorer_url": "https://explorer.multiversx.com/transactions/..."
+  },
+  "trial": { "remaining": 9 }
+}
+\`\`\`
+Response header: X-Trial-Remaining: 9
+
+## Certify Multiple Files (Batch)
+\`\`\`bash
+curl -X POST ${baseUrl}/api/batch \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "files": [
+      {"file_hash": "...", "filename": "file1.pdf"},
+      {"file_hash": "...", "filename": "file2.md"}
+    ]
+  }'
+\`\`\`
+Up to 50 files per call.
+
+## Check Your Quota
+\`\`\`bash
+curl ${baseUrl}/api/me \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY"
+\`\`\`
+Returns: trial_quota, trial_used, trial_remaining, total certifications.
+
+## List Your Certifications
+\`\`\`bash
+curl ${baseUrl}/api/certifications \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY"
+\`\`\`
+
+## Verify a Proof
+\`\`\`bash
+curl ${baseUrl}/proof/{proof_id}.json
+\`\`\`
+No auth required. Public endpoint.
+
+## Compute a SHA-256 Hash
+\`\`\`bash
+sha256sum myfile.pdf
+# or
+echo -n "content" | sha256sum
+\`\`\`
+
+## Pricing
+$${priceUsd} per certification. After trial: pay via USDC on Base (x402, no account needed) or EGLD on MultiversX (ACP).
+
+x402 — pay per use, no account:
+\`\`\`bash
+# 1. Send without auth → get 402 with payment requirements
+curl -X POST ${baseUrl}/api/proof -d '{"file_hash":"...","filename":"..."}'
+# 2. Pay USDC on Base, resend with X-PAYMENT header
+\`\`\`
+
+## More
+- Compact discovery: ${baseUrl}/.well-known/xproof.json
+- Full docs: ${baseUrl}/llms.txt
+- Specification: ${baseUrl}/.well-known/xproof.md
+- OpenAPI: ${baseUrl}/api/acp/openapi.json
+- MCP endpoint: ${baseUrl}/mcp
+`;
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(content);
+  });
+
   // robots.txt for SEO and AI agent discovery
   app.get("/robots.txt", (req, res) => {
     const baseUrl = `https://${req.get('host')}`;
@@ -3426,19 +3545,19 @@ Allow: /
 
 Sitemap: ${baseUrl}/sitemap.xml
 
-# AI Agent Discovery
-# /.well-known/xproof.md - Full specification (Markdown)
-# /.well-known/ai-plugin.json - OpenAI plugin manifest
-# /.well-known/mcp.json - Model Context Protocol manifest
-# /.well-known/agent.json - Agent Protocol manifest
+# AI Agent Discovery — Start here:
+# /skill.md - Agent skill (start here, plain text, no JS needed)
 # /llms.txt - LLM-friendly summary
 # /llms-full.txt - Extended LLM documentation
+# /.well-known/xproof.json - Compact machine-readable discovery (JSON)
+# /.well-known/xproof.md - Full specification (Markdown)
+# /.well-known/agent.json - Agent Protocol manifest
+# /.well-known/ai-plugin.json - OpenAI plugin manifest
+# /.well-known/mcp.json - Model Context Protocol manifest
 # /api/acp/products - Service discovery (JSON)
 # /api/acp/openapi.json - OpenAPI 3.0 specification
 # /api/acp/health - Health check
-# /agent-tools/langchain.py - LangChain tool
-# /agent-tools/crewai.py - CrewAI tool
-# /agent-tools/openapi-actions.json - GPT Actions spec
+# /api/agent - Agent trial registration info
 `;
     res.setHeader('Content-Type', 'text/plain');
     res.send(content);
