@@ -78,9 +78,6 @@ export async function recordOnBlockchain(
     logger.warn("MultiversX not configured, using simulation mode", { component: "blockchain" });
     
     const simulatedHash = `sim_${Date.now()}_${fileHash.substring(0, 8)}`;
-    const latency = Math.floor(Math.random() * 200) + 500; // 500-700ms simulation
-    recordTransaction(true, latency, "certification");
-
     return {
       transactionHash: simulatedHash,
       transactionUrl: `https://explorer.multiversx.com/transactions/${simulatedHash}`,
