@@ -359,7 +359,7 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            <div className="grid gap-4 grid-cols-1 lg:grid-cols-3 mb-6">
+            <div className="grid gap-4 grid-cols-1 lg:grid-cols-4 mb-6">
               {stats?.traffic && (
                 <Card data-testid="stat-card-visitor-breakdown">
                   <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
@@ -394,8 +394,9 @@ export default function AdminDashboard() {
               )}
 
               <Card data-testid="card-source-breakdown">
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Certification Source</CardTitle>
+                  <Target className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -434,7 +435,7 @@ export default function AdminDashboard() {
               </Card>
 
               <Card data-testid="card-blockchain-status">
-                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Blockchain Status</CardTitle>
                   <Activity className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
@@ -465,10 +466,8 @@ export default function AdminDashboard() {
                   </div>
                 </CardContent>
               </Card>
-            </div>
 
-            {(stats.blockchain.avg_latency_ms !== null || stats.blockchain.last_known_latency_ms !== null || stats.blockchain.last_success_at) && (
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+              {(stats.blockchain.avg_latency_ms !== null || stats.blockchain.last_known_latency_ms !== null || stats.blockchain.last_success_at) && (
                 <Card data-testid="stat-card-blockchain-latency">
                   <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-muted-foreground">Blockchain Latency</CardTitle>
@@ -494,8 +493,8 @@ export default function AdminDashboard() {
                     </p>
                   </CardContent>
                 </Card>
-              </div>
-            )}
+              )}
+            </div>
 
             <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 mb-6">
               <Card data-testid="card-webhook-stats">
