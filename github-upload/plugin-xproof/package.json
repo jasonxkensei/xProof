@@ -1,5 +1,5 @@
 {
-  "name": "@elizaos/plugin-xproof",
+  "name": "xproof-eliza-plugin",
   "version": "2.0.0",
   "description": "Compliance layer for autonomous agents. Audit guard blocks critical actions without on-chain proof. Certify outputs on MultiversX via xProof. 6-second finality.",
   "main": "dist/index.js",

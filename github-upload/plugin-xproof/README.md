@@ -1,4 +1,4 @@
-# @elizaos/plugin-xproof
+# xproof-eliza-plugin
 
 **Don't let your agent go rogue. Certify before you execute.**
 
@@ -18,8 +18,18 @@ The compliance layer for autonomous agents on MultiversX. Audit guard blocks cri
 
 ## Install
 
+### Community Release (Available Now)
+
 ```bash
-pnpm add @elizaos/plugin-xproof
+pnpm add xproof-eliza-plugin
+```
+
+### Official ElizaOS Registry (Coming Soon)
+
+PR [#266](https://github.com/elizaos/registry/pull/266) submitted to `@elizaos/registry`. Once merged, install via:
+
+```bash
+elizaos install @elizaos/plugin-xproof
 ```
 
 ## Quickstart
@@ -29,7 +39,7 @@ Add the plugin to your character configuration:
 ```json
 {
   "name": "TradingAgent",
-  "plugins": ["@elizaos/plugin-xproof"],
+  "plugins": ["xproof-eliza-plugin"],
   "settings": {
     "XPROOF_API_KEY": "pm_your_api_key_here"
   }
@@ -39,7 +49,7 @@ Add the plugin to your character configuration:
 Or register programmatically:
 
 ```typescript
-import { xproofPlugin } from "@elizaos/plugin-xproof";
+import { xproofPlugin } from "xproof-eliza-plugin";
 
 const agent = new AgentRuntime({
   plugins: [xproofPlugin],
@@ -131,7 +141,7 @@ Agent (internal):
 ### Advanced: Using AuditRequiredError
 
 ```typescript
-import { AuditRequiredError } from "@elizaos/plugin-xproof";
+import { AuditRequiredError } from "xproof-eliza-plugin";
 
 try {
   // The audit action will throw if certification fails
