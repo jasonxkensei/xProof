@@ -1,10 +1,22 @@
 {
   "name": "@elizaos/plugin-xproof",
-  "version": "1.0.0",
-  "description": "xProof blockchain certification plugin for ElizaOS — anchor agent outputs to MultiversX with tamper-proof on-chain proof",
+  "version": "2.0.0",
+  "description": "Compliance layer for autonomous agents. Audit guard blocks critical actions without on-chain proof. Certify outputs on MultiversX via xProof. 6-second finality.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -33,10 +45,27 @@
     "agents",
     "trust",
     "audit",
-    "mx-8004"
+    "audit-log",
+    "compliance",
+    "agent-audit",
+    "trust-primitive",
+    "proof-of-existence",
+    "mx-8004",
+    "autonomous-agent"
   ],
   "author": "jasonxkensei",
   "license": "MIT",
+  "homepage": "https://xproof.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jasonxkensei/plugin-xproof.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jasonxkensei/plugin-xproof/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "peerDependencies": {
     "@elizaos/core": "*"
   },

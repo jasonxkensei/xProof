@@ -83,6 +83,9 @@ A health endpoint provides structured component checks and operational metrics. 
 ### Font Loading
 -   Google Fonts CDN
 
+### ElizaOS Plugin NPM Package
+`@elizaos/plugin-xproof` v2.0.0 lives in `github-upload/plugin-xproof/`. Modular structure: `src/types.ts`, `src/client.ts`, `src/actions/{audit,certify,verify}.ts`, `src/providers/audit-state.ts`, `src/index.ts`. 5 actions (AUDIT_BEFORE_EXECUTE, CERTIFY_CONTENT, CERTIFY_HASH, CERTIFY_BATCH, VERIFY_PROOF) + 1 provider (audit state). Built with tsup (ESM + CJS + DTS). Headline feature: audit guard blocks execution without on-chain proof via `AuditRequiredError`.
+
 ### Environment Configuration
 -   `DATABASE_URL`
 -   `SESSION_SECRET`
