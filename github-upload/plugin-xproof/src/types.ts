@@ -64,11 +64,13 @@ export class AuditRequiredError extends Error {
 }
 
 export function getConfig(runtime: IAgentRuntime): XProofConfig {
-  const apiKey =
-    runtime.getSetting('XPROOF_API_KEY') ?? process.env.XPROOF_API_KEY ?? '';
-  const baseUrl =
+  const apiKey = String(
+    runtime.getSetting('XPROOF_API_KEY') ?? process.env.XPROOF_API_KEY ?? ''
+  );
+  const baseUrl = String(
     runtime.getSetting('XPROOF_BASE_URL') ??
-    process.env.XPROOF_BASE_URL ??
-    'https://xproof.app';
+      process.env.XPROOF_BASE_URL ??
+      'https://xproof.app'
+  );
   return { apiKey, baseUrl };
 }
