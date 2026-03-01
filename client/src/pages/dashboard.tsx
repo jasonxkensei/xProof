@@ -10,6 +10,7 @@ import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import type { Certification } from "@shared/schema";
+import { ApiKeysSection } from "@/components/api-keys-section";
 
 export default function Dashboard() {
   const { toast } = useToast();
@@ -132,6 +133,11 @@ export default function Dashboard() {
               Certify a file
             </Link>
           </Button>
+        </div>
+
+        {/* API Keys Section */}
+        <div className="mb-12">
+          <ApiKeysSection />
         </div>
 
         {/* Certifications List */}
