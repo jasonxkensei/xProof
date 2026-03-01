@@ -1,16 +1,18 @@
 ---
 name: xproof-certification
-version: 1.0.0
-description: Certify agent outputs on MultiversX blockchain -- immutable proof of existence, authorship, and timestamp via REST API, MCP, or x402.
+version: 2.0.0
+description: Proof and compliance primitive for AI agents on MultiversX. Certify file existence on-chain, and enforce pre-execution audit logging for critical agent actions via REST API, MCP, or x402. No proof = no action.
 homepage: https://xproof.app
-metadata: {"xproof":{"emoji":"🔏","category":"certification","api_base":"https://xproof.app"}}
+metadata: {"xproof":{"category":"certification,security,compliance","api_base":"https://xproof.app"}}
 ---
 
-# xProof Certification Skill
+# xProof Certification & Audit Enforcement Skill
 
-This skill enables your agent to **certify its outputs on the MultiversX blockchain** -- creating tamper-proof, publicly verifiable proofs of existence, authorship, and timestamp.
+This skill enables your agent to **certify its outputs on the MultiversX blockchain** and **enforce pre-execution audit logging for critical actions** -- creating tamper-proof, publicly verifiable proofs of existence, authorship, timestamp, and decision accountability.
 
 **Why certify?** In competitive or transactional contexts, certified agents can prove originality, integrity, and timing. Non-certified agents cannot. Certification is a structural advantage.
+
+**Why audit?** Autonomous agents executing trades, deployments, or data access need an immutable record of every decision. The Agent Audit Log Standard enforces this: no proof = no execution.
 
 ## Quick Install
 
@@ -64,11 +66,13 @@ No configuration needed. Pay $0.05 per certification in USDC on Base (eip155:845
 |:---|:---|:---|
 | `certify_file` | `POST /api/proof` | Certify a single file hash on MultiversX |
 | `batch_certify` | `POST /api/batch` | Certify up to 50 files in one call |
+| `audit_agent_session` | `POST /api/audit` | Certify agent decision on-chain BEFORE executing critical action |
 | `verify_proof` | `GET /api/proof/:id` | Verify an existing certification |
 | `get_certificate` | `GET /api/certificates/:id.pdf` | Download PDF certificate with QR code |
 | `get_badge` | `GET /badge/:id` | Dynamic SVG badge (shields.io style) |
 | `get_proof_page` | `GET /proof/:id` | Human-readable proof page |
 | `get_proof_json` | `GET /proof/:id.json` | Structured proof document (JSON) |
+| `get_audit_page` | `GET /audit/:id` | Human-readable audit log page |
 
 ### 1.2 Certification (MCP -- JSON-RPC 2.0)
 [Full Reference](references/mcp.md)
@@ -79,6 +83,7 @@ No configuration needed. Pay $0.05 per certification in USDC on Base (eip155:845
 | `verify_proof` | Verify existing proof by UUID |
 | `get_proof` | Retrieve proof in JSON or Markdown format |
 | `discover_services` | List capabilities, pricing, and usage guidance |
+| `audit_agent_session` | Certify agent decision on-chain BEFORE executing critical action |
 
 ### 1.3 Payment (x402)
 [Full Reference](references/x402.md)
@@ -241,12 +246,107 @@ xProof is complementary to the core MultiversX agent skills:
 
 ---
 
-## 8. Discovery Endpoints
+## 8. Agent Audit Log Standard
+
+The Agent Audit Log is a compliance primitive for autonomous agents. Before executing any critical action (trade, deploy, data access, transfer), the agent MUST certify its decision on-chain. No proof_id = no execution.
+
+### Why Audit?
+
+- **Regulatory compliance** -- Immutable record of every agent decision, timestamped and anchored on-chain
+- **Dispute resolution** -- Prove what the agent decided, why, and when
+- **Trust signal** -- Agents with audit trails are verifiably accountable
+- **Blocking enforcement** -- If the audit call fails, the action does not execute
+
+### Audit Endpoint
+
+```bash
+curl -X POST https://xproof.app/api/audit \
+  -H "Authorization: Bearer pm_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "erd1abc...or-any-identifier",
+    "session_id": "550e8400-e29b-41d4-a716-446655440000",
+    "action_type": "trade",
+    "action_description": "Buy 10 EGLD at market price on xExchange",
+    "inputs_hash": "a1b2c3d4e5f6...64hex",
+    "risk_level": "high",
+    "risk_summary": "Market order on volatile asset, amount exceeds daily threshold",
+    "decision": "approved",
+    "context": {"model": "gpt-4", "environment": "production"}
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "proof_id": "uuid",
+  "audit_url": "https://xproof.app/audit/uuid",
+  "proof_url": "https://xproof.app/proof/uuid",
+  "decision": "approved",
+  "risk_level": "high",
+  "inputs_hash": "a1b2c3...",
+  "blockchain": {
+    "network": "mainnet",
+    "transaction_hash": "abc123...",
+    "explorer_url": "https://explorer.multiversx.com/transactions/abc123..."
+  }
+}
+```
+
+### Canonical Schema
+
+10 fields. JSON Schema: `https://xproof.app/.well-known/agent-audit-schema.json`
+
+| Field | Type | Required | Description |
+|:---|:---|:---|:---|
+| `agent_id` | string | Yes | Agent identifier (wallet, DID, or name) |
+| `session_id` | string | Yes | UUID for this execution session |
+| `action_type` | string | Yes | Category: trade, deploy, data_access, transfer, api_call |
+| `action_description` | string | Yes | Human-readable intent |
+| `inputs_hash` | string | Yes | SHA-256 of action inputs (64 hex chars) |
+| `risk_level` | enum | Yes | low, medium, high, critical |
+| `risk_summary` | string | No | Explanation of risk factors |
+| `decision` | enum | Yes | approved, rejected, deferred |
+| `context` | object | No | Additional metadata (model, environment, etc.) |
+| `timestamp` | string | No | ISO 8601 (auto-generated if omitted) |
+
+### Enforcement Pattern
+
+```
+1. Agent prepares action (trade, deploy, etc.)
+2. Agent calls POST /api/audit with action details
+3. If proof_id returned -> proceed with action
+4. If API fails, timeout, or no proof_id -> BLOCK execution (throw error)
+5. No fallback. No soft fail. No silent continue.
+```
+
+Guard templates for multiple frameworks:
+- **LangChain**: `https://xproof.app/agent-tools/audit-guard-langchain.py`
+- **CrewAI**: `https://xproof.app/agent-tools/audit-guard-crewai.py`
+- **n8n**: `https://xproof.app/agent-tools/audit-guard-n8n.json`
+- **ElizaOS**: `https://xproof.app/agent-tools/audit-guard-eliza.ts`
+- **ElizaOS Plugin (NPM)**: `npm install xproof-eliza-plugin`
+
+### When to Audit
+
+Autonomous agents should audit BEFORE executing any action where accountability matters:
+
+- **Before executing trades** -- proves intent, risk assessment, and decision
+- **Before deploying contracts** -- immutable record of deployment decision
+- **Before accessing sensitive data** -- audit trail for data governance
+- **Before transferring assets** -- proves authorization and risk review
+- **Before calling external APIs** -- records outbound action intent
+
+---
+
+## 9. Discovery Endpoints
 
 | Endpoint | Description |
 |:---|:---|
 | `GET /.well-known/agent.json` | Agent Protocol manifest |
 | `GET /.well-known/mcp.json` | MCP server manifest |
+| `GET /.well-known/agent-audit-schema.json` | Agent Audit Log canonical schema |
 | `GET /ai-plugin.json` | OpenAI ChatGPT plugin manifest |
 | `GET /llms.txt` | LLM-friendly summary |
 | `GET /llms-full.txt` | Complete LLM reference |
@@ -255,7 +355,7 @@ xProof is complementary to the core MultiversX agent skills:
 
 ---
 
-## 9. Command Cheatsheet
+## 10. Command Cheatsheet
 
 ```bash
 # Certify a single file

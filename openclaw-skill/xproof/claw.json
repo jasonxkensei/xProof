@@ -1,7 +1,7 @@
 {
   "name": "xproof",
-  "version": "1.2.0",
-  "description": "Anchor any agent output on-chain and make it verifiable by other agents or humans. Proof primitive for AI agents on MultiversX.",
+  "version": "2.0.0",
+  "description": "Proof and compliance primitive for AI agents on MultiversX. Certify file existence and ownership on-chain, and enforce pre-execution audit logging for critical agent actions. No proof → no action.",
   "author": "jasonxkensei",
   "homepage": "https://xproof.app",
   "repository": "https://github.com/jasonxkensei/xproof-openclaw-skill",
@@ -100,6 +100,59 @@
       "parameters": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "audit_agent_session",
+      "description": "Certify an agent audit log on-chain BEFORE executing a critical action. The audit log captures agent identity, action intent, risk assessment, and decision. If this call fails or returns no proof_id, the agent MUST NOT proceed. This is the enforcement primitive for the Agent Audit Log Standard.",
+      "parameters": {
+        "type": "object",
+        "required": ["agent_id", "session_id", "action_type", "action_description", "inputs_hash", "risk_level", "decision"],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Unique identifier for the agent (wallet address or DID)"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID identifying this execution session"
+          },
+          "action_type": {
+            "type": "string",
+            "description": "Category of action (e.g. trade, deploy, data_access, transfer, api_call)"
+          },
+          "action_description": {
+            "type": "string",
+            "description": "Human-readable description of what the agent intends to do"
+          },
+          "inputs_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the action inputs (deterministic, hex, 64 chars)",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"],
+            "description": "Risk assessment for this action"
+          },
+          "risk_summary": {
+            "type": "string",
+            "description": "Brief explanation of risk factors"
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["approved", "rejected", "deferred"],
+            "description": "Agent's decision on whether to proceed"
+          },
+          "context": {
+            "type": "object",
+            "description": "Additional context (model version, environment, etc.)"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "ISO 8601 timestamp (auto-generated if omitted)"
+          }
+        }
       }
     }
   ],
