@@ -2,6 +2,7 @@ import { logger } from "./logger";
 import { db } from "./db";
 import { certifications } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { recordTransaction } from "./metrics";
 
 const API_URL = process.env.MULTIVERSX_API_URL || "https://api.multiversx.com";
 
@@ -129,6 +130,7 @@ export function scheduleVerificationRetry(
   expectedMinValue: string
 ): void {
   let attempt = 0;
+  const startTime = Date.now();
 
   const retry = async () => {
     attempt++;
@@ -143,15 +145,18 @@ export function scheduleVerificationRetry(
     const result = await verifyTransactionOnChain(txHash, expectedReceiver, expectedMinValue);
 
     if (result.verified) {
+      const latencyMs = Date.now() - startTime;
+      recordTransaction(true, latencyMs, "certification");
       await db
         .update(certifications)
-        .set({ blockchainStatus: "confirmed" })
+        .set({ blockchainStatus: "confirmed", blockchainLatencyMs: latencyMs })
         .where(eq(certifications.id, certificationId));
       logger.info("Background verification succeeded — certification confirmed", {
         component: "verifyTransaction",
         certificationId,
         txHash,
         attempt,
+        latencyMs,
       });
       return;
     }
@@ -166,6 +171,10 @@ export function scheduleVerificationRetry(
     if (attempt >= MAX_RETRIES) {
       const isStillIndexing = result.error === "pending" || result.error === "Transaction not found on blockchain";
       const finalStatus = isStillIndexing ? "pending" : "failed";
+      const latencyMs = Date.now() - startTime;
+      if (finalStatus === "failed") {
+        recordTransaction(false, latencyMs, "certification");
+      }
       await db
         .update(certifications)
         .set({ blockchainStatus: finalStatus })
@@ -176,11 +185,14 @@ export function scheduleVerificationRetry(
         txHash,
         attempt,
         finalStatus,
+        latencyMs,
         error: result.error,
       });
       return;
     }
 
+    const latencyMs = Date.now() - startTime;
+    recordTransaction(false, latencyMs, "certification");
     await db
       .update(certifications)
       .set({ blockchainStatus: "failed" })
@@ -190,6 +202,7 @@ export function scheduleVerificationRetry(
       certificationId,
       txHash,
       attempt,
+      latencyMs,
       error: result.error,
     });
   };

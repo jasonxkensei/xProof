@@ -295,6 +295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         logger.withRequest(req).info("Using client-signed transaction", { transactionHash });
 
         const { verifyTransactionOnChain } = await import("./verifyTransaction");
+        const { recordTransaction } = await import("./metrics");
 
         const expectedReceiver = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS || "";
         const ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
@@ -306,6 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           expectedMinValue = priceEgld;
         }
 
+        const verifyStart = Date.now();
         const verificationResult = await verifyTransactionOnChain(transactionHash, expectedReceiver, expectedMinValue);
 
         if (verificationResult.error === "pending" || verificationResult.error === "Transaction not found on blockchain") {
@@ -316,6 +318,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(402).json({ message: "Payment verification failed", error: verificationResult.error });
         } else {
           blockchainStatus = "confirmed";
+          blockchainLatencyMs = Date.now() - verifyStart;
+          recordTransaction(true, blockchainLatencyMs, "certification");
         }
       } else {
         const result = await recordOnBlockchain(
