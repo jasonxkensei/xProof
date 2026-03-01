@@ -1,8 +1,8 @@
-# Add xProof certification skills
+# Add xProof certification & audit enforcement skills
 
 ## Summary
 
-Adds `xproof_skills.ts` -- off-chain certification for agent outputs via the [xProof](https://xproof.app) API, with a composite flow that chains xProof certification with MX-8004 Validation Registry `submit_proof`.
+Adds `xproof_skills.ts` -- off-chain certification and pre-execution audit enforcement for agent outputs via the [xProof](https://xproof.app) API, with a composite flow that chains xProof certification with MX-8004 Validation Registry `submit_proof`. Implements the [Agent Audit Log Standard](https://xproof.app/.well-known/agent-audit-schema.json).
 
 Ref: multiversx/mx-openclaw-skills#1, issue #679
 
@@ -15,6 +15,7 @@ Ref: multiversx/mx-openclaw-skills#1, issue #679
 | `certifyBatch(params)` | Certify up to 50 files in a single API call |
 | `verifyProof(certId)` | Check certification status and blockchain details |
 | `certifyAndSubmitProof(params)` | **Composite**: xProof certify + Validation Registry `submit_proof` in one call |
+| `auditAgentSession(params)` | **Audit enforcement**: certify agent decision on-chain BEFORE executing critical action. Throws `AuditRequiredError` on failure -- no soft fail |
 
 ## Integration architecture
 
@@ -37,6 +38,27 @@ Two-layer proof:
   - xProof: immutable content hash + timestamp + explorer link
   - MX-8004: on-chain job proof for the agent economy
 ```
+
+## Audit enforcement architecture
+
+```
+Critical Action Intent
+    |
+    v
+auditAgentSession()
+    |
+    +-- POST /api/audit → xProof API
+    |   Body: { agent_id, session_id, action_type, inputs_hash, risk_level, decision }
+    |
+    +-- Success: proof_id returned → proceed with action
+    |
+    +-- Failure (API error, timeout, no proof_id):
+            → throw AuditRequiredError
+            → EXECUTION BLOCKED
+            → No soft fail. No fallback.
+```
+
+The `AuditRequiredError` is a dedicated error class. Every failure path (network error, timeout via `AbortSignal.timeout(15_000)`, HTTP error, missing proof_id) throws this error. There is no `return false` anywhere in the function.
 
 ## Auth modes
 

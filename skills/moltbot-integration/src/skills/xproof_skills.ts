@@ -84,6 +84,35 @@ export interface CertifyAndSubmitResult {
   validationTxHash: string;
 }
 
+export interface AuditLogParams {
+  agentId: string;
+  sessionId: string;
+  actionType: string;
+  actionDescription: string;
+  inputsHash: string;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  riskSummary?: string;
+  decision: 'approved' | 'rejected' | 'deferred';
+  context?: Record<string, unknown>;
+  timestamp?: string;
+  useX402?: boolean;
+  x402Payment?: string;
+}
+
+export interface AuditResult {
+  proof_id: string;
+  audit_url: string;
+  proof_url: string;
+  decision: string;
+  risk_level: string;
+  inputs_hash: string;
+  blockchain: {
+    network: string;
+    transaction_hash: string;
+    explorer_url: string;
+  };
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 async function hashFile(filePath: string): Promise<{hash: string; size: number}> {
@@ -147,6 +176,13 @@ export class XProofPaymentRequired extends Error {
     super('xProof requires payment (HTTP 402). Use x402 or provide an API key.');
     this.name = 'XProofPaymentRequired';
     this.paymentDetails = details;
+  }
+}
+
+export class AuditRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuditRequiredError';
   }
 }
 
@@ -321,4 +357,81 @@ export async function certifyAndSubmitProof(params: {
   );
 
   return {certification, validationTxHash};
+}
+
+// ─── audit_agent_session ────────────────────────────────────────────────────────
+// Certify an agent decision on-chain BEFORE executing a critical action.
+// If this call fails or returns no proof_id, the caller MUST NOT proceed.
+// There is no soft fail. There is no fallback.
+
+export async function auditAgentSession(
+  params: AuditLogParams,
+): Promise<AuditResult> {
+  logger.info(
+    `Auditing: ${params.actionType} — ${params.actionDescription} (risk=${params.riskLevel}, decision=${params.decision})`,
+  );
+
+  const payload = {
+    agent_id: params.agentId,
+    session_id: params.sessionId,
+    action_type: params.actionType,
+    action_description: params.actionDescription,
+    inputs_hash: params.inputsHash,
+    risk_level: params.riskLevel,
+    risk_summary: params.riskSummary,
+    decision: params.decision,
+    context: params.context,
+    timestamp: params.timestamp || new Date().toISOString(),
+  };
+
+  try {
+    const url = `${CONFIG.XPROOF.BASE_URL}/api/audit`;
+    const headers = buildHeaders(params.useX402, params.x402Payment);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (response.status === 402) {
+      const paymentRequired = await response.json();
+      throw new AuditRequiredError(
+        `EXECUTION BLOCKED: Audit requires payment. ${JSON.stringify(paymentRequired)}`,
+      );
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new AuditRequiredError(
+        `EXECUTION BLOCKED: Audit certification failed (HTTP ${response.status}): ${errorText.slice(0, 300)}`,
+      );
+    }
+
+    const result = (await response.json()) as AuditResult;
+
+    if (!result.proof_id) {
+      throw new AuditRequiredError(
+        'EXECUTION BLOCKED: xProof returned no proof_id.',
+      );
+    }
+
+    logger.info(
+      `Audit certified: proof_id=${result.proof_id}, decision=${result.decision}, risk=${result.risk_level}`,
+    );
+    return result;
+  } catch (err) {
+    if (err instanceof AuditRequiredError) {
+      logger.error(`Audit BLOCKED: ${err.message}`);
+      throw err;
+    }
+
+    const msg = err instanceof Error ? err.message : String(err);
+    const blockError = new AuditRequiredError(
+      `EXECUTION BLOCKED: Audit certification failed. ${msg}`,
+    );
+    logger.error(`Audit BLOCKED: ${blockError.message}`);
+    throw blockError;
+  }
 }

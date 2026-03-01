@@ -90,14 +90,16 @@ export {
   type OASFDomainGroup,
 } from './oasf_taxonomy';
 
-// xProof (off-chain certification + composite MX-8004 flow)
+// xProof (off-chain certification + audit enforcement + composite MX-8004 flow)
 export {
   certifyFile,
   certifyHash,
   certifyBatch,
   verifyProof,
   certifyAndSubmitProof,
+  auditAgentSession,
   XProofPaymentRequired,
+  AuditRequiredError,
   type CertifyFileParams,
   type CertifyHashParams,
   type CertifyBatchParams,
@@ -105,4 +107,6 @@ export {
   type BatchCertificationResult,
   type ProofData,
   type CertifyAndSubmitResult,
+  type AuditLogParams,
+  type AuditResult,
 } from './xproof_skills';
