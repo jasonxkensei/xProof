@@ -8,7 +8,7 @@ channel = "stable-24_05"
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["node", "dist/index.js"]
+run = ["npm", "run", "start"]
 
 # CSP header for MultiversX SDK compatibility
 [[deployment.responseHeaders]]
