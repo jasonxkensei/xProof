@@ -6,6 +6,7 @@ import {
 import { recordTransaction } from "./metrics";
 import { enqueueTx } from "./txQueue";
 import { logger } from "./logger";
+import { claimNextNonce, resyncNonceFromChain } from "./nonce";
 
 const PRIVATE_KEY = process.env.MULTIVERSX_PRIVATE_KEY;
 const SENDER_ADDRESS = process.env.MULTIVERSX_SENDER_ADDRESS;
@@ -36,22 +37,10 @@ function addressToHex(bech32: string): string {
   return Buffer.from(addr.getPublicKey()).toString("hex");
 }
 
-let localNonce: bigint | null = null;
-
-async function getNextNonce(): Promise<bigint> {
-  if (localNonce === null) {
-    const response = await fetch(`${API_URL}/address/${SENDER_ADDRESS}`);
-    if (!response.ok) throw new Error(`Failed to fetch nonce: ${response.statusText}`);
-    const data = await response.json();
-    localNonce = BigInt(data.nonce || 0);
-  }
-  const nonce = localNonce;
-  localNonce = localNonce + BigInt(1);
-  return nonce;
-}
-
 export function resetNonce() {
-  localNonce = null;
+  if (SENDER_ADDRESS) {
+    resyncNonceFromChain(SENDER_ADDRESS).catch(() => {});
+  }
 }
 
 async function signAndSubmit(tx: Transaction): Promise<string> {
@@ -97,7 +86,7 @@ async function buildScCall(
   value: bigint = BigInt(0),
   gasLimit: bigint = BigInt(10_000_000)
 ): Promise<Transaction> {
-  const nonce = await getNextNonce();
+  const nonce = await claimNextNonce(SENDER_ADDRESS!);
   const dataPayload = [functionName, ...args].join("@");
 
   return new Transaction({

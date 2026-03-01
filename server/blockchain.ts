@@ -5,6 +5,7 @@ import {
 } from "@multiversx/sdk-core";
 import { recordTransaction } from "./metrics";
 import { logger } from "./logger";
+import { claimNextNonce, resyncNonceFromChain } from "./nonce";
 
 // MultiversX configuration from environment
 const PRIVATE_KEY = process.env.MULTIVERSX_PRIVATE_KEY;
@@ -17,16 +18,6 @@ const CHAIN_ID = process.env.MULTIVERSX_CHAIN_ID || "1"; // 1 = mainnet, D = dev
 // Check if MultiversX is properly configured
 export function isMultiversXConfigured(): boolean {
   return !!(PRIVATE_KEY && SENDER_ADDRESS);
-}
-
-// Get account nonce from MultiversX API
-async function getAccountNonce(address: string): Promise<bigint> {
-  const response = await fetch(`${API_URL}/accounts/${address}`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch account nonce: ${response.statusText}`);
-  }
-  const data = await response.json();
-  return BigInt(data.nonce ?? 0);
 }
 
 // Submit signed transaction to MultiversX gateway
@@ -89,7 +80,7 @@ export async function recordOnBlockchain(
     const payloadText = `certify:${fileHash}${filename ? `|filename:${filename}` : ""}${author ? `|author:${author}` : ""}`;
     const dataPayload = Buffer.from(payloadText);
 
-    const nonce = await getAccountNonce(SENDER_ADDRESS!);
+    const nonce = await claimNextNonce(SENDER_ADDRESS!);
 
     const gasLimit = BigInt(50000 + dataPayload.length * 1500);
 
@@ -134,6 +125,9 @@ export async function recordOnBlockchain(
   } catch (error: any) {
     recordTransaction(false, Date.now() - txStart, "certification");
     logger.error("MultiversX transaction error", { component: "blockchain", error: error instanceof Error ? error.message : String(error) });
+    if (SENDER_ADDRESS && /nonce/i.test(error.message)) {
+      resyncNonceFromChain(SENDER_ADDRESS).catch(() => {});
+    }
     throw new Error(`Failed to record on blockchain: ${error.message}`);
   }
 }

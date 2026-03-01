@@ -26,7 +26,13 @@ xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Stan
 -   **Views**: Query job lifecycle, agent reputation, and feedback from on-chain data.
 
 ### Data Storage
-PostgreSQL, hosted on Neon, is used for data persistence with Drizzle ORM for type-safe operations. Key tables include `users`, `certifications`, `sessions`, and `tx_queue`. Drizzle Kit manages database migrations.
+PostgreSQL, hosted on Neon, is used for data persistence with Drizzle ORM for type-safe operations. Key tables include `users`, `certifications`, `sessions`, `tx_queue`, and `wallet_nonces`. Drizzle Kit manages database migrations. The `wallet_nonces` table is managed via raw SQL (not Drizzle schema) and provides atomic distributed nonce management.
+
+### Distributed Nonce Management (Autoscale-Safe)
+`server/nonce.ts` centralizes all blockchain nonce handling for both direct certifications (`blockchain.ts`) and MX-8004 validation steps (`mx8004.ts`). A PostgreSQL `UPDATE ... RETURNING` atomic statement serializes nonce claims across all instances: each caller atomically increments the DB counter and receives its unique nonce. On nonce errors, `resyncNonceFromChain()` re-fetches the confirmed on-chain nonce. This eliminates nonce conflicts under multi-instance autoscale without requiring Redis or any external lock service.
+
+### Deployment
+Configured for **autoscale** (Replit): `npm run build` → `node dist/index.js`. Scales up/down based on traffic. Safe for multi-instance because: (1) nonce management is DB-atomic, (2) tx_queue claims are atomic via PostgreSQL UPDATE RETURNING, (3) no in-memory state shared between instances.
 
 ### Prepaid Credits System
 Trial users who exhaust their 10-cert quota can purchase prepaid credit packs (USDC on Base) without needing a wallet session. Three packages: Starter (100 certs/$5), Pro (1000/$40), Business (10k/$300). Flow: `GET /api/credits/packages` → `POST /api/credits/purchase` → send USDC on Base → `POST /api/credits/confirm` with tx_hash. Server verifies the USDC Transfer event on Base mainnet via viem, records the purchase in `credit_purchases` table (unique tx_hash prevents double-claim), and increments `users.credit_balance`. Credits are consumed at `/api/proof` and `/api/batch` before falling back to x402. Response header `X-Credits-Remaining` tracks balance in real time. Logic lives in `server/credits.ts` (package constants + Base verification).
