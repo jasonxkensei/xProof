@@ -125,22 +125,31 @@ app.use((req, res, next) => {
         `SELECT wallet_address FROM users WHERE is_public_profile = true`
       );
       let snapshots = 0;
+      const agentScores: Array<{ wallet: string; score: number; level: string; certTotal: number; activeAttestations: number }> = [];
       for (const row of publicAgents.rows) {
         try {
           const trust = await computeTrustScoreByWallet(row.wallet_address);
           if (trust) {
-            await pool.query(
-              `INSERT INTO trust_score_snapshots (wallet_address, score, level, cert_total, active_attestations, snapshot_date)
-               VALUES ($1, $2, $3, $4, $5, CURRENT_DATE)
-               ON CONFLICT (wallet_address, snapshot_date) DO UPDATE SET
-                 score = EXCLUDED.score,
-                 level = EXCLUDED.level,
-                 cert_total = EXCLUDED.cert_total,
-                 active_attestations = EXCLUDED.active_attestations`,
-              [row.wallet_address, trust.score, trust.level, trust.certTotal, trust.activeAttestations ?? 0]
-            );
-            snapshots++;
+            agentScores.push({ wallet: row.wallet_address, score: trust.score, level: trust.level, certTotal: trust.certTotal, activeAttestations: trust.activeAttestations ?? 0 });
           }
+        } catch {}
+      }
+      agentScores.sort((a, b) => b.score - a.score);
+      for (let i = 0; i < agentScores.length; i++) {
+        const a = agentScores[i];
+        try {
+          await pool.query(
+            `INSERT INTO trust_score_snapshots (wallet_address, score, level, cert_total, active_attestations, rank, snapshot_date)
+             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE)
+             ON CONFLICT (wallet_address, snapshot_date) DO UPDATE SET
+               score = EXCLUDED.score,
+               level = EXCLUDED.level,
+               cert_total = EXCLUDED.cert_total,
+               active_attestations = EXCLUDED.active_attestations,
+               rank = EXCLUDED.rank`,
+            [a.wallet, a.score, a.level, a.certTotal, a.activeAttestations, i + 1]
+          );
+          snapshots++;
         } catch {}
       }
 

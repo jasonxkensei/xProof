@@ -1,9 +1,10 @@
 import type { Request, Response, NextFunction } from "express";
 import { db } from "./db";
-import { certifications } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { certifications, users } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { getCertificationPriceUsd } from "./pricing";
+import { getLeaderboard, computeTrustScoreByWallet, getTrustLevel } from "./trust";
 
 const CRAWLER_USER_AGENTS = [
   "ChatGPT", "GPTBot", "Googlebot", "Bingbot", "Twitterbot",
@@ -436,6 +437,77 @@ async function renderAgentsPage(baseUrl: string): Promise<string> {
 </html>`;
 }
 
+async function renderLeaderboardPage(baseUrl: string): Promise<string> {
+  let agentCount = 0;
+  let topAgentNames: string[] = [];
+  try {
+    const result = await getLeaderboard({ limit: 10 });
+    agentCount = result.total;
+    topAgentNames = result.entries.filter((e) => e.agentName).map((e) => e.agentName as string).slice(0, 5);
+  } catch {}
+
+  const title = `Agent Trust Leaderboard — ${agentCount} verified AI agents | xproof`;
+  const topList = topAgentNames.length > 0 ? ` Top agents: ${topAgentNames.join(", ")}.` : "";
+  const description = `Public trust registry for AI agents on MultiversX. ${agentCount} agents ranked by on-chain certification history, streaks, and domain attestations.${topList}`;
+
+  return `${commonHead(title, description, `${baseUrl}/leaderboard`)}
+<body>
+<header><nav><a href="${baseUrl}"><strong>xproof</strong></a></nav></header>
+<main>
+  <h1>Agent Trust Leaderboard</h1>
+  <p>${agentCount} AI agents ranked by on-chain certification history. Trust scores computed from confirmed certifications, activity streaks, seniority, and domain attestations.</p>
+  <p>Trust levels: Newcomer (0-99), Active (100-299), Trusted (300-699), Verified (700+)</p>
+  <p><a href="${baseUrl}/settings">Add my agent to the leaderboard</a></p>
+</main>
+<footer><p>&copy; ${new Date().getFullYear()} xproof. Powered by <a href="https://multiversx.com">MultiversX</a></p></footer>
+</body></html>`;
+}
+
+async function renderAgentProfilePage(baseUrl: string, walletAddress: string): Promise<string | null> {
+  try {
+    const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+    if (!user || !user.isPublicProfile) return null;
+    const trust = await computeTrustScoreByWallet(walletAddress);
+    if (!trust) return null;
+
+    const name = user.agentName || `Agent ${walletAddress.slice(0, 8)}...${walletAddress.slice(-6)}`;
+    const cat = user.agentCategory ? ` (${user.agentCategory})` : "";
+    const title = `${name} — ${trust.level} (${trust.score} pts)${cat} | xproof`;
+    const desc = user.agentDescription || `${name} is a ${trust.level}-level AI agent with ${trust.certTotal} on-chain certifications and a ${trust.streakWeeks}-week activity streak on MultiversX.`;
+
+    return `${commonHead(title, desc, `${baseUrl}/agent/${walletAddress}`, "profile")}
+<body>
+<header><nav><a href="${baseUrl}"><strong>xproof</strong></a></nav></header>
+<main>
+  <h1>${escapeHtml(name)}</h1>
+  <p>Trust level: ${trust.level} (${trust.score} pts)</p>
+  <p>${escapeHtml(desc)}</p>
+  <dl>
+    <dt>Certifications</dt><dd>${trust.certTotal} total, ${trust.certLast30d} this month</dd>
+    <dt>Streak</dt><dd>${trust.streakWeeks} consecutive weeks</dd>
+    <dt>Attestations</dt><dd>${trust.activeAttestations} active</dd>
+    <dt>Wallet</dt><dd>${walletAddress}</dd>
+  </dl>
+  <p><a href="${baseUrl}/leaderboard">View full leaderboard</a></p>
+</main>
+<footer><p>&copy; ${new Date().getFullYear()} xproof. Powered by <a href="https://multiversx.com">MultiversX</a></p></footer>
+
+<script type="application/ld+json">
+${JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": name,
+  "description": desc,
+  "url": `${baseUrl}/agent/${walletAddress}`,
+  "identifier": walletAddress,
+}, null, 2)}
+</script>
+</body></html>`;
+  } catch {
+    return null;
+  }
+}
+
 export function prerenderMiddleware() {
   return async (req: Request, res: Response, next: NextFunction) => {
     const userAgent = req.get("user-agent") || "";
@@ -477,6 +549,21 @@ export function prerenderMiddleware() {
           .set("Content-Type", "text/html")
           .set("Link", agentLinks)
           .send(await renderAgentsPage(baseUrl));
+      }
+
+      if (path === "/leaderboard") {
+        return res.status(200)
+          .set("Content-Type", "text/html")
+          .set("Link", agentLinks)
+          .send(await renderLeaderboardPage(baseUrl));
+      }
+
+      const agentMatch = path.match(/^\/agent\/([^/]+)$/);
+      if (agentMatch) {
+        const html = await renderAgentProfilePage(baseUrl, agentMatch[1]);
+        if (html) {
+          return res.status(200).set("Content-Type", "text/html").send(html);
+        }
       }
 
       const proofMatch = path.match(/^\/proof\/([^/]+)$/);

@@ -21,6 +21,7 @@ import Leaderboard from "@/pages/leaderboard";
 import AgentProfilePage from "@/pages/agent-profile";
 import AttestationDetailPage from "@/pages/attestation-detail";
 import IssuerProfilePage from "@/pages/issuer-profile";
+import AgentComparePage from "@/pages/agent-compare";
 import { Shield, Loader2 } from "lucide-react";
 
 function Router() {
@@ -54,6 +55,7 @@ function Router() {
         <Route path="/agent/:wallet" component={AgentProfilePage} />
         <Route path="/attestation/:id" component={AttestationDetailPage} />
         <Route path="/issuer/:wallet" component={IssuerProfilePage} />
+        <Route path="/compare" component={AgentComparePage} />
         <Route path="/stats" component={AdminDashboard} />
         <Route path="/admin" component={AdminDashboard} />
         <Route>
@@ -81,6 +83,7 @@ function Router() {
       <Route path="/agent/:wallet" component={AgentProfilePage} />
       <Route path="/attestation/:id" component={AttestationDetailPage} />
       <Route path="/issuer/:wallet" component={IssuerProfilePage} />
+      <Route path="/compare" component={AgentComparePage} />
       <Route component={NotFound} />
     </Switch>
   );

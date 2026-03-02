@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Shield, ArrowLeft, ExternalLink, Trophy, Award, BadgeCheck, Trash2, Plus } from "lucide-react";
+import { Shield, ArrowLeft, ExternalLink, Trophy, Award, BadgeCheck, Trash2, Plus, TrendingUp, Zap, Flame, Star } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -59,6 +59,37 @@ const TRUST_LEVEL_STYLES: Record<string, string> = {
   Trusted:  "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30",
   Active:   "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
   Newcomer: "bg-muted text-muted-foreground border-border",
+};
+
+interface TrustPreview {
+  score: number;
+  level: string;
+  certTotal: number;
+  certLast30d: number;
+  streakWeeks: number;
+  activeAttestations: number;
+  firstCertAt: string | null;
+  lastCertAt: string | null;
+  walletAddress: string;
+  isPublicProfile: boolean;
+  hypotheticalRank: number;
+  totalPublicAgents: number;
+  agentName: string | null;
+  agentCategory: string | null;
+}
+
+const TRUST_LEVEL_ORDER: Record<string, number> = {
+  Newcomer: 0,
+  Active: 1,
+  Trusted: 2,
+  Verified: 3,
+};
+
+const NEXT_LEVEL_HINTS: Record<string, string> = {
+  Newcomer: "Reach 100 pts to become Active",
+  Active: "Reach 300 pts to become Trusted",
+  Trusted: "Reach 600 pts to become Verified",
+  Verified: "Maximum trust level achieved",
 };
 
 interface AgentProfileForm {
@@ -113,6 +144,11 @@ export default function Settings() {
       }),
     enabled: !!user?.walletAddress && !!user?.isPublicProfile,
     retry: false,
+  });
+
+  const { data: trustPreview } = useQuery<TrustPreview>({
+    queryKey: ["/api/trust/preview"],
+    enabled: isAuthenticated,
   });
 
   const { data: issuedAttestations, isLoading: issuedLoading } = useQuery<IssuedAttestation[]>({
@@ -420,6 +456,84 @@ export default function Settings() {
             </form>
           </CardContent>
         </Card>
+
+        {/* Trust Score Preview */}
+        {trustPreview && (
+          <Card className="mb-6" data-testid="card-trust-preview">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-primary" />
+                Trust Score Preview
+              </CardTitle>
+              <CardDescription>
+                Your trust score is computed from on-chain certifications, streaks, and attestations.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex flex-wrap items-center gap-4">
+                <Badge
+                  variant="outline"
+                  className={`text-sm ${TRUST_LEVEL_STYLES[trustPreview.level] ?? TRUST_LEVEL_STYLES.Newcomer}`}
+                  data-testid="badge-trust-level"
+                >
+                  {trustPreview.level === "Verified" && <Shield className="mr-1 h-3.5 w-3.5" />}
+                  {trustPreview.level}
+                </Badge>
+                <span className="text-3xl font-bold tabular-nums" data-testid="text-trust-score">
+                  {trustPreview.score}
+                </span>
+                <span className="text-sm text-muted-foreground">pts</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-md border p-3 text-center" data-testid="stat-cert-total">
+                  <Zap className="mx-auto mb-1 h-4 w-4 text-muted-foreground" />
+                  <p className="text-xl font-semibold tabular-nums">{trustPreview.certTotal}</p>
+                  <p className="text-xs text-muted-foreground">Total Certs</p>
+                </div>
+                <div className="rounded-md border p-3 text-center" data-testid="stat-cert-month">
+                  <TrendingUp className="mx-auto mb-1 h-4 w-4 text-muted-foreground" />
+                  <p className="text-xl font-semibold tabular-nums">{trustPreview.certLast30d}</p>
+                  <p className="text-xs text-muted-foreground">This Month</p>
+                </div>
+                <div className="rounded-md border p-3 text-center" data-testid="stat-streak">
+                  <Flame className="mx-auto mb-1 h-4 w-4 text-muted-foreground" />
+                  <p className="text-xl font-semibold tabular-nums">{trustPreview.streakWeeks}</p>
+                  <p className="text-xs text-muted-foreground">Streak (weeks)</p>
+                </div>
+                <div className="rounded-md border p-3 text-center" data-testid="stat-attestations">
+                  <Star className="mx-auto mb-1 h-4 w-4 text-muted-foreground" />
+                  <p className="text-xl font-semibold tabular-nums">{trustPreview.activeAttestations}</p>
+                  <p className="text-xs text-muted-foreground">Attestations</p>
+                </div>
+              </div>
+
+              <div className="rounded-md bg-muted/50 px-4 py-3 text-sm" data-testid="text-rank-info">
+                {trustPreview.isPublicProfile ? (
+                  <span>
+                    Currently ranked <span className="font-semibold">#{trustPreview.hypotheticalRank}</span>.{" "}
+                    <Link
+                      href={`/agent/${trustPreview.walletAddress}`}
+                      className="text-primary hover:underline underline-offset-4"
+                      data-testid="link-view-profile"
+                    >
+                      View public profile
+                    </Link>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    If you go public, you'd rank <span className="font-semibold">#{trustPreview.hypotheticalRank}</span> out of{" "}
+                    <span className="font-semibold">{trustPreview.totalPublicAgents}</span> agents.
+                  </span>
+                )}
+              </div>
+
+              <div className="rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground" data-testid="text-next-level">
+                {NEXT_LEVEL_HINTS[trustPreview.level] ?? NEXT_LEVEL_HINTS.Newcomer}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Issue Domain Attestation */}
         {isAuthenticated && (

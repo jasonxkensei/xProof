@@ -6637,11 +6637,75 @@ export const xproofAuditPlugin: Plugin = {
 
   // ===== LEADERBOARD & AGENT PROFILE ENDPOINTS =====
 
-  // GET /api/leaderboard — public, returns top 50 agents with public profiles
-  app.get("/api/leaderboard", async (_req, res) => {
+  // GET /api/leaderboard — public, paginated + server-side filters
+  app.get("/api/leaderboard", async (req, res) => {
     try {
-      const entries = await getLeaderboard();
-      res.json(entries);
+      const filters = {
+        page: req.query.page ? parseInt(req.query.page as string, 10) : undefined,
+        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : undefined,
+        category: (req.query.category as string) || undefined,
+        search: (req.query.search as string) || undefined,
+        attestedOnly: req.query.attested === "true",
+        sortBy: (req.query.sort as "score" | "certs" | "streak" | "attestations") || undefined,
+      };
+      const result = await getLeaderboard(filters);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/trust/preview — auth required, preview trust score without public profile
+  app.get("/api/trust/preview", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const walletAddress = req.walletAddress;
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const trust = await computeTrustScore(user.id);
+      const rankResult = await getLeaderboard({ limit: 100 });
+      const allEntries = rankResult.entries;
+      const hypotheticalRank = allEntries.filter((e: any) => e.trustScore > trust.score).length + 1;
+      res.json({
+        ...trust,
+        walletAddress,
+        isPublicProfile: user.isPublicProfile,
+        hypotheticalRank,
+        totalPublicAgents: rankResult.total,
+        agentName: user.agentName,
+        agentCategory: user.agentCategory,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/agents/compare — compare 2-5 agents side by side
+  app.get("/api/agents/compare", async (req, res) => {
+    try {
+      const walletsParam = req.query.wallets as string;
+      if (!walletsParam) return res.status(400).json({ message: "wallets query param required (comma-separated)" });
+      const wallets = walletsParam.split(",").map((w) => w.trim()).filter(Boolean).slice(0, 5);
+      if (wallets.length < 2) return res.status(400).json({ message: "At least 2 wallet addresses required" });
+
+      const agents = await Promise.all(
+        wallets.map(async (wallet) => {
+          const [user] = await db.select().from(users).where(eq(users.walletAddress, wallet));
+          if (!user || !user.isPublicProfile) return null;
+          const trust = await computeTrustScore(user.id);
+          return {
+            walletAddress: wallet,
+            agentName: user.agentName,
+            agentCategory: user.agentCategory,
+            agentDescription: user.agentDescription,
+            agentWebsite: user.agentWebsite,
+            ...trust,
+          };
+        }),
+      );
+
+      const valid = agents.filter(Boolean);
+      if (valid.length < 2) return res.status(404).json({ message: "Need at least 2 public agents to compare" });
+      res.json({ agents: valid });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, Flame, BadgeCheck, Award } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, TrendingDown, Flame, BadgeCheck, Award, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -29,6 +30,17 @@ interface LeaderboardEntry {
   activeAttestations: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
+  scoreDelta7d: number;
+  rank: number;
+  previousLevel: string | null;
+}
+
+interface LeaderboardResponse {
+  entries: LeaderboardEntry[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 const TRUST_LEVEL_STYLES: Record<string, { badge: string; label: string }> = {
@@ -36,6 +48,13 @@ const TRUST_LEVEL_STYLES: Record<string, { badge: string; label: string }> = {
   Trusted:   { badge: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30", label: "Trusted" },
   Active:    { badge: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30", label: "Active" },
   Newcomer:  { badge: "bg-muted text-muted-foreground border-border", label: "Newcomer" },
+};
+
+const TRUST_LEVEL_ORDER: Record<string, number> = {
+  Newcomer: 0,
+  Active: 1,
+  Trusted: 2,
+  Verified: 3,
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -79,41 +98,71 @@ function truncateWallet(addr: string) {
   return `${addr.slice(0, 8)}…${addr.slice(-6)}`;
 }
 
+function useDebounce(value: string, delay: number) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
+}
+
 export default function Leaderboard() {
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [attestedOnly, setAttestedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<"score" | "certs" | "streak" | "attestations">("score");
+  const [page, setPage] = useState(1);
+  const limit = 50;
+  const [selectedWallets, setSelectedWallets] = useState<Set<string>>(new Set());
 
-  const { data: entries = [], isLoading } = useQuery<LeaderboardEntry[]>({
-    queryKey: ["/api/leaderboard"],
+  const debouncedSearch = useDebounce(search, 300);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, categoryFilter, attestedOnly, sortBy]);
+
+  useEffect(() => {
+    document.title = "Agent Trust Leaderboard | xproof";
+  }, []);
+
+  const { data, isLoading } = useQuery<LeaderboardResponse>({
+    queryKey: ["/api/leaderboard", page, limit, categoryFilter, debouncedSearch, attestedOnly, sortBy],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("limit", String(limit));
+      if (debouncedSearch) params.set("search", debouncedSearch);
+      if (categoryFilter !== "all") params.set("category", categoryFilter);
+      if (attestedOnly) params.set("attested", "true");
+      params.set("sort", sortBy);
+      const res = await fetch(`/api/leaderboard?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch leaderboard");
+      return res.json();
+    },
   });
 
-  const filtered = entries
-    .filter((e) => {
-      const q = search.toLowerCase();
-      const matchesSearch =
-        !q ||
-        e.walletAddress.toLowerCase().includes(q) ||
-        (e.agentName || "").toLowerCase().includes(q);
-      const matchesCategory =
-        categoryFilter === "all" || e.agentCategory === categoryFilter;
-      const matchesAttested = !attestedOnly || (e.activeAttestations || 0) > 0;
-      return matchesSearch && matchesCategory && matchesAttested;
-    })
-    .sort((a, b) => {
-      if (sortBy === "certs") return b.certTotal - a.certTotal;
-      if (sortBy === "streak") return b.streakWeeks - a.streakWeeks;
-      if (sortBy === "attestations") return (b.activeAttestations || 0) - (a.activeAttestations || 0);
-      return b.trustScore - a.trustScore;
-    });
+  const entries = data?.entries ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
-  const attestedCount = entries.filter((e) => (e.activeAttestations || 0) > 0).length;
+  const handleCompare = () => {
+    const wallets = Array.from(selectedWallets).join(",");
+    navigate(`/compare?wallets=${wallets}`);
+  };
+
+  const isPromoted = (entry: LeaderboardEntry) => {
+    if (!entry.previousLevel || entry.previousLevel === entry.trustLevel) return false;
+    const prevOrder = TRUST_LEVEL_ORDER[entry.previousLevel] ?? -1;
+    const currOrder = TRUST_LEVEL_ORDER[entry.trustLevel] ?? -1;
+    return currOrder > prevOrder;
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between">
+        <div className="container flex h-16 items-center justify-between gap-4">
           <Link href="/" data-testid="link-logo-home" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
@@ -150,31 +199,29 @@ export default function Leaderboard() {
           </Button>
         </div>
 
-        {/* Stats row */}
-        {!isLoading && entries.length > 0 && (
+        {!isLoading && total > 0 && (
           <div className="mb-6 grid grid-cols-3 gap-4 sm:grid-cols-3">
             <div className="rounded-md border bg-muted/30 px-4 py-3">
               <p className="text-xs text-muted-foreground">Agents</p>
-              <p className="text-2xl font-bold tabular-nums" data-testid="stat-agent-count">{entries.length}</p>
+              <p className="text-2xl font-bold tabular-nums" data-testid="stat-agent-count">{total}</p>
             </div>
             <div className="rounded-md border bg-muted/30 px-4 py-3">
-              <p className="text-xs text-muted-foreground">Certified agents</p>
+              <p className="text-xs text-muted-foreground">Showing</p>
               <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                {entries.filter((e) => e.certTotal > 0).length}
+                {entries.length}
               </p>
             </div>
             <div className="rounded-md border bg-muted/30 px-4 py-3">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <BadgeCheck className="h-3 w-3 text-emerald-500" /> Attested agents
+              <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+                <BadgeCheck className="h-3 w-3 text-emerald-500" /> Page
               </p>
               <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                {attestedCount}
+                {page} / {totalPages}
               </p>
             </div>
           </div>
         )}
 
-        {/* Filters */}
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -217,9 +264,6 @@ export default function Leaderboard() {
           >
             <Award className="h-3.5 w-3.5" />
             Attested only
-            {attestedCount > 0 && (
-              <span className="ml-1 rounded-full bg-primary/20 px-1.5 py-0.5 text-xs">{attestedCount}</span>
-            )}
           </Button>
         </div>
 
@@ -227,17 +271,17 @@ export default function Leaderboard() {
           <div className="flex items-center justify-center py-20">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : entries.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center gap-4 py-16">
               <Bot className="h-12 w-12 text-muted-foreground/40" />
               <div className="text-center">
                 <p className="font-medium text-muted-foreground">
-                  {entries.length === 0
+                  {total === 0
                     ? "No agents have made their profile public yet."
                     : "No agents match your search."}
                 </p>
-                {entries.length === 0 && (
+                {total === 0 && (
                   <p className="mt-1 text-sm text-muted-foreground">
                     Be the first to{" "}
                     <Link href="/settings" className="text-primary underline-offset-2 hover:underline">
@@ -254,6 +298,7 @@ export default function Leaderboard() {
             <table className="w-full text-sm" data-testid="table-leaderboard">
               <thead className="border-b bg-muted/40">
                 <tr>
+                  <th className="px-3 py-3 text-center font-medium text-muted-foreground w-10" />
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">#</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Agent</th>
                   <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground sm:table-cell">Category</th>
@@ -271,20 +316,38 @@ export default function Leaderboard() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((entry, i) => (
+                {entries.map((entry) => (
                   <tr
                     key={entry.walletAddress}
                     data-testid={`row-agent-${entry.walletAddress}`}
                     className="border-b last:border-0 hover-elevate cursor-pointer transition-colors"
-                    onClick={() => (window.location.href = `/agent/${entry.walletAddress}`)}
+                    onClick={() => navigate(`/agent/${entry.walletAddress}`)}
                   >
+                    <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        data-testid={`checkbox-compare-${entry.walletAddress}`}
+                        checked={selectedWallets.has(entry.walletAddress)}
+                        disabled={!selectedWallets.has(entry.walletAddress) && selectedWallets.size >= 5}
+                        onCheckedChange={() => {
+                          setSelectedWallets((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(entry.walletAddress)) {
+                              next.delete(entry.walletAddress);
+                            } else if (next.size < 5) {
+                              next.add(entry.walletAddress);
+                            }
+                            return next;
+                          });
+                        }}
+                      />
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
-                      {i + 1}
+                      {entry.rank}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium" data-testid={`text-agent-name-${i}`}>
+                          <span className="font-medium" data-testid={`text-agent-name-${entry.rank}`}>
                             {entry.agentName || truncateWallet(entry.walletAddress)}
                           </span>
                           {(entry.activeAttestations || 0) > 0 && (
@@ -307,10 +370,35 @@ export default function Leaderboard() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
-                        <TrustBadge level={entry.trustLevel} />
-                        <span className="text-xs text-muted-foreground tabular-nums">
-                          {entry.trustScore} pts
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <TrustBadge level={entry.trustLevel} />
+                          {isPromoted(entry) && (
+                            <Badge
+                              data-testid={`badge-promoted-${entry.walletAddress}`}
+                              className="border border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px] px-1.5 py-0"
+                            >
+                              <Sparkles className="mr-0.5 h-2.5 w-2.5" />
+                              Promoted
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            {entry.trustScore} pts
+                          </span>
+                          {entry.scoreDelta7d > 0 && (
+                            <span className="inline-flex items-center text-[10px] text-emerald-600 dark:text-emerald-400 tabular-nums" data-testid={`delta-up-${entry.walletAddress}`}>
+                              <TrendingUp className="h-3 w-3 mr-0.5" />
+                              +{entry.scoreDelta7d}
+                            </span>
+                          )}
+                          {entry.scoreDelta7d < 0 && (
+                            <span className="inline-flex items-center text-[10px] text-red-600 dark:text-red-400 tabular-nums" data-testid={`delta-down-${entry.walletAddress}`}>
+                              <TrendingDown className="h-3 w-3 mr-0.5" />
+                              {entry.scoreDelta7d}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="hidden px-4 py-3 text-center md:table-cell">
@@ -356,6 +444,34 @@ export default function Leaderboard() {
           </div>
         )}
 
+        {!isLoading && totalPages > 1 && (
+          <div className="mt-6 flex items-center justify-center gap-4" data-testid="pagination-controls">
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="button-prev-page"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground tabular-nums" data-testid="text-page-indicator">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="button-next-page"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
         <p className="mt-4 text-center text-xs text-muted-foreground">
           Trust scores are computed from on-chain certification history. No self-reporting.
           {attestedOnly && (
@@ -363,6 +479,18 @@ export default function Leaderboard() {
           )}
         </p>
       </div>
+
+      {selectedWallets.size >= 2 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" data-testid="compare-floating-container">
+          <Button
+            data-testid="button-compare-agents"
+            onClick={handleCompare}
+            className="shadow-lg gap-2"
+          >
+            Compare ({selectedWallets.size})
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

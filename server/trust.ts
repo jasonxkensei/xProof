@@ -263,10 +263,10 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
   const cutoff7d = new Date();
   cutoff7d.setDate(cutoff7d.getDate() - 7);
 
-  const [streakMap, attestationMap, deltaMap, prevLevelMap] = await Promise.all([
+  const [streakMap, attestationMap, oldScoreMap, prevLevelMap] = await Promise.all([
     computeStreakWeeksBatch(userIds),
     countActiveAttestationsBatch(walletAddresses),
-    getScoreDelta7dBatch(walletAddresses, cutoff7d),
+    getOldScoreBatch(walletAddresses, cutoff7d),
     getPreviousLevelBatch(walletAddresses),
   ]);
 
@@ -293,7 +293,7 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
       activeAttestations,
       firstCertAt: firstAt ? firstAt.toISOString() : null,
       lastCertAt: lastAt ? lastAt.toISOString() : null,
-      scoreDelta7d: deltaMap.get(row.wallet_address) ?? 0,
+      scoreDelta7d: oldScoreMap.has(row.wallet_address) ? score - (oldScoreMap.get(row.wallet_address) as number) : 0,
       rank: 0,
       previousLevel: prevLevelMap.get(row.wallet_address) ?? null,
     };
