@@ -88,7 +88,7 @@ const TRUST_LEVEL_ORDER: Record<string, number> = {
 const NEXT_LEVEL_HINTS: Record<string, string> = {
   Newcomer: "Reach 100 pts to become Active",
   Active: "Reach 300 pts to become Trusted",
-  Trusted: "Reach 600 pts to become Verified",
+  Trusted: "Reach 700 pts to become Verified",
   Verified: "Maximum trust level achieved",
 };
 

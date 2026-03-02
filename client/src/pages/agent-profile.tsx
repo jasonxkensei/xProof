@@ -13,6 +13,8 @@ import {
   Flame,
   Award,
   BadgeCheck,
+  Calendar,
+  BarChart2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -356,6 +358,156 @@ function TrustHistoryChart({ snapshots }: { snapshots: TrustSnapshot[] }) {
   );
 }
 
+const NEXT_LEVELS = [
+  { threshold: 100, label: "Active" },
+  { threshold: 300, label: "Trusted" },
+  { threshold: 700, label: "Verified" },
+];
+
+function ScoreBreakdown({ agent }: { agent: AgentProfile }) {
+  const firstAt = agent.firstCertAt ? new Date(agent.firstCertAt) : null;
+  const lastAt = agent.lastCertAt ? new Date(agent.lastCertAt) : null;
+
+  const daysSinceFirst = firstAt
+    ? Math.floor((Date.now() - firstAt.getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const daysSinceLast = lastAt
+    ? Math.floor((Date.now() - lastAt.getTime()) / (1000 * 60 * 60 * 24))
+    : Infinity;
+
+  const baseScore = agent.certTotal * 10;
+  const recencyBonus = agent.certLast30d * 5;
+
+  let ageBonus = 0;
+  if (daysSinceLast <= 30) {
+    ageBonus = Math.floor(Math.min(150, daysSinceFirst * 0.3));
+  } else if (daysSinceLast <= 90) {
+    const rawAge = Math.min(150, daysSinceFirst * 0.3);
+    const decayFactor = 1 - (daysSinceLast - 30) / 60;
+    ageBonus = Math.max(0, Math.round(rawAge * decayFactor));
+  }
+
+  const streakBonus = Math.min(100, agent.streakWeeks * 8);
+  const attestationBonus = Math.min(3, agent.activeAttestations) * 50;
+
+  const nextLevel = NEXT_LEVELS.find((l) => l.threshold > agent.score);
+  const ptToNext = nextLevel ? nextLevel.threshold - agent.score : null;
+  const prevIdx = nextLevel ? NEXT_LEVELS.indexOf(nextLevel) - 1 : -1;
+  const prevThreshold = prevIdx >= 0 ? NEXT_LEVELS[prevIdx].threshold : 0;
+  const progressPct = nextLevel
+    ? Math.min(100, ((agent.score - prevThreshold) / (nextLevel.threshold - prevThreshold)) * 100)
+    : 100;
+
+  const components = [
+    {
+      label: "Confirmed certs",
+      value: baseScore,
+      cap: null as number | null,
+      detail: `${agent.certTotal} × 10 pts`,
+      Icon: CheckCircle2,
+    },
+    {
+      label: "Recent activity",
+      value: recencyBonus,
+      cap: null,
+      detail: `${agent.certLast30d} cert${agent.certLast30d !== 1 ? "s" : ""} × 5 pts (30d)`,
+      Icon: TrendingUp,
+    },
+    {
+      label: "Seniority",
+      value: ageBonus,
+      cap: 150,
+      detail: daysSinceLast > 30 ? `${daysSinceFirst}d active (decaying)` : `${daysSinceFirst} days active`,
+      Icon: Calendar,
+    },
+    {
+      label: "Streak",
+      value: streakBonus,
+      cap: 100,
+      detail: `${agent.streakWeeks} week${agent.streakWeeks !== 1 ? "s" : ""} × 8 pts`,
+      Icon: Flame,
+    },
+    {
+      label: "Attestations",
+      value: attestationBonus,
+      cap: 150,
+      detail: `${Math.min(3, agent.activeAttestations)} × 50 pts`,
+      Icon: BadgeCheck,
+    },
+  ];
+
+  return (
+    <Card data-testid="card-score-breakdown">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <BarChart2 className="h-4 w-4" />
+          Score breakdown
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-3">
+          {components.map(({ label, value, cap, detail, Icon }) => (
+            <div key={label} className="space-y-1.5" data-testid={`breakdown-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="text-sm">{label}</span>
+                  <span className="truncate text-xs text-muted-foreground hidden sm:inline">{detail}</span>
+                </div>
+                <span className="shrink-0 tabular-nums text-sm font-medium">
+                  +{value}
+                  {cap !== null && (
+                    <span className="text-xs text-muted-foreground"> /{cap}</span>
+                  )}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${cap !== null ? Math.min(100, (value / cap) * 100) : value > 0 ? 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between border-t pt-3">
+          <span className="text-sm text-muted-foreground">Total Trust Score</span>
+          <span className="text-lg font-bold tabular-nums">{agent.score} pts</span>
+        </div>
+
+        {nextLevel ? (
+          <div className="rounded-md bg-muted/50 p-3 space-y-2" data-testid="card-next-level">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Progress to{" "}
+                <span className="font-medium text-foreground">{nextLevel.label}</span>
+              </span>
+              <span className="font-semibold tabular-nums text-primary">{ptToNext} pts to go</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Fastest path: certify weekly to grow streak (+8 pts/week) or earn a domain attestation (+50 pts).
+            </p>
+          </div>
+        ) : (
+          <div
+            className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
+            data-testid="text-max-level"
+          >
+            Maximum trust level achieved — Verified
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AgentProfilePage() {
   const params = useParams<{ wallet: string }>();
   const wallet = params.wallet;
@@ -569,6 +721,9 @@ export default function AgentProfilePage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Score Breakdown */}
+            <ScoreBreakdown agent={agent} />
 
             {/* Trust Score History */}
             <Card data-testid="card-trust-history">
