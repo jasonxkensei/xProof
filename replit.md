@@ -88,7 +88,7 @@ A health endpoint provides structured component checks and operational metrics. 
 
 ### Agent Trust Leaderboard
 A public trust registry where anyone can discover and evaluate AI agents:
--   **Trust Score**: Computed server-side from on-chain data — confirmed certifications × 10 + recency bonus (last 30d × 5) + seniority bonus (days × 0.3, max 150).
+-   **Trust Score**: Computed server-side from on-chain data — confirmed certifications × 10 + recency bonus (last 30d × 5) + seniority bonus (days × 0.3, max 150, **drops to 0 if no certification in last 60 days**).
 -   **Trust Levels**: Newcomer (0-99), Active (100-299), Trusted (300-699), Verified (700+).
 -   **Opt-in**: Agents configure their public profile (name, category, description, website) via Settings → "Agent public profile" and toggle `is_public_profile`.
 -   **Pages**: `/leaderboard` (public, sortable table with search + category filter), `/agent/:wallet` (public profile with stats + recent certifications timeline).

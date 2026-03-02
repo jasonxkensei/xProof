@@ -20,6 +20,20 @@ export function getTrustLevel(score: number): TrustLevel {
   return "Newcomer";
 }
 
+function computeScore(confirmed: number, last30d: number, firstAt: Date | null, lastAt: Date | null): number {
+  const daysSinceFirst = firstAt
+    ? Math.floor((Date.now() - firstAt.getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const daysSinceLastCert = lastAt
+    ? Math.floor((Date.now() - lastAt.getTime()) / (1000 * 60 * 60 * 24))
+    : Infinity;
+
+  const baseScore = confirmed * 10;
+  const recencyBonus = last30d * 5;
+  const ageBonus = daysSinceLastCert <= 60 ? Math.min(150, daysSinceFirst * 0.3) : 0;
+  return Math.round(baseScore + recencyBonus + ageBonus);
+}
+
 export async function computeTrustScore(userId: string): Promise<TrustScore> {
   const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
@@ -27,8 +41,8 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
     .select({
       confirmed: sql<number>`COUNT(*) FILTER (WHERE blockchain_status = 'confirmed')`,
       last30d: sql<number>`COUNT(*) FILTER (WHERE created_at >= ${cutoff30d} AND blockchain_status = 'confirmed')`,
-      firstAt: sql<Date>`MIN(created_at)`,
-      lastAt: sql<Date>`MAX(created_at)`,
+      firstAt: sql<Date>`MIN(created_at) FILTER (WHERE blockchain_status = 'confirmed')`,
+      lastAt: sql<Date>`MAX(created_at) FILTER (WHERE blockchain_status = 'confirmed')`,
     })
     .from(certifications)
     .where(eq(certifications.userId, userId));
@@ -38,14 +52,7 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
   const firstAt = totals.firstAt ? new Date(totals.firstAt) : null;
   const lastAt = totals.lastAt ? new Date(totals.lastAt) : null;
 
-  const daysSinceFirst = firstAt
-    ? Math.floor((Date.now() - firstAt.getTime()) / (1000 * 60 * 60 * 24))
-    : 0;
-
-  const baseScore = confirmed * 10;
-  const recencyBonus = last30d * 5;
-  const ageBonus = Math.min(150, daysSinceFirst * 0.3);
-  const score = Math.round(baseScore + recencyBonus + ageBonus);
+  const score = computeScore(confirmed, last30d, firstAt, lastAt);
 
   return {
     score,
@@ -84,24 +91,20 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
       u.agent_website,
       COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') AS cert_total,
       COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.created_at >= ${cutoff30d}) AS cert_last_30d,
-      MIN(c.created_at) AS first_cert_at,
-      MAX(c.created_at) AS last_cert_at
+      MIN(c.created_at) FILTER (WHERE c.blockchain_status = 'confirmed') AS first_cert_at,
+      MAX(c.created_at) FILTER (WHERE c.blockchain_status = 'confirmed') AS last_cert_at
     FROM users u
     LEFT JOIN certifications c ON c.user_id = u.id
     WHERE u.is_public_profile = true
     GROUP BY u.id, u.wallet_address, u.agent_name, u.agent_category, u.agent_description, u.agent_website
-    ORDER BY cert_total DESC
-    LIMIT 50
   `);
 
-  return (rows.rows as any[]).map((row) => {
+  const entries = (rows.rows as any[]).map((row) => {
     const confirmed = Number(row.cert_total || 0);
     const last30d = Number(row.cert_last_30d || 0);
     const firstAt = row.first_cert_at ? new Date(row.first_cert_at) : null;
-    const daysSinceFirst = firstAt
-      ? Math.floor((Date.now() - firstAt.getTime()) / (1000 * 60 * 60 * 24))
-      : 0;
-    const score = Math.round(confirmed * 10 + last30d * 5 + Math.min(150, daysSinceFirst * 0.3));
+    const lastAt = row.last_cert_at ? new Date(row.last_cert_at) : null;
+    const score = computeScore(confirmed, last30d, firstAt, lastAt);
 
     return {
       walletAddress: row.wallet_address,
@@ -114,7 +117,10 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
       certTotal: confirmed,
       certLast30d: last30d,
       firstCertAt: firstAt ? firstAt.toISOString() : null,
-      lastCertAt: row.last_cert_at ? new Date(row.last_cert_at).toISOString() : null,
+      lastCertAt: lastAt ? lastAt.toISOString() : null,
     };
   });
+
+  entries.sort((a, b) => b.trustScore - a.trustScore);
+  return entries.slice(0, 50);
 }
