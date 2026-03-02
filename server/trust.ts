@@ -104,21 +104,14 @@ async function computeStreakWeeks(userId: string): Promise<number> {
 async function computeStreakWeeksBatch(userIds: string[]): Promise<Map<string, number>> {
   if (userIds.length === 0) return new Map();
 
-  const rows = await db.execute(sql`
-    SELECT user_id,
-      ARRAY_AGG(DISTINCT FLOOR(EXTRACT(EPOCH FROM created_at - '2024-01-01'::timestamp) / 604800)::int ORDER BY FLOOR(EXTRACT(EPOCH FROM created_at - '2024-01-01'::timestamp) / 604800)::int DESC) AS week_nums
-    FROM certifications
-    WHERE user_id = ANY(${userIds})
-      AND blockchain_status = 'confirmed'
-    GROUP BY user_id
-  `);
+  const results = await Promise.all(
+    userIds.map(async (id) => {
+      const streak = await computeStreakWeeks(id);
+      return [id, streak] as [string, number];
+    }),
+  );
 
-  const result = new Map<string, number>();
-  for (const row of rows.rows as any[]) {
-    const weekNums = (row.week_nums || []).map(Number);
-    result.set(row.user_id, computeStreakFromWeekNumbers(weekNums));
-  }
-  return result;
+  return new Map(results);
 }
 
 export async function computeTrustScore(userId: string): Promise<TrustScore> {
