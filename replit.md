@@ -106,9 +106,14 @@ Third-party certifying bodies (MHRA, ISO, SOC2, FCA, etc.) can issue on-chain-an
 -   **Issuance flow**: Issuer authenticates with their MultiversX wallet → `POST /api/attestation` with subject wallet, domain, standard (e.g. ISO-27001), title, optional description and expiry.
 -   **Anti-self-attest**: An issuer cannot attest their own wallet. Duplicate check per domain/standard/issuer.
 -   **Revocation**: `DELETE /api/attestation/:id` — issuer-only, sets status to `revoked`.
--   **Endpoints**: `POST /api/attestation` (auth), `GET /api/attestations/:wallet` (public), `DELETE /api/attestation/:id` (auth, issuer only), `GET /api/my-attestations/issued` (auth, list issued).
+-   **Endpoints**: `POST /api/attestation` (auth), `GET /api/attestation/:id` (public, single attestation by ID), `GET /api/attestations/:wallet` (public), `DELETE /api/attestation/:id` (auth, issuer only), `GET /api/my-attestations/issued` (auth, list issued).
+-   **Public detail page**: `/attestation/:id` — shows domain, standard, issuer identity, subject agent, timeline, trust impact (+50 pts), link to agent profile.
+-   **MCP tool**: `check_attestations(wallet)` — returns all active attestations for a wallet, trust bonus, and `attestation_url` per entry. No auth required.
+-   **Leaderboard integration**: Attestation count displayed as a badge (`BadgeCheck` icon) in the leaderboard table. "Attested only" filter toggle. Sort by attestation count. Stats row shows total attested agent count.
+-   **Trust badge update**: When agent has attestations, badge SVG shows "Level · N attested (score)" instead of "Level (score)".
 -   **UI**: Attestation badges displayed on `/agent/:wallet` profile with domain color coding and issuer identity. Settings page includes "Issue attestation" form with revocation management.
 -   **DB**: New `attestations` table — `id`, `subject_wallet`, `issuer_wallet`, `issuer_name`, `domain`, `standard`, `title`, `description`, `expires_at`, `status` (active/revoked), `revoked_at`, `created_at`.
+-   **Documentation**: Attestations fully documented in `/.well-known/xproof.md`, `/llms.txt`, `/llms-full.txt`, and `/.well-known/mcp.json`.
 
 ### Font Loading
 -   Google Fonts CDN

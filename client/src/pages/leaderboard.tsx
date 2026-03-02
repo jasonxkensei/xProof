@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, Flame } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, Flame, BadgeCheck, Award } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ interface LeaderboardEntry {
   certTotal: number;
   certLast30d: number;
   streakWeeks: number;
+  activeAttestations: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
 }
@@ -60,6 +61,16 @@ function TrustBadge({ level }: { level: string }) {
   );
 }
 
+function AttestationBadge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <span className="inline-flex items-center gap-0.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+      <BadgeCheck className="h-3 w-3" />
+      {count}
+    </span>
+  );
+}
+
 function truncateWallet(addr: string) {
   return `${addr.slice(0, 8)}…${addr.slice(-6)}`;
 }
@@ -67,21 +78,33 @@ function truncateWallet(addr: string) {
 export default function Leaderboard() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [attestedOnly, setAttestedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<"score" | "certs" | "streak" | "attestations">("score");
 
   const { data: entries = [], isLoading } = useQuery<LeaderboardEntry[]>({
     queryKey: ["/api/leaderboard"],
   });
 
-  const filtered = entries.filter((e) => {
-    const q = search.toLowerCase();
-    const matchesSearch =
-      !q ||
-      e.walletAddress.toLowerCase().includes(q) ||
-      (e.agentName || "").toLowerCase().includes(q);
-    const matchesCategory =
-      categoryFilter === "all" || e.agentCategory === categoryFilter;
-    return matchesSearch && matchesCategory;
-  });
+  const filtered = entries
+    .filter((e) => {
+      const q = search.toLowerCase();
+      const matchesSearch =
+        !q ||
+        e.walletAddress.toLowerCase().includes(q) ||
+        (e.agentName || "").toLowerCase().includes(q);
+      const matchesCategory =
+        categoryFilter === "all" || e.agentCategory === categoryFilter;
+      const matchesAttested = !attestedOnly || (e.activeAttestations || 0) > 0;
+      return matchesSearch && matchesCategory && matchesAttested;
+    })
+    .sort((a, b) => {
+      if (sortBy === "certs") return b.certTotal - a.certTotal;
+      if (sortBy === "streak") return b.streakWeeks - a.streakWeeks;
+      if (sortBy === "attestations") return (b.activeAttestations || 0) - (a.activeAttestations || 0);
+      return b.trustScore - a.trustScore;
+    });
+
+  const attestedCount = entries.filter((e) => (e.activeAttestations || 0) > 0).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -123,6 +146,31 @@ export default function Leaderboard() {
           </Button>
         </div>
 
+        {/* Stats row */}
+        {!isLoading && entries.length > 0 && (
+          <div className="mb-6 grid grid-cols-3 gap-4 sm:grid-cols-3">
+            <div className="rounded-md border bg-muted/30 px-4 py-3">
+              <p className="text-xs text-muted-foreground">Agents</p>
+              <p className="text-2xl font-bold tabular-nums" data-testid="stat-agent-count">{entries.length}</p>
+            </div>
+            <div className="rounded-md border bg-muted/30 px-4 py-3">
+              <p className="text-xs text-muted-foreground">Certified agents</p>
+              <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {entries.filter((e) => e.certTotal > 0).length}
+              </p>
+            </div>
+            <div className="rounded-md border bg-muted/30 px-4 py-3">
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <BadgeCheck className="h-3 w-3 text-emerald-500" /> Attested agents
+              </p>
+              <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {attestedCount}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Filters */}
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -134,10 +182,7 @@ export default function Leaderboard() {
               className="pl-9"
             />
           </div>
-          <Select
-            value={categoryFilter}
-            onValueChange={setCategoryFilter}
-          >
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger data-testid="select-category-filter" className="w-40">
               <SelectValue placeholder="Category" />
             </SelectTrigger>
@@ -148,6 +193,30 @@ export default function Leaderboard() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+            <SelectTrigger data-testid="select-sort-filter" className="w-40">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="score">Trust score</SelectItem>
+              <SelectItem value="certs">Certifications</SelectItem>
+              <SelectItem value="streak">Streak</SelectItem>
+              <SelectItem value="attestations">Attestations</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant={attestedOnly ? "default" : "outline"}
+            size="sm"
+            data-testid="button-attested-filter"
+            onClick={() => setAttestedOnly((v) => !v)}
+            className="gap-1.5"
+          >
+            <Award className="h-3.5 w-3.5" />
+            Attested only
+            {attestedCount > 0 && (
+              <span className="ml-1 rounded-full bg-primary/20 px-1.5 py-0.5 text-xs">{attestedCount}</span>
+            )}
+          </Button>
         </div>
 
         {isLoading ? (
@@ -185,9 +254,15 @@ export default function Leaderboard() {
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Agent</th>
                   <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground sm:table-cell">Category</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Trust</th>
-                  <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground md:table-cell">Certifications</th>
-                  <th className="hidden px-4 py-3 text-center font-medium text-muted-foreground lg:table-cell">Streak</th>
-                  <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground lg:table-cell">Last active</th>
+                  <th className="hidden px-4 py-3 text-center font-medium text-muted-foreground md:table-cell">
+                    <span className="inline-flex items-center gap-1">
+                      <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                      Attested
+                    </span>
+                  </th>
+                  <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground lg:table-cell">Certifications</th>
+                  <th className="hidden px-4 py-3 text-center font-medium text-muted-foreground xl:table-cell">Streak</th>
+                  <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground xl:table-cell">Last active</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -204,9 +279,14 @@ export default function Leaderboard() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-medium" data-testid={`text-agent-name-${i}`}>
-                          {entry.agentName || truncateWallet(entry.walletAddress)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium" data-testid={`text-agent-name-${i}`}>
+                            {entry.agentName || truncateWallet(entry.walletAddress)}
+                          </span>
+                          {(entry.activeAttestations || 0) > 0 && (
+                            <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-emerald-500" data-testid={`icon-attested-${entry.walletAddress}`} />
+                          )}
+                        </div>
                         <span className="font-mono text-xs text-muted-foreground">
                           {truncateWallet(entry.walletAddress)}
                         </span>
@@ -229,7 +309,14 @@ export default function Leaderboard() {
                         </span>
                       </div>
                     </td>
-                    <td className="hidden px-4 py-3 text-right md:table-cell">
+                    <td className="hidden px-4 py-3 text-center md:table-cell">
+                      {(entry.activeAttestations || 0) > 0 ? (
+                        <AttestationBadge count={entry.activeAttestations} />
+                      ) : (
+                        <span className="text-muted-foreground/40 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="hidden px-4 py-3 text-right lg:table-cell">
                       <div className="flex flex-col gap-0.5 items-end">
                         <span className="font-medium tabular-nums">{entry.certTotal}</span>
                         {entry.certLast30d > 0 && (
@@ -240,7 +327,7 @@ export default function Leaderboard() {
                         )}
                       </div>
                     </td>
-                    <td className="hidden px-4 py-3 text-center lg:table-cell">
+                    <td className="hidden px-4 py-3 text-center xl:table-cell">
                       {entry.streakWeeks > 0 ? (
                         <span className="inline-flex items-center gap-1 text-sm font-medium tabular-nums text-orange-600 dark:text-orange-400">
                           <Flame className="h-3.5 w-3.5" />
@@ -250,7 +337,7 @@ export default function Leaderboard() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="hidden px-4 py-3 text-right text-muted-foreground lg:table-cell">
+                    <td className="hidden px-4 py-3 text-right text-muted-foreground xl:table-cell">
                       {entry.lastCertAt
                         ? formatDistanceToNow(new Date(entry.lastCertAt), { addSuffix: true })
                         : "—"}
@@ -267,6 +354,9 @@ export default function Leaderboard() {
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
           Trust scores are computed from on-chain certification history. No self-reporting.
+          {attestedOnly && (
+            <span className="ml-2 text-emerald-600 dark:text-emerald-400">· Showing attested agents only</span>
+          )}
         </p>
       </div>
     </div>

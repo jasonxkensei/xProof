@@ -272,12 +272,14 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   return entries.slice(0, 50);
 }
 
-export function generateTrustBadgeSvg(level: TrustLevel, score: number): string {
+export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestationCount = 0): string {
   const levelColor = getTrustLevelColor(level);
   const levelColorDark = adjustColor(levelColor, -20);
+  const hasAttestations = attestationCount > 0;
 
   const labelText = "xproof";
-  const statusText = `${level} (${score})`;
+  const attestedLabel = hasAttestations ? ` · ${attestationCount} attested` : "";
+  const statusText = `${level}${attestedLabel} (${score})`;
   const pad = 10;
   const labelCharW = 6.8;
   const statusCharW = 6.2;
@@ -288,6 +290,8 @@ export function generateTrustBadgeSvg(level: TrustLevel, score: number): string 
   const totalWidth = labelWidth + statusWidth;
   const h = 24;
   const r = 5;
+
+  const attestedStarX = labelWidth + dotSpace + (statusWidth - dotSpace) / 2 + statusText.length * statusCharW * 0.1;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${h}" role="img" aria-label="${labelText}: ${statusText}">
   <title>${labelText}: ${statusText}</title>

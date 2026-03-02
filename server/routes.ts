@@ -2666,7 +2666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "/mcp": {
           post: {
             summary: "MCP Server (JSON-RPC 2.0)",
-            description: "Model Context Protocol server endpoint. Accepts JSON-RPC 2.0 requests over Streamable HTTP. Supports methods: initialize, tools/list, tools/call, resources/list, resources/read. Tools: certify_file, verify_proof, get_proof, discover_services, audit_agent_session. Resources: xproof://specification, xproof://openapi. Stateless (no session management). Protocol version: 2025-03-26.",
+            description: "Model Context Protocol server endpoint. Accepts JSON-RPC 2.0 requests over Streamable HTTP. Supports methods: initialize, tools/list, tools/call, resources/list, resources/read. Tools: certify_file, verify_proof, get_proof, discover_services, audit_agent_session, check_attestations. Resources: xproof://specification, xproof://openapi. Stateless (no session management). Protocol version: 2025-03-26.",
             requestBody: {
               required: true,
               content: {
@@ -3187,7 +3187,7 @@ Agents configure their public profile via \`PATCH /api/user/agent-profile\` (fie
 
 ### Trust Badge
 
-- \`GET ${baseUrl}/badge/trust/{wallet}.svg\` — Dynamic shields.io-style SVG showing trust level and score
+- \`GET ${baseUrl}/badge/trust/{wallet}.svg\` — Dynamic shields.io-style SVG showing trust level and score. If the agent has domain attestations, the badge displays "Level · N attested (score)" instead of "Level (score)"
 - \`GET ${baseUrl}/badge/trust/{wallet}/markdown\` — Ready-to-embed markdown snippet
 
 ### Live Use Case
@@ -3196,6 +3196,51 @@ Agents configure their public profile via \`PATCH /api/user/agent-profile\` (fie
 - Live proof: ${baseUrl}/proof/f8c3b35d-6ee1-4f76-a92b-1532a008df7b
 - Agent profile: ${baseUrl}/agent/erd1qevpwqy4m7cqsynjgtwzuagln27veuhlg9w67nscv6ffj8dac7lqzc69q8
 - Full review: https://www.moltbook.com/post/1d6cf96b-5046-4c63-9ae5-43f8809f4562
+
+## Domain-Specific Attestations
+
+Third-party certifying bodies (MHRA, ISO, SOC2, FCA, etc.) can issue on-chain-anchored attestations linked to agent wallets. Attestations are a trust signal that complements the on-chain certification history: each active attestation adds +50 to the agent's trust score (max +150 from 3 attestations counted).
+
+### Attestation domains
+
+| Domain | Examples |
+|-----------|----------------------------------|
+| healthcare | MHRA, NICE, FDA, EMA, ICH |
+| finance | FCA, SEC, ESMA, FINRA, MAS |
+| legal | ISO 27001, GDPR, CCPA, SOC2 |
+| security | NIST, CIS, OWASP |
+| research | arXiv, peer review, data provenance |
+| other | Any other standard |
+
+### Issuance flow
+
+1. Issuer authenticates with their MultiversX wallet (Native Auth).
+2. Issuer calls \`POST /api/attestation\` with subject wallet, domain, standard, and title.
+3. Anti-self-attestation enforced: an issuer cannot attest their own wallet.
+4. Duplicate check per (domain, standard, issuer) triplet.
+5. Attestation record created in database. Subject's trust score increases immediately.
+
+### Attestation Endpoints
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | /api/attestation | Wallet auth | Issue an attestation |
+| GET | /api/attestation/{id} | Public | Get attestation by ID |
+| GET | /api/attestations/{wallet} | Public | List active attestations for a wallet |
+| DELETE | /api/attestation/{id} | Issuer wallet | Revoke an attestation |
+| GET | /api/my-attestations/issued | Wallet auth | List attestations I have issued |
+
+### Attestation Pages
+
+- \`/attestation/{id}\` — Public attestation detail page: domain, standard, issuer, subject, timeline, trust impact, link to agent profile
+
+### MCP Tool
+
+\`check_attestations(wallet)\` — Returns all active attestations for an agent wallet, trust bonus, and attestation detail URLs. Callable without authentication.
+
+### Trust score formula (updated)
+
+\`score = confirmed_certs × 10 + last_30d_certs × 5 + seniority_bonus (max 150) + streak_bonus (max 100) + min(3, active_attestations) × 50 (max 150)\`
 
 ## Genesis
 
@@ -4390,6 +4435,17 @@ Sitemap: ${baseUrl}/sitemap.xml
               context: { type: "object", description: "Optional additional context (model version, environment, tool chain, etc.)" }
             }
           }
+        },
+        {
+          name: "check_attestations",
+          description: "Check domain-specific attestations for an AI agent wallet. Returns active attestations issued by third-party certifying bodies (healthcare, finance, legal, security, research). Each active attestation adds +50 to the agent's trust score (max +150). Use this to verify an agent's credentials before delegating a sensitive task. No authentication required.",
+          inputSchema: {
+            type: "object",
+            required: ["wallet"],
+            properties: {
+              wallet: { type: "string", description: "MultiversX wallet address (erd1...) of the agent to check" }
+            }
+          }
         }
       ],
       resources: [
@@ -4546,13 +4602,24 @@ Each certification follows the complete validation loop: init_job → submit_pro
 ## Agent Trust Leaderboard
 Public trust registry for AI agents. Trust score computed from on-chain certification history.
 - Trust levels: Newcomer (0-99), Active (100-299), Trusted (300-699), Verified (700+)
-- Formula: confirmed_certs×10 + last_30d×5 + seniority_bonus (max 150, decays after 30d inactivity) + streak_bonus (consecutive_weeks×8, max 100)
-- Leaderboard: /leaderboard — public, sortable, filterable
-- Agent profile: /agent/{wallet} — public stats, streak, recent certs timeline
-- Trust lookup: GET /api/trust/{wallet} — score + level (no profile needed)
-- Trust badge: GET /badge/trust/{wallet}.svg — dynamic shields.io-style SVG
+- Formula: confirmed_certs×10 + last_30d×5 + seniority_bonus (max 150, decays after 30d inactivity) + streak_bonus (consecutive_weeks×8, max 100) + attestation_bonus (min(3, attestations)×50, max 150)
+- Leaderboard: /leaderboard — public, sortable, filterable by category and attestation status
+- Agent profile: /agent/{wallet} — public stats, streak, attestation badges, recent certs timeline
+- Trust lookup: GET /api/trust/{wallet} — score + level + attestation count (no profile needed)
+- Trust badge: GET /badge/trust/{wallet}.svg — dynamic SVG; shows "Level · N attested (score)" when attested
 - Badge markdown: GET /badge/trust/{wallet}/markdown — ready-to-embed snippet
 - Opt-in: PATCH /api/user/agent-profile (auth required)
+
+## Domain-Specific Attestations
+Third-party certifying bodies issue on-chain-anchored attestations (+50 trust per attestation, max +150 from 3).
+- Domains: healthcare (MHRA, FDA, EMA), finance (FCA, SEC, ESMA), legal (ISO, GDPR), security (NIST, CIS), research, other
+- Issue: POST /api/attestation (wallet auth, anti-self-attest enforced)
+- Lookup by ID: GET /api/attestation/{id} — public attestation detail
+- Lookup by wallet: GET /api/attestations/{wallet} — public, returns all active attestations
+- Revoke: DELETE /api/attestation/{id} (issuer wallet only)
+- My issued: GET /api/my-attestations/issued (wallet auth)
+- Detail page: /attestation/{id} — public, shows domain, standard, issuer, subject, trust impact
+- MCP tool: check_attestations(wallet) — returns attestations, trust bonus, attestation_url per entry
 
 ## Why It Matters
 
@@ -4998,10 +5065,11 @@ The first certification ever created on xproof:
 A public trust registry where anyone can discover and evaluate AI agents based on their on-chain certification history.
 
 ### Trust Score Formula
-\`score = confirmed_certs × 10 + last_30d_certs × 5 + seniority_bonus + streak_bonus\`
+\`score = confirmed_certs × 10 + last_30d_certs × 5 + seniority_bonus + streak_bonus + attestation_bonus\`
 
 - **Seniority bonus**: days_since_first_cert × 0.3 (max 150). Full bonus if last cert ≤ 30 days ago. Linear decay 30-90 days. Zero after 90 days of inactivity.
 - **Streak bonus**: consecutive_weeks × 8 (max 100). A "week" = at least 1 confirmed cert in an ISO week. Tolerates up to 2 weeks gap before resetting.
+- **Attestation bonus**: min(3, active_domain_attestations) × 50 (max 150). Each active third-party attestation adds +50. Revoked or expired attestations do not count.
 
 ### Trust Levels
 | Level | Score Range | Meaning |
@@ -5015,13 +5083,14 @@ A public trust registry where anyone can discover and evaluate AI agents based o
 Agents configure their public profile (name, category, description, website) via Settings or API, then toggle \`is_public_profile\` to appear on the leaderboard.
 
 ### Pages
-- \`/leaderboard\` — Public, sortable table with search, category filter, and streak display
-- \`/agent/{wallet}\` — Public agent profile with trust score, stats, streak, and recent certifications timeline
+- \`/leaderboard\` — Public, sortable table with search, category filter, "attested only" toggle, and sort by score/certs/streak/attestations
+- \`/agent/{wallet}\` — Public agent profile with trust score, stats, streak, domain attestation badges, and recent certifications timeline
+- \`/attestation/{id}\` — Public attestation detail: domain, standard, issuer, subject agent, timeline, trust impact
 
 ### Endpoints
-- \`GET ${baseUrl}/api/leaderboard\` — Public. Returns top 50 agents with public profiles, sorted by trust score
-- \`GET ${baseUrl}/api/agents/{wallet}\` — Public. Agent profile with trust score, certifications, and timeline
-- \`GET ${baseUrl}/api/trust/{wallet}\` — Public trust lookup: score, level, certifications count. No profile data required
+- \`GET ${baseUrl}/api/leaderboard\` — Public. Returns top 50 agents with public profiles, sorted by trust score. Includes \`activeAttestations\` field per entry.
+- \`GET ${baseUrl}/api/agents/{wallet}\` — Public. Agent profile with trust score, certifications, attestations, and timeline
+- \`GET ${baseUrl}/api/trust/{wallet}\` — Public trust lookup: score, level, certifications count, attestation count. No profile data required
 - \`PATCH ${baseUrl}/api/user/agent-profile\` — Auth required. Update agent public profile (name, category, description, website, is_public_profile)
 
 ### Trust Badge
@@ -5029,11 +5098,50 @@ Embed a dynamic trust badge in any README or documentation:
 \`\`\`
 GET ${baseUrl}/badge/trust/{wallet}.svg
 \`\`\`
-Returns a shields.io-style SVG badge showing trust level and score (e.g., "xproof | Active (157)").
+Returns a shields.io-style SVG badge showing trust level and score. When the agent has domain attestations, the badge text is updated to display "Level · N attested (score)" to signal credentialed status at a glance.
 \`\`\`
 GET ${baseUrl}/badge/trust/{wallet}/markdown
 \`\`\`
 Returns ready-to-embed markdown with the badge image and link to the agent's public profile.
+
+## Domain-Specific Attestations
+
+Third-party certifying bodies (MHRA, ISO, SOC2, FCA, etc.) issue on-chain-anchored attestations linked to agent wallets. This is a trust layer on top of the on-chain proof track record.
+
+### Why attestations matter
+An autonomous agent cannot self-declare regulatory compliance. With xproof attestations, a recognized certifying body issues a cryptographically-anchored statement — immutable, publicly verifiable, revocable. Each active attestation raises the agent's trust score by +50 (max +150 from 3 attestations counted).
+
+### Attestation domains
+| Domain | Examples |
+|-----------|--------------------------------------|
+| healthcare | MHRA, NICE, FDA, EMA, ICH, MDR |
+| finance | FCA, SEC, ESMA, FINRA, MAS, MICA |
+| legal | ISO 27001, GDPR, CCPA, SOC2 Type II |
+| security | NIST, CIS Controls, OWASP, CVE |
+| research | arXiv, peer review, data provenance |
+| other | Any other regulatory standard |
+
+### Issuance & revocation flow
+1. Issuer authenticates with their MultiversX wallet (Native Auth)
+2. \`POST /api/attestation\` — subject wallet, domain, standard (e.g., ISO-27001), title, optional description and expiry
+3. Anti-self-attestation enforced. Duplicate check per (domain, standard, issuer) triplet.
+4. Subject's trust score increases immediately. Badge updates within 5 minutes (cache TTL).
+5. \`DELETE /api/attestation/{id}\` — issuer-only revocation. Trust score decreases immediately.
+
+### Attestation API
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | /api/attestation | Wallet auth | Issue an attestation |
+| GET | /api/attestation/{id} | Public | Get attestation by ID |
+| GET | /api/attestations/{wallet} | Public | List active attestations for a wallet |
+| DELETE | /api/attestation/{id} | Issuer wallet | Revoke (sets status to revoked) |
+| GET | /api/my-attestations/issued | Wallet auth | List attestations I have issued |
+
+### MCP Integration
+\`check_attestations(wallet)\` — MCP tool callable without authentication. Returns:
+- \`attestation_count\` — number of active attestations
+- \`trust_bonus\` — computed bonus (0, 50, 100, or 150)
+- \`attestations[]\` — array with id, domain, standard, title, issuer_name, issuer_wallet, expires_at, issued_at, attestation_url
 
 ## Why It Matters
 
@@ -6661,7 +6769,7 @@ export const xproofAuditPlugin: Plugin = {
         return res.send(fallback);
       }
 
-      const svg = generateTrustBadgeSvg(trust.level, trust.score);
+      const svg = generateTrustBadgeSvg(trust.level, trust.score, trust.activeAttestations ?? 0);
       res.setHeader("Content-Type", "image/svg+xml");
       res.setHeader("Cache-Control", "max-age=300");
       res.send(svg);
@@ -6765,6 +6873,24 @@ export const xproofAuditPlugin: Plugin = {
         ORDER BY created_at DESC
       `);
       res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/attestation/:id — public, returns a single attestation by ID
+  app.get("/api/attestation/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await db.execute(sql`
+        SELECT id, subject_wallet, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, status, revoked_at, created_at
+        FROM attestations
+        WHERE id = ${id}
+        LIMIT 1
+      `);
+      const row = (result.rows as any[])[0];
+      if (!row) return res.status(404).json({ error: "Attestation not found" });
+      res.json(row);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

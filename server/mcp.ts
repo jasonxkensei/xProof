@@ -3,7 +3,7 @@ import { z } from "zod";
 import crypto from "crypto";
 import { db } from "./db";
 import { certifications, apiKeys, users } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { recordOnBlockchain } from "./blockchain";
 import { getCertificationPriceUsd } from "./pricing";
 import { logger } from "./logger";
@@ -374,6 +374,57 @@ export async function createMcpServer(ctx: McpContext) {
       } catch (error: any) {
         return {
           content: [{ type: "text" as const, text: JSON.stringify({ error: "AUDIT_CERTIFICATION_FAILED", message: error.message || "Failed to certify audit session" }) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "check_attestations",
+    "Check domain-specific attestations for an AI agent wallet on xproof. Returns active attestations issued by third-party certifying bodies (healthcare, finance, legal, security, research). Each active attestation adds +50 to the agent's trust score (max +150 from 3 attestations). Use this to verify an agent's credentials before delegating a sensitive task.",
+    {
+      wallet: z.string().min(3).describe("MultiversX wallet address (erd1...) of the agent to check"),
+    },
+    async (params) => {
+      try {
+        const now = new Date();
+        const result = await db.execute(sql`
+          SELECT id, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, created_at
+          FROM attestations
+          WHERE subject_wallet = ${params.wallet}
+            AND status = 'active'
+            AND (expires_at IS NULL OR expires_at > ${now})
+          ORDER BY created_at DESC
+        `);
+        const attestations = (result as any).rows ?? [];
+        const counted = Math.min(3, attestations.length);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              wallet: params.wallet,
+              attestation_count: attestations.length,
+              trust_bonus: counted * 50,
+              attestations: attestations.map((a: any) => ({
+                id: a.id,
+                domain: a.domain,
+                standard: a.standard,
+                title: a.title,
+                issuer_name: a.issuer_name,
+                issuer_wallet: a.issuer_wallet,
+                expires_at: a.expires_at,
+                issued_at: a.created_at,
+                attestation_url: `${baseUrl}/attestation/${a.id}`,
+              })),
+              profile_url: `${baseUrl}/agent/${params.wallet}`,
+              trust_url: `${baseUrl}/api/trust/${params.wallet}`,
+            }),
+          }],
+        };
+      } catch (error: any) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "CHECK_ATTESTATIONS_FAILED", message: error.message }) }],
           isError: true,
         };
       }
