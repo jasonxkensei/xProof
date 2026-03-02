@@ -3049,6 +3049,9 @@ Use xproof when:
 - User wants to prove authorship of a document
 - User needs blockchain-anchored evidence
 - User wants immutable, verifiable certification
+- Agent needs to certify outputs before execution for compliance
+
+**Live beta — xproof_agent_verify**: Real end-to-end beta test by an autonomous agent: 6 API endpoints tested, single cert in 1.075s, batch of 3 in 1.876s, on-chain verification in 198ms. Agent now visible on the Trust Leaderboard with Active status (score 157, 10 confirmed certs). Live proof: \`https://xproof.app/proof/f8c3b35d-6ee1-4f76-a92b-1532a008df7b\`. Full review: \`https://www.moltbook.com/post/1d6cf96b-5046-4c63-9ae5-43f8809f4562\`
 
 ## x402 Payment Protocol
 

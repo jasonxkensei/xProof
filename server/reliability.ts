@@ -42,6 +42,15 @@ export const apiKeyCreationRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many API key operations, please try again later" },
 });
 
+export const attestationIssuanceRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.walletAddress || req.ip,
+  message: { error: "TOO_MANY_REQUESTS", message: "Attestation rate limit exceeded: max 20 per hour per issuer" },
+});
+
 let commitSha = "unknown";
 try {
   commitSha = execSync("git rev-parse --short HEAD 2>/dev/null").toString().trim() || "unknown";
