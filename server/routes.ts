@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { db } from "./db";
 import { storage } from "./storage";
 import { logger } from "./logger";
-import { computeTrustScore, getLeaderboard } from "./trust";
+import { computeTrustScore, computeTrustScoreByWallet, getLeaderboard, generateTrustBadgeSvg } from "./trust";
 import { getAlertConfig } from "./txAlerts";
 import { 
   certifications, 
@@ -6505,6 +6505,68 @@ export const xproofAuditPlugin: Plugin = {
         return res.status(400).json({ message: "Validation error", errors: err.errors });
       }
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/trust/:wallet — public trust lookup (score only, no profile data)
+  app.get("/api/trust/:wallet", async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      const trust = await computeTrustScoreByWallet(wallet);
+      if (!trust) {
+        return res.status(404).json({ message: "Wallet not found" });
+      }
+      res.json({
+        walletAddress: wallet,
+        score: trust.score,
+        level: trust.level,
+        certTotal: trust.certTotal,
+        certLast30d: trust.certLast30d,
+        streakWeeks: trust.streakWeeks,
+        firstCertAt: trust.firstCertAt,
+        lastCertAt: trust.lastCertAt,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /badge/trust/:wallet.svg — dynamic trust badge for READMEs
+  app.get("/badge/trust/:wallet.svg", async (req, res) => {
+    try {
+      const wallet = req.params.wallet;
+      const trust = await computeTrustScoreByWallet(wallet);
+
+      if (!trust) {
+        const fallback = `<svg xmlns="http://www.w3.org/2000/svg" width="130" height="24" role="img"><rect width="130" height="24" rx="5" fill="#1E1E1E"/><rect width="130" height="24" rx="5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="65" y="16" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11">xproof: Unknown</text></svg>`;
+        res.setHeader("Content-Type", "image/svg+xml");
+        res.setHeader("Cache-Control", "max-age=300");
+        return res.send(fallback);
+      }
+
+      const svg = generateTrustBadgeSvg(trust.level, trust.score);
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.setHeader("Cache-Control", "max-age=300");
+      res.send(svg);
+    } catch (error) {
+      logger.withRequest(req).error("Failed to generate trust badge");
+      const fallback = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="24" role="img"><rect width="120" height="24" rx="5" fill="#1E1E1E"/><rect width="120" height="24" rx="5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="60" y="16" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11">xproof: Error</text></svg>`;
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.status(500).send(fallback);
+    }
+  });
+
+  // GET /badge/trust/:wallet/markdown — markdown snippet for trust badge
+  app.get("/badge/trust/:wallet/markdown", async (req, res) => {
+    try {
+      const wallet = req.params.wallet;
+      const baseUrl = `https://${req.get("host")}`;
+      const badgeUrl = `${baseUrl}/badge/trust/${wallet}.svg`;
+      const linkUrl = `${baseUrl}/agent/${wallet}`;
+      const markdown = `[![xproof Trust](${badgeUrl})](${linkUrl})`;
+      res.json({ markdown, badgeUrl, linkUrl });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate markdown" });
     }
   });
 

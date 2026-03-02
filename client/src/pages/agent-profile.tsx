@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   Globe,
   TrendingUp,
+  Flame,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ interface AgentProfile {
   level: string;
   certTotal: number;
   certLast30d: number;
+  streakWeeks: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
   recentCertifications: {
@@ -81,10 +83,6 @@ export default function AgentProfilePage() {
   const confirmationRate = agent && agent.certTotal > 0
     ? Math.round((agent.recentCertifications.filter((c) => c.blockchainStatus === "confirmed").length / agent.recentCertifications.length) * 100)
     : null;
-
-  const daysSinceFirst = agent?.firstCertAt
-    ? Math.floor((Date.now() - new Date(agent.firstCertAt).getTime()) / (1000 * 60 * 60 * 24))
-    : 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -242,14 +240,17 @@ export default function AgentProfilePage() {
                 </CardContent>
               </Card>
 
-              <Card data-testid="stat-seniority">
+              <Card data-testid="stat-streak">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">Seniority</CardTitle>
-                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-xs font-medium text-muted-foreground">Streak</CardTitle>
+                  <Flame className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold" data-testid="text-seniority">{daysSinceFirst}</div>
-                  <p className="text-xs text-muted-foreground">days on xproof</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-bold" data-testid="text-streak">{agent.streakWeeks}</span>
+                    <span className="text-sm text-muted-foreground">weeks</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">consecutive activity</p>
                 </CardContent>
               </Card>
             </div>

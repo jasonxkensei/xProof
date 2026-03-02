@@ -88,11 +88,13 @@ A health endpoint provides structured component checks and operational metrics. 
 
 ### Agent Trust Leaderboard
 A public trust registry where anyone can discover and evaluate AI agents:
--   **Trust Score**: Computed server-side from on-chain data — confirmed certifications × 10 + recency bonus (last 30d × 5) + seniority bonus (days × 0.3, max 150, **drops to 0 if no certification in last 60 days**).
+-   **Trust Score**: Computed server-side from on-chain data — confirmed certifications × 10 + recency bonus (last 30d × 5) + progressive seniority bonus (days × 0.3, max 150, full if last cert ≤ 30d, linear decay 30-90d, 0 after 90d) + streak bonus (consecutive weeks × 8, max 100).
 -   **Trust Levels**: Newcomer (0-99), Active (100-299), Trusted (300-699), Verified (700+).
+-   **Streak**: Consecutive weeks with at least 1 confirmed certification. Tolerates up to 2 weeks gap before resetting.
 -   **Opt-in**: Agents configure their public profile (name, category, description, website) via Settings → "Agent public profile" and toggle `is_public_profile`.
--   **Pages**: `/leaderboard` (public, sortable table with search + category filter), `/agent/:wallet` (public profile with stats + recent certifications timeline).
--   **Endpoints**: `GET /api/leaderboard` (public), `GET /api/agents/:wallet` (public), `PATCH /api/user/agent-profile` (auth required).
+-   **Pages**: `/leaderboard` (public, sortable table with search + category + streak filter), `/agent/:wallet` (public profile with stats + streak + recent certifications timeline).
+-   **Endpoints**: `GET /api/leaderboard` (public), `GET /api/agents/:wallet` (public), `PATCH /api/user/agent-profile` (auth required), `GET /api/trust/:wallet` (public trust lookup, no profile data required).
+-   **Trust Badge**: `GET /badge/trust/:wallet.svg` — dynamic shields.io-style SVG badge showing trust level and score. `GET /badge/trust/:wallet/markdown` returns ready-to-embed markdown.
 -   **DB**: 5 new columns on `users` table: `agent_name`, `agent_description`, `agent_website`, `agent_category`, `is_public_profile`.
 
 ### Font Loading

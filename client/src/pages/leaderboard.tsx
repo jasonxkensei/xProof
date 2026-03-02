@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp } from "lucide-react";
+import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, Flame } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ interface LeaderboardEntry {
   trustLevel: "Newcomer" | "Active" | "Trusted" | "Verified";
   certTotal: number;
   certLast30d: number;
+  streakWeeks: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
 }
@@ -185,6 +186,7 @@ export default function Leaderboard() {
                   <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground sm:table-cell">Category</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Trust</th>
                   <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground md:table-cell">Certifications</th>
+                  <th className="hidden px-4 py-3 text-center font-medium text-muted-foreground lg:table-cell">Streak</th>
                   <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground lg:table-cell">Last active</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -237,6 +239,16 @@ export default function Leaderboard() {
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td className="hidden px-4 py-3 text-center lg:table-cell">
+                      {entry.streakWeeks > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-sm font-medium tabular-nums text-orange-600 dark:text-orange-400">
+                          <Flame className="h-3.5 w-3.5" />
+                          {entry.streakWeeks}w
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="hidden px-4 py-3 text-right text-muted-foreground lg:table-cell">
                       {entry.lastCertAt
