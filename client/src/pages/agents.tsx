@@ -181,6 +181,9 @@ export default function AgentsPage() {
             <a href="/#faq" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-faq">
               FAQ
             </a>
+            <a href="/leaderboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-leaderboard">
+              Leaderboard
+            </a>
             <a href="/stats" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-metrics">
               Metrics
             </a>
@@ -311,6 +314,7 @@ export default function AgentsPage() {
                   <li><a href="/#how-it-works" className="hover:text-foreground transition-colors">How it works</a></li>
                   <li><a href="/#faq" className="hover:text-foreground transition-colors">FAQ</a></li>
                   <li><a href="/agents" className="hover:text-foreground transition-colors" data-testid="link-footer-agents">For AI Agents</a></li>
+                  <li><a href="/leaderboard" className="hover:text-foreground transition-colors" data-testid="link-footer-leaderboard">Leaderboard</a></li>
                   <li><a href="/stats" className="hover:text-foreground transition-colors" data-testid="link-footer-stats">Metrics</a></li>
                 </ul>
               </div>
