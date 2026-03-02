@@ -79,6 +79,12 @@ export default function Dashboard() {
             <span className="text-xl font-bold tracking-tight">xproof</span>
           </a>
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            <Button asChild variant="ghost" size="sm" data-testid="button-leaderboard">
+              <Link href="/leaderboard">
+                <Trophy className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Leaderboard</span>
+              </Link>
+            </Button>
             <Button asChild variant="ghost" size="sm" data-testid="button-stats">
               <Link href="/stats">
                 <Activity className="h-4 w-4 sm:mr-2" />
