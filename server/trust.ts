@@ -211,9 +211,31 @@ export interface LeaderboardEntry {
   activeAttestations: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
+  scoreDelta7d: number;
+  rank: number;
+  previousLevel: TrustLevel | null;
 }
 
-export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
+export interface LeaderboardFilters {
+  page?: number;
+  limit?: number;
+  category?: string;
+  search?: string;
+  attestedOnly?: boolean;
+  sortBy?: "score" | "certs" | "streak" | "attestations";
+}
+
+export interface LeaderboardResult {
+  entries: LeaderboardEntry[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<LeaderboardResult> {
+  const page = Math.max(1, filters.page || 1);
+  const limit = Math.min(100, Math.max(1, filters.limit || 50));
   const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const rows = await db.execute(sql`
@@ -238,12 +260,17 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   const userIds = allRows.map((r) => r.id);
   const walletAddresses = allRows.map((r) => r.wallet_address);
 
-  const [streakMap, attestationMap] = await Promise.all([
+  const cutoff7d = new Date();
+  cutoff7d.setDate(cutoff7d.getDate() - 7);
+
+  const [streakMap, attestationMap, deltaMap, prevLevelMap] = await Promise.all([
     computeStreakWeeksBatch(userIds),
     countActiveAttestationsBatch(walletAddresses),
+    getScoreDelta7dBatch(walletAddresses, cutoff7d),
+    getPreviousLevelBatch(walletAddresses),
   ]);
 
-  const entries = allRows.map((row) => {
+  let entries = allRows.map((row) => {
     const confirmed = Number(row.cert_total || 0);
     const last30d = Number(row.cert_last_30d || 0);
     const firstAt = row.first_cert_at ? new Date(row.first_cert_at) : null;
@@ -266,10 +293,78 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
       activeAttestations,
       firstCertAt: firstAt ? firstAt.toISOString() : null,
       lastCertAt: lastAt ? lastAt.toISOString() : null,
+      scoreDelta7d: deltaMap.get(row.wallet_address) ?? 0,
+      rank: 0,
+      previousLevel: prevLevelMap.get(row.wallet_address) ?? null,
     };
   });
+
   entries.sort((a, b) => b.trustScore - a.trustScore);
-  return entries.slice(0, 50);
+  entries.forEach((e, i) => { e.rank = i + 1; });
+
+  if (filters.category) {
+    entries = entries.filter((e) => e.agentCategory === filters.category);
+  }
+  if (filters.search) {
+    const q = filters.search.toLowerCase();
+    entries = entries.filter(
+      (e) =>
+        e.walletAddress.toLowerCase().includes(q) ||
+        (e.agentName || "").toLowerCase().includes(q),
+    );
+  }
+  if (filters.attestedOnly) {
+    entries = entries.filter((e) => e.activeAttestations > 0);
+  }
+
+  if (filters.sortBy === "certs") entries.sort((a, b) => b.certTotal - a.certTotal);
+  else if (filters.sortBy === "streak") entries.sort((a, b) => b.streakWeeks - a.streakWeeks);
+  else if (filters.sortBy === "attestations") entries.sort((a, b) => b.activeAttestations - a.activeAttestations);
+
+  const total = entries.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const start = (page - 1) * limit;
+  const paged = entries.slice(start, start + limit);
+
+  return { entries: paged, total, page, limit, totalPages };
+}
+
+async function getOldScoreBatch(wallets: string[], cutoff: Date): Promise<Map<string, number>> {
+  if (wallets.length === 0) return new Map();
+  try {
+    const results = await Promise.all(
+      wallets.map(async (w) => {
+        const r = await db.execute(sql`
+          SELECT score FROM trust_score_snapshots
+          WHERE wallet_address = ${w} AND snapshot_date <= ${cutoff.toISOString().split("T")[0]}
+          ORDER BY snapshot_date DESC LIMIT 1
+        `);
+        return [w, r.rows.length > 0 ? Number((r.rows[0] as any).score) : null] as [string, number | null];
+      }),
+    );
+    return new Map(results.filter(([, v]) => v !== null) as Array<[string, number]>);
+  } catch {
+    return new Map();
+  }
+}
+
+async function getPreviousLevelBatch(wallets: string[]): Promise<Map<string, TrustLevel>> {
+  if (wallets.length === 0) return new Map();
+  try {
+    const results = await Promise.all(
+      wallets.map(async (w) => {
+        const r = await db.execute(sql`
+          SELECT level FROM trust_score_snapshots
+          WHERE wallet_address = ${w}
+          ORDER BY snapshot_date DESC LIMIT 1 OFFSET 1
+        `);
+        return [w, r.rows.length > 0 ? (r.rows[0] as any).level as TrustLevel : null] as [string, TrustLevel | null];
+      }),
+    );
+    return new Map(results.filter(([, v]) => v !== null) as Array<[string, TrustLevel]>);
+  } catch {
+    return new Map();
+  }
 }
 
 export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestationCount = 0): string {
