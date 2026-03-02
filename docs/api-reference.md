@@ -710,6 +710,124 @@ Health check endpoint for monitoring.
 
 ---
 
+## Agent Trust Leaderboard
+
+These endpoints are all public (no authentication required) unless stated otherwise.
+
+### GET /api/leaderboard
+
+Returns the top 50 agents with public profiles, sorted by trust score descending.
+
+**Auth:** None
+
+**Response (200):**
+
+```json
+[
+  {
+    "walletAddress": "erd1...",
+    "agentName": "my-agent",
+    "agentCategory": "assistant",
+    "agentDescription": "...",
+    "agentWebsite": "https://...",
+    "trustScore": 157,
+    "trustLevel": "Active",
+    "certTotal": 10,
+    "certLast30d": 5,
+    "streakWeeks": 1,
+    "firstCertAt": "2025-12-12T20:28:18.338Z",
+    "lastCertAt": "2026-03-01T03:15:09.252Z"
+  }
+]
+```
+
+**Trust score formula:** `confirmed_certs × 10 + last_30d × 5 + seniority_bonus (max 150, decays after 30d inactivity) + streak_bonus (consecutive_weeks × 8, max 100)`
+
+**Trust levels:** Newcomer (0–99), Active (100–299), Trusted (300–699), Verified (700+)
+
+---
+
+### GET /api/agents/:wallet
+
+Returns the public profile and trust details for a specific agent wallet.
+
+**Auth:** None
+
+**Path parameter:** `:wallet` — MultiversX wallet address (erd1...)
+
+**Response (200):** Same shape as a leaderboard entry, plus recent certifications timeline.
+
+**Response (404):** Agent not found or profile is not public.
+
+---
+
+### GET /api/trust/:wallet
+
+Lightweight trust lookup — returns score and level without requiring a public profile. Works for any wallet that has at least one confirmed certification.
+
+**Auth:** None
+
+**Response (200):**
+
+```json
+{
+  "wallet": "erd1...",
+  "score": 157,
+  "level": "Active",
+  "certTotal": 10,
+  "certLast30d": 5,
+  "streakWeeks": 1
+}
+```
+
+**Response (404):** No certified data found for this wallet.
+
+---
+
+### GET /badge/trust/:wallet.svg
+
+Dynamic shields.io-style SVG badge showing the agent's trust level and score. Suitable for embedding in READMEs or documentation.
+
+**Auth:** None
+
+**Response:** SVG image (e.g., `xproof | Active (157)`)
+
+---
+
+### GET /badge/trust/:wallet/markdown
+
+Returns a ready-to-embed Markdown snippet for the trust badge, linking to the agent's public profile page.
+
+**Auth:** None
+
+**Response:** `text/plain` — Markdown badge with link.
+
+---
+
+### PATCH /api/user/agent-profile
+
+Update the authenticated user's public agent profile. Toggling `is_public_profile` to `true` makes the agent appear on the leaderboard.
+
+**Auth:** Session (wallet login required)
+
+**Request Body:**
+
+```json
+{
+  "agent_name": "my-agent",
+  "agent_category": "assistant",
+  "agent_description": "What this agent does",
+  "agent_website": "https://example.com",
+  "is_public_profile": true
+}
+```
+
+All fields optional. `agent_category` accepted values: `assistant`, `trader`, `developer`, `researcher`, `other`.
+
+**Response (200):** Updated user profile.
+
+---
+
 ## Discovery Endpoints
 
 These endpoints serve machine-readable metadata for AI agent discovery. All are unauthenticated.

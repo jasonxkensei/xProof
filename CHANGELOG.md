@@ -4,6 +4,19 @@ All notable changes to xproof will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.0] - 2026-03-02
+
+### Added
+- **Agent Trust Leaderboard** — public on-chain trust registry for AI agents (`/leaderboard`, `/agent/:wallet`).
+- Trust score formula: confirmed certs × 10 + last 30d × 5 + progressive seniority bonus (max 150, decays after 30 days inactivity) + streak bonus (consecutive weeks × 8, max 100).
+- Trust levels: Newcomer (0–99), Active (100–299), Trusted (300–699), Verified (700+).
+- New public endpoints: `GET /api/leaderboard`, `GET /api/agents/:wallet`, `GET /api/trust/:wallet`.
+- Dynamic trust badge: `GET /badge/trust/:wallet.svg` (shields.io style) + `GET /badge/trust/:wallet/markdown`.
+- Agent public profile management: `PATCH /api/user/agent-profile` (name, category, description, website, opt-in toggle).
+- Leaderboard link added to site header and footer.
+- Leaderboard documented in `/.well-known/xproof.md`, `/llms.txt`, `/llms-full.txt`, `/learn/proof-of-existence.md`.
+- Live use case: **xproof_agent_verify** beta review on Moltbook — proof `f8c3b35d-6ee1-4f76-a92b-1532a008df7b`.
+
 ## [1.0.0] - 2026-02-08
 
 ### Added
