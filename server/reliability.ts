@@ -47,7 +47,8 @@ export const attestationIssuanceRateLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => req.walletAddress || req.ip,
+  keyGenerator: (req: any) => (req.walletAddress as string) ?? "unknown",
+  skip: (req: any) => !req.walletAddress,
   message: { error: "TOO_MANY_REQUESTS", message: "Attestation rate limit exceeded: max 20 per hour per issuer" },
 });
 

@@ -92,6 +92,91 @@ function DomainBadge({ domain }: { domain: string }) {
   );
 }
 
+interface TrustSnapshot {
+  score: number;
+  level: string;
+  cert_total: number;
+  active_attestations: number;
+  snapshot_date: string;
+}
+
+function TrustSparkline({ snapshots }: { snapshots: TrustSnapshot[] }) {
+  if (snapshots.length < 2) {
+    return (
+      <div className="flex h-16 items-center justify-center text-xs text-muted-foreground">
+        Tracking starts today — data available tomorrow
+      </div>
+    );
+  }
+
+  const W = 320;
+  const H = 56;
+  const PAD = 4;
+  const scores = snapshots.map((s) => s.score);
+  const minScore = Math.min(...scores);
+  const maxScore = Math.max(...scores);
+  const range = maxScore - minScore || 1;
+
+  const points = snapshots.map((s, i) => {
+    const x = PAD + (i / (snapshots.length - 1)) * (W - PAD * 2);
+    const y = H - PAD - ((s.score - minScore) / range) * (H - PAD * 2);
+    return `${x},${y}`;
+  });
+
+  const areaPoints = [
+    `${PAD},${H}`,
+    ...points,
+    `${W - PAD},${H}`,
+  ].join(" ");
+
+  const lastScore = scores[scores.length - 1];
+  const firstScore = scores[0];
+  const delta = lastScore - firstScore;
+
+  return (
+    <div className="space-y-1" data-testid="card-trust-sparkline">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>90-day trend</span>
+        <span className={delta >= 0 ? "text-emerald-500" : "text-destructive"}>
+          {delta >= 0 ? "+" : ""}{delta} pts
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 56 }}>
+        <defs>
+          <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgb(16,185,129)" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="rgb(16,185,129)" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <polygon points={areaPoints} fill="url(#sparkGrad)" />
+        <polyline
+          points={points.join(" ")}
+          fill="none"
+          stroke="rgb(16,185,129)"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        {(() => {
+          const last = points[points.length - 1].split(",");
+          return (
+            <circle
+              cx={Number(last[0])}
+              cy={Number(last[1])}
+              r="3"
+              fill="rgb(16,185,129)"
+            />
+          );
+        })()}
+      </svg>
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>{snapshots[0]?.snapshot_date?.slice(0, 10)}</span>
+        <span>{snapshots[snapshots.length - 1]?.snapshot_date?.slice(0, 10)}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function AgentProfilePage() {
   const params = useParams<{ wallet: string }>();
   const wallet = params.wallet;
@@ -105,6 +190,12 @@ export default function AgentProfilePage() {
       return r.json();
     }),
     retry: false,
+  });
+
+  const { data: history } = useQuery<{ snapshots: TrustSnapshot[] }>({
+    queryKey: ["/api/trust", wallet, "history"],
+    queryFn: () => fetch(`/api/trust/${wallet}/history`).then((r) => r.json()),
+    enabled: !!wallet,
   });
 
   function copyWallet() {
@@ -300,6 +391,19 @@ export default function AgentProfilePage() {
               </Card>
             </div>
 
+            {/* Trust Score Trend */}
+            <Card data-testid="card-trust-history">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Trust score history
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TrustSparkline snapshots={history?.snapshots ?? []} />
+              </CardContent>
+            </Card>
+
             {/* Domain Attestations */}
             {agent.attestations?.length > 0 && (
               <Card data-testid="card-attestations">
@@ -337,7 +441,13 @@ export default function AgentProfilePage() {
                             )}
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="text-xs font-medium">{att.issuer_name}</p>
+                            <Link
+                              href={`/issuer/${att.issuer_wallet}`}
+                              data-testid={`link-issuer-${att.id}`}
+                              className="text-xs font-medium hover:underline underline-offset-2 text-primary"
+                            >
+                              {att.issuer_name}
+                            </Link>
                             <p className="font-mono text-xs text-muted-foreground">
                               {att.issuer_wallet.slice(0, 8)}…{att.issuer_wallet.slice(-6)}
                             </p>

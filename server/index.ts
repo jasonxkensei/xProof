@@ -10,6 +10,8 @@ import {
   setupProcessErrorHandlers 
 } from "./reliability";
 import { startTxQueueWorker } from "./txQueue";
+import { computeTrustScoreByWallet } from "./trust";
+import { pool } from "./db";
 import { requestIdMiddleware, logger } from "./logger";
 
 setupProcessErrorHandlers();
@@ -117,6 +119,64 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
+  async function runDailyMaintenance() {
+    try {
+      const publicAgents = await pool.query(
+        `SELECT wallet_address FROM users WHERE is_public_profile = true`
+      );
+      let snapshots = 0;
+      for (const row of publicAgents.rows) {
+        try {
+          const trust = await computeTrustScoreByWallet(row.wallet_address);
+          if (trust) {
+            await pool.query(
+              `INSERT INTO trust_score_snapshots (wallet_address, score, level, cert_total, active_attestations, snapshot_date)
+               VALUES ($1, $2, $3, $4, $5, CURRENT_DATE)
+               ON CONFLICT (wallet_address, snapshot_date) DO UPDATE SET
+                 score = EXCLUDED.score,
+                 level = EXCLUDED.level,
+                 cert_total = EXCLUDED.cert_total,
+                 active_attestations = EXCLUDED.active_attestations`,
+              [row.wallet_address, trust.score, trust.level, trust.certTotal, trust.activeAttestations ?? 0]
+            );
+            snapshots++;
+          }
+        } catch {}
+      }
+
+      const expiring = await pool.query(
+        `SELECT id, subject_wallet, domain, standard, expires_at
+         FROM attestations
+         WHERE status = 'active'
+           AND expires_at IS NOT NULL
+           AND expires_at BETWEEN NOW() AND NOW() + INTERVAL '30 days'
+           AND expiry_notified_at IS NULL`
+      );
+      for (const att of expiring.rows) {
+        logger.warn("Attestation expiring soon", {
+          component: "maintenance",
+          attestationId: att.id,
+          domain: att.domain,
+          expiresAt: att.expires_at,
+        });
+        await pool.query(
+          `UPDATE attestations SET expiry_notified_at = NOW() WHERE id = $1`,
+          [att.id]
+        );
+      }
+
+      if (snapshots > 0 || expiring.rows.length > 0) {
+        logger.info("Daily maintenance complete", {
+          component: "maintenance",
+          snapshots,
+          expiryNotifications: expiring.rows.length,
+        });
+      }
+    } catch (err: any) {
+      logger.error("Daily maintenance error", { component: "maintenance", error: err.message });
+    }
+  }
+
   server.listen({
     port,
     host: "0.0.0.0",
@@ -124,6 +184,8 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
     startTxQueueWorker();
+    runDailyMaintenance();
+    setInterval(runDailyMaintenance, 24 * 60 * 60 * 1000);
   });
 
   setupGracefulShutdown(server);

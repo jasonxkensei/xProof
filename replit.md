@@ -1,7 +1,7 @@
 # xproof — Proof primitive for agents & humans on MultiversX
 
 ## Overview
-xproof is an API-first, composable trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It is designed for both human users and autonomous agents, providing a robust and verifiable proof system within the MultiversX ecosystem for decentralized applications and agent-based systems. Key capabilities include immutable proof storage, support for various payment protocols (ACP, x402), and comprehensive AI agent discovery and integration tools. The project aims to provide trust infrastructure for the AI economy, enabling verifiable and attributable agent outputs.
+xproof is an API-first, composable trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It serves both human users and autonomous agents by providing a robust, verifiable proof system for decentralized applications and agent-based systems within the MultiversX ecosystem. The project aims to establish trust infrastructure for the AI economy through verifiable and attributable agent outputs.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -10,121 +10,72 @@ Positioning tone: "Hybride stratégique" — precise, credible, strategic, mixin
 ## System Architecture
 
 ### Frontend
-The frontend uses React 18, TypeScript, Vite, Wouter for routing, and TanStack Query v5 for data management. UI design follows a "New York" aesthetic with Shadcn/ui (Radix UI primitives), Tailwind CSS, emerald green primary color, and dark mode support. Typography uses Space Grotesk and Inter. Forms are handled with React Hook Form and Zod validation. A pre-rendering middleware supports SEO for non-browser clients.
+The frontend is a React 18 application built with TypeScript and Vite. It uses Wouter for routing, TanStack Query v5 for data management, and Shadcn/ui (Radix UI primitives) with Tailwind CSS for styling, adhering to a "New York" aesthetic. It features an emerald green primary color, dark mode support, and uses Space Grotesk and Inter for typography. Forms are managed with React Hook Form and Zod validation. A pre-rendering middleware supports SEO.
 
 ### Backend
-The backend is built with Express.js, TypeScript, and Node.js. It integrates MultiversX SDK-dApp for secure Native Auth, handling client-side signature verification for user sessions stored in PostgreSQL. RESTful APIs under `/api/*` include middleware for logging and error handling, with protected routes enforcing wallet authentication. File processing involves client-side SHA-256 hashing.
+The backend uses Express.js, TypeScript, and Node.js. It integrates MultiversX SDK-dApp for secure Native Auth, handling client-side signature verification for user sessions stored in PostgreSQL. RESTful APIs include middleware for logging, error handling, and wallet authentication for protected routes. File processing involves client-side SHA-256 hashing.
 
 ### Blockchain Integration
-xproof integrates with the MultiversX blockchain for immutable proof storage, supporting both XPortal (user-signed transactions) and server-side signing. It handles transaction broadcasting and generation of explorer URLs across Mainnet, Devnet, and Testnet. Transaction verification occurs server-side to confirm successful payments and certifications. A persistent transaction queue (`tx_queue`) manages blockchain transactions, ensuring reliable execution with smart retry logic and nonce management.
+xproof integrates with the MultiversX blockchain for immutable proof storage, supporting XPortal and server-side signing. It manages transaction broadcasting, explorer URL generation, and server-side verification of payments and certifications. A persistent `tx_queue` handles blockchain transactions with retry logic and nonce management.
 
 ### MX-8004 Integration (Trustless Agents Standard)
-xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard, providing:
+xproof is integrated with MX-8004, the MultiversX Trustless Agents Standard, providing:
 -   **Identity Registry**: Agent registration with soulbound NFTs.
--   **Validation Registry**: Full ERC-8004 validation for certifications, achieving "Verified" status on-chain.
+-   **Validation Registry**: On-chain certification validation.
 -   **Reputation Registry**: On-chain reputation scoring for agents.
--   **Views**: Query job lifecycle, agent reputation, and feedback from on-chain data.
+-   **Views**: Querying job lifecycle, agent reputation, and feedback.
 
 ### Data Storage
-PostgreSQL, hosted on Neon, is used for data persistence with Drizzle ORM for type-safe operations. Key tables include `users`, `certifications`, `sessions`, `tx_queue`, and `wallet_nonces`. Drizzle Kit manages database migrations. The `wallet_nonces` table is managed via raw SQL (not Drizzle schema) and provides atomic distributed nonce management.
-
-### Distributed Nonce Management (Autoscale-Safe)
-`server/nonce.ts` centralizes all blockchain nonce handling for both direct certifications (`blockchain.ts`) and MX-8004 validation steps (`mx8004.ts`). A PostgreSQL `UPDATE ... RETURNING` atomic statement serializes nonce claims across all instances: each caller atomically increments the DB counter and receives its unique nonce. On nonce errors, `resyncNonceFromChain()` re-fetches the confirmed on-chain nonce. This eliminates nonce conflicts under multi-instance autoscale without requiring Redis or any external lock service.
+PostgreSQL, hosted on Neon, is used for data persistence with Drizzle ORM for type-safe operations. Key tables include `users`, `certifications`, `sessions`, `tx_queue`, and `wallet_nonces`. Drizzle Kit manages database migrations. Distributed nonce management is handled via atomic PostgreSQL `UPDATE ... RETURNING` statements to ensure autoscale safety.
 
 ### Deployment
-Configured for **autoscale** (Replit): `npm run build` → `node dist/index.js`. Scales up/down based on traffic. Safe for multi-instance because: (1) nonce management is DB-atomic, (2) tx_queue claims are atomic via PostgreSQL UPDATE RETURNING, (3) no in-memory state shared between instances.
+The system is configured for autoscale on Replit. It's designed to be safe for multi-instance deployments due to atomic nonce management, atomic `tx_queue` claims, and the absence of shared in-memory state.
 
 ### Prepaid Credits System
-Trial users who exhaust their 10-cert quota can purchase prepaid credit packs (USDC on Base) without needing a wallet session. Three packages: Starter (100 certs/$5), Pro (1000/$40), Business (10k/$300). Flow: `GET /api/credits/packages` → `POST /api/credits/purchase` → send USDC on Base → `POST /api/credits/confirm` with tx_hash. Server verifies the USDC Transfer event on Base mainnet via viem, records the purchase in `credit_purchases` table (unique tx_hash prevents double-claim), and increments `users.credit_balance`. Credits are consumed at `/api/proof` and `/api/batch` before falling back to x402. Response header `X-Credits-Remaining` tracks balance in real time. Logic lives in `server/credits.ts` (package constants + Base verification).
+Users can purchase prepaid credit packs with USDC on Base. The system verifies USDC transfers via viem, records purchases, and increments user credit balances. Credits are consumed for certifications before falling back to x402 payments.
 
-### Agent Commerce Protocol (ACP)
-xproof implements the ACP for programmatic interaction by AI agents, providing endpoints for product discovery, OpenAPI specification, checkout, transaction confirmation, and status checks. It includes API key management for secure agent access and rate limiting.
-
-### x402 Payment Protocol (HTTP 402)
-xproof supports the x402 payment protocol for per-request payments, allowing certification via HTTP 402 with USDC on Base, without requiring an account or API key.
+### Agent Commerce Protocol (ACP) & x402 Payment Protocol
+xproof implements ACP for programmatic interaction by AI agents, offering endpoints for product discovery, OpenAPI specs, checkout, and status checks. It supports x402 for per-request payments using USDC on Base, allowing certification without an account or API key.
 
 ### Agent APIs & Batch Certification
-A simplified single-call certification endpoint (`POST /api/proof`) accepts file metadata and handles server-side blockchain recording. Batch certification (`POST /api/batch`) allows certifying up to 50 files in a single API call.
+A single API endpoint (`POST /api/proof`) handles individual certifications, accepting file metadata for server-side blockchain recording. Batch certification (`POST /api/batch`) allows certifying up to 50 files in one call.
 
-### Verification Badges & GitHub Action
-Dynamic SVG badges display certification status. A Composite GitHub Action integrates xproof into CI/CD pipelines for artifact certification.
-
-### Webhook Notifications
-xProof sends POST notifications to specified `webhook_url`s upon on-chain proof confirmation, with HMAC-SHA256 signed headers and a retry policy.
+### Verification Badges & Webhook Notifications
+Dynamic SVG badges display certification status. A Composite GitHub Action integrates xproof into CI/CD pipelines. Webhooks send POST notifications upon on-chain proof confirmation with HMAC-SHA256 signed headers and retry policies.
 
 ### Agent Audit Log Standard
-xProof is the canonical implementation of the Agent Audit Log Standard — a compliance primitive for AI agents. Before executing any critical action (trade, deploy, data access), an agent MUST certify its session. No `proof_id` → no execution. Key components:
--   **Endpoint**: `POST /api/audit` — validates `AgentAuditLog` schema (agent_id, session_id, action_type, inputs_hash, risk_level, decision, etc.), computes canonical SHA-256, records on blockchain, stores in `certifications.metadata`.
--   **Canonical Schema**: `GET /.well-known/agent-audit-schema.json` — JSON Schema 2020-12 citeable by agents.
--   **Audit View**: `/audit/{proof_id}` — frontend page showing structured audit log with badges (action_type, risk_level, decision) and blockchain proof.
--   **Blocking Templates**: 4 workflow templates where agent RAISES EXCEPTION if `proof_id` absent: `/agent-tools/audit-guard-langchain.py`, `/agent-tools/audit-guard-crewai.py`, `/agent-tools/audit-guard-n8n.json`, `/agent-tools/audit-guard-eliza.ts`.
--   **MCP Tool**: `audit_agent_session` — callable via `/mcp` JSON-RPC.
--   **Discovery**: Section in `llms.txt`, `/.well-known/xproof.md`, and sitemap.
+xProof is the canonical implementation of the Agent Audit Log Standard, providing a compliance primitive for AI agents. It requires agents to certify sessions before critical actions. This includes a dedicated audit endpoint (`POST /api/audit`), a canonical JSON Schema, a frontend audit view, blocking templates for various agent frameworks, and an MCP tool.
 
 ### LLM-Ready Routes & AI Agent Discovery
-The platform offers machine-readable documentation and endpoints for AI agent discovery:
--   **MCP Server**: Live MCP JSON-RPC 2.0 endpoint with tools: `certify_file`, `verify_proof`, `get_proof`, `discover_services`, `audit_agent_session`.
--   **Discovery Endpoints**: `.well-known` files for canonical specification, OpenAI ChatGPT plugin manifest, Model Context Protocol manifest, Agent Protocol manifest, LLM-friendly summaries, and `agent-audit-schema.json`.
--   **Agent Tool Integrations**: LangChain, CrewAI, n8n, Eliza OS integrations (standard + audit guard variants).
+The platform offers machine-readable documentation and discovery endpoints for AI agents, including an MCP JSON-RPC 2.0 endpoint with tools like `certify_file`, `verify_proof`, `audit_agent_session`, and `.well-known` files for various specifications.
 
 ### Monitoring & Admin
-A health endpoint provides structured component checks and operational metrics. A metrics module tracks transaction latency, success/failure rates, and MX-8004 queue size. An admin dashboard provides certification counts, source breakdown, blockchain status, API key usage, and webhook delivery stats, protected by wallet authentication. Structured JSON logging is used for all backend logs.
+A health endpoint provides component checks and metrics. A metrics module tracks performance indicators. An admin dashboard offers insights into certifications, blockchain status, API key usage, and webhook delivery stats, protected by wallet authentication. Structured JSON logging is used for backend logs.
+
+### Agent Trust Leaderboard
+A public trust registry for AI agents calculates a "Trust Score" based on confirmed certifications, recency, seniority, streaks, and attestations. Agents can opt-in to public profiles. The system provides public leaderboard and agent profile pages, API endpoints for trust lookup, and dynamic SVG trust badges.
+
+### Domain-Specific Attestations
+Third-party certifying bodies can issue on-chain-anchored attestations linked to agent wallets, adding to their trust score. Features include attestation issuance, revocation, public detail pages, an MCP tool, integration with the leaderboard, expanded categories, and PDF compliance export. Additional features include agent search by attestation, issuer profiles, rate limiting for issuance, trust history, expiring attestation alerts, revocation webhooks, batch attestation, and an embeddable trust widget. A daily maintenance worker handles trust score snapshots and expiry notifications.
+
+### ElizaOS Plugin NPM Package
+The `xproof-eliza-plugin` (v2.0.0) provides modular actions for ElizaOS agents, including `AUDIT_BEFORE_EXECUTE`, `CERTIFY_CONTENT`, `CERTIFY_HASH`, `CERTIFY_BATCH`, `VERIFY_PROOF`, and an audit state provider. A key feature is the `AuditRequiredError` for enforcing on-chain proof before execution.
 
 ## External Dependencies
 
 ### Payment Processing
--   EGLD via ACP (MultiversX)
--   USDC on Base via x402
+-   EGLD (MultiversX)
+-   USDC on Base
 
 ### Blockchain Services
 -   MultiversX blockchain
 -   MultiversX Explorer
 
 ### Third-Party UI Libraries
--   Radix UI primitives
+-   Radix UI
 -   Lucide React
 -   date-fns
 -   Vaul
 
-### Agent Trust Leaderboard
-A public trust registry where anyone can discover and evaluate AI agents:
--   **Trust Score**: Computed server-side from on-chain data — confirmed certifications × 10 + recency bonus (last 30d × 5) + progressive seniority bonus (days × 0.3, max 150, full if last cert ≤ 30d, linear decay 30-90d, 0 after 90d) + streak bonus (consecutive weeks × 8, max 100) + attestation bonus (active domain attestations × 50, max +150).
--   **Trust Levels**: Newcomer (0-99), Active (100-299), Trusted (300-699), Verified (700+).
--   **Streak**: Consecutive weeks with at least 1 confirmed certification. Tolerates up to 2 weeks gap before resetting.
--   **Opt-in**: Agents configure their public profile (name, category, description, website) via Settings → "Agent public profile" and toggle `is_public_profile`.
--   **Pages**: `/leaderboard` (public, sortable table with search + category + streak filter), `/agent/:wallet` (public profile with stats + streak + domain attestations + recent certifications timeline).
--   **Endpoints**: `GET /api/leaderboard` (public), `GET /api/agents/:wallet` (public, includes `attestations[]`), `PATCH /api/user/agent-profile` (auth required), `GET /api/trust/:wallet` (public trust lookup), `GET /api/attestations/:wallet` (public attestations for a wallet).
--   **Trust Badge**: `GET /badge/trust/:wallet.svg` — dynamic shields.io-style SVG badge showing trust level and score. `GET /badge/trust/:wallet/markdown` returns ready-to-embed markdown.
--   **DB**: 5 new columns on `users` table: `agent_name`, `agent_description`, `agent_website`, `agent_category`, `is_public_profile`.
--   **Documentation**: Leaderboard fully documented in `/.well-known/xproof.md` (full section + "When to Use xproof" mention), `/llms.txt` ("Agent Trust Leaderboard" + "Why It Matters"), `/llms-full.txt` (full scoring formula + all endpoints), and `/learn/proof-of-existence.md` ("Use Cases" section).
--   **Live Use Case**: xproof_agent_verify beta review (Moltbook) documented as use case across all public specs: `/.well-known/xproof.md` ("When to Use xproof" section + "Live Use Case" subsection in leaderboard), `/llms.txt` ("Why It Matters"), `/llms-full.txt` ("Why It Matters"), `/learn/proof-of-existence.md` ("Use Cases"). Proof: `f8c3b35d-6ee1-4f76-a92b-1532a008df7b`. Review: `https://www.moltbook.com/post/1d6cf96b-5046-4c63-9ae5-43f8809f4562`.
-
-### Domain-Specific Attestations
-Third-party certifying bodies (MHRA, ISO, SOC2, FCA, etc.) can issue on-chain-anchored attestations linked to agent wallets:
--   **Attestation bonus**: Each active attestation adds +50 to the agent's trust score (max 3 counted = +150 max).
--   **Domains**: `healthcare`, `finance`, `legal`, `security`, `research`, `other`.
--   **Issuance flow**: Issuer authenticates with their MultiversX wallet → `POST /api/attestation` with subject wallet, domain, standard (e.g. ISO-27001), title, optional description and expiry.
--   **Anti-self-attest**: An issuer cannot attest their own wallet. Duplicate check per domain/standard/issuer.
--   **Revocation**: `DELETE /api/attestation/:id` — issuer-only, sets status to `revoked`.
--   **Endpoints**: `POST /api/attestation` (auth), `GET /api/attestation/:id` (public, single attestation by ID), `GET /api/attestations/:wallet` (public), `DELETE /api/attestation/:id` (auth, issuer only), `GET /api/my-attestations/issued` (auth, list issued).
--   **Public detail page**: `/attestation/:id` — shows domain, standard, issuer identity, subject agent, timeline, trust impact (+50 pts), link to agent profile.
--   **MCP tool**: `check_attestations(wallet)` — returns all active attestations for a wallet, trust bonus, and `attestation_url` per entry. No auth required.
--   **Leaderboard integration**: Attestation count displayed as a badge (`BadgeCheck` icon) in the leaderboard table. "Attested only" filter toggle. Sort by attestation count. Stats row shows total attested agent count.
--   **Trust badge update**: When agent has attestations, badge SVG shows "Level · N attested (score)" instead of "Level (score)".
--   **UI**: Attestation badges displayed on `/agent/:wallet` profile with domain color coding and issuer identity. Settings page includes "Issue attestation" form with revocation management.
--   **DB**: New `attestations` table — `id`, `subject_wallet`, `issuer_wallet`, `issuer_name`, `domain`, `standard`, `title`, `description`, `expires_at`, `status` (active/revoked), `revoked_at`, `created_at`.
--   **Documentation**: Attestations fully documented in `/.well-known/xproof.md`, `/llms.txt`, `/llms-full.txt`, and `/.well-known/mcp.json`.
-
 ### Font Loading
 -   Google Fonts CDN
-
-### ElizaOS Plugin NPM Package
-`xproof-eliza-plugin` (NPM) / `@elizaos/plugin-xproof` (official registry, PR #266 pending) v2.0.0 lives in `github-upload/plugin-xproof/`. Modular structure: `src/types.ts`, `src/client.ts`, `src/actions/{audit,certify,verify}.ts`, `src/providers/audit-state.ts`, `src/index.ts`. 5 actions (AUDIT_BEFORE_EXECUTE, CERTIFY_CONTENT, CERTIFY_HASH, CERTIFY_BATCH, VERIFY_PROOF) + 1 provider (audit state). Built with tsup (ESM + CJS + DTS). Headline feature: audit guard blocks execution without on-chain proof via `AuditRequiredError`.
-
-### Environment Configuration
--   `DATABASE_URL`
--   `SESSION_SECRET`
--   MultiversX API keys and configurations
--   MX-8004 registry addresses
--   `ADMIN_WALLETS`
--   `REPL_ID`

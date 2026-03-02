@@ -45,6 +45,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   code: "Code",
   research: "Research",
   assistant: "Assistant",
+  healthcare: "Healthcare",
+  finance: "Finance",
+  legal: "Legal",
+  security: "Security",
   other: "Other",
 };
 
