@@ -14,6 +14,7 @@ import {
   txQueue as txQueueTable,
   visits,
   creditPurchases,
+  attestations,
   acpCheckoutRequestSchema,
   acpConfirmRequestSchema,
   type ACPProduct,
@@ -6550,17 +6551,28 @@ export const xproofAuditPlugin: Plugin = {
 
       const trust = await computeTrustScore(user.id);
 
-      const recentCerts = await db
-        .select({
-          id: certifications.id,
-          fileName: certifications.fileName,
-          blockchainStatus: certifications.blockchainStatus,
-          createdAt: certifications.createdAt,
-        })
-        .from(certifications)
-        .where(eq(certifications.userId, user.id))
-        .orderBy(desc(certifications.createdAt))
-        .limit(20);
+      const now = new Date();
+      const [recentCerts, agentAttestations] = await Promise.all([
+        db
+          .select({
+            id: certifications.id,
+            fileName: certifications.fileName,
+            blockchainStatus: certifications.blockchainStatus,
+            createdAt: certifications.createdAt,
+          })
+          .from(certifications)
+          .where(eq(certifications.userId, user.id))
+          .orderBy(desc(certifications.createdAt))
+          .limit(20),
+        db.execute(sql`
+          SELECT id, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, status, created_at
+          FROM attestations
+          WHERE subject_wallet = ${user.walletAddress}
+            AND status = 'active'
+            AND (expires_at IS NULL OR expires_at > ${now})
+          ORDER BY created_at DESC
+        `),
+      ]);
 
       res.json({
         walletAddress: user.walletAddress,
@@ -6570,6 +6582,7 @@ export const xproofAuditPlugin: Plugin = {
         agentWebsite: user.agentWebsite,
         ...trust,
         recentCertifications: recentCerts,
+        attestations: agentAttestations.rows,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -6671,6 +6684,138 @@ export const xproofAuditPlugin: Plugin = {
       res.json({ markdown, badgeUrl, linkUrl });
     } catch (error) {
       res.status(500).json({ error: "Failed to generate markdown" });
+    }
+  });
+
+  // ============================================
+  // Attestation routes — Domain-specific trust signals
+  // ============================================
+
+  // POST /api/attestation — issue an attestation (issuer must be wallet-authenticated)
+  app.post("/api/attestation", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const issuerWallet = req.walletAddress;
+      const schema = z.object({
+        subjectWallet: z.string().min(3, "Subject wallet required"),
+        issuerName: z.string().min(1).max(120),
+        domain: z.enum(["healthcare", "finance", "legal", "security", "research", "other"]),
+        standard: z.string().min(1).max(80),
+        title: z.string().min(1).max(200),
+        description: z.string().max(500).optional().nullable(),
+        expiresAt: z.string().datetime().optional().nullable(),
+      });
+
+      const data = schema.parse(req.body);
+
+      if (data.subjectWallet === issuerWallet) {
+        return res.status(400).json({ message: "Cannot self-attest" });
+      }
+
+      const dupCheck = await db.execute(sql`
+        SELECT id FROM attestations
+        WHERE subject_wallet = ${data.subjectWallet}
+          AND issuer_wallet = ${issuerWallet}
+          AND domain = ${data.domain}
+          AND standard = ${data.standard}
+          AND status = 'active'
+        LIMIT 1
+      `);
+      if ((dupCheck.rows as any[])[0]?.id) {
+        return res.status(409).json({ message: "An active attestation for this domain/standard already exists from you for this agent." });
+      }
+
+      const result = await db.execute(sql`
+        INSERT INTO attestations (subject_wallet, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, status)
+        VALUES (
+          ${data.subjectWallet},
+          ${issuerWallet},
+          ${data.issuerName},
+          ${data.domain},
+          ${data.standard},
+          ${data.title},
+          ${data.description ?? null},
+          ${data.expiresAt ? new Date(data.expiresAt) : null},
+          'active'
+        )
+        RETURNING *
+      `);
+
+      logger.info("Attestation issued", { issuer: issuerWallet, subject: data.subjectWallet, domain: data.domain, standard: data.standard });
+      res.status(201).json((result.rows as any[])[0]);
+    } catch (err: any) {
+      if (err.name === "ZodError") {
+        return res.status(400).json({ message: "Validation error", errors: err.errors });
+      }
+      logger.error("Failed to create attestation", { error: err.message });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/attestations/:wallet — public, returns all active attestations for a wallet
+  app.get("/api/attestations/:wallet", async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      const now = new Date();
+      const result = await db.execute(sql`
+        SELECT id, subject_wallet, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, status, created_at
+        FROM attestations
+        WHERE subject_wallet = ${wallet}
+          AND status = 'active'
+          AND (expires_at IS NULL OR expires_at > ${now})
+        ORDER BY created_at DESC
+      `);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/attestation/:id — revoke an attestation (issuer only)
+  app.delete("/api/attestation/:id", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const issuerWallet = req.walletAddress;
+      const { id } = req.params;
+
+      const existing = await db.execute(sql`
+        SELECT id, issuer_wallet, status FROM attestations WHERE id = ${id} LIMIT 1
+      `);
+      const row = (existing.rows as any[])[0];
+
+      if (!row) {
+        return res.status(404).json({ message: "Attestation not found" });
+      }
+      if (row.issuer_wallet !== issuerWallet) {
+        return res.status(403).json({ message: "Only the issuer can revoke this attestation" });
+      }
+      if (row.status === "revoked") {
+        return res.status(409).json({ message: "Attestation already revoked" });
+      }
+
+      await db.execute(sql`
+        UPDATE attestations SET status = 'revoked', revoked_at = NOW() WHERE id = ${id}
+      `);
+
+      logger.info("Attestation revoked", { issuer: issuerWallet, attestationId: id });
+      res.json({ success: true, id });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/my-attestations/issued — attestations issued by the authenticated user
+  app.get("/api/my-attestations/issued", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const issuerWallet = req.walletAddress;
+      const result = await db.execute(sql`
+        SELECT id, subject_wallet, issuer_name, domain, standard, title, description, expires_at, status, created_at, revoked_at
+        FROM attestations
+        WHERE issuer_wallet = ${issuerWallet}
+        ORDER BY created_at DESC
+        LIMIT 50
+      `);
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

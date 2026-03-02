@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { certifications, users } from "@shared/schema";
-import { eq, and, sql, gte, count } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export type TrustLevel = "Newcomer" | "Active" | "Trusted" | "Verified";
 
@@ -10,6 +10,7 @@ export interface TrustScore {
   certTotal: number;
   certLast30d: number;
   streakWeeks: number;
+  activeAttestations: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
 }
@@ -36,6 +37,7 @@ function computeScore(
   streakWeeks: number,
   firstAt: Date | null,
   lastAt: Date | null,
+  activeAttestations: number = 0,
 ): number {
   const daysSinceFirst = firstAt
     ? Math.floor((Date.now() - firstAt.getTime()) / (1000 * 60 * 60 * 24))
@@ -57,8 +59,9 @@ function computeScore(
   }
 
   const streakBonus = Math.min(100, streakWeeks * 8);
+  const attestationBonus = Math.min(3, activeAttestations) * 50;
 
-  return Math.round(baseScore + recencyBonus + ageBonus + streakBonus);
+  return Math.round(baseScore + recencyBonus + ageBonus + streakBonus + attestationBonus);
 }
 
 function computeStreakFromWeekNumbers(weekNumbers: number[]): number {
@@ -114,6 +117,37 @@ async function computeStreakWeeksBatch(userIds: string[]): Promise<Map<string, n
   return new Map(results);
 }
 
+async function countActiveAttestations(walletAddress: string): Promise<number> {
+  try {
+    const now = new Date();
+    const rows = await db.execute(sql`
+      SELECT COUNT(*) AS cnt
+      FROM attestations
+      WHERE subject_wallet = ${walletAddress}
+        AND status = 'active'
+        AND (expires_at IS NULL OR expires_at > ${now})
+    `);
+    return Number((rows.rows[0] as any)?.cnt || 0);
+  } catch {
+    return 0;
+  }
+}
+
+async function countActiveAttestationsBatch(walletAddresses: string[]): Promise<Map<string, number>> {
+  if (walletAddresses.length === 0) return new Map();
+  try {
+    const results = await Promise.all(
+      walletAddresses.map(async (wallet) => {
+        const count = await countActiveAttestations(wallet);
+        return [wallet, count] as [string, number];
+      }),
+    );
+    return new Map(results);
+  } catch {
+    return new Map();
+  }
+}
+
 export async function computeTrustScore(userId: string): Promise<TrustScore> {
   const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
@@ -132,8 +166,15 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
   const firstAt = totals.firstAt ? new Date(totals.firstAt) : null;
   const lastAt = totals.lastAt ? new Date(totals.lastAt) : null;
 
-  const streakWeeks = await computeStreakWeeks(userId);
-  const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt);
+  const [user] = await db.select({ walletAddress: users.walletAddress }).from(users).where(eq(users.id, userId));
+  const walletAddress = user?.walletAddress || "";
+
+  const [streakWeeks, activeAttestations] = await Promise.all([
+    computeStreakWeeks(userId),
+    countActiveAttestations(walletAddress),
+  ]);
+
+  const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, activeAttestations);
 
   return {
     score,
@@ -141,6 +182,7 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
     certTotal: confirmed,
     certLast30d: last30d,
     streakWeeks,
+    activeAttestations,
     firstCertAt: firstAt ? firstAt.toISOString() : null,
     lastCertAt: lastAt ? lastAt.toISOString() : null,
   };
@@ -166,6 +208,7 @@ export interface LeaderboardEntry {
   certTotal: number;
   certLast30d: number;
   streakWeeks: number;
+  activeAttestations: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
 }
@@ -193,7 +236,12 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
 
   const allRows = rows.rows as any[];
   const userIds = allRows.map((r) => r.id);
-  const streakMap = await computeStreakWeeksBatch(userIds);
+  const walletAddresses = allRows.map((r) => r.wallet_address);
+
+  const [streakMap, attestationMap] = await Promise.all([
+    computeStreakWeeksBatch(userIds),
+    countActiveAttestationsBatch(walletAddresses),
+  ]);
 
   const entries = allRows.map((row) => {
     const confirmed = Number(row.cert_total || 0);
@@ -201,7 +249,8 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
     const firstAt = row.first_cert_at ? new Date(row.first_cert_at) : null;
     const lastAt = row.last_cert_at ? new Date(row.last_cert_at) : null;
     const streakWeeks = streakMap.get(row.id) || 0;
-    const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt);
+    const activeAttestations = attestationMap.get(row.wallet_address) || 0;
+    const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, activeAttestations);
 
     return {
       walletAddress: row.wallet_address,
@@ -214,6 +263,7 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
       certTotal: confirmed,
       certLast30d: last30d,
       streakWeeks,
+      activeAttestations,
       firstCertAt: firstAt ? firstAt.toISOString() : null,
       lastCertAt: lastAt ? lastAt.toISOString() : null,
     };

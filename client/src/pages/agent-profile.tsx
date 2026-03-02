@@ -11,13 +11,27 @@ import {
   Globe,
   TrendingUp,
   Flame,
+  Award,
+  BadgeCheck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
+
+interface AttestationRecord {
+  id: string;
+  issuer_wallet: string;
+  issuer_name: string;
+  domain: string;
+  standard: string;
+  title: string;
+  description: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
 
 interface AgentProfile {
   walletAddress: string;
@@ -30,6 +44,7 @@ interface AgentProfile {
   certTotal: number;
   certLast30d: number;
   streakWeeks: number;
+  activeAttestations: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
   recentCertifications: {
@@ -38,6 +53,7 @@ interface AgentProfile {
     blockchainStatus: string | null;
     createdAt: string | null;
   }[];
+  attestations: AttestationRecord[];
 }
 
 const TRUST_LEVEL_STYLES: Record<string, { badge: string }> = {
@@ -52,10 +68,28 @@ const CATEGORY_LABELS: Record<string, string> = {
   research: "Research", assistant: "Assistant", other: "Other",
 };
 
+const DOMAIN_STYLES: Record<string, { color: string; label: string }> = {
+  healthcare: { color: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/25", label: "Healthcare" },
+  finance:    { color: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25", label: "Finance" },
+  legal:      { color: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/25", label: "Legal" },
+  security:   { color: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/25", label: "Security" },
+  research:   { color: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/25", label: "Research" },
+  other:      { color: "bg-muted text-muted-foreground border-border", label: "Other" },
+};
+
 function StatusIcon({ status }: { status: string | null }) {
   if (status === "confirmed") return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
   if (status === "failed") return <XCircle className="h-3.5 w-3.5 text-destructive" />;
   return <Clock className="h-3.5 w-3.5 text-yellow-500" />;
+}
+
+function DomainBadge({ domain }: { domain: string }) {
+  const style = DOMAIN_STYLES[domain] ?? DOMAIN_STYLES.other;
+  return (
+    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${style.color}`}>
+      {style.label}
+    </span>
+  );
 }
 
 export default function AgentProfilePage() {
@@ -143,6 +177,12 @@ export default function AgentProfilePage() {
                           {CATEGORY_LABELS[agent.agentCategory] ?? agent.agentCategory}
                         </Badge>
                       )}
+                      {agent.attestations?.length > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400" data-testid="badge-attested">
+                          <BadgeCheck className="h-3.5 w-3.5" />
+                          {agent.attestations.length} attestation{agent.attestations.length > 1 ? "s" : ""}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -198,6 +238,11 @@ export default function AgentProfilePage() {
                     <span className="text-xs text-muted-foreground" data-testid="text-trust-score">
                       Trust score: {agent.score}
                     </span>
+                    {agent.activeAttestations > 0 && (
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400" data-testid="text-attestation-bonus">
+                        +{Math.min(3, agent.activeAttestations) * 50} pts from attestations
+                      </span>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -254,6 +299,62 @@ export default function AgentProfilePage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Domain Attestations */}
+            {agent.attestations?.length > 0 && (
+              <Card data-testid="card-attestations">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Award className="h-4 w-4 text-primary" />
+                    Domain attestations
+                    <span className="ml-auto text-xs font-normal text-muted-foreground">
+                      +{Math.min(3, agent.attestations.length) * 50} trust pts
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {agent.attestations.map((att) => (
+                      <div
+                        key={att.id}
+                        data-testid={`card-attestation-${att.id}`}
+                        className="rounded-md border bg-muted/30 p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <BadgeCheck className="h-4 w-4 text-emerald-500" />
+                              <span className="font-medium text-sm" data-testid={`text-attestation-title-${att.id}`}>
+                                {att.title}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <DomainBadge domain={att.domain} />
+                              <span className="font-mono text-xs text-muted-foreground">{att.standard}</span>
+                            </div>
+                            {att.description && (
+                              <p className="text-xs text-muted-foreground mt-1">{att.description}</p>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs font-medium">{att.issuer_name}</p>
+                            <p className="font-mono text-xs text-muted-foreground">
+                              {att.issuer_wallet.slice(0, 8)}…{att.issuer_wallet.slice(-6)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <span>Issued {formatDistanceToNow(new Date(att.created_at), { addSuffix: true })}</span>
+                          {att.expires_at && (
+                            <span>· Expires {formatDistanceToNow(new Date(att.expires_at), { addSuffix: true })}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Recent certifications timeline */}
             <Card data-testid="card-recent-certs">

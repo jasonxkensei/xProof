@@ -99,6 +99,32 @@ export const insertCertificationSchema = createInsertSchema(certifications).omit
 export type InsertCertification = z.infer<typeof insertCertificationSchema>;
 export type Certification = typeof certifications.$inferSelect;
 
+// ============================================
+// Attestations table — Domain-specific trust signals
+// ============================================
+export const attestations = pgTable("attestations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  subjectWallet: varchar("subject_wallet").notNull(),
+  issuerWallet: varchar("issuer_wallet").notNull(),
+  issuerName: varchar("issuer_name").notNull(),
+  domain: varchar("domain").notNull(),
+  standard: varchar("standard").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  expiresAt: timestamp("expires_at"),
+  status: varchar("status").default("active"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAttestationSchema = createInsertSchema(attestations).omit({
+  id: true,
+  createdAt: true,
+  revokedAt: true,
+  status: true,
+});
+export type InsertAttestation = z.infer<typeof insertAttestationSchema>;
+export type Attestation = typeof attestations.$inferSelect;
 
 // ============================================
 // ACP (Agent Commerce Protocol) Types

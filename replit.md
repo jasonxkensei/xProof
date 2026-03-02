@@ -88,16 +88,27 @@ A health endpoint provides structured component checks and operational metrics. 
 
 ### Agent Trust Leaderboard
 A public trust registry where anyone can discover and evaluate AI agents:
--   **Trust Score**: Computed server-side from on-chain data — confirmed certifications × 10 + recency bonus (last 30d × 5) + progressive seniority bonus (days × 0.3, max 150, full if last cert ≤ 30d, linear decay 30-90d, 0 after 90d) + streak bonus (consecutive weeks × 8, max 100).
+-   **Trust Score**: Computed server-side from on-chain data — confirmed certifications × 10 + recency bonus (last 30d × 5) + progressive seniority bonus (days × 0.3, max 150, full if last cert ≤ 30d, linear decay 30-90d, 0 after 90d) + streak bonus (consecutive weeks × 8, max 100) + attestation bonus (active domain attestations × 50, max +150).
 -   **Trust Levels**: Newcomer (0-99), Active (100-299), Trusted (300-699), Verified (700+).
 -   **Streak**: Consecutive weeks with at least 1 confirmed certification. Tolerates up to 2 weeks gap before resetting.
 -   **Opt-in**: Agents configure their public profile (name, category, description, website) via Settings → "Agent public profile" and toggle `is_public_profile`.
--   **Pages**: `/leaderboard` (public, sortable table with search + category + streak filter), `/agent/:wallet` (public profile with stats + streak + recent certifications timeline).
--   **Endpoints**: `GET /api/leaderboard` (public), `GET /api/agents/:wallet` (public), `PATCH /api/user/agent-profile` (auth required), `GET /api/trust/:wallet` (public trust lookup, no profile data required).
+-   **Pages**: `/leaderboard` (public, sortable table with search + category + streak filter), `/agent/:wallet` (public profile with stats + streak + domain attestations + recent certifications timeline).
+-   **Endpoints**: `GET /api/leaderboard` (public), `GET /api/agents/:wallet` (public, includes `attestations[]`), `PATCH /api/user/agent-profile` (auth required), `GET /api/trust/:wallet` (public trust lookup), `GET /api/attestations/:wallet` (public attestations for a wallet).
 -   **Trust Badge**: `GET /badge/trust/:wallet.svg` — dynamic shields.io-style SVG badge showing trust level and score. `GET /badge/trust/:wallet/markdown` returns ready-to-embed markdown.
 -   **DB**: 5 new columns on `users` table: `agent_name`, `agent_description`, `agent_website`, `agent_category`, `is_public_profile`.
 -   **Documentation**: Leaderboard fully documented in `/.well-known/xproof.md`, `/llms.txt`, `/llms-full.txt`, and `/learn/proof-of-existence.md`.
 -   **Live Use Case**: xproof_agent_verify beta review (Moltbook) documented as use case across all public specs. Proof: `f8c3b35d-6ee1-4f76-a92b-1532a008df7b`. Review: `https://www.moltbook.com/post/1d6cf96b-5046-4c63-9ae5-43f8809f4562`.
+
+### Domain-Specific Attestations
+Third-party certifying bodies (MHRA, ISO, SOC2, FCA, etc.) can issue on-chain-anchored attestations linked to agent wallets:
+-   **Attestation bonus**: Each active attestation adds +50 to the agent's trust score (max 3 counted = +150 max).
+-   **Domains**: `healthcare`, `finance`, `legal`, `security`, `research`, `other`.
+-   **Issuance flow**: Issuer authenticates with their MultiversX wallet → `POST /api/attestation` with subject wallet, domain, standard (e.g. ISO-27001), title, optional description and expiry.
+-   **Anti-self-attest**: An issuer cannot attest their own wallet. Duplicate check per domain/standard/issuer.
+-   **Revocation**: `DELETE /api/attestation/:id` — issuer-only, sets status to `revoked`.
+-   **Endpoints**: `POST /api/attestation` (auth), `GET /api/attestations/:wallet` (public), `DELETE /api/attestation/:id` (auth, issuer only), `GET /api/my-attestations/issued` (auth, list issued).
+-   **UI**: Attestation badges displayed on `/agent/:wallet` profile with domain color coding and issuer identity. Settings page includes "Issue attestation" form with revocation management.
+-   **DB**: New `attestations` table — `id`, `subject_wallet`, `issuer_wallet`, `issuer_name`, `domain`, `standard`, `title`, `description`, `expires_at`, `status` (active/revoked), `revoked_at`, `created_at`.
 
 ### Font Loading
 -   Google Fonts CDN
