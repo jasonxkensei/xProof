@@ -1,20 +1,118 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Upload, FileText, ExternalLink, Download, Copy, LogOut, Settings as SettingsIcon, Activity } from "lucide-react";
+import { Shield, Upload, FileText, ExternalLink, Download, Copy, LogOut, Settings as SettingsIcon, Activity, Check, ArrowRight, Rocket, X, Sparkles } from "lucide-react";
 import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import type { Certification } from "@shared/schema";
 import { ApiKeysSection } from "@/components/api-keys-section";
 
+function OnboardingCard({ certifications, isPublicProfile, onDismiss }: { certifications: Certification[] | undefined; isPublicProfile: boolean; onDismiss: () => void }) {
+  const certCount = certifications?.length || 0;
+  const hasFirstCert = certCount > 0;
+  const hasPublicCert = certifications?.some(c => c.isPublic) || false;
+
+  const steps = [
+    {
+      number: 1,
+      title: "Connect wallet",
+      description: "You're authenticated and ready to go",
+      completed: true,
+      action: null,
+    },
+    {
+      number: 2,
+      title: "Certify your first file",
+      description: "Upload a file to create a verifiable proof on-chain",
+      completed: hasFirstCert,
+      action: hasFirstCert ? null : { href: "/certify", label: "Certify now" },
+    },
+    {
+      number: 3,
+      title: "View your proof",
+      description: "See your certification details and download the PDF",
+      completed: hasFirstCert && hasPublicCert,
+      action: hasFirstCert ? { href: `/proof/${certifications?.[0]?.id}`, label: "View proof" } : null,
+    },
+    {
+      number: 4,
+      title: "Go public on the leaderboard",
+      description: "Enable your public profile to appear on the trust leaderboard",
+      completed: isPublicProfile,
+      action: isPublicProfile ? null : { href: "/settings", label: "Open settings" },
+    },
+  ];
+
+  const completedCount = steps.filter(s => s.completed).length;
+
+  return (
+    <Card className="mb-8 border-primary/30" data-testid="card-onboarding">
+      <CardContent className="p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-3 mb-5">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary">
+              <Rocket className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">Getting Started</h3>
+              <p className="text-sm text-muted-foreground">{completedCount} of {steps.length} steps completed</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onDismiss} data-testid="button-dismiss-onboarding">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {steps.map((step) => (
+            <div
+              key={step.number}
+              className={`flex flex-col gap-2 rounded-md border p-4 ${step.completed ? "border-primary/30 bg-primary/5" : "border-border"}`}
+              data-testid={`onboarding-step-${step.number}`}
+            >
+              <div className="flex items-center gap-2">
+                {step.completed ? (
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary">
+                    <Check className="h-3.5 w-3.5 text-primary-foreground" />
+                  </div>
+                ) : (
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-muted-foreground/30 text-xs font-bold text-muted-foreground">
+                    {step.number}
+                  </div>
+                )}
+                <span className={`text-sm font-medium ${step.completed ? "text-foreground" : "text-muted-foreground"}`}>
+                  {step.title}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">{step.description}</p>
+              {step.action && !step.completed && (
+                <Button asChild variant="outline" size="sm" className="mt-auto w-full" data-testid={`button-onboarding-step-${step.number}`}>
+                  <Link href={step.action.href}>
+                    {step.action.label}
+                    <ArrowRight className="ml-1 h-3 w-3" />
+                  </Link>
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const { toast } = useToast();
   const { user, isLoading: authLoading, isAuthenticated, logout } = useWalletAuth();
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    return localStorage.getItem("onboarding_dismissed") === "true";
+  });
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const { data: certifications, isLoading: certsLoading } = useQuery<Certification[]>({
     queryKey: ["/api/certifications"],
@@ -25,6 +123,19 @@ export default function Dashboard() {
     queryKey: ["/api/auth/me"],
     enabled: isAuthenticated,
   });
+
+  const certCount = certifications?.length || 0;
+  const shouldShowOnboarding = (!onboardingDismissed && certCount < 2) || showOnboarding;
+
+  const handleDismissOnboarding = () => {
+    setOnboardingDismissed(true);
+    setShowOnboarding(false);
+    localStorage.setItem("onboarding_dismissed", "true");
+  };
+
+  const handleReopenOnboarding = () => {
+    setShowOnboarding(true);
+  };
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -108,13 +219,32 @@ export default function Dashboard() {
       <div className="container mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-12">
         {/* Welcome Section */}
         <div className="mb-6 sm:mb-8">
-          <h1 className="mb-2 text-2xl sm:text-3xl font-bold tracking-tight">
-            Welcome back{user?.firstName ? `, ${user.firstName}` : ""}!
-          </h1>
-          <p className="text-sm sm:text-base text-muted-foreground">
-            Manage your blockchain certifications
-          </p>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h1 className="mb-2 text-2xl sm:text-3xl font-bold tracking-tight">
+                Welcome back{user?.firstName ? `, ${user.firstName}` : ""}!
+              </h1>
+              <p className="text-sm sm:text-base text-muted-foreground">
+                Manage your blockchain certifications
+              </p>
+            </div>
+            {!shouldShowOnboarding && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReopenOnboarding}
+                data-testid="button-reopen-onboarding"
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Getting Started
+              </Button>
+            )}
+          </div>
         </div>
+
+        {shouldShowOnboarding && (
+          <OnboardingCard certifications={certifications} isPublicProfile={user?.isPublicProfile || false} onDismiss={handleDismissOnboarding} />
+        )}
 
         {/* Stats Card */}
         <div className="mb-8">

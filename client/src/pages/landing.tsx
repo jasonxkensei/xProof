@@ -58,6 +58,9 @@ export default function Landing() {
             <a href="/stats" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-metrics">
               Metrics
             </a>
+            <a href="/docs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-docs">
+              Docs
+            </a>
             <a href="#faq" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-faq">
               FAQ
             </a>
@@ -118,6 +121,77 @@ export default function Landing() {
           <p className="mt-6 text-sm text-muted-foreground">{price} per certification • Unlimited</p>
         </div>
       </section>
+      {/* Quick Start for Developers/Agents */}
+      <section className="py-16 md:py-20">
+        <div className="container">
+          <div className="mx-auto max-w-4xl">
+            <div className="mb-10 text-center">
+              <Badge variant="outline" className="mb-4">Quick Start</Badge>
+              <h2 className="mb-3 text-2xl md:text-3xl font-bold">
+                Integrate in minutes
+              </h2>
+              <p className="text-muted-foreground max-w-xl mx-auto">
+                Three ways to start anchoring proofs, whether you're a developer, an AI agent, or a no-code user.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card data-testid="card-quickstart-api">
+                <CardContent className="pt-6 pb-5">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                    <Cog className="h-5 w-5 text-primary" />
+                  </div>
+                  <h3 className="font-semibold mb-2">REST API</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    POST a file hash to <code className="text-xs bg-muted px-1.5 py-0.5 rounded">/api/proof</code> with your API key. Get a blockchain-anchored proof in seconds.
+                  </p>
+                  <Button asChild variant="outline" size="sm" data-testid="button-quickstart-docs">
+                    <a href="/docs">
+                      Read the docs
+                      <ArrowRight className="ml-1 h-3 w-3" />
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card data-testid="card-quickstart-agent">
+                <CardContent className="pt-6 pb-5">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                    <Bot className="h-5 w-5 text-primary" />
+                  </div>
+                  <h3 className="font-semibold mb-2">AI Agent (MCP)</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Connect via Model Context Protocol. Your agent can certify outputs, audit logs, and build trust autonomously.
+                  </p>
+                  <Button asChild variant="outline" size="sm" data-testid="button-quickstart-agents">
+                    <a href="/agents">
+                      Agent integrations
+                      <ArrowRight className="ml-1 h-3 w-3" />
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card data-testid="card-quickstart-ui">
+                <CardContent className="pt-6 pb-5">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                    <Upload className="h-5 w-5 text-primary" />
+                  </div>
+                  <h3 className="font-semibold mb-2">Web Interface</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Connect your wallet, drag a file, and get a verifiable certificate. No code required.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={handleConnect} data-testid="button-quickstart-connect">
+                    Connect wallet
+                    <ArrowRight className="ml-1 h-3 w-3" />
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* How It Works */}
       <section id="how-it-works" className="border-y bg-muted/30 py-20 md:py-28">
         <div className="container">
@@ -420,6 +494,7 @@ export default function Landing() {
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li><a href="#how-it-works" className="hover:text-foreground transition-colors">How it works</a></li>
                   <li><a href="#faq" className="hover:text-foreground transition-colors">FAQ</a></li>
+                  <li><a href="/docs" className="hover:text-foreground transition-colors" data-testid="link-footer-docs">API Docs</a></li>
                   <li><a href="/agents" className="hover:text-foreground transition-colors" data-testid="link-footer-agents">For AI Agents</a></li>
                   <li><a href="/leaderboard" className="hover:text-foreground transition-colors" data-testid="link-footer-leaderboard">Trust Leaderboard</a></li>
                   <li><a href="/stats" className="hover:text-foreground transition-colors" data-testid="link-footer-stats">Metrics</a></li>

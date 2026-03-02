@@ -58,6 +58,15 @@ A public trust registry for AI agents calculates a "Trust Score" based on confir
 ### Domain-Specific Attestations
 Third-party certifying bodies can issue on-chain-anchored attestations linked to agent wallets, adding to their trust score. Features include attestation issuance, revocation, public detail pages, an MCP tool, integration with the leaderboard, expanded categories, and PDF compliance export. Additional features include agent search by attestation, issuer profiles, rate limiting for issuance, trust history, expiring attestation alerts, revocation webhooks, batch attestation, and an embeddable trust widget. A daily maintenance worker handles trust score snapshots and expiry notifications.
 
+### API Documentation Page
+A public `/docs` page provides a comprehensive, searchable API reference with collapsible endpoint groups covering all API sections (Core, Trust & Leaderboard, Attestations, Agent Protocols, Discovery, Webhooks, Credits & Payments). Includes curl examples with copy buttons, authentication overview, and method badges. Linked from the landing page header and footer.
+
+### Onboarding UX
+First-time authenticated users see a guided onboarding card on the Dashboard with 4 steps: Connect wallet (auto-completed), Certify first file, View proof, Go public on leaderboard. Steps reflect actual user state (`isPublicProfile`, certification count). Card is dismissible via localStorage and re-openable. The landing page includes a Quick Start section with 3 integration path cards (REST API, MCP, Web Interface).
+
+### Rate Limiting
+Endpoint-specific rate limiters complement the global 100 req/min limit: `publicReadRateLimiter` (60/min) on agent profiles, trust lookups, and ACP discovery; `publicSearchRateLimiter` (30/min) on leaderboard, agent search, and trust history; `publicCompareRateLimiter` (20/min) on agent comparison. Defined in `server/reliability.ts`.
+
 ### ElizaOS Plugin NPM Package
 The `xproof-eliza-plugin` (v2.0.0) provides modular actions for ElizaOS agents, including `AUDIT_BEFORE_EXECUTE`, `CERTIFY_CONTENT`, `CERTIFY_HASH`, `CERTIFY_BATCH`, `VERIFY_PROOF`, and an audit state provider. A key feature is the `AuditRequiredError` for enforcing on-chain proof before execution.
 

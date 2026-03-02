@@ -40,7 +40,7 @@ import {
   destroyWalletSession 
 } from "./walletAuth";
 import { getSession } from "./replitAuth";
-import { authRateLimiter, paymentRateLimiter, apiKeyCreationRateLimiter, attestationIssuanceRateLimiter } from "./reliability";
+import { authRateLimiter, paymentRateLimiter, apiKeyCreationRateLimiter, attestationIssuanceRateLimiter, publicReadRateLimiter, publicSearchRateLimiter, publicCompareRateLimiter } from "./reliability";
 import { recordCertificationAsJob, isMX8004Configured, getReputationScore, getAgentDetails, getContractAddresses, getJobData, getValidationStatus, hasGivenFeedback, getAgentResponse, readFeedback, getAgentsExplorerUrl } from "./mx8004";
 import { getTxQueueStats } from "./txQueue";
 
@@ -2121,7 +2121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================
 
   // ACP Products Discovery - Returns available services for AI agents
-  app.get("/api/acp/products", async (req, res) => {
+  app.get("/api/acp/products", publicReadRateLimiter, async (req, res) => {
     const priceUsd = await getCertificationPriceUsd();
     
     const products: ACPProduct[] = [
@@ -2422,7 +2422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ACP Status - Check checkout status
-  app.get("/api/acp/checkout/:checkoutId", async (req, res) => {
+  app.get("/api/acp/checkout/:checkoutId", publicReadRateLimiter, async (req, res) => {
     try {
       const { checkoutId } = req.params;
 
@@ -2460,7 +2460,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // OpenAPI 3.0 Specification for ACP
-  app.get("/api/acp/openapi.json", async (req, res) => {
+  app.get("/api/acp/openapi.json", publicReadRateLimiter, async (req, res) => {
     const baseUrl = `https://${req.get("host")}`;
     const priceUsd = await getCertificationPriceUsd();
 
@@ -6638,7 +6638,7 @@ export const xproofAuditPlugin: Plugin = {
   // ===== LEADERBOARD & AGENT PROFILE ENDPOINTS =====
 
   // GET /api/leaderboard — public, paginated + server-side filters
-  app.get("/api/leaderboard", async (req, res) => {
+  app.get("/api/leaderboard", publicSearchRateLimiter, async (req, res) => {
     try {
       const filters = {
         page: req.query.page ? parseInt(req.query.page as string, 10) : undefined,
@@ -6680,7 +6680,7 @@ export const xproofAuditPlugin: Plugin = {
   });
 
   // GET /api/agents/compare — compare 2-5 agents side by side
-  app.get("/api/agents/compare", async (req, res) => {
+  app.get("/api/agents/compare", publicCompareRateLimiter, async (req, res) => {
     try {
       const walletsParam = req.query.wallets as string;
       if (!walletsParam) return res.status(400).json({ message: "wallets query param required (comma-separated)" });
@@ -6712,7 +6712,7 @@ export const xproofAuditPlugin: Plugin = {
   });
 
   // GET /api/agents/search — search agents by attestation domain and/or standard (must be before :wallet)
-  app.get("/api/agents/search", async (req, res) => {
+  app.get("/api/agents/search", publicSearchRateLimiter, async (req, res) => {
     try {
       const domain = req.query.domain as string | undefined;
       const standard = req.query.standard as string | undefined;
@@ -6750,7 +6750,7 @@ export const xproofAuditPlugin: Plugin = {
   });
 
   // GET /api/agents/:wallet — public, returns a single agent profile
-  app.get("/api/agents/:wallet", async (req, res) => {
+  app.get("/api/agents/:wallet", publicReadRateLimiter, async (req, res) => {
     try {
       const { wallet } = req.params;
       const [user] = await db
@@ -6839,7 +6839,7 @@ export const xproofAuditPlugin: Plugin = {
   });
 
   // GET /api/trust/:wallet — public trust lookup (score only, no profile data)
-  app.get("/api/trust/:wallet", async (req, res) => {
+  app.get("/api/trust/:wallet", publicReadRateLimiter, async (req, res) => {
     try {
       const { wallet } = req.params;
       const trust = await computeTrustScoreByWallet(wallet);
@@ -7106,7 +7106,7 @@ export const xproofAuditPlugin: Plugin = {
   });
 
   // GET /api/agents/search — search agents by attestation domain and/or standard
-  app.get("/api/agents/search", async (req, res) => {
+  app.get("/api/agents/search", publicSearchRateLimiter, async (req, res) => {
     try {
       const domain = req.query.domain as string | undefined;
       const standard = req.query.standard as string | undefined;
@@ -7276,7 +7276,7 @@ export const xproofAuditPlugin: Plugin = {
   });
 
   // GET /api/trust/:wallet/history — trust score history (last 90 days snapshots)
-  app.get("/api/trust/:wallet/history", async (req, res) => {
+  app.get("/api/trust/:wallet/history", publicSearchRateLimiter, async (req, res) => {
     try {
       const { wallet } = req.params;
       const days = Math.min(parseInt(req.query.days as string || "90"), 90);

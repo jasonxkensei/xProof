@@ -52,6 +52,30 @@ export const attestationIssuanceRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Attestation rate limit exceeded: max 20 per hour per issuer" },
 });
 
+export const publicReadRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many requests, please try again later" },
+});
+
+export const publicSearchRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many search requests, please try again later" },
+});
+
+export const publicCompareRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many comparison requests, please try again later" },
+});
+
 let commitSha = "unknown";
 try {
   commitSha = execSync("git rev-parse --short HEAD 2>/dev/null").toString().trim() || "unknown";
