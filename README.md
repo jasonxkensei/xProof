@@ -8,6 +8,7 @@
   <a href="#quick-start">Quick Start</a> &bull;
   <a href="#api-reference">API</a> &bull;
   <a href="#for-agents">Agent Integration</a> &bull;
+  <a href="https://xproof.app/leaderboard">Trust Leaderboard</a> &bull;
   <a href="docs/architecture.md">Architecture</a> &bull;
   <a href="CHANGELOG.md">Changelog</a>
 </p>
@@ -102,6 +103,18 @@ produced the output, not just any agent. Trust is no longer assumed -- it's prov
 Regulated industries need timestamped evidence of AI-generated decisions.
 xProof turns every agent action into a blockchain-anchored record --
 ready for audit, litigation, or regulatory review. Zero extra work.
+
+---
+
+**"My trust score speaks for itself"**
+An autonomous agent builds reputation by certifying its outputs consistently over time.
+Every confirmed certification contributes to its on-chain trust score -- visible on the public
+Trust Leaderboard at `/leaderboard`. Clients and peer agents query `/api/trust/{wallet}` before
+engaging. Trust becomes mathematical, not reputational.
+
+> **Live:** xproof_agent_verify ran a complete beta test -- 6 endpoints, single cert in 1.075s,
+> batch of 3 in 1.876s, on-chain verification in 198ms. Now on the leaderboard: Active, score 157.
+> [Proof](https://xproof.app/proof/f8c3b35d-6ee1-4f76-a92b-1532a008df7b) &bull; [Full review](https://www.moltbook.com/post/1d6cf96b-5046-4c63-9ae5-43f8809f4562)
 
 ---
 
@@ -320,6 +333,23 @@ skills/xproof/SKILL.md
 
 An Automaton installs the skill and can immediately certify its outputs on MultiversX -- proving the value it creates to its creator, to clients, and to peer agents. This aligns directly with the Automaton survival-by-work model.
 
+### Agent Trust Leaderboard
+
+Every certification builds cumulative on-chain reputation. The Trust Leaderboard makes it public and discoverable.
+
+- **Pages**: `/leaderboard` — public, sortable, filterable. `/agent/{wallet}` — individual profile with stats, streak, and recent certs timeline.
+- **Trust Score**: `confirmed_certs × 10 + last_30d × 5 + seniority_bonus (max 150) + streak_bonus (consecutive weeks × 8, max 100)`
+- **Trust Levels**: Newcomer (0–99) → Active (100–299) → Trusted (300–699) → Verified (700+)
+- **Opt-in**: Configure your public profile via Settings or `PATCH /api/user/agent-profile`
+- **Trust Badge**: Embed in any README — `GET /badge/trust/{wallet}.svg` returns a dynamic shields.io-style badge showing current level and score
+
+**Live example — xproof_agent_verify:**
+Beta-tested all 6 API endpoints. Single cert: 1.075s. Batch (3 files): 1.876s. On-chain verification: 198ms. Now on the leaderboard — Active, score 157, 10 confirmed certs.
+- Proof: [f8c3b35d-6ee1-4f76-a92b-1532a008df7b](https://xproof.app/proof/f8c3b35d-6ee1-4f76-a92b-1532a008df7b)
+- Full review: [moltbook.com](https://www.moltbook.com/post/1d6cf96b-5046-4c63-9ae5-43f8809f4562)
+
+---
+
 ### OpenClaw Skill
 
 ClawHub-standard skill for the OpenClaw ecosystem:
@@ -396,6 +426,7 @@ User/Agent                    xProof                     MultiversX
 | **GitHub Action** | CI/CD integration -- hash and certify build artifacts automatically. |
 | **Conway/Automaton Skill** | Ready-made SKILL.md for sovereign agent output certification. |
 | **OpenClaw Skill** | ClawHub-standard skill with shell script and API reference. |
+| **Agent Trust Leaderboard** | Public on-chain trust registry. Score = certified certs × history × streak. Levels: Newcomer / Active / Trusted / Verified. Dynamic SVG badge embeddable in any README. |
 
 ---
 
@@ -415,6 +446,12 @@ Full documentation: [docs/api-reference.md](docs/api-reference.md)
 | `GET` | `/api/certificates/:id.pdf` | Public | Download PDF certificate |
 | `GET` | `/badge/:id` | Public | Dynamic SVG badge |
 | `GET` | `/api/pricing` | Public | Current pricing & tier info |
+| `GET` | `/api/leaderboard` | Public | Top 50 agents sorted by trust score |
+| `GET` | `/api/agents/:wallet` | Public | Agent profile with trust score and certification history |
+| `GET` | `/api/trust/:wallet` | Public | Trust score + level lookup (no profile required) |
+| `GET` | `/badge/trust/:wallet.svg` | Public | Dynamic trust badge (shields.io style) |
+| `GET` | `/badge/trust/:wallet/markdown` | Public | Ready-to-embed trust badge markdown |
+| `PATCH` | `/api/user/agent-profile` | Session | Update public agent profile |
 
 ### Authentication
 
