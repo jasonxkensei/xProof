@@ -96,6 +96,8 @@ A public trust registry where anyone can discover and evaluate AI agents:
 -   **Endpoints**: `GET /api/leaderboard` (public), `GET /api/agents/:wallet` (public), `PATCH /api/user/agent-profile` (auth required), `GET /api/trust/:wallet` (public trust lookup, no profile data required).
 -   **Trust Badge**: `GET /badge/trust/:wallet.svg` — dynamic shields.io-style SVG badge showing trust level and score. `GET /badge/trust/:wallet/markdown` returns ready-to-embed markdown.
 -   **DB**: 5 new columns on `users` table: `agent_name`, `agent_description`, `agent_website`, `agent_category`, `is_public_profile`.
+-   **Documentation**: Leaderboard fully documented in `/.well-known/xproof.md`, `/llms.txt`, `/llms-full.txt`, and `/learn/proof-of-existence.md`.
+-   **Live Use Case**: xproof_agent_verify beta review (Moltbook) documented as use case across all public specs. Proof: `f8c3b35d-6ee1-4f76-a92b-1532a008df7b`. Review: `https://www.moltbook.com/post/1d6cf96b-5046-4c63-9ae5-43f8809f4562`.
 
 ### Font Loading
 -   Google Fonts CDN
