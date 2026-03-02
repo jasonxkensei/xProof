@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface AttestationRecord {
   id: string;
@@ -97,82 +97,261 @@ interface TrustSnapshot {
   level: string;
   cert_total: number;
   active_attestations: number;
+  rank: number | null;
   snapshot_date: string;
 }
 
-function TrustSparkline({ snapshots }: { snapshots: TrustSnapshot[] }) {
+const LEVEL_THRESHOLDS = [
+  { score: 100, label: "Active", color: "rgb(59,130,246)" },
+  { score: 300, label: "Trusted", color: "rgb(34,197,94)" },
+  { score: 700, label: "Verified", color: "rgb(16,185,129)" },
+];
+
+function HistoryTableBody({ snapshots }: { snapshots: TrustSnapshot[] }) {
+  const reversed = [...snapshots].reverse().slice(0, 14);
+  return (
+    <tbody>
+      {reversed.map((snap, i) => {
+        const prev = reversed[i + 1];
+        const scoreDiff = prev ? snap.score - prev.score : 0;
+        return (
+          <tr key={snap.snapshot_date} className="border-b last:border-0">
+            <td className="px-3 py-2 tabular-nums text-muted-foreground">
+              {snap.snapshot_date.slice(0, 10)}
+            </td>
+            <td className="px-3 py-2 text-right tabular-nums font-medium">
+              {snap.score}
+              {scoreDiff !== 0 && (
+                <span className={`ml-1 text-[10px] ${scoreDiff > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                  {scoreDiff > 0 ? "+" : ""}{scoreDiff}
+                </span>
+              )}
+            </td>
+            <td className="px-3 py-2">
+              <span className={`inline-flex items-center rounded-md border px-1.5 py-0 text-[10px] font-medium ${TRUST_LEVEL_STYLES[snap.level]?.badge ?? TRUST_LEVEL_STYLES.Newcomer.badge}`}>
+                {snap.level}
+              </span>
+            </td>
+            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+              {snap.rank ? `#${snap.rank}` : "—"}
+            </td>
+            <td className="px-3 py-2 text-right tabular-nums">{snap.cert_total}</td>
+            <td className="hidden sm:table-cell px-3 py-2 text-right tabular-nums">{snap.active_attestations}</td>
+          </tr>
+        );
+      })}
+    </tbody>
+  );
+}
+
+function TrustHistoryChart({ snapshots }: { snapshots: TrustSnapshot[] }) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
   if (snapshots.length < 2) {
     return (
-      <div className="flex h-16 items-center justify-center text-xs text-muted-foreground">
-        Tracking starts today — data available tomorrow
+      <div className="flex h-24 items-center justify-center text-sm text-muted-foreground" data-testid="text-history-empty">
+        Tracking starts today — history data available tomorrow.
       </div>
     );
   }
 
-  const W = 320;
-  const H = 56;
-  const PAD = 4;
+  const W = 600;
+  const H = 160;
+  const PAD_TOP = 16;
+  const PAD_BOTTOM = 24;
+  const PAD_LEFT = 40;
+  const PAD_RIGHT = 12;
+
   const scores = snapshots.map((s) => s.score);
-  const minScore = Math.min(...scores);
-  const maxScore = Math.max(...scores);
-  const range = maxScore - minScore || 1;
+  const rawMin = Math.min(...scores);
+  const rawMax = Math.max(...scores);
+  const chartMin = Math.max(0, rawMin - 20);
+  const chartMax = rawMax + 30;
+  const range = chartMax - chartMin || 1;
 
-  const points = snapshots.map((s, i) => {
-    const x = PAD + (i / (snapshots.length - 1)) * (W - PAD * 2);
-    const y = H - PAD - ((s.score - minScore) / range) * (H - PAD * 2);
-    return `${x},${y}`;
-  });
+  const xScale = (i: number) => PAD_LEFT + (i / (snapshots.length - 1)) * (W - PAD_LEFT - PAD_RIGHT);
+  const yScale = (score: number) => H - PAD_BOTTOM - ((score - chartMin) / range) * (H - PAD_TOP - PAD_BOTTOM);
 
-  const areaPoints = [
-    `${PAD},${H}`,
-    ...points,
-    `${W - PAD},${H}`,
-  ].join(" ");
+  const points = snapshots.map((s, i) => ({ x: xScale(i), y: yScale(s.score) }));
+  const polyline = points.map((p) => `${p.x},${p.y}`).join(" ");
+  const areaPoints = [`${points[0].x},${H - PAD_BOTTOM}`, ...points.map((p) => `${p.x},${p.y}`), `${points[points.length - 1].x},${H - PAD_BOTTOM}`].join(" ");
+
+  const levelChanges: { idx: number; from: string; to: string }[] = [];
+  for (let i = 1; i < snapshots.length; i++) {
+    if (snapshots[i].level !== snapshots[i - 1].level) {
+      levelChanges.push({ idx: i, from: snapshots[i - 1].level, to: snapshots[i].level });
+    }
+  }
 
   const lastScore = scores[scores.length - 1];
   const firstScore = scores[0];
   const delta = lastScore - firstScore;
+  const lastRank = snapshots[snapshots.length - 1].rank;
+  const firstRank = snapshots[0].rank;
+  const rankDelta = firstRank && lastRank ? firstRank - lastRank : null;
+
+  const visibleThresholds = LEVEL_THRESHOLDS.filter((t) => t.score >= chartMin && t.score <= chartMax);
+
+  const dateLabels: { idx: number; label: string }[] = [];
+  const step = Math.max(1, Math.floor(snapshots.length / 5));
+  for (let i = 0; i < snapshots.length; i += step) dateLabels.push({ idx: i, label: snapshots[i].snapshot_date.slice(5, 10) });
+  if (dateLabels[dateLabels.length - 1]?.idx !== snapshots.length - 1) {
+    dateLabels.push({ idx: snapshots.length - 1, label: snapshots[snapshots.length - 1].snapshot_date.slice(5, 10) });
+  }
+
+  const hovered = hoveredIdx !== null ? snapshots[hoveredIdx] : null;
 
   return (
-    <div className="space-y-1" data-testid="card-trust-sparkline">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>90-day trend</span>
-        <span className={delta >= 0 ? "text-emerald-500" : "text-destructive"}>
-          {delta >= 0 ? "+" : ""}{delta} pts
-        </span>
+    <div className="space-y-4" data-testid="card-trust-history-chart">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium">90-day trend</span>
+          <span className={`text-sm font-semibold tabular-nums ${delta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-score-delta">
+            {delta >= 0 ? "+" : ""}{delta} pts
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          {lastRank && (
+            <span data-testid="text-current-rank">
+              Rank #{lastRank}
+              {rankDelta !== null && rankDelta !== 0 && (
+                <span className={rankDelta > 0 ? "ml-1 text-emerald-600 dark:text-emerald-400" : "ml-1 text-red-600 dark:text-red-400"}>
+                  ({rankDelta > 0 ? "+" : ""}{rankDelta})
+                </span>
+              )}
+            </span>
+          )}
+          <span>{snapshots.length} data points</span>
+        </div>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 56 }}>
-        <defs>
-          <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgb(16,185,129)" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="rgb(16,185,129)" stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
-        <polygon points={areaPoints} fill="url(#sparkGrad)" />
-        <polyline
-          points={points.join(" ")}
-          fill="none"
-          stroke="rgb(16,185,129)"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-        {(() => {
-          const last = points[points.length - 1].split(",");
-          return (
-            <circle
-              cx={Number(last[0])}
-              cy={Number(last[1])}
-              r="3"
-              fill="rgb(16,185,129)"
+
+      <div className="relative">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="w-full"
+          style={{ height: 180 }}
+          data-testid="svg-trust-chart"
+          onMouseLeave={() => setHoveredIdx(null)}
+        >
+          <defs>
+            <linearGradient id="histGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgb(16,185,129)" stopOpacity="0.20" />
+              <stop offset="100%" stopColor="rgb(16,185,129)" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+
+          {visibleThresholds.map((t) => {
+            const ty = yScale(t.score);
+            return (
+              <g key={t.score}>
+                <line x1={PAD_LEFT} y1={ty} x2={W - PAD_RIGHT} y2={ty} stroke={t.color} strokeWidth="0.5" strokeDasharray="4,3" opacity="0.5" />
+                <text x={PAD_LEFT - 4} y={ty + 3} textAnchor="end" fontSize="8" fill={t.color} opacity="0.7">{t.score}</text>
+              </g>
+            );
+          })}
+
+          <polygon points={areaPoints} fill="url(#histGrad)" />
+
+          <polyline points={polyline} fill="none" stroke="rgb(16,185,129)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+
+          {levelChanges.map((lc) => {
+            const p = points[lc.idx];
+            return (
+              <g key={lc.idx}>
+                <line x1={p.x} y1={PAD_TOP} x2={p.x} y2={H - PAD_BOTTOM} stroke="rgb(251,191,36)" strokeWidth="0.7" strokeDasharray="2,2" opacity="0.6" />
+                <circle cx={p.x} cy={p.y} r="4" fill="rgb(251,191,36)" stroke="white" strokeWidth="1" />
+              </g>
+            );
+          })}
+
+          <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="4" fill="rgb(16,185,129)" stroke="white" strokeWidth="1.5" />
+
+          {dateLabels.map((dl) => (
+            <text key={dl.idx} x={xScale(dl.idx)} y={H - 6} textAnchor="middle" fontSize="8" className="fill-muted-foreground">{dl.label}</text>
+          ))}
+
+          {points.map((p, i) => (
+            <rect
+              key={i}
+              x={p.x - (W / snapshots.length) / 2}
+              y={PAD_TOP}
+              width={W / snapshots.length}
+              height={H - PAD_TOP - PAD_BOTTOM}
+              fill="transparent"
+              onMouseEnter={(e) => {
+                setHoveredIdx(i);
+                const svg = e.currentTarget.ownerSVGElement;
+                if (svg) {
+                  const rect = svg.getBoundingClientRect();
+                  const xPct = (p.x / W) * rect.width;
+                  setTooltipPos({ x: xPct, y: 0 });
+                }
+              }}
             />
-          );
-        })()}
-      </svg>
-      <div className="flex justify-between text-xs text-muted-foreground">
-        <span>{snapshots[0]?.snapshot_date?.slice(0, 10)}</span>
-        <span>{snapshots[snapshots.length - 1]?.snapshot_date?.slice(0, 10)}</span>
+          ))}
+
+          {hoveredIdx !== null && (
+            <g>
+              <line x1={points[hoveredIdx].x} y1={PAD_TOP} x2={points[hoveredIdx].x} y2={H - PAD_BOTTOM} stroke="rgb(16,185,129)" strokeWidth="0.5" opacity="0.5" />
+              <circle cx={points[hoveredIdx].x} cy={points[hoveredIdx].y} r="4" fill="rgb(16,185,129)" stroke="white" strokeWidth="1.5" />
+            </g>
+          )}
+        </svg>
+
+        {hovered && (
+          <div
+            className="pointer-events-none absolute top-0 z-10 rounded-md border bg-card px-3 py-2 text-xs shadow-md"
+            style={{
+              left: `${tooltipPos.x}px`,
+              transform: tooltipPos.x > 300 ? "translateX(-110%)" : "translateX(10%)",
+            }}
+            data-testid="tooltip-chart"
+          >
+            <p className="font-medium tabular-nums">{hovered.snapshot_date.slice(0, 10)}</p>
+            <p className="tabular-nums">Score: <span className="font-semibold">{hovered.score}</span></p>
+            <p>Level: <span className="font-semibold">{hovered.level}</span></p>
+            {hovered.rank && <p className="tabular-nums">Rank: <span className="font-semibold">#{hovered.rank}</span></p>}
+            <p className="tabular-nums text-muted-foreground">{hovered.cert_total} certs · {hovered.active_attestations} attestations</p>
+          </div>
+        )}
       </div>
+
+      {visibleThresholds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+          <span className="font-medium">Level thresholds:</span>
+          {LEVEL_THRESHOLDS.map((t) => (
+            <span key={t.score} className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: t.color }} />
+              {t.score} = {t.label}
+            </span>
+          ))}
+          {levelChanges.length > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
+              Level change
+            </span>
+          )}
+        </div>
+      )}
+
+      {snapshots.length >= 3 && (
+        <div className="overflow-hidden rounded-md border" data-testid="table-trust-history">
+          <table className="w-full text-xs">
+            <thead className="border-b bg-muted/40">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Date</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Score</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Level</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Rank</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Certs</th>
+                <th className="hidden sm:table-cell px-3 py-2 text-right font-medium text-muted-foreground">Attestations</th>
+              </tr>
+            </thead>
+            <HistoryTableBody snapshots={snapshots} />
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -212,7 +391,7 @@ export default function AgentProfilePage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between">
+        <div className="container flex h-16 items-center justify-between gap-4">
           <Link href="/" data-testid="link-logo-home" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
@@ -391,16 +570,16 @@ export default function AgentProfilePage() {
               </Card>
             </div>
 
-            {/* Trust Score Trend */}
+            {/* Trust Score History */}
             <Card data-testid="card-trust-history">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
                   <TrendingUp className="h-4 w-4" />
                   Trust score history
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <TrustSparkline snapshots={history?.snapshots ?? []} />
+                <TrustHistoryChart snapshots={history?.snapshots ?? []} />
               </CardContent>
             </Card>
 

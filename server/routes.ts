@@ -7282,7 +7282,7 @@ export const xproofAuditPlugin: Plugin = {
       const days = Math.min(parseInt(req.query.days as string || "90"), 90);
 
       const result = await db.execute(sql`
-        SELECT score, level, cert_total, active_attestations, snapshot_date
+        SELECT score, level, cert_total, active_attestations, rank, snapshot_date
         FROM trust_score_snapshots
         WHERE wallet_address = ${wallet}
           AND snapshot_date >= CURRENT_DATE - (${days} || ' days')::interval
