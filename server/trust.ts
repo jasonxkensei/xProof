@@ -11,6 +11,7 @@ export interface TrustScore {
   certLast30d: number;
   streakWeeks: number;
   activeAttestations: number;
+  attestationBonus: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
 }
@@ -37,7 +38,7 @@ function computeScore(
   streakWeeks: number,
   firstAt: Date | null,
   lastAt: Date | null,
-  activeAttestations: number = 0,
+  attestationBonus: number = 0,
 ): number {
   const daysSinceFirst = firstAt
     ? Math.floor((Date.now() - firstAt.getTime()) / (1000 * 60 * 60 * 24))
@@ -59,9 +60,15 @@ function computeScore(
   }
 
   const streakBonus = Math.min(100, streakWeeks * 8);
-  const attestationBonus = Math.min(3, activeAttestations) * 50;
 
   return Math.round(baseScore + recencyBonus + ageBonus + streakBonus + attestationBonus);
+}
+
+function issuerBonusFromCertCount(confirmedCerts: number): number {
+  if (confirmedCerts >= 30) return 50;
+  if (confirmedCerts >= 10) return 40;
+  if (confirmedCerts >= 3) return 25;
+  return 10;
 }
 
 function computeStreakFromWeekNumbers(weekNumbers: number[]): number {
@@ -117,29 +124,40 @@ async function computeStreakWeeksBatch(userIds: string[]): Promise<Map<string, n
   return new Map(results);
 }
 
-async function countActiveAttestations(walletAddress: string): Promise<number> {
+async function computeAttestationBonus(walletAddress: string): Promise<{ bonus: number; count: number }> {
   try {
     const now = new Date();
     const rows = await db.execute(sql`
-      SELECT COUNT(*) AS cnt
-      FROM attestations
-      WHERE subject_wallet = ${walletAddress}
-        AND status = 'active'
-        AND (expires_at IS NULL OR expires_at > ${now})
+      SELECT
+        a.issuer_wallet,
+        COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') AS issuer_confirmed_certs
+      FROM attestations a
+      LEFT JOIN users u ON u.wallet_address = a.issuer_wallet
+      LEFT JOIN certifications c ON c.user_id = u.id
+      WHERE a.subject_wallet = ${walletAddress}
+        AND a.status = 'active'
+        AND (a.expires_at IS NULL OR a.expires_at > ${now})
+      GROUP BY a.issuer_wallet
+      ORDER BY issuer_confirmed_certs DESC
     `);
-    return Number((rows.rows[0] as any)?.cnt || 0);
+    const allRows = rows.rows as any[];
+    const count = allRows.length;
+    const bonus = allRows
+      .slice(0, 3)
+      .reduce((sum, r) => sum + issuerBonusFromCertCount(Number(r.issuer_confirmed_certs || 0)), 0);
+    return { bonus, count };
   } catch {
-    return 0;
+    return { bonus: 0, count: 0 };
   }
 }
 
-async function countActiveAttestationsBatch(walletAddresses: string[]): Promise<Map<string, number>> {
+async function computeAttestationBonusBatch(walletAddresses: string[]): Promise<Map<string, { bonus: number; count: number }>> {
   if (walletAddresses.length === 0) return new Map();
   try {
     const results = await Promise.all(
       walletAddresses.map(async (wallet) => {
-        const count = await countActiveAttestations(wallet);
-        return [wallet, count] as [string, number];
+        const result = await computeAttestationBonus(wallet);
+        return [wallet, result] as [string, { bonus: number; count: number }];
       }),
     );
     return new Map(results);
@@ -169,12 +187,13 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
   const [user] = await db.select({ walletAddress: users.walletAddress }).from(users).where(eq(users.id, userId));
   const walletAddress = user?.walletAddress || "";
 
-  const [streakWeeks, activeAttestations] = await Promise.all([
+  const [streakWeeks, attestationResult] = await Promise.all([
     computeStreakWeeks(userId),
-    countActiveAttestations(walletAddress),
+    computeAttestationBonus(walletAddress),
   ]);
 
-  const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, activeAttestations);
+  const { bonus: attestationBonus, count: activeAttestations } = attestationResult;
+  const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, attestationBonus);
 
   return {
     score,
@@ -183,6 +202,7 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
     certLast30d: last30d,
     streakWeeks,
     activeAttestations,
+    attestationBonus,
     firstCertAt: firstAt ? firstAt.toISOString() : null,
     lastCertAt: lastAt ? lastAt.toISOString() : null,
   };
@@ -209,6 +229,7 @@ export interface LeaderboardEntry {
   certLast30d: number;
   streakWeeks: number;
   activeAttestations: number;
+  attestationBonus: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
   scoreDelta7d: number;
@@ -265,7 +286,7 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
 
   const [streakMap, attestationMap, oldScoreMap, prevLevelMap] = await Promise.all([
     computeStreakWeeksBatch(userIds),
-    countActiveAttestationsBatch(walletAddresses),
+    computeAttestationBonusBatch(walletAddresses),
     getOldScoreBatch(walletAddresses, cutoff7d),
     getPreviousLevelBatch(walletAddresses),
   ]);
@@ -276,8 +297,10 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
     const firstAt = row.first_cert_at ? new Date(row.first_cert_at) : null;
     const lastAt = row.last_cert_at ? new Date(row.last_cert_at) : null;
     const streakWeeks = streakMap.get(row.id) || 0;
-    const activeAttestations = attestationMap.get(row.wallet_address) || 0;
-    const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, activeAttestations);
+    const attestationResult = attestationMap.get(row.wallet_address) || { bonus: 0, count: 0 };
+    const activeAttestations = attestationResult.count;
+    const attestationBonus = attestationResult.bonus;
+    const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, attestationBonus);
 
     return {
       walletAddress: row.wallet_address,
@@ -291,6 +314,7 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
       certLast30d: last30d,
       streakWeeks,
       activeAttestations,
+      attestationBonus,
       firstCertAt: firstAt ? firstAt.toISOString() : null,
       lastCertAt: lastAt ? lastAt.toISOString() : null,
       scoreDelta7d: oldScoreMap.has(row.wallet_address) ? score - (oldScoreMap.get(row.wallet_address) as number) : 0,

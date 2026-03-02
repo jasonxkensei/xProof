@@ -58,6 +58,8 @@ A public trust registry for AI agents calculates a "Trust Score" based on confir
 ### Domain-Specific Attestations
 Third-party certifying bodies can issue on-chain-anchored attestations linked to agent wallets, adding to their trust score. Features include attestation issuance, revocation, public detail pages, an MCP tool, integration with the leaderboard, expanded categories, and PDF compliance export. Additional features include agent search by attestation, issuer profiles, rate limiting for issuance, trust history, expiring attestation alerts, revocation webhooks, batch attestation, and an embeddable trust widget. A daily maintenance worker handles trust score snapshots and expiry notifications.
 
+**Issuer Reputation Weighting** (anti-gaming): Attestation bonus is weighted by the issuer's own confirmed certification count — Newcomer (0-2 certs) = +10 pts, Active (3-9) = +25 pts, Trusted (10-29) = +40 pts, Verified (30+) = +50 pts. Issuers must have ≥ 3 confirmed on-chain certifications to issue at all. Top 3 attestations by issuer quality count (max +150). Issuer level displayed as badge on agent profile. Implemented in `server/trust.ts` (`computeAttestationBonus`) and enforced at `POST /api/attestation` in `server/routes.ts`.
+
 ### API Documentation Page
 A public `/docs` page provides a comprehensive, searchable API reference with collapsible endpoint groups covering all API sections (Core, Trust & Leaderboard, Attestations, Agent Protocols, Discovery, Webhooks, Credits & Payments). Includes curl examples with copy buttons, authentication overview, and method badges. Linked from the landing page header and footer.
 

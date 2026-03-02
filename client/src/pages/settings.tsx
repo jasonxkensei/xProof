@@ -547,7 +547,7 @@ export default function Settings() {
                   </CardTitle>
                   <CardDescription className="mt-1">
                     Issue a domain-specific attestation for another agent's wallet.
-                    Each active attestation adds +50 points to their trust score (max +150).
+                    Each active attestation adds +25 to +50 points to their trust score (weighted by your issuer level, max +150). Minimum 3 confirmed certifications required to issue.
                   </CardDescription>
                 </div>
                 <Button

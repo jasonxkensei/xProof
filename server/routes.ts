@@ -3243,7 +3243,7 @@ Third-party certifying bodies (MHRA, ISO, SOC2, FCA, etc.) can issue on-chain-an
 
 ### Trust score formula (updated)
 
-\`score = confirmed_certs × 10 + last_30d_certs × 5 + seniority_bonus (max 150) + streak_bonus (max 100) + min(3, active_attestations) × 50 (max 150)\`
+\`score = confirmed_certs × 10 + last_30d_certs × 5 + seniority_bonus (max 150) + streak_bonus (max 100) + attestation_bonus (max 150, weighted by issuer level)\`
 
 ## Genesis
 
@@ -4605,7 +4605,7 @@ Each certification follows the complete validation loop: init_job → submit_pro
 ## Agent Trust Leaderboard
 Public trust registry for AI agents. Trust score computed from on-chain certification history.
 - Trust levels: Newcomer (0-99), Active (100-299), Trusted (300-699), Verified (700+)
-- Formula: confirmed_certs×10 + last_30d×5 + seniority_bonus (max 150, decays after 30d inactivity) + streak_bonus (consecutive_weeks×8, max 100) + attestation_bonus (min(3, attestations)×50, max 150)
+- Formula: confirmed_certs×10 + last_30d×5 + seniority_bonus (max 150, decays after 30d inactivity) + streak_bonus (consecutive_weeks×8, max 100) + attestation_bonus (max 150, weighted by issuer level: Newcomer +10, Active +25, Trusted +40, Verified +50)
 - Leaderboard: /leaderboard — public, sortable, filterable by category and attestation status
 - Agent profile: /agent/{wallet} — public stats, streak, attestation badges, recent certs timeline
 - Trust lookup: GET /api/trust/{wallet} — score + level + attestation count (no profile needed)
@@ -4614,7 +4614,7 @@ Public trust registry for AI agents. Trust score computed from on-chain certific
 - Opt-in: PATCH /api/user/agent-profile (auth required)
 
 ## Domain-Specific Attestations
-Third-party certifying bodies issue on-chain-anchored attestations (+50 trust per attestation, max +150 from 3).
+Third-party certifying bodies issue on-chain-anchored attestations. Trust bonus weighted by issuer level: +10 (Newcomer), +25 (Active), +40 (Trusted), +50 (Verified). Top 3 counted, max +150. Requires issuer to have ≥ 3 confirmed certifications.
 - Domains: healthcare (MHRA, FDA, EMA), finance (FCA, SEC, ESMA), legal (ISO, GDPR), security (NIST, CIS), research, other
 - Issue: POST /api/attestation (wallet auth, anti-self-attest enforced)
 - Lookup by ID: GET /api/attestation/{id} — public attestation detail
@@ -5072,7 +5072,7 @@ A public trust registry where anyone can discover and evaluate AI agents based o
 
 - **Seniority bonus**: days_since_first_cert × 0.3 (max 150). Full bonus if last cert ≤ 30 days ago. Linear decay 30-90 days. Zero after 90 days of inactivity.
 - **Streak bonus**: consecutive_weeks × 8 (max 100). A "week" = at least 1 confirmed cert in an ISO week. Tolerates up to 2 weeks gap before resetting.
-- **Attestation bonus**: min(3, active_domain_attestations) × 50 (max 150). Each active third-party attestation adds +50. Revoked or expired attestations do not count.
+- **Attestation bonus**: weighted by issuer level (Newcomer +10, Active +25, Trusted +40, Verified +50). Top 3 attestations counted (max 150 pts). Requires issuer to have ≥ 3 confirmed on-chain certifications. Revoked or expired attestations do not count.
 
 ### Trust Levels
 | Level | Score Range | Meaning |
@@ -5112,7 +5112,7 @@ Returns ready-to-embed markdown with the badge image and link to the agent's pub
 Third-party certifying bodies (MHRA, ISO, SOC2, FCA, etc.) issue on-chain-anchored attestations linked to agent wallets. This is a trust layer on top of the on-chain proof track record.
 
 ### Why attestations matter
-An autonomous agent cannot self-declare regulatory compliance. With xproof attestations, a recognized certifying body issues a cryptographically-anchored statement — immutable, publicly verifiable, revocable. Each active attestation raises the agent's trust score by +50 (max +150 from 3 attestations counted).
+An autonomous agent cannot self-declare regulatory compliance. With xproof attestations, a recognized certifying body issues a cryptographically-anchored statement — immutable, publicly verifiable, revocable. The trust bonus varies by issuer reputation: +10 pts (Newcomer issuer), +25 pts (Active issuer), +40 pts (Trusted issuer), +50 pts (Verified issuer). Maximum +150 pts from top 3 attestations. Issuers must have ≥ 3 confirmed on-chain certifications to issue.
 
 ### Attestation domains
 | Domain | Examples |
@@ -6778,12 +6778,29 @@ export const xproofAuditPlugin: Plugin = {
           .orderBy(desc(certifications.createdAt))
           .limit(20),
         db.execute(sql`
-          SELECT id, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, status, created_at
-          FROM attestations
-          WHERE subject_wallet = ${user.walletAddress}
-            AND status = 'active'
-            AND (expires_at IS NULL OR expires_at > ${now})
-          ORDER BY created_at DESC
+          SELECT
+            a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at,
+            COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') AS issuer_confirmed_certs,
+            CASE
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 30 THEN 'Verified'
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 10 THEN 'Trusted'
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 3 THEN 'Active'
+              ELSE 'Newcomer'
+            END AS issuer_level,
+            CASE
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 30 THEN 50
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 10 THEN 40
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 3 THEN 25
+              ELSE 10
+            END AS attestation_value
+          FROM attestations a
+          LEFT JOIN users u ON u.wallet_address = a.issuer_wallet
+          LEFT JOIN certifications c ON c.user_id = u.id
+          WHERE a.subject_wallet = ${user.walletAddress}
+            AND a.status = 'active'
+            AND (a.expires_at IS NULL OR a.expires_at > ${now})
+          GROUP BY a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at
+          ORDER BY a.created_at DESC
         `),
       ]);
 
@@ -6923,6 +6940,22 @@ export const xproofAuditPlugin: Plugin = {
 
       if (data.subjectWallet === issuerWallet) {
         return res.status(400).json({ message: "Cannot self-attest" });
+      }
+
+      const issuerCertCheck = await db.execute(sql`
+        SELECT COUNT(*) AS cnt
+        FROM certifications c
+        JOIN users u ON u.id = c.user_id
+        WHERE u.wallet_address = ${issuerWallet}
+          AND c.blockchain_status = 'confirmed'
+      `);
+      const issuerConfirmedCerts = Number((issuerCertCheck.rows[0] as any)?.cnt || 0);
+      if (issuerConfirmedCerts < 3) {
+        return res.status(403).json({
+          message: "Minimum 3 confirmed on-chain certifications required to issue attestations.",
+          issuer_confirmed_certs: issuerConfirmedCerts,
+          required: 3,
+        });
       }
 
       const dupCheck = await db.execute(sql`

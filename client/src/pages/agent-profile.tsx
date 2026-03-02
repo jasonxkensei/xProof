@@ -33,6 +33,9 @@ interface AttestationRecord {
   description: string | null;
   expires_at: string | null;
   created_at: string;
+  issuer_confirmed_certs?: number;
+  issuer_level?: "Newcomer" | "Active" | "Trusted" | "Verified";
+  attestation_value?: number;
 }
 
 interface AgentProfile {
@@ -47,6 +50,7 @@ interface AgentProfile {
   certLast30d: number;
   streakWeeks: number;
   activeAttestations: number;
+  attestationBonus?: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
   recentCertifications: {
@@ -388,7 +392,7 @@ function ScoreBreakdown({ agent }: { agent: AgentProfile }) {
   }
 
   const streakBonus = Math.min(100, agent.streakWeeks * 8);
-  const attestationBonus = Math.min(3, agent.activeAttestations) * 50;
+  const attestationBonus = agent.attestationBonus ?? Math.min(3, agent.activeAttestations) * 50;
 
   const nextLevel = NEXT_LEVELS.find((l) => l.threshold > agent.score);
   const ptToNext = nextLevel ? nextLevel.threshold - agent.score : null;
@@ -431,7 +435,7 @@ function ScoreBreakdown({ agent }: { agent: AgentProfile }) {
       label: "Attestations",
       value: attestationBonus,
       cap: 150,
-      detail: `${Math.min(3, agent.activeAttestations)} × 50 pts`,
+      detail: `${Math.min(3, agent.activeAttestations)} counted (weighted by issuer level)`,
       Icon: BadgeCheck,
     },
   ];
@@ -492,7 +496,7 @@ function ScoreBreakdown({ agent }: { agent: AgentProfile }) {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Fastest path: certify weekly to grow streak (+8 pts/week) or earn a domain attestation (+50 pts).
+              Fastest path: certify weekly to grow streak (+8 pts/week) or earn a domain attestation (+25 to +50 pts, weighted by issuer level).
             </p>
           </div>
         ) : (
@@ -662,7 +666,7 @@ export default function AgentProfilePage() {
                     </span>
                     {agent.activeAttestations > 0 && (
                       <span className="text-xs text-emerald-600 dark:text-emerald-400" data-testid="text-attestation-bonus">
-                        +{Math.min(3, agent.activeAttestations) * 50} pts from attestations
+                        +{agent.attestationBonus ?? Math.min(3, agent.activeAttestations) * 50} pts from attestations
                       </span>
                     )}
                   </div>
@@ -746,13 +750,22 @@ export default function AgentProfilePage() {
                     <Award className="h-4 w-4 text-primary" />
                     Domain attestations
                     <span className="ml-auto text-xs font-normal text-muted-foreground">
-                      +{Math.min(3, agent.attestations.length) * 50} trust pts
+                      +{agent.attestationBonus ?? Math.min(3, agent.attestations.length) * 50} trust pts
                     </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {agent.attestations.map((att) => (
+                    {agent.attestations.map((att) => {
+                      const issuerLevel = att.issuer_level ?? "Newcomer";
+                      const attValue = att.attestation_value ?? 10;
+                      const issuerLevelColor: Record<string, string> = {
+                        Verified: "text-emerald-600 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/10",
+                        Trusted: "text-green-700 dark:text-green-400 border-green-500/40 bg-green-500/10",
+                        Active: "text-blue-600 dark:text-blue-400 border-blue-500/40 bg-blue-500/10",
+                        Newcomer: "text-muted-foreground border-border bg-muted/50",
+                      };
+                      return (
                       <div
                         key={att.id}
                         data-testid={`card-attestation-${att.id}`}
@@ -774,17 +787,25 @@ export default function AgentProfilePage() {
                               <p className="text-xs text-muted-foreground mt-1">{att.description}</p>
                             )}
                           </div>
-                          <div className="text-right shrink-0">
+                          <div className="text-right shrink-0 space-y-1">
                             <Link
                               href={`/issuer/${att.issuer_wallet}`}
                               data-testid={`link-issuer-${att.id}`}
-                              className="text-xs font-medium hover:underline underline-offset-2 text-primary"
+                              className="text-xs font-medium hover:underline underline-offset-2 text-primary block"
                             >
                               {att.issuer_name}
                             </Link>
                             <p className="font-mono text-xs text-muted-foreground">
                               {att.issuer_wallet.slice(0, 8)}…{att.issuer_wallet.slice(-6)}
                             </p>
+                            <span
+                              data-testid={`badge-issuer-level-${att.id}`}
+                              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs font-medium ${issuerLevelColor[issuerLevel]}`}
+                            >
+                              {issuerLevel === "Verified" && <Shield className="h-3 w-3" />}
+                              {issuerLevel}
+                              <span className="opacity-70">· +{attValue} pts</span>
+                            </span>
                           </div>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -794,7 +815,8 @@ export default function AgentProfilePage() {
                           )}
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 </CardContent>
               </Card>
