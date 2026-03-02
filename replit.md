@@ -86,6 +86,15 @@ A health endpoint provides structured component checks and operational metrics. 
 -   date-fns
 -   Vaul
 
+### Agent Trust Leaderboard
+A public trust registry where anyone can discover and evaluate AI agents:
+-   **Trust Score**: Computed server-side from on-chain data — confirmed certifications × 10 + recency bonus (last 30d × 5) + seniority bonus (days × 0.3, max 150).
+-   **Trust Levels**: Newcomer (0-99), Active (100-299), Trusted (300-699), Verified (700+).
+-   **Opt-in**: Agents configure their public profile (name, category, description, website) via Settings → "Agent public profile" and toggle `is_public_profile`.
+-   **Pages**: `/leaderboard` (public, sortable table with search + category filter), `/agent/:wallet` (public profile with stats + recent certifications timeline).
+-   **Endpoints**: `GET /api/leaderboard` (public), `GET /api/agents/:wallet` (public), `PATCH /api/user/agent-profile` (auth required).
+-   **DB**: 5 new columns on `users` table: `agent_name`, `agent_description`, `agent_website`, `agent_category`, `is_public_profile`.
+
 ### Font Loading
 -   Google Fonts CDN
 

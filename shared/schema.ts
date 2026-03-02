@@ -43,6 +43,11 @@ export const users = pgTable("users", {
   trialQuota: integer("trial_quota").default(0),
   trialUsed: integer("trial_used").default(0),
   creditBalance: integer("credit_balance").default(0),
+  agentName: varchar("agent_name"),
+  agentDescription: text("agent_description"),
+  agentWebsite: varchar("agent_website"),
+  agentCategory: varchar("agent_category"),
+  isPublicProfile: boolean("is_public_profile").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

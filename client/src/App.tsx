@@ -17,6 +17,8 @@ import ConditionsUtilisation from "@/pages/legal/terms";
 import AgentsPage from "@/pages/agents";
 import AdminDashboard from "@/pages/admin";
 import AuditPage from "@/pages/audit";
+import Leaderboard from "@/pages/leaderboard";
+import AgentProfilePage from "@/pages/agent-profile";
 import { Shield, Loader2 } from "lucide-react";
 
 function Router() {
@@ -46,6 +48,8 @@ function Router() {
         <Route path="/legal/privacy" component={PolitiqueConfidentialite} />
         <Route path="/legal/terms" component={ConditionsUtilisation} />
         <Route path="/agents" component={AgentsPage} />
+        <Route path="/leaderboard" component={Leaderboard} />
+        <Route path="/agent/:wallet" component={AgentProfilePage} />
         <Route path="/stats" component={AdminDashboard} />
         <Route path="/admin" component={AdminDashboard} />
         <Route>
@@ -69,6 +73,8 @@ function Router() {
       <Route path="/legal/privacy" component={PolitiqueConfidentialite} />
       <Route path="/legal/terms" component={ConditionsUtilisation} />
       <Route path="/agents" component={AgentsPage} />
+      <Route path="/leaderboard" component={Leaderboard} />
+      <Route path="/agent/:wallet" component={AgentProfilePage} />
       <Route component={NotFound} />
     </Switch>
   );

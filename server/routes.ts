@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { db } from "./db";
 import { storage } from "./storage";
 import { logger } from "./logger";
+import { computeTrustScore, getLeaderboard } from "./trust";
 import { getAlertConfig } from "./txAlerts";
 import { 
   certifications, 
@@ -6414,6 +6415,95 @@ export const xproofAuditPlugin: Plugin = {
         recent_processing: recentProcessing,
       });
     } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ===== LEADERBOARD & AGENT PROFILE ENDPOINTS =====
+
+  // GET /api/leaderboard — public, returns top 50 agents with public profiles
+  app.get("/api/leaderboard", async (_req, res) => {
+    try {
+      const entries = await getLeaderboard();
+      res.json(entries);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/agents/:wallet — public, returns a single agent profile
+  app.get("/api/agents/:wallet", async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+
+      if (!user || !user.isPublicProfile) {
+        return res.status(404).json({ message: "Agent profile not found or not public" });
+      }
+
+      const trust = await computeTrustScore(user.id);
+
+      const recentCerts = await db
+        .select({
+          id: certifications.id,
+          fileName: certifications.fileName,
+          blockchainStatus: certifications.blockchainStatus,
+          createdAt: certifications.createdAt,
+        })
+        .from(certifications)
+        .where(eq(certifications.userId, user.id))
+        .orderBy(desc(certifications.createdAt))
+        .limit(20);
+
+      res.json({
+        walletAddress: user.walletAddress,
+        agentName: user.agentName,
+        agentCategory: user.agentCategory,
+        agentDescription: user.agentDescription,
+        agentWebsite: user.agentWebsite,
+        ...trust,
+        recentCertifications: recentCerts,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/user/agent-profile — auth required, update agent public profile
+  app.patch("/api/user/agent-profile", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const walletAddress = req.walletAddress;
+      const schema = z.object({
+        agentName: z.string().max(80).optional().nullable(),
+        agentDescription: z.string().max(300).optional().nullable(),
+        agentWebsite: z.string().url().optional().nullable().or(z.literal("")),
+        agentCategory: z.enum(["trading", "data", "content", "code", "research", "assistant", "other"]).optional().nullable(),
+        isPublicProfile: z.boolean().optional(),
+      });
+
+      const data = schema.parse(req.body);
+
+      await db
+        .update(users)
+        .set({
+          ...(data.agentName !== undefined ? { agentName: data.agentName } : {}),
+          ...(data.agentDescription !== undefined ? { agentDescription: data.agentDescription } : {}),
+          ...(data.agentWebsite !== undefined ? { agentWebsite: data.agentWebsite || null } : {}),
+          ...(data.agentCategory !== undefined ? { agentCategory: data.agentCategory } : {}),
+          ...(data.isPublicProfile !== undefined ? { isPublicProfile: data.isPublicProfile } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.walletAddress, walletAddress));
+
+      const [updated] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      res.json(updated);
+    } catch (err: any) {
+      if (err.name === "ZodError") {
+        return res.status(400).json({ message: "Validation error", errors: err.errors });
+      }
       res.status(500).json({ error: err.message });
     }
   });
