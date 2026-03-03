@@ -38,7 +38,10 @@ Users can purchase prepaid credit packs with USDC on Base. The system verifies U
 xproof implements ACP for programmatic interaction by AI agents, offering endpoints for product discovery, OpenAPI specs, checkout, and status checks. It supports x402 for per-request payments using USDC on Base, allowing certification without an account or API key.
 
 ### Agent APIs & Batch Certification
-A single API endpoint (`POST /api/proof`) handles individual certifications, accepting file metadata for server-side blockchain recording. Batch certification (`POST /api/batch`) allows certifying up to 50 files in one call.
+A single API endpoint (`POST /api/proof`) handles individual certifications, accepting file hash, filename, and optional structured `metadata` (JSON) for server-side blockchain recording. Batch certification (`POST /api/batch`) allows certifying up to 50 files in one call, each with optional metadata.
+
+### Structured Metadata & Search
+Certifications support an optional `metadata` field (jsonb) that accepts any JSON object. Common fields include `model_hash`, `strategy_hash`, and `version_number` for AI/trading agent use cases. All metadata fields are queryable via `GET /api/proofs/search` with parameters: `?model_hash=`, `?strategy_hash=`, `?version_number=`, `?key=&value=`, `?wallet=`. Supports pagination (`?limit=&offset=`). Metadata is returned in all proof responses.
 
 ### Verification Badges & Webhook Notifications
 Dynamic SVG badges display certification status. A Composite GitHub Action integrates xproof into CI/CD pipelines. Webhooks send POST notifications upon on-chain proof confirmation with HMAC-SHA256 signed headers and retry policies.

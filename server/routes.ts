@@ -24,7 +24,7 @@ import {
 import { CREDIT_PACKAGES, getPackage, verifyUsdcOnBase } from "./credits";
 import { auditLogSchema, AUDIT_LOG_JSON_SCHEMA, type AgentAuditLog } from "./auditSchema";
 import { getCertificationPriceEgld, getCertificationPriceUsd, getPricingInfo } from "./pricing";
-import { eq, desc, sql, and, gte, gt, count, isNotNull } from "drizzle-orm";
+import { eq, desc, sql, and, gte, gt, count, isNotNull, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { getMetrics, bootstrapMetricsFromDb } from "./metrics";
 import { isX402Configured, verifyX402Payment, send402Response } from "./x402";
@@ -1374,6 +1374,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/acp", validateApiKey);
 
   // ============================================
+  // Metadata search endpoint
+  // Search certifications by metadata fields (model_hash, strategy_hash, version_number, etc.)
+  // ============================================
+  app.get("/api/proofs/search", publicSearchRateLimiter, async (req, res) => {
+    try {
+      const { model_hash, strategy_hash, version_number, key, value, wallet, limit: limitStr, offset: offsetStr } = req.query;
+      const limit = Math.min(parseInt(limitStr as string) || 20, 100);
+      const offset = Math.max(parseInt(offsetStr as string) || 0, 0);
+
+      const sqlConditions: SQL[] = [];
+
+      if (model_hash) {
+        sqlConditions.push(sql`${certifications.metadata}->>'model_hash' = ${String(model_hash)}`);
+      }
+      if (strategy_hash) {
+        sqlConditions.push(sql`${certifications.metadata}->>'strategy_hash' = ${String(strategy_hash)}`);
+      }
+      if (version_number) {
+        sqlConditions.push(sql`${certifications.metadata}->>'version_number' = ${String(version_number)}`);
+      }
+      if (key && value) {
+        sqlConditions.push(sql`${certifications.metadata}->>${ String(key)} = ${String(value)}`);
+      }
+      if (wallet) {
+        sqlConditions.push(eq(users.walletAddress, String(wallet)));
+      }
+
+      const hasMetadataFilter = !!(model_hash || strategy_hash || version_number || (key && value));
+
+      if (sqlConditions.length === 0) {
+        return res.status(400).json({
+          error: "MISSING_FILTER",
+          message: "Provide at least one search parameter: model_hash, strategy_hash, version_number, key+value, or wallet",
+        });
+      }
+
+      if (hasMetadataFilter) {
+        sqlConditions.push(sql`${certifications.metadata} IS NOT NULL`);
+      }
+
+      const whereClause = and(...sqlConditions);
+
+      const countResult = await db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(certifications)
+        .leftJoin(users, eq(certifications.userId, users.id))
+        .where(whereClause!);
+
+      const total = countResult[0]?.total || 0;
+
+      const rows = await db
+        .select({
+          id: certifications.id,
+          fileName: certifications.fileName,
+          fileHash: certifications.fileHash,
+          metadata: certifications.metadata,
+          blockchainStatus: certifications.blockchainStatus,
+          transactionHash: certifications.transactionHash,
+          createdAt: certifications.createdAt,
+          walletAddress: users.walletAddress,
+        })
+        .from(certifications)
+        .leftJoin(users, eq(certifications.userId, users.id))
+        .where(whereClause!)
+        .orderBy(sql`${certifications.createdAt} DESC`)
+        .limit(limit)
+        .offset(offset);
+
+      const baseUrl = `https://${req.get("host")}`;
+
+      return res.json({
+        results: rows.map((r: any) => ({
+          proof_id: r.id,
+          file_hash: r.file_hash || r.fileHash,
+          filename: r.file_name || r.fileName,
+          metadata: r.metadata,
+          blockchain_status: r.blockchain_status || r.blockchainStatus,
+          transaction_hash: r.transaction_hash || r.transactionHash,
+          wallet_address: r.wallet_address || null,
+          verify_url: `${baseUrl}/proof/${r.id}`,
+          created_at: r.created_at || r.createdAt,
+        })),
+        total,
+        limit,
+        offset,
+      });
+    } catch (error) {
+      logger.error("Proof search failed", { error: (error as Error).message });
+      return res.status(500).json({ error: "INTERNAL_ERROR", message: "Search failed" });
+    }
+  });
+
+  // ============================================
   // Simplified POST /api/proof endpoint for AI agents
   // Single-call certification: validate API key, record on blockchain, return proof
   // ============================================
@@ -1382,6 +1475,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     filename: z.string().min(1, "Filename is required"),
     author_name: z.string().optional(),
     webhook_url: z.string().url("Must be a valid URL").refine((url) => !url || url.startsWith("https://"), { message: "Webhook URL must use HTTPS" }).optional(),
+    metadata: z.record(z.any()).optional(),
   });
 
   app.post("/api/proof", paymentRateLimiter, async (req, res) => {
@@ -1516,6 +1610,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: "certified",
           file_hash: existing.fileHash,
           filename: existing.fileName,
+          metadata: existing.metadata || null,
           verify_url: `${baseUrl}/proof/${existing.id}`,
           certificate_url: `${baseUrl}/api/certificates/${existing.id}.pdf`,
           proof_json_url: `${baseUrl}/proof/${existing.id}.json`,
@@ -1573,6 +1668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           blockchainStatus: "confirmed",
           isPublic: true,
           ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+          ...(data.metadata ? { metadata: data.metadata } : {}),
         })
         .returning();
 
@@ -1616,6 +1712,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "certified",
         file_hash: certification.fileHash,
         filename: certification.fileName,
+        metadata: certification.metadata || null,
         verify_url: `${baseUrl}/proof/${certification.id}`,
         certificate_url: `${baseUrl}/api/certificates/${certification.id}.pdf`,
         proof_json_url: `${baseUrl}/proof/${certification.id}.json`,
@@ -1846,6 +1943,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     files: z.array(z.object({
       file_hash: z.string().length(64, "SHA-256 hash must be exactly 64 hex characters").regex(/^[a-fA-F0-9]+$/, "Must be a valid hex string"),
       filename: z.string().min(1, "Filename is required"),
+      metadata: z.record(z.any()).optional(),
     })).min(1, "At least one file is required").max(50, "Maximum 50 files per batch"),
     author_name: z.string().optional(),
     webhook_url: z.string().url("Must be a valid URL").refine((url) => !url || url.startsWith("https://"), { message: "Webhook URL must use HTTPS" }).optional(),
@@ -2042,6 +2140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             blockchainStatus: "confirmed",
             isPublic: true,
             ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+            ...(file.metadata ? { metadata: file.metadata } : {}),
           })
           .returning();
 
@@ -2049,6 +2148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         results.push({
           file_hash: certification.fileHash,
           filename: certification.fileName,
+          metadata: certification.metadata || null,
           proof_id: certification.id,
           verify_url: `${baseUrl}/proof/${certification.id}`,
           badge_url: `${baseUrl}/badge/${certification.id}`,
@@ -2139,7 +2239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           file_hash: "SHA-256 hash of the file (64 character hex string)",
           filename: "Original filename with extension",
           author_name: "Optional - Name of the author/certifier",
-          metadata: "Optional - Additional JSON metadata",
+          metadata: "Optional - Additional JSON metadata (supports model_hash, strategy_hash, version_number and any custom fields). Searchable via GET /api/proofs/search",
         },
         outputs: {
           certification_id: "Unique certification ID",
@@ -2516,7 +2616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   file_hash: { type: "string", description: "SHA-256 hash of the file (64 hex chars)", example: "a1b2c3d4e5f678901234567890123456789012345678901234567890123456ab" },
                   filename: { type: "string", example: "document.pdf" },
                   author_name: { type: "string", example: "AI Agent" },
-                  metadata: { type: "object", description: "Optional JSON metadata" },
+                  metadata: { type: "object", description: "Optional JSON metadata. Supports model_hash, strategy_hash, version_number, and any custom fields. Searchable via GET /api/proofs/search.", properties: { model_hash: { type: "string" }, strategy_hash: { type: "string" }, version_number: { type: "string" } }, additionalProperties: true },
                 },
               },
               buyer: {
@@ -4387,7 +4487,8 @@ Sitemap: ${baseUrl}/sitemap.xml
               file_hash: { type: "string", description: "SHA-256 hash of the file (64 hex characters)" },
               filename: { type: "string", description: "Original filename with extension" },
               author_name: { type: "string", description: "Name of the certifier", default: "AI Agent" },
-              webhook_url: { type: "string", format: "uri", description: "Optional HTTPS URL to receive a POST notification when the proof is confirmed on-chain. Payload is signed with HMAC-SHA256 (X-xProof-Signature header)." }
+              webhook_url: { type: "string", format: "uri", description: "Optional HTTPS URL to receive a POST notification when the proof is confirmed on-chain. Payload is signed with HMAC-SHA256 (X-xProof-Signature header)." },
+              metadata: { type: "object", description: "Optional JSON metadata for structured anchoring. Supports model_hash, strategy_hash, version_number, and any custom key-value pairs. All fields are searchable via GET /api/proofs/search.", properties: { model_hash: { type: "string" }, strategy_hash: { type: "string" }, version_number: { type: "string" } }, additionalProperties: true }
             }
           }
         },
@@ -5967,7 +6068,7 @@ export const xproofAuditPlugin: Plugin = {
                   file_hash: { type: "string", description: "SHA-256 hash of the file (64 hex chars)", example: "a1b2c3d4e5f678901234567890123456789012345678901234567890123456ab" },
                   filename: { type: "string", example: "document.pdf" },
                   author_name: { type: "string", example: "AI Agent" },
-                  metadata: { type: "object", description: "Optional JSON metadata" },
+                  metadata: { type: "object", description: "Optional JSON metadata. Supports model_hash, strategy_hash, version_number, and any custom fields. Searchable via GET /api/proofs/search.", properties: { model_hash: { type: "string" }, strategy_hash: { type: "string" }, version_number: { type: "string" } }, additionalProperties: true },
                 },
               },
               buyer: {
