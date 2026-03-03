@@ -646,6 +646,9 @@ export default function DocsPage() {
             <Badge variant="outline">API Docs</Badge>
           </div>
           <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm" data-testid="link-trading-guide">
+              <a href="/docs/trading">Trading Guide</a>
+            </Button>
             <Button asChild variant="ghost" size="sm" data-testid="link-llms-txt">
               <a href="/llms.txt" target="_blank" rel="noopener noreferrer">llms.txt</a>
             </Button>
@@ -702,6 +705,25 @@ export default function DocsPage() {
               <p className="text-xs font-mono text-muted-foreground">
                 Base URL: <span className="text-primary">{BASE}</span>
               </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-4 border-primary/20 bg-primary/5 hover-elevate" data-testid="card-trading-guide-cta">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 shrink-0">
+                  <Globe className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Proof of Trade Execution</h3>
+                  <p className="text-xs text-muted-foreground">Integration pattern for autonomous trading agents — async, non-blocking, privacy-preserving.</p>
+                </div>
+              </div>
+              <Button asChild size="sm" variant="outline" data-testid="button-open-trading-guide">
+                <a href="/docs/trading">View integration guide</a>
+              </Button>
             </div>
           </CardContent>
         </Card>
