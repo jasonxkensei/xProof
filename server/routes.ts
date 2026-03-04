@@ -1330,6 +1330,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : [];
       const hasDuplicate = existingByUser.length > 0 || existingByKey.length > 0;
 
+      if (hasDuplicate) {
+        const baseUrl = `https://${req.get('host')}`;
+        return res.status(409).json({
+          error: "DUPLICATE_AGENT_NAME",
+          message: `An agent named "${data.agent_name}" already exists on a real wallet. Registration blocked to prevent duplicates.`,
+          resolution: `If this is your agent, connect your wallet at ${baseUrl} and use your existing API key. If you need a new trial key for a different agent, choose a unique name.`,
+          claim_endpoint: `POST ${baseUrl}/api/trial/claim`,
+        });
+      }
+
       const trialWallet = `erd1trial${crypto.randomBytes(24).toString("hex")}`;
 
       const [trialUser] = await db.insert(users).values({
@@ -1380,7 +1390,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         warning: `This trial account is NOT linked to a MultiversX wallet. Certifications made with this key will NOT appear on your public agent profile or trust leaderboard. To link this key to your real wallet, authenticate at ${baseUrl} and call POST ${baseUrl}/api/trial/claim with this API key.`,
         claim_endpoint: `POST ${baseUrl}/api/trial/claim`,
         claim_usage: `After connecting your real wallet at ${baseUrl}, call: curl -X POST ${baseUrl}/api/trial/claim -H "Cookie: <your-session>" -H "Content-Type: application/json" -d '{"trial_api_key":"${rawKey}"}'`,
-        ...(hasDuplicate ? { duplicate_warning: `An agent named "${data.agent_name}" already exists on a real wallet. If this is your agent, use POST ${baseUrl}/api/trial/claim after connecting your wallet to merge this trial key into your existing account.` } : {}),
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
