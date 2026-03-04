@@ -2068,6 +2068,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         agent_id: data.agent_id,
         session_id: data.session_id,
         inputs_hash: data.inputs_hash,
+        ...(data.inputs_manifest ? { inputs_manifest: data.inputs_manifest } : {}),
         file_hash: fileHash,
         blockchain: {
           network: "MultiversX",
@@ -3039,6 +3040,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       action_type: { type: "string", enum: ["trade_execution", "code_deploy", "data_access", "content_generation", "api_call", "other"] },
                       action_description: { type: "string", description: "Human-readable description of the action", example: "Buy 0.5 ETH at market price on Uniswap v3" },
                       inputs_hash: { type: "string", description: "SHA-256 of all inputs analyzed (64 hex chars)", example: "a1b2c3d4e5f678901234567890123456789012345678901234567890123456ab" },
+                      inputs_manifest: { type: "object", description: "Optional declaration of what inputs_hash covers (field names, sources, hash method) — enables regulatory audit without revealing values", properties: { fields: { type: "array", items: { type: "string" }, description: "Input field names included in the hash" }, sources: { type: "array", items: { type: "string" }, description: "Data sources consulted" }, hash_method: { type: "string", description: "How the hash was computed" } }, required: ["fields"] },
                       risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
                       decision: { type: "string", enum: ["approved", "rejected", "deferred"] },
                       timestamp: { type: "string", format: "date-time", example: "2026-02-27T23:00:00Z" },
@@ -3064,6 +3066,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         decision: { type: "string" },
                         risk_level: { type: "string" },
                         inputs_hash: { type: "string" },
+                        inputs_manifest: { type: "object", description: "Present when submitted — declares what the inputs_hash covers" },
                       },
                     },
                   },
@@ -3382,11 +3385,17 @@ Fields:
 - \`action_type\` — \`trade_execution | code_deploy | data_access | content_generation | api_call | other\`
 - \`action_description\` — human-readable description of the action
 - \`inputs_hash\` — SHA-256 of all inputs analyzed before the decision
+- \`inputs_manifest\` (optional) — structured declaration of what the hash covers:
+  - \`fields\` (required) — array of input field names (e.g. \`["btc_price", "portfolio_nav", "volatility_30d"]\`)
+  - \`sources\` (optional) — data sources consulted (e.g. \`["binance_ws", "coingecko"]\`)
+  - \`hash_method\` (optional) — how the hash was computed (e.g. \`"SHA-256 over JSON.stringify(inputs, sorted_keys)"\`)
 - \`risk_level\` — \`low | medium | high | critical\`
 - \`decision\` — \`approved | rejected | deferred\`
 - \`risk_summary\` (optional) — brief risk analysis
 - \`context\` (optional) — additional metadata (model version, environment, etc.)
 - \`timestamp\` — ISO 8601
+
+The \`inputs_manifest\` enables regulatory audit: the agent declares *what categories of data* were analyzed without revealing the values. During an audit, the agent can selectively disclose specific input values, and the auditor recomputes the hash to verify it matches the on-chain proof.
 
 ### Endpoint
 
@@ -3395,7 +3404,7 @@ POST ${baseUrl}/api/audit
 Authorization: Bearer pm_YOUR_API_KEY
 \`\`\`
 
-Returns: \`{ proof_id, audit_url, decision, risk_level, blockchain }\`
+Returns: \`{ proof_id, audit_url, decision, risk_level, inputs_manifest, blockchain }\`
 View certified audit log: \`${baseUrl}/audit/{proof_id}\`
 
 ### Blocking Workflow Templates
@@ -4442,13 +4451,18 @@ curl -X POST ${baseUrl}/api/audit \\
     "action_type": "trade_execution",
     "action_description": "Buy 0.5 ETH at market price on Uniswap v3",
     "inputs_hash": "a3f1c7d2e9b4...64-char-sha256-of-analyzed-inputs",
+    "inputs_manifest": {
+      "fields": ["btc_usd_price", "eth_usd_price", "portfolio_nav", "volatility_30d", "slippage_estimate"],
+      "sources": ["binance_ws", "internal_risk_engine"],
+      "hash_method": "SHA-256 over JSON.stringify(inputs, Object.keys(inputs).sort())"
+    },
     "risk_level": "high",
     "decision": "approved",
     "timestamp": "2026-02-27T23:00:00Z",
     "risk_summary": "Slippage < 0.5%, liquidity verified on 3 pools"
   }'
 \`\`\`
-Returns: { "proof_id": "...", "audit_url": "${baseUrl}/audit/{id}", "decision": "approved", "risk_level": "high" }
+Returns: { "proof_id": "...", "audit_url": "${baseUrl}/audit/{id}", "decision": "approved", "risk_level": "high", "inputs_manifest": { "fields": [...], "sources": [...] } }
 
 Use the returned proof_id as compliance certificate. View at /audit/{proof_id}.
 
@@ -4691,6 +4705,7 @@ Sitemap: ${baseUrl}/sitemap.xml
               action_type: { type: "string", enum: ["trade_execution", "code_deploy", "data_access", "content_generation", "api_call", "other"], description: "Category of the action being certified" },
               action_description: { type: "string", description: "Human-readable description of the specific action being certified" },
               inputs_hash: { type: "string", description: "SHA-256 of all inputs analyzed before making the decision (market data, code diff, dataset, etc.)" },
+              inputs_manifest: { type: "object", description: "Optional declaration of what inputs_hash covers — field names, data sources, and hash method. Enables regulatory audit without revealing values.", properties: { fields: { type: "array", items: { type: "string" }, description: "Input field names included in the hash (e.g. ['btc_price', 'portfolio_nav'])" }, sources: { type: "array", items: { type: "string" }, description: "Data sources consulted (e.g. ['binance_ws', 'coingecko'])" }, hash_method: { type: "string", description: "How inputs_hash was computed (e.g. 'SHA-256 over JSON.stringify(inputs, sorted_keys)')" } }, required: ["fields"] },
               risk_level: { type: "string", enum: ["low", "medium", "high", "critical"], description: "Assessed risk level of the action" },
               decision: { type: "string", enum: ["approved", "rejected", "deferred"], description: "Agent's decision about whether to proceed" },
               timestamp: { type: "string", format: "date-time", description: "ISO 8601 timestamp of when the decision was made" },

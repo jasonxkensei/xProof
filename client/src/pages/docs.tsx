@@ -149,15 +149,16 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
           action_type: "trade_execution | code_deploy | data_access | content_generation | api_call | other",
           action_description: "string (required)",
           inputs_hash: "string (64-char SHA-256 hex)",
+          inputs_manifest: "object (optional) — { fields: string[], sources?: string[], hash_method?: string }",
           risk_level: "low | medium | high | critical",
           decision: "approved | rejected | deferred",
           timestamp: "string (ISO8601)",
         },
-        response: `{ "proof_id": "uuid", "tx_hash": "0x...", "status": "confirmed", "verify_url": "..." }`,
+        response: `{ "proof_id": "uuid", "inputs_manifest": { "fields": [...], "sources": [...] }, "blockchain": { ... } }`,
         curl: `curl -X POST ${BASE}/api/audit \\
   -H "Authorization: Bearer pm_xxx" \\
   -H "Content-Type: application/json" \\
-  -d '{"agent_id": "agent-1", "session_id": "sess-1", "action_type": "trade_execution", "action_description": "Swap 100 USDC", "inputs_hash": "abc...", "risk_level": "medium", "decision": "approved", "timestamp": "2025-01-01T00:00:00Z"}'`,
+  -d '{"agent_id": "agent-1", "session_id": "sess-1", "action_type": "trade_execution", "action_description": "Swap 100 USDC", "inputs_hash": "abc...", "inputs_manifest": {"fields": ["price", "volume", "nav"], "sources": ["binance"]}, "risk_level": "medium", "decision": "approved", "timestamp": "2025-01-01T00:00:00Z"}'`,
       },
       {
         method: "GET",

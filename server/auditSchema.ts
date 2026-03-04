@@ -13,6 +13,12 @@ export const RISK_LEVELS = ["low", "medium", "high", "critical"] as const;
 
 export const DECISIONS = ["approved", "rejected", "deferred"] as const;
 
+export const inputsManifestSchema = z.object({
+  fields: z.array(z.string().max(128)).min(1, "At least one field name is required").max(50, "Maximum 50 fields"),
+  sources: z.array(z.string().max(256)).max(20, "Maximum 20 sources").optional(),
+  hash_method: z.string().max(256).optional(),
+}).strict();
+
 export const auditLogSchema = z.object({
   agent_id: z.string().min(1, "agent_id is required").max(256),
   session_id: z.string().min(1, "session_id is required").max(128),
@@ -24,6 +30,7 @@ export const auditLogSchema = z.object({
     .string()
     .length(64, "inputs_hash must be a SHA-256 hex string (64 chars)")
     .regex(/^[a-fA-F0-9]+$/, "inputs_hash must be a valid hex string"),
+  inputs_manifest: inputsManifestSchema.optional(),
   risk_level: z.enum(RISK_LEVELS, {
     errorMap: () => ({ message: `risk_level must be one of: ${RISK_LEVELS.join(", ")}` }),
   }),
@@ -94,6 +101,39 @@ export const AUDIT_LOG_JSON_SCHEMA = {
         "This anchors the proof to the exact data the agent saw.",
       examples: ["a3f5b2c1d4e6f7890123456789abcdef0123456789abcdef0123456789abcdef"],
     },
+    inputs_manifest: {
+      type: "object",
+      description:
+        "Optional structured declaration of what the inputs_hash covers. Lists the field names, data sources, and hashing method " +
+        "without revealing the actual values. This enables regulatory audit: the agent can later selectively disclose specific input " +
+        "values, and the auditor can recompute the hash to verify they match the on-chain proof. " +
+        "The manifest answers: 'what data categories did the agent analyze before deciding?'",
+      properties: {
+        fields: {
+          type: "array",
+          items: { type: "string", maxLength: 128 },
+          minItems: 1,
+          maxItems: 50,
+          description: "Ordered list of input field names included in the hash (e.g. ['btc_usd_price', 'portfolio_nav', 'volatility_30d'])",
+          examples: [["btc_usd_price", "eth_usd_price", "portfolio_nav", "volatility_30d", "model_version"]],
+        },
+        sources: {
+          type: "array",
+          items: { type: "string", maxLength: 256 },
+          maxItems: 20,
+          description: "Data sources consulted (e.g. ['binance_ws', 'internal_risk_engine'])",
+          examples: [["binance_ws", "coingecko_api", "internal_risk_engine"]],
+        },
+        hash_method: {
+          type: "string",
+          maxLength: 256,
+          description: "How the inputs_hash was computed, enabling reproducibility (e.g. 'SHA-256 over JSON.stringify(inputs, sorted_keys)')",
+          examples: ["SHA-256 over JSON.stringify(inputs, Object.keys(inputs).sort())"],
+        },
+      },
+      required: ["fields"],
+      additionalProperties: false,
+    },
     risk_level: {
       type: "string",
       enum: RISK_LEVELS,
@@ -133,6 +173,11 @@ export const AUDIT_LOG_JSON_SCHEMA = {
       action_type: "trade_execution",
       action_description: "Buy 0.5 ETH at market price on Uniswap v3 (USDC→ETH)",
       inputs_hash: "a3f5b2c1d4e6f789012345678901234567890123456789abcdef01234567890a",
+      inputs_manifest: {
+        fields: ["btc_usd_price", "eth_usd_price", "portfolio_nav", "volatility_30d", "slippage_estimate"],
+        sources: ["binance_ws", "internal_risk_engine"],
+        hash_method: "SHA-256 over JSON.stringify(inputs, Object.keys(inputs).sort())",
+      },
       risk_level: "high",
       risk_summary: "Market volatility elevated. Slippage < 0.5%. Liquidity verified.",
       decision: "approved",

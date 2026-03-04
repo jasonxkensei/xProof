@@ -245,6 +245,48 @@ export default function AuditPage() {
               </p>
             </div>
 
+            {/* Inputs Manifest */}
+            {meta.inputs_manifest && meta.inputs_manifest.fields && (
+              <div className="rounded-lg bg-muted/30 p-4" data-testid="card-inputs-manifest">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-medium text-muted-foreground">Inputs Manifest (what the hash covers)</p>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1.5">Analyzed fields</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {meta.inputs_manifest.fields.map((field: string, i: number) => (
+                        <Badge key={i} variant="secondary" className="font-mono text-xs" data-testid={`badge-manifest-field-${i}`}>
+                          {field}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  {meta.inputs_manifest.sources && meta.inputs_manifest.sources.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1.5">Data sources</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {meta.inputs_manifest.sources.map((src: string, i: number) => (
+                          <Badge key={i} variant="outline" className="font-mono text-xs" data-testid={`badge-manifest-source-${i}`}>
+                            {src}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {meta.inputs_manifest.hash_method && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1.5">Hash method</p>
+                      <p className="font-mono text-xs text-muted-foreground" data-testid="text-manifest-hash-method">
+                        {meta.inputs_manifest.hash_method}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Context */}
             {meta.context && Object.keys(meta.context).length > 0 && (
               <div className="rounded-lg bg-muted/30 p-4">

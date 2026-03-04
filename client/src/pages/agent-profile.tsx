@@ -943,6 +943,19 @@ export default function AgentProfilePage() {
                                 <p className="text-xs text-muted-foreground">{evt.action_description}</p>
                               )}
 
+                              {isAudit && evt.metadata?.inputs_manifest?.fields && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {evt.metadata.inputs_manifest.fields.slice(0, 5).map((f: string, fi: number) => (
+                                    <span key={fi} className="text-xs bg-muted rounded px-1.5 py-0.5 font-mono">
+                                      {f}
+                                    </span>
+                                  ))}
+                                  {evt.metadata.inputs_manifest.fields.length > 5 && (
+                                    <span className="text-xs text-muted-foreground">+{evt.metadata.inputs_manifest.fields.length - 5} more</span>
+                                  )}
+                                </div>
+                              )}
+
                               {(evt.model_hash || evt.strategy_hash || evt.version_number) && (
                                 <div className="flex flex-wrap gap-2 mt-1">
                                   {evt.model_hash && (
