@@ -78,6 +78,18 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         response: `{ "name": "xproof Agent Trial", "free_certifications": 10, "register": { ... } }`,
         curl: `curl ${BASE}/api/trial`,
       },
+      {
+        method: "POST",
+        path: "/api/trial/claim",
+        auth: "Wallet session (cookie)",
+        description: "Claim a trial account: transfers all certifications and the API key from a trial account to your authenticated wallet. Requires wallet login. Trust score is recalculated immediately.",
+        body: { trial_api_key: "string (required, the pm_xxx key from trial registration)" },
+        response: `{ "success": true, "message": "...", "transferred": { "certifications": 5, "api_keys": 1 }, "api_key_prefix": "pm_xxx", "wallet": "erd1...", "trust_score": { "score": 120, "level": "Active" } }`,
+        curl: `curl -X POST ${BASE}/api/trial/claim \\
+  -H "Content-Type: application/json" \\
+  -H "Cookie: your-session-cookie" \\
+  -d '{"trial_api_key": "pm_your_trial_key_here"}'`,
+      },
     ],
   },
   {

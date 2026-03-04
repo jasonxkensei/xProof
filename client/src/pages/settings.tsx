@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Shield, ArrowLeft, ExternalLink, Trophy, Award, BadgeCheck, Trash2, Plus, TrendingUp, Zap, Flame, Star } from "lucide-react";
+import { Shield, ArrowLeft, ExternalLink, Trophy, Award, BadgeCheck, Trash2, Plus, TrendingUp, Zap, Flame, Star, KeyRound, CheckCircle2 } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -129,6 +129,39 @@ export default function Settings() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [showAttestForm, setShowAttestForm] = useState(false);
+  const [trialApiKey, setTrialApiKey] = useState("");
+  const [claimResult, setClaimResult] = useState<{ success: boolean; message: string; transferred?: { certifications: number; api_keys: number }; trust_score?: { score: number; level: string } } | null>(null);
+
+  const claimMutation = useMutation({
+    mutationFn: (key: string) =>
+      apiRequest("POST", "/api/trial/claim", { trial_api_key: key }),
+    onSuccess: async (res: any) => {
+      const data = await res.json();
+      setClaimResult(data);
+      setTrialApiKey("");
+      qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      qc.invalidateQueries({ queryKey: ["/api/trust/preview"] });
+      qc.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+      if (user?.walletAddress) {
+        qc.invalidateQueries({ queryKey: ["/api/agents", user.walletAddress] });
+      }
+      toast({ description: data.message || "Trial account claimed successfully." });
+    },
+    onError: (err: any) => {
+      let msg = "Failed to claim trial account.";
+      const errStr = err?.message || String(err);
+      try {
+        const jsonPart = errStr.includes("{") ? errStr.slice(errStr.indexOf("{")) : null;
+        if (jsonPart) {
+          const parsed = JSON.parse(jsonPart);
+          if (parsed.message) msg = parsed.message;
+        } else if (errStr.includes(":")) {
+          msg = errStr.split(":").slice(1).join(":").trim() || msg;
+        }
+      } catch {}
+      toast({ variant: "destructive", description: msg });
+    },
+  });
 
   const { data: agentData } = useQuery<{
     level: string;
@@ -322,6 +355,64 @@ export default function Settings() {
                   : "Not provided"}
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Claim trial key */}
+        <Card className="mb-6" data-testid="card-claim-trial">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-muted-foreground" />
+              Claim a trial API key
+            </CardTitle>
+            <CardDescription>
+              If you tested xproof with a trial key (from <code className="text-xs bg-muted px-1 py-0.5 rounded">POST /api/agent/register</code>), your certifications are on a separate temporary account. Paste your trial key here to transfer everything to your real wallet.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {claimResult?.success ? (
+              <div className="flex items-start gap-3 rounded-md border border-primary/20 bg-primary/5 p-4" data-testid="claim-success">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">{claimResult.message}</p>
+                  {claimResult.trust_score && (
+                    <p className="text-xs text-muted-foreground">
+                      Updated Trust Score: <span className="font-semibold text-foreground">{claimResult.trust_score.score} pts</span> ({claimResult.trust_score.level})
+                    </p>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => setClaimResult(null)}
+                    data-testid="button-claim-another"
+                  >
+                    Claim another key
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex-1 min-w-[250px] space-y-2">
+                  <Label htmlFor="trialApiKey">Trial API key</Label>
+                  <Input
+                    id="trialApiKey"
+                    data-testid="input-trial-api-key"
+                    placeholder="pm_abc123..."
+                    value={trialApiKey}
+                    onChange={(e) => setTrialApiKey(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                </div>
+                <Button
+                  onClick={() => claimMutation.mutate(trialApiKey)}
+                  disabled={claimMutation.isPending || !trialApiKey.startsWith("pm_")}
+                  data-testid="button-claim-trial"
+                >
+                  {claimMutation.isPending ? "Claiming..." : "Claim & transfer"}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 

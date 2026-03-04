@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { storage } from "./storage";
 import { logger } from "./logger";
 import { computeTrustScore, computeTrustScoreByWallet, getLeaderboard, generateTrustBadgeSvg } from "./trust";
@@ -1381,8 +1381,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================
   app.post("/api/trial/claim", isWalletAuthenticated, async (req: any, res) => {
     try {
-      const { trial_api_key } = req.body;
-      if (!trial_api_key || typeof trial_api_key !== "string" || !trial_api_key.startsWith("pm_")) {
+      const rawKey = typeof req.body?.trial_api_key === "string" ? req.body.trial_api_key.trim() : "";
+      if (!rawKey || !rawKey.startsWith("pm_")) {
         return res.status(400).json({
           error: "INVALID_INPUT",
           message: "trial_api_key is required and must be a valid trial API key (starts with pm_)",
@@ -1395,14 +1395,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "USER_NOT_FOUND", message: "Authenticated user not found" });
       }
 
-      // Look up trial API key by hash
-      const keyHash = crypto.createHash("sha256").update(trial_api_key).digest("hex");
+      const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
       const [trialApiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
       if (!trialApiKey) {
         return res.status(404).json({ error: "KEY_NOT_FOUND", message: "Trial API key not found" });
       }
 
-      // Verify it belongs to a trial user
       const [trialUser] = await db.select().from(users).where(eq(users.id, trialApiKey.userId));
       if (!trialUser) {
         return res.status(404).json({ error: "TRIAL_USER_NOT_FOUND", message: "Trial user not found" });
@@ -1420,47 +1418,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Count certifications to transfer
-      const trialCerts = await db.select({ id: certifications.id })
-        .from(certifications)
-        .where(eq(certifications.userId, trialUser.id));
+      // Atomic transfer inside a transaction to prevent double-claim race conditions
+      const result = await db.transaction(async (tx) => {
+        // Atomically claim the API key — if userId already changed, this returns 0 rows
+        const claimedKeys = await tx.update(apiKeys)
+          .set({
+            userId: realUser.id,
+            name: trialApiKey.name?.replace(/^Trial: /, "") || "Claimed from trial",
+          })
+          .where(and(eq(apiKeys.id, trialApiKey.id), eq(apiKeys.userId, trialUser.id)))
+          .returning({ id: apiKeys.id });
 
-      // Transfer all certifications to real user
-      let transferredCerts = 0;
-      if (trialCerts.length > 0) {
-        await db.update(certifications)
-          .set({ userId: realUser.id })
+        if (claimedKeys.length === 0) {
+          throw new Error("ALREADY_CLAIMED");
+        }
+
+        // Transfer all certifications
+        const trialCerts = await tx.select({ id: certifications.id })
+          .from(certifications)
           .where(eq(certifications.userId, trialUser.id));
-        transferredCerts = trialCerts.length;
-      }
 
-      // Reassign the API key to the real user
-      await db.update(apiKeys)
-        .set({
-          userId: realUser.id,
-          name: trialApiKey.name?.replace(/^Trial: /, "") || "Claimed from trial",
-        })
-        .where(eq(apiKeys.id, trialApiKey.id));
+        if (trialCerts.length > 0) {
+          await tx.update(certifications)
+            .set({ userId: realUser.id })
+            .where(eq(certifications.userId, trialUser.id));
+        }
+
+        return { transferredCerts: trialCerts.length };
+      });
+
+      // Recalculate trust score outside transaction (non-critical — retry-safe)
+      let updatedScore: any = null;
+      try {
+        const trust = await computeTrustScoreByWallet(realWallet);
+        if (trust) {
+          updatedScore = { score: trust.score, level: trust.level };
+          await pool.query(
+            `INSERT INTO trust_score_snapshots (wallet_address, score, level, cert_total, active_attestations, rank, snapshot_date)
+             VALUES ($1, $2, $3, $4, $5, 0, CURRENT_DATE)
+             ON CONFLICT (wallet_address, snapshot_date) DO UPDATE SET
+               score = EXCLUDED.score, level = EXCLUDED.level,
+               cert_total = EXCLUDED.cert_total, active_attestations = EXCLUDED.active_attestations`,
+            [realWallet, trust.score, trust.level, trust.certTotal, trust.activeAttestations ?? 0]
+          );
+        }
+      } catch (e) {
+        logger.withRequest(req).warn("Trust score recalculation after claim failed", { error: (e as Error).message });
+      }
 
       logger.withRequest(req).info("Trial account claimed", {
         realWallet,
         realUserId: realUser.id,
         trialUserId: trialUser.id,
-        transferredCerts,
+        transferredCerts: result.transferredCerts,
         apiKeyId: trialApiKey.id,
+        updatedScore,
       });
 
       return res.status(200).json({
         success: true,
-        message: `Trial account successfully claimed. ${transferredCerts} certification(s) and 1 API key transferred to your wallet.`,
+        message: `Trial account successfully claimed. ${result.transferredCerts} certification(s) and 1 API key transferred to your wallet.`,
         transferred: {
-          certifications: transferredCerts,
+          certifications: result.transferredCerts,
           api_keys: 1,
         },
         api_key_prefix: trialApiKey.keyPrefix,
         wallet: realWallet,
+        trust_score: updatedScore,
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message === "ALREADY_CLAIMED") {
+        return res.status(409).json({
+          error: "ALREADY_CLAIMED",
+          message: "This trial key has already been claimed by another account.",
+        });
+      }
       logger.withRequest(req).error("Trial claim failed", { error: (error as Error).message });
       return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to claim trial account" });
     }
@@ -6826,6 +6858,112 @@ export const xproofAuditPlugin: Plugin = {
         },
         recent_failed: recentFailed,
         recent_processing: recentProcessing,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================
+  // Admin: Trial Account Management
+  // ============================================
+  app.get("/api/admin/trial/orphans", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT u.id as user_id, u.wallet_address, u.company_name as agent_name,
+               u.trial_quota, u.trial_used, u.created_at,
+               COUNT(c.id)::int as cert_count,
+               COUNT(ak.id)::int as key_count,
+               MAX(c.created_at) as last_cert_at,
+               ARRAY_AGG(DISTINCT c.file_name) FILTER (WHERE c.file_name IS NOT NULL) as file_names
+        FROM users u
+        LEFT JOIN certifications c ON c.user_id = u.id
+        LEFT JOIN api_keys ak ON ak.user_id = u.id
+        WHERE u.wallet_address LIKE 'erd1trial%'
+        GROUP BY u.id
+        HAVING COUNT(c.id) > 0 OR COUNT(ak.id) > 0
+        ORDER BY COUNT(c.id) DESC
+      `);
+      res.json({
+        orphans: result.rows,
+        total: result.rows.length,
+        total_certs: result.rows.reduce((s: number, r: any) => s + r.cert_count, 0),
+        total_keys: result.rows.reduce((s: number, r: any) => s + r.key_count, 0),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/trial/migrate", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const trial_user_id = typeof req.body?.trial_user_id === "string" ? req.body.trial_user_id.trim() : "";
+      const target_wallet = typeof req.body?.target_wallet === "string" ? req.body.target_wallet.trim() : "";
+
+      if (!trial_user_id || !target_wallet) {
+        return res.status(400).json({ error: "trial_user_id and target_wallet are required" });
+      }
+      if (!target_wallet.startsWith("erd1") || target_wallet.length < 30) {
+        return res.status(400).json({ error: "target_wallet must be a valid MultiversX address (starts with erd1)" });
+      }
+
+      const [trialUser] = await db.select().from(users).where(eq(users.id, trial_user_id));
+      if (!trialUser || !trialUser.walletAddress?.startsWith("erd1trial")) {
+        return res.status(404).json({ error: "Trial user not found or not a trial account" });
+      }
+
+      const [targetUser] = await db.select().from(users).where(eq(users.walletAddress, target_wallet));
+      if (!targetUser) {
+        return res.status(404).json({ error: "Target wallet user not found" });
+      }
+
+      // Atomic transfer inside a transaction
+      const transferred = await db.transaction(async (tx) => {
+        const certs = await tx.select({ id: certifications.id }).from(certifications).where(eq(certifications.userId, trialUser.id));
+        if (certs.length > 0) {
+          await tx.update(certifications).set({ userId: targetUser.id }).where(eq(certifications.userId, trialUser.id));
+        }
+
+        const keys = await tx.select({ id: apiKeys.id }).from(apiKeys).where(eq(apiKeys.userId, trialUser.id));
+        if (keys.length > 0) {
+          await tx.update(apiKeys).set({
+            userId: targetUser.id,
+            name: sql`REPLACE(name, 'Trial: ', '')`,
+          }).where(eq(apiKeys.userId, trialUser.id));
+        }
+
+        return { certs: certs.length, keys: keys.length };
+      });
+
+      // Recalculate trust score
+      let updatedScore: any = null;
+      try {
+        const trust = await computeTrustScoreByWallet(target_wallet);
+        if (trust) {
+          updatedScore = { score: trust.score, level: trust.level };
+          await pool.query(
+            `INSERT INTO trust_score_snapshots (wallet_address, score, level, cert_total, active_attestations, rank, snapshot_date)
+             VALUES ($1, $2, $3, $4, $5, 0, CURRENT_DATE)
+             ON CONFLICT (wallet_address, snapshot_date) DO UPDATE SET
+               score = EXCLUDED.score, level = EXCLUDED.level,
+               cert_total = EXCLUDED.cert_total, active_attestations = EXCLUDED.active_attestations`,
+            [target_wallet, trust.score, trust.level, trust.certTotal, trust.activeAttestations ?? 0]
+          );
+        }
+      } catch {}
+
+      logger.withRequest(req).info("Admin trial migration", {
+        trialUserId: trialUser.id,
+        targetWallet: target_wallet,
+        certs: transferred.certs,
+        keys: transferred.keys,
+      });
+
+      res.json({
+        success: true,
+        transferred: { certifications: transferred.certs, api_keys: transferred.keys },
+        target_wallet,
+        trust_score: updatedScore,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

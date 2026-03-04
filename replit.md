@@ -72,6 +72,9 @@ A public `/docs` page provides a comprehensive, searchable API reference with co
 ### Onboarding UX
 First-time authenticated users see a guided onboarding card on the Dashboard with 4 steps: Connect wallet (auto-completed), Certify first file, View proof, Go public on leaderboard. Steps reflect actual user state (`isPublicProfile`, certification count). Card is dismissible via localStorage and re-openable. The landing page includes a Quick Start section with 3 integration path cards (REST API, MCP, Web Interface).
 
+### Trial Account Claim System
+Users who test xproof via `POST /api/agent/register` get a trial account with a temporary `erd1trial...` wallet. To link trial certifications and API keys to a real wallet, `POST /api/trial/claim` accepts `{ trial_api_key }` with wallet session auth. It transfers all certifications and the API key, recalculates the trust score immediately, and updates the leaderboard snapshot. The Settings page (`/settings`) includes a "Claim a trial API key" card with input and feedback. Admin endpoints `GET /api/admin/trial/orphans` and `POST /api/admin/trial/migrate` allow bulk management of orphaned trial accounts.
+
 ### Rate Limiting
 Endpoint-specific rate limiters complement the global 100 req/min limit: `publicReadRateLimiter` (60/min) on agent profiles, trust lookups, and ACP discovery; `publicSearchRateLimiter` (30/min) on leaderboard, agent search, and trust history; `publicCompareRateLimiter` (20/min) on agent comparison. Defined in `server/reliability.ts`.
 
