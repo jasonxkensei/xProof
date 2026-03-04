@@ -4,6 +4,8 @@ import { eq, sql } from "drizzle-orm";
 
 export type TrustLevel = "Newcomer" | "Active" | "Trusted" | "Verified";
 
+export type TransparencyTier = "Tier 1" | "Tier 2" | "Tier 3";
+
 export interface TrustScore {
   score: number;
   level: TrustLevel;
@@ -12,6 +14,10 @@ export interface TrustScore {
   streakWeeks: number;
   activeAttestations: number;
   attestationBonus: number;
+  transparencyTier: TransparencyTier;
+  transparencyBonus: number;
+  metadataCount: number;
+  auditCount: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
 }
@@ -32,6 +38,19 @@ export function getTrustLevelColor(level: TrustLevel): string {
   }
 }
 
+export function getTransparencyTier(metadataCount: number, auditCount: number): TransparencyTier {
+  if (auditCount >= 5) return "Tier 3";
+  if (metadataCount >= 3) return "Tier 2";
+  return "Tier 1";
+}
+
+function computeTransparencyBonus(metadataCount: number, auditCount: number): number {
+  let bonus = 0;
+  bonus += Math.min(50, metadataCount * 5);
+  bonus += Math.min(100, auditCount * 15);
+  return Math.min(200, bonus);
+}
+
 function computeScore(
   confirmed: number,
   last30d: number,
@@ -39,6 +58,7 @@ function computeScore(
   firstAt: Date | null,
   lastAt: Date | null,
   attestationBonus: number = 0,
+  transparencyBonus: number = 0,
 ): number {
   const daysSinceFirst = firstAt
     ? Math.floor((Date.now() - firstAt.getTime()) / (1000 * 60 * 60 * 24))
@@ -61,7 +81,7 @@ function computeScore(
 
   const streakBonus = Math.min(100, streakWeeks * 8);
 
-  return Math.round(baseScore + recencyBonus + ageBonus + streakBonus + attestationBonus);
+  return Math.round(baseScore + recencyBonus + ageBonus + streakBonus + attestationBonus + transparencyBonus);
 }
 
 function issuerBonusFromCertCount(confirmedCerts: number): number {
@@ -166,6 +186,24 @@ async function computeAttestationBonusBatch(walletAddresses: string[]): Promise<
   }
 }
 
+async function computeTransparencyCounts(userId: string): Promise<{ metadataCount: number; auditCount: number }> {
+  try {
+    const [result] = await db
+      .select({
+        metadataCount: sql<number>`COUNT(*) FILTER (WHERE blockchain_status = 'confirmed' AND metadata IS NOT NULL AND (metadata->>'model_hash' IS NOT NULL OR metadata->>'strategy_hash' IS NOT NULL OR metadata->>'version_number' IS NOT NULL))`,
+        auditCount: sql<number>`COUNT(*) FILTER (WHERE blockchain_status = 'confirmed' AND metadata IS NOT NULL AND metadata->>'agent_id' IS NOT NULL)`,
+      })
+      .from(certifications)
+      .where(eq(certifications.userId, userId));
+    return {
+      metadataCount: Number(result.metadataCount || 0),
+      auditCount: Number(result.auditCount || 0),
+    };
+  } catch {
+    return { metadataCount: 0, auditCount: 0 };
+  }
+}
+
 export async function computeTrustScore(userId: string): Promise<TrustScore> {
   const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
@@ -187,13 +225,16 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
   const [user] = await db.select({ walletAddress: users.walletAddress }).from(users).where(eq(users.id, userId));
   const walletAddress = user?.walletAddress || "";
 
-  const [streakWeeks, attestationResult] = await Promise.all([
+  const [streakWeeks, attestationResult, transparencyCounts] = await Promise.all([
     computeStreakWeeks(userId),
     computeAttestationBonus(walletAddress),
+    computeTransparencyCounts(userId),
   ]);
 
   const { bonus: attestationBonus, count: activeAttestations } = attestationResult;
-  const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, attestationBonus);
+  const { metadataCount, auditCount } = transparencyCounts;
+  const tBonus = computeTransparencyBonus(metadataCount, auditCount);
+  const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, attestationBonus, tBonus);
 
   return {
     score,
@@ -203,6 +244,10 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
     streakWeeks,
     activeAttestations,
     attestationBonus,
+    transparencyTier: getTransparencyTier(metadataCount, auditCount),
+    transparencyBonus: tBonus,
+    metadataCount,
+    auditCount,
     firstCertAt: firstAt ? firstAt.toISOString() : null,
     lastCertAt: lastAt ? lastAt.toISOString() : null,
   };
@@ -230,6 +275,8 @@ export interface LeaderboardEntry {
   streakWeeks: number;
   activeAttestations: number;
   attestationBonus: number;
+  transparencyTier: TransparencyTier;
+  transparencyBonus: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
   scoreDelta7d: number;
@@ -270,7 +317,9 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
       COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') AS cert_total,
       COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.created_at >= ${cutoff30d}) AS cert_last_30d,
       MIN(c.created_at) FILTER (WHERE c.blockchain_status = 'confirmed') AS first_cert_at,
-      MAX(c.created_at) FILTER (WHERE c.blockchain_status = 'confirmed') AS last_cert_at
+      MAX(c.created_at) FILTER (WHERE c.blockchain_status = 'confirmed') AS last_cert_at,
+      COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.metadata IS NOT NULL AND (c.metadata->>'model_hash' IS NOT NULL OR c.metadata->>'strategy_hash' IS NOT NULL OR c.metadata->>'version_number' IS NOT NULL)) AS metadata_count,
+      COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.metadata IS NOT NULL AND c.metadata->>'agent_id' IS NOT NULL) AS audit_count
     FROM users u
     LEFT JOIN certifications c ON c.user_id = u.id
     WHERE u.is_public_profile = true
@@ -300,7 +349,10 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
     const attestationResult = attestationMap.get(row.wallet_address) || { bonus: 0, count: 0 };
     const activeAttestations = attestationResult.count;
     const attestationBonus = attestationResult.bonus;
-    const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, attestationBonus);
+    const mCount = Number(row.metadata_count || 0);
+    const aCount = Number(row.audit_count || 0);
+    const tBonus = computeTransparencyBonus(mCount, aCount);
+    const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, attestationBonus, tBonus);
 
     return {
       walletAddress: row.wallet_address,
@@ -315,6 +367,8 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
       streakWeeks,
       activeAttestations,
       attestationBonus,
+      transparencyTier: getTransparencyTier(mCount, aCount),
+      transparencyBonus: tBonus,
       firstCertAt: firstAt ? firstAt.toISOString() : null,
       lastCertAt: lastAt ? lastAt.toISOString() : null,
       scoreDelta7d: oldScoreMap.has(row.wallet_address) ? score - (oldScoreMap.get(row.wallet_address) as number) : 0,

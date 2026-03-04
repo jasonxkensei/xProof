@@ -38,6 +38,21 @@ interface AttestationRecord {
   attestation_value?: number;
 }
 
+interface TimelineEvent {
+  id: string;
+  file_name: string;
+  file_hash: string;
+  blockchain_status: string;
+  transaction_hash: string | null;
+  metadata: any;
+  created_at: string;
+  event_type: "cert" | "metadata_cert" | "audit";
+  action_description: string | null;
+  model_hash: string | null;
+  strategy_hash: string | null;
+  version_number: string | null;
+}
+
 interface AgentProfile {
   walletAddress: string;
   agentName: string | null;
@@ -51,6 +66,10 @@ interface AgentProfile {
   streakWeeks: number;
   activeAttestations: number;
   attestationBonus?: number;
+  transparencyTier?: string;
+  transparencyBonus?: number;
+  metadataCount?: number;
+  auditCount?: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
   recentCertifications: {
@@ -438,6 +457,13 @@ function ScoreBreakdown({ agent }: { agent: AgentProfile }) {
       detail: `${Math.min(3, agent.activeAttestations)} counted (weighted by issuer level)`,
       Icon: BadgeCheck,
     },
+    {
+      label: "Transparency",
+      value: agent.transparencyBonus ?? 0,
+      cap: 200,
+      detail: `${agent.transparencyTier ?? "Tier 1"} — ${agent.metadataCount ?? 0} metadata, ${agent.auditCount ?? 0} audits`,
+      Icon: Shield,
+    },
   ];
 
   return (
@@ -530,6 +556,12 @@ export default function AgentProfilePage() {
   const { data: history } = useQuery<{ snapshots: TrustSnapshot[] }>({
     queryKey: ["/api/trust", wallet, "history"],
     queryFn: () => fetch(`/api/trust/${wallet}/history`).then((r) => r.json()),
+    enabled: !!wallet,
+  });
+
+  const { data: timeline } = useQuery<{ events: TimelineEvent[]; total: number }>({
+    queryKey: ["/api/agents", wallet, "timeline"],
+    queryFn: () => fetch(`/api/agents/${wallet}/timeline?limit=30`).then((r) => r.json()),
     enabled: !!wallet,
   });
 
@@ -668,6 +700,19 @@ export default function AgentProfilePage() {
                       <span className="text-xs text-emerald-600 dark:text-emerald-400" data-testid="text-attestation-bonus">
                         +{agent.attestationBonus ?? Math.min(3, agent.activeAttestations) * 50} pts from attestations
                       </span>
+                    )}
+                    {agent.transparencyTier && agent.transparencyTier !== "Tier 1" && (
+                      <Badge
+                        variant="outline"
+                        className={
+                          agent.transparencyTier === "Tier 3"
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                            : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                        }
+                        data-testid="badge-header-transparency"
+                      >
+                        {agent.transparencyTier}
+                      </Badge>
                     )}
                   </div>
                 </div>
@@ -822,48 +867,135 @@ export default function AgentProfilePage() {
               </Card>
             )}
 
-            {/* Recent certifications timeline */}
-            <Card data-testid="card-recent-certs">
+            <Card data-testid="card-audit-timeline">
               <CardHeader>
-                <CardTitle className="text-base">Recent certifications</CardTitle>
+                <CardTitle className="flex items-center justify-between gap-2 flex-wrap text-base">
+                  <span className="flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Audit Timeline
+                  </span>
+                  {agent.transparencyTier && (
+                    <Badge
+                      variant="outline"
+                      className={
+                        agent.transparencyTier === "Tier 3"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                          : agent.transparencyTier === "Tier 2"
+                          ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                          : "bg-muted text-muted-foreground"
+                      }
+                      data-testid="badge-transparency-tier"
+                    >
+                      {agent.transparencyTier}
+                    </Badge>
+                  )}
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                {agent.recentCertifications.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No certifications yet.</p>
+                {!timeline ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4 animate-spin" />
+                    Loading timeline...
+                  </div>
+                ) : timeline.events.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No confirmed certifications yet.</p>
                 ) : (
-                  <div className="space-y-0">
-                    {agent.recentCertifications.map((cert, i) => (
-                      <div
-                        key={cert.id}
-                        data-testid={`row-cert-${cert.id}`}
-                        className={`flex items-center justify-between gap-4 py-3 ${i < agent.recentCertifications.length - 1 ? "border-b" : ""}`}
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <StatusIcon status={cert.blockchainStatus} />
-                          <span className="truncate text-sm font-medium" title={cert.fileName}>
-                            {cert.fileName}
-                          </span>
+                  <div className="relative space-y-0">
+                    <div className="absolute left-[11px] top-3 bottom-3 w-px bg-border" />
+                    {timeline.events.map((evt, i) => {
+                      const isAudit = evt.event_type === "audit";
+                      const hasMeta = evt.event_type === "metadata_cert";
+                      return (
+                        <div
+                          key={evt.id}
+                          data-testid={`timeline-event-${evt.id}`}
+                          className={`relative pl-8 py-3 ${i < timeline.events.length - 1 ? "border-b border-border/50" : ""}`}
+                        >
+                          <div className={`absolute left-1.5 top-4 h-3 w-3 rounded-full border-2 ${
+                            isAudit
+                              ? "border-amber-500 bg-amber-500/20"
+                              : hasMeta
+                              ? "border-blue-500 bg-blue-500/20"
+                              : "border-emerald-500 bg-emerald-500/20"
+                          }`} />
+
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    isAudit
+                                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                                      : hasMeta
+                                      ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30"
+                                      : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                                  }
+                                >
+                                  {isAudit ? "Audit" : hasMeta ? "Metadata" : "Cert"}
+                                </Badge>
+                                <span className="truncate text-sm font-medium" title={evt.file_name}>
+                                  {evt.file_name}
+                                </span>
+                              </div>
+
+                              {isAudit && evt.action_description && (
+                                <p className="text-xs text-muted-foreground">{evt.action_description}</p>
+                              )}
+
+                              {(evt.model_hash || evt.strategy_hash || evt.version_number) && (
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {evt.model_hash && (
+                                    <span className="text-xs bg-muted rounded px-1.5 py-0.5 font-mono">
+                                      model: {evt.model_hash.slice(0, 12)}...
+                                    </span>
+                                  )}
+                                  {evt.strategy_hash && (
+                                    <span className="text-xs bg-muted rounded px-1.5 py-0.5 font-mono">
+                                      strategy: {evt.strategy_hash.slice(0, 12)}...
+                                    </span>
+                                  )}
+                                  {evt.version_number && (
+                                    <span className="text-xs bg-muted rounded px-1.5 py-0.5 font-mono">
+                                      v{evt.version_number}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex shrink-0 items-center gap-2">
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                {formatDistanceToNow(new Date(evt.created_at), { addSuffix: true })}
+                              </span>
+                              {evt.transaction_hash && (
+                                <Button
+                                  asChild
+                                  size="icon"
+                                  variant="ghost"
+                                  data-testid={`link-tx-${evt.id}`}
+                                >
+                                  <a
+                                    href={`https://explorer.multiversx.com/transactions/${evt.transaction_hash}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="View on explorer"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </a>
+                                </Button>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-3">
-                          <span className="text-xs text-muted-foreground">
-                            {cert.createdAt
-                              ? formatDistanceToNow(new Date(cert.createdAt), { addSuffix: true })
-                              : "—"}
-                          </span>
-                          <Button
-                            asChild
-                            size="sm"
-                            variant="ghost"
-                            data-testid={`link-cert-proof-${cert.id}`}
-                          >
-                            <a href={`/proof/${cert.id}`} target="_blank" rel="noopener noreferrer">
-                              Proof
-                              <ExternalLink className="ml-1 h-3 w-3" />
-                            </a>
-                          </Button>
-                        </div>
+                      );
+                    })}
+
+                    {timeline.total > timeline.events.length && (
+                      <div className="pt-3 pl-8 text-xs text-muted-foreground" data-testid="text-timeline-total">
+                        Showing {timeline.events.length} of {timeline.total} events
                       </div>
-                    ))}
+                    )}
                   </div>
                 )}
               </CardContent>

@@ -6850,6 +6850,77 @@ export const xproofAuditPlugin: Plugin = {
     }
   });
 
+  app.get("/api/agents/:wallet/timeline", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+      const offset = Math.max(0, Number(req.query.offset) || 0);
+
+      const [user] = await db
+        .select({ id: users.id, isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+
+      if (!user || !user.isPublicProfile) {
+        return res.status(404).json({ message: "Agent profile not found or not public" });
+      }
+
+      const [countResult, events] = await Promise.all([
+        db.execute(sql`
+          SELECT COUNT(*) AS total
+          FROM certifications
+          WHERE user_id = ${user.id} AND blockchain_status = 'confirmed'
+        `),
+        db.execute(sql`
+          SELECT
+            id,
+            file_name,
+            file_hash,
+            blockchain_status,
+            transaction_hash,
+            metadata,
+            created_at,
+            CASE
+              WHEN metadata IS NOT NULL AND metadata->>'agent_id' IS NOT NULL THEN 'audit'
+              WHEN metadata IS NOT NULL AND (metadata->>'model_hash' IS NOT NULL OR metadata->>'strategy_hash' IS NOT NULL OR metadata->>'version_number' IS NOT NULL) THEN 'metadata_cert'
+              ELSE 'cert'
+            END AS event_type,
+            CASE
+              WHEN metadata IS NOT NULL AND metadata->>'agent_id' IS NOT NULL THEN metadata->>'action_description'
+              ELSE NULL
+            END AS action_description,
+            CASE
+              WHEN metadata IS NOT NULL THEN metadata->>'model_hash'
+              ELSE NULL
+            END AS model_hash,
+            CASE
+              WHEN metadata IS NOT NULL THEN metadata->>'strategy_hash'
+              ELSE NULL
+            END AS strategy_hash,
+            CASE
+              WHEN metadata IS NOT NULL THEN metadata->>'version_number'
+              ELSE NULL
+            END AS version_number
+          FROM certifications
+          WHERE user_id = ${user.id} AND blockchain_status = 'confirmed'
+          ORDER BY created_at DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `),
+      ]);
+
+      const total = Number((countResult.rows[0] as any)?.total || 0);
+      res.json({
+        walletAddress: wallet,
+        events: events.rows,
+        total,
+        limit,
+        offset,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // GET /api/agents/:wallet — public, returns a single agent profile
   app.get("/api/agents/:wallet", publicReadRateLimiter, async (req, res) => {
     try {
@@ -6971,6 +7042,10 @@ export const xproofAuditPlugin: Plugin = {
         certTotal: trust.certTotal,
         certLast30d: trust.certLast30d,
         streakWeeks: trust.streakWeeks,
+        transparencyTier: trust.transparencyTier,
+        transparencyBonus: trust.transparencyBonus,
+        metadataCount: trust.metadataCount,
+        auditCount: trust.auditCount,
         firstCertAt: trust.firstCertAt,
         lastCertAt: trust.lastCertAt,
       });
