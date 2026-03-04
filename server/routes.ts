@@ -1309,6 +1309,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const data = agentRegisterSchema.parse(req.body);
 
+      const nameLower = data.agent_name.toLowerCase();
+      const existingByUser = await db.select({ id: users.id })
+        .from(users)
+        .where(and(
+          sql`(LOWER(${users.companyName}) = ${nameLower} OR LOWER(${users.agentName}) = ${nameLower})`,
+          eq(users.isTrial, false),
+        ))
+        .limit(1);
+      const existingByKey = existingByUser.length === 0
+        ? await db.select({ id: apiKeys.id })
+            .from(apiKeys)
+            .innerJoin(users, eq(apiKeys.userId, users.id))
+            .where(and(
+              sql`LOWER(${apiKeys.name}) = ${nameLower}`,
+              eq(users.isTrial, false),
+              eq(apiKeys.isActive, true),
+            ))
+            .limit(1)
+        : [];
+      const hasDuplicate = existingByUser.length > 0 || existingByKey.length > 0;
+
       const trialWallet = `erd1trial${crypto.randomBytes(24).toString("hex")}`;
 
       const [trialUser] = await db.insert(users).values({
@@ -1359,6 +1380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         warning: `This trial account is NOT linked to a MultiversX wallet. Certifications made with this key will NOT appear on your public agent profile or trust leaderboard. To link this key to your real wallet, authenticate at ${baseUrl} and call POST ${baseUrl}/api/trial/claim with this API key.`,
         claim_endpoint: `POST ${baseUrl}/api/trial/claim`,
         claim_usage: `After connecting your real wallet at ${baseUrl}, call: curl -X POST ${baseUrl}/api/trial/claim -H "Cookie: <your-session>" -H "Content-Type: application/json" -d '{"trial_api_key":"${rawKey}"}'`,
+        ...(hasDuplicate ? { duplicate_warning: `An agent named "${data.agent_name}" already exists on a real wallet. If this is your agent, use POST ${baseUrl}/api/trial/claim after connecting your wallet to merge this trial key into your existing account.` } : {}),
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -6640,7 +6662,7 @@ export const xproofAuditPlugin: Plugin = {
       const [humanVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, false));
       const [agentVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, true));
 
-      const [uniqueAgentsRow] = await db.select({ count: count() }).from(apiKeys).innerJoin(users, eq(apiKeys.userId, users.id)).where(and(eq(apiKeys.isActive, true), gt(apiKeys.requestCount, 0), sql`${users.isTrial} IS NOT TRUE`));
+      const [uniqueAgentsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ${users.id})` }).from(apiKeys).innerJoin(users, eq(apiKeys.userId, users.id)).where(and(eq(apiKeys.isActive, true), gt(apiKeys.requestCount, 0), sql`${users.isTrial} IS NOT TRUE`));
       const [totalApiKeysRow] = await db.select({ count: count() }).from(apiKeys).innerJoin(users, eq(apiKeys.userId, users.id)).where(and(eq(apiKeys.isActive, true), sql`${users.isTrial} IS NOT TRUE`));
       const [trialAgentsRow] = await db.select({ count: count() }).from(users).where(eq(users.isTrial, true));
       const [trialUsedRow] = await db.select({ total: sql<number>`COALESCE(SUM(trial_used), 0)` }).from(users).where(eq(users.isTrial, true));
