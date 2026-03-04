@@ -1356,6 +1356,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         usage: `Include header: Authorization: Bearer ${rawKey}`,
         message: `Trial account created with ${TRIAL_QUOTA} free certifications. No wallet or payment needed. After trial, pay per certification via x402 (USDC on Base) or EGLD (ACP).`,
+        warning: `This trial account is NOT linked to a MultiversX wallet. Certifications made with this key will NOT appear on your public agent profile or trust leaderboard. To link this key to your real wallet, authenticate at ${baseUrl} and call POST ${baseUrl}/api/trial/claim with this API key.`,
+        claim_endpoint: `POST ${baseUrl}/api/trial/claim`,
+        claim_usage: `After connecting your real wallet at ${baseUrl}, call: curl -X POST ${baseUrl}/api/trial/claim -H "Cookie: <your-session>" -H "Content-Type: application/json" -d '{"trial_api_key":"${rawKey}"}'`,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1367,6 +1370,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       logger.withRequest(req).error("Agent registration failed", { error: (error as Error).message });
       return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to create trial account" });
+    }
+  });
+
+  // ============================================
+  // Trial Claim endpoint
+  // Transfers all certifications and API key from a trial account to the authenticated real wallet
+  // POST /api/trial/claim — requires wallet session auth
+  // Body: { trial_api_key: "pm_xxx..." }
+  // ============================================
+  app.post("/api/trial/claim", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const { trial_api_key } = req.body;
+      if (!trial_api_key || typeof trial_api_key !== "string" || !trial_api_key.startsWith("pm_")) {
+        return res.status(400).json({
+          error: "INVALID_INPUT",
+          message: "trial_api_key is required and must be a valid trial API key (starts with pm_)",
+        });
+      }
+
+      const realWallet = req.walletAddress as string;
+      const [realUser] = await db.select().from(users).where(eq(users.walletAddress, realWallet));
+      if (!realUser) {
+        return res.status(404).json({ error: "USER_NOT_FOUND", message: "Authenticated user not found" });
+      }
+
+      // Look up trial API key by hash
+      const keyHash = crypto.createHash("sha256").update(trial_api_key).digest("hex");
+      const [trialApiKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+      if (!trialApiKey) {
+        return res.status(404).json({ error: "KEY_NOT_FOUND", message: "Trial API key not found" });
+      }
+
+      // Verify it belongs to a trial user
+      const [trialUser] = await db.select().from(users).where(eq(users.id, trialApiKey.userId));
+      if (!trialUser) {
+        return res.status(404).json({ error: "TRIAL_USER_NOT_FOUND", message: "Trial user not found" });
+      }
+      if (!trialUser.isTrial) {
+        return res.status(400).json({
+          error: "NOT_A_TRIAL_KEY",
+          message: "This API key is already linked to a real wallet account. Only trial keys can be claimed.",
+        });
+      }
+      if (trialUser.id === realUser.id) {
+        return res.status(400).json({
+          error: "SAME_ACCOUNT",
+          message: "This trial key already belongs to your account.",
+        });
+      }
+
+      // Count certifications to transfer
+      const trialCerts = await db.select({ id: certifications.id })
+        .from(certifications)
+        .where(eq(certifications.userId, trialUser.id));
+
+      // Transfer all certifications to real user
+      let transferredCerts = 0;
+      if (trialCerts.length > 0) {
+        await db.update(certifications)
+          .set({ userId: realUser.id })
+          .where(eq(certifications.userId, trialUser.id));
+        transferredCerts = trialCerts.length;
+      }
+
+      // Reassign the API key to the real user
+      await db.update(apiKeys)
+        .set({
+          userId: realUser.id,
+          name: trialApiKey.name?.replace(/^Trial: /, "") || "Claimed from trial",
+        })
+        .where(eq(apiKeys.id, trialApiKey.id));
+
+      logger.withRequest(req).info("Trial account claimed", {
+        realWallet,
+        realUserId: realUser.id,
+        trialUserId: trialUser.id,
+        transferredCerts,
+        apiKeyId: trialApiKey.id,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Trial account successfully claimed. ${transferredCerts} certification(s) and 1 API key transferred to your wallet.`,
+        transferred: {
+          certifications: transferredCerts,
+          api_keys: 1,
+        },
+        api_key_prefix: trialApiKey.keyPrefix,
+        wallet: realWallet,
+      });
+    } catch (error) {
+      logger.withRequest(req).error("Trial claim failed", { error: (error as Error).message });
+      return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to claim trial account" });
     }
   });
 
