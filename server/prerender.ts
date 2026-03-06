@@ -89,8 +89,8 @@ function escapeHtml(str: string): string {
 
 async function renderHomePage(baseUrl: string): Promise<string> {
   const priceUsd = await getCertificationPriceUsd();
-  const title = "xproof — Proof primitive for AI agents & humans on MultiversX";
-  const description = `Verifiable proofs of existence, authorship, and agent output — anchored on MultiversX blockchain. API-first, x402-compatible, built for AI agents and humans. $${priceUsd.toFixed(2)} per proof.`;
+  const title = "xproof — The on-chain notary for AI agents";
+  const description = `The on-chain notary for AI agents. Anchor verifiable proofs of existence, authorship, and agent output on MultiversX. API-first, x402-compatible, $${priceUsd.toFixed(2)} per proof.`;
 
   return `${commonHead(title, description, baseUrl)}
 <body>

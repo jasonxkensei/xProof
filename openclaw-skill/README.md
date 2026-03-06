@@ -1,6 +1,6 @@
 # xProof OpenClaw Skill
 
-Certify files on MultiversX blockchain via [xProof](https://xproof.app). Proof primitive for AI agents and humans.
+Certify files on MultiversX blockchain via [xProof](https://xproof.app) — the on-chain notary for AI agents.
 
 ## Install
 

@@ -1,7 +1,7 @@
-# xproof — Proof primitive for agents & humans on MultiversX
+# xproof — The on-chain notary for AI agents
 
 ## Overview
-xproof is an API-first, composable trust primitive that anchors verifiable proofs of existence, authorship, and agent output on the MultiversX blockchain. It serves both human users and autonomous agents by providing a robust, verifiable proof system for decentralized applications and agent-based systems within the MultiversX ecosystem. The project aims to establish trust infrastructure for the AI economy through verifiable and attributable agent outputs.
+xproof is the on-chain notary for AI agents — it anchors verifiable proofs of what an agent saw, decided, and produced on the MultiversX blockchain. It serves both human users and autonomous agents by providing a robust, verifiable proof system for decentralized applications and agent-based systems within the MultiversX ecosystem. The project aims to establish trust infrastructure for the AI economy through verifiable and attributable agent outputs.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

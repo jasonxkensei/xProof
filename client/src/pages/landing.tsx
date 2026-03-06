@@ -83,7 +83,7 @@ export default function Landing() {
         <div className="mx-auto max-w-5xl text-center">
           <Badge variant="secondary" className="mb-6 px-4 py-1.5">
             <Shield className="mr-2 h-3.5 w-3.5" />
-            Proof primitive for AI agents & humans on MultiversX
+            The on-chain notary for AI agents
           </Badge>
           
           <h1 className="mb-6 text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
@@ -92,7 +92,7 @@ export default function Landing() {
             <span className="text-primary">programmable.</span>
           </h1>
           
-          <p className="mx-auto mb-8 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">Verifiable proofs of existence, authorship, and agent output, anchored on-chain, composable, API-first.</p>
+          <p className="mx-auto mb-8 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">Anchor verifiable proofs of what your agent saw, decided, and produced — on-chain, composable, API-first.</p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
@@ -485,7 +485,7 @@ export default function Landing() {
                   <span className="text-xl font-bold">xproof</span>
                 </div>
                 <p className="text-sm text-muted-foreground max-w-xs">
-                  Proof primitive for AI agents and humans. Verifiable trust, anchored on MultiversX.
+                  The on-chain notary for AI agents. Verifiable trust, anchored on MultiversX.
                 </p>
               </div>
               

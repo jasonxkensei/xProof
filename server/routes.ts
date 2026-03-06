@@ -6479,7 +6479,7 @@ export const xproofAuditPlugin: Plugin = {
 
     res.json({
       name: "xproof",
-      description: "Proof primitive for AI agents & humans on MultiversX. Verifiable proofs of existence, authorship, and agent output anchored on-chain.",
+      description: "The on-chain notary for AI agents. Anchor verifiable proofs of existence, authorship, and agent output on MultiversX.",
       url: baseUrl,
       version: "1.2.0",
       capabilities: ["file-certification", "batch-certification", "proof-verification", "blockchain-anchoring", "webhook-notifications", "verification-badges", "mx8004-validation", "agent-audit-log"],

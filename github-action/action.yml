@@ -1,5 +1,5 @@
 name: 'xProof Certify'
-description: 'Proof primitive for AI agents and humans on MultiversX. Anchor CI/CD artifacts and agent outputs on-chain.'
+description: 'The on-chain notary for AI agents. Anchor CI/CD artifacts and agent outputs on-chain via MultiversX.'
 author: 'xproof'
 branding:
   icon: 'shield'

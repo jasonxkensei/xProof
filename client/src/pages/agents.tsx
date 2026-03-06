@@ -304,7 +304,7 @@ export default function AgentsPage() {
                   <span className="text-xl font-bold">xproof</span>
                 </div>
                 <p className="text-sm text-muted-foreground max-w-xs">
-                  Proof primitive for AI agents and humans. Verifiable trust, anchored on MultiversX.
+                  The on-chain notary for AI agents. Verifiable trust, anchored on MultiversX.
                 </p>
               </div>
 
