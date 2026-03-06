@@ -499,10 +499,6 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Total</span>
-                      <span className="font-medium">{stats.webhooks.total}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Delivered</span>
                       <span className="font-medium text-chart-2">{stats.webhooks.delivered}</span>
                     </div>
