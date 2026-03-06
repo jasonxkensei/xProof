@@ -442,10 +442,6 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Total</span>
-                      <span className="font-medium">{stats.certifications.total}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         <CheckCircle2 className="h-3 w-3 text-chart-2" /> Verified
                       </span>
