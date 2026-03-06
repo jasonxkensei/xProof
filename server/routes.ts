@@ -6915,7 +6915,7 @@ export const xproofAuditPlugin: Plugin = {
   // ============================================
   app.get("/api/admin/trial/orphans", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
     try {
-      const result = await pool.query(`
+      const result = await db.execute(sql`
         SELECT u.id as user_id, u.wallet_address, u.company_name as agent_name,
                u.trial_quota, u.trial_used, u.created_at,
                COUNT(c.id)::int as cert_count,
