@@ -989,10 +989,10 @@ export default function AgentProfilePage() {
                                   data-testid={`link-tx-${evt.id}`}
                                 >
                                   <a
-                                    href={`https://explorer.multiversx.com/transactions/${evt.transaction_hash}`}
+                                    href={isAudit ? `/audit/${evt.id}` : `/proof/${evt.id}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    title="View on explorer"
+                                    title={isAudit ? "View audit proof" : "View certification proof"}
                                   >
                                     <ExternalLink className="h-3.5 w-3.5" />
                                   </a>
