@@ -11,7 +11,9 @@ import {
 } from "./reliability";
 import { startTxQueueWorker } from "./txQueue";
 import { computeTrustScoreByWallet } from "./trust";
-import { pool } from "./db";
+import { pool, db } from "./db";
+import { users } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import { requestIdMiddleware, logger } from "./logger";
 
 setupProcessErrorHandlers();
@@ -121,16 +123,17 @@ app.use((req, res, next) => {
   const port = parseInt(process.env.PORT || '5000', 10);
   async function runDailyMaintenance() {
     try {
-      const publicAgents = await pool.query(
-        `SELECT wallet_address FROM users WHERE is_public_profile = true`
-      );
+      const publicAgents = await db
+        .select({ walletAddress: users.walletAddress })
+        .from(users)
+        .where(eq(users.isPublicProfile, true));
       let snapshots = 0;
       const agentScores: Array<{ wallet: string; score: number; level: string; certTotal: number; activeAttestations: number }> = [];
-      for (const row of publicAgents.rows) {
+      for (const row of publicAgents) {
         try {
-          const trust = await computeTrustScoreByWallet(row.wallet_address);
+          const trust = await computeTrustScoreByWallet(row.walletAddress);
           if (trust) {
-            agentScores.push({ wallet: row.wallet_address, score: trust.score, level: trust.level, certTotal: trust.certTotal, activeAttestations: trust.activeAttestations ?? 0 });
+            agentScores.push({ wallet: row.walletAddress, score: trust.score, level: trust.level, certTotal: trust.certTotal, activeAttestations: trust.activeAttestations ?? 0 });
           }
         } catch {}
       }
