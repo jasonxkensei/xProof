@@ -20,7 +20,6 @@ import {
   Bot,
   User,
   Zap,
-  Timer,
   Eye,
   Globe,
   Target,
@@ -127,13 +126,6 @@ function formatTimeAgo(isoDate: string): string {
   return `${days}d ago`;
 }
 
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  if (days > 0) return `${days}d ${hours}h ${mins}m`;
-  return `${hours}h ${mins}m`;
-}
 
 function TrendIndicator({ current, previous }: { current: number; previous: number }) {
   if (previous === 0 && current === 0) {
@@ -192,63 +184,10 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {health && (
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6">
-            <Card data-testid="card-system-health">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">System Health</CardTitle>
-                <StatusIndicator status={health.status} />
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-4">
-                  {Object.entries(health.components || {}).map(([name, comp]) => (
-                    <div key={name} className="flex items-center gap-2">
-                      <StatusIndicator status={comp.status} />
-                      <span className="text-sm capitalize">{name}</span>
-                      {comp.latency_ms !== undefined && (
-                        <span className="text-xs text-muted-foreground">({comp.latency_ms}ms)</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card data-testid="card-uptime">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Update</CardTitle>
-                <Timer className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatUptime(health.uptime_seconds)}</div>
-                <p className="text-xs text-muted-foreground mt-1">Since last update</p>
-              </CardContent>
-            </Card>
-
-            {stats && (
-              <Card data-testid="card-live-activity">
-                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    Live
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-chart-2 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-chart-2" />
-                    </span>
-                  </CardTitle>
-                  <Zap className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.certifications.last_5m}</div>
-                  <p className="text-xs text-muted-foreground mt-1">Certifications in last 5 min</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
 
         {stats && (
           <>
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-6">
               <StatCard
                 title="Total Certifications"
                 value={stats.certifications.total}
@@ -279,6 +218,22 @@ export default function AdminDashboard() {
                 subtitle={stats.certifications.total > 0 ? `${Math.round((stats.certifications.by_source.user || 0) / stats.certifications.total * 100)}% of total` : "No certifications yet"}
                 icon={User}
               />
+              <Card data-testid="card-live-activity">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    Live
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-chart-2 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-chart-2" />
+                    </span>
+                  </CardTitle>
+                  <Zap className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.certifications.last_5m}</div>
+                  <p className="text-xs text-muted-foreground mt-1">Certifications in last 5 min</p>
+                </CardContent>
+              </Card>
             </div>
 
             {stats?.pricing && (
@@ -466,7 +421,7 @@ export default function AdminDashboard() {
               <Card data-testid="stat-card-blockchain-latency">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">Blockchain Latency</CardTitle>
-                  <Activity className="h-4 w-4 text-muted-foreground" />
+                  {health ? <StatusIndicator status={health.status} /> : <Activity className="h-4 w-4 text-muted-foreground" />}
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
@@ -486,6 +441,19 @@ export default function AdminDashboard() {
                           : "No transactions recorded yet"
                     }
                   </p>
+                  {health && Object.keys(health.components || {}).length > 0 && (
+                    <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t">
+                      {Object.entries(health.components).map(([name, comp]) => (
+                        <div key={name} className="flex items-center gap-1.5">
+                          <StatusIndicator status={comp.status} />
+                          <span className="text-xs text-muted-foreground capitalize">{name}</span>
+                          {comp.latency_ms !== undefined && (
+                            <span className="text-xs text-muted-foreground">({comp.latency_ms}ms)</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
