@@ -369,6 +369,98 @@ export default function Landing() {
           </div>
         </div>
       </section>
+      {/* x402 / Base Demo */}
+      <section id="x402" className="border-y bg-muted/30 py-20 md:py-28">
+        <div className="container">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-16 text-center">
+              <Badge variant="outline" className="mb-4">Base Network · x402</Badge>
+              <h2 className="mb-4 text-3xl md:text-4xl font-bold">
+                Agents pay natively.<br className="hidden md:block" /> No signup, no API key.
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                Any x402-compatible agent certifies in one round-trip. $0.05 in USDC on Base. No account required.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {/* Step 1 */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">1</div>
+                  <h3 className="font-semibold">Request certification</h3>
+                </div>
+                <p className="text-sm text-muted-foreground pl-11">Agent sends a POST with no credentials.</p>
+                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-x402-step1">
+                  <div className="text-[#8b949e] mb-2"># No API key, no auth</div>
+                  <div><span className="text-[#79c0ff]">POST</span> <span className="text-[#a5d6ff]">https://xproof.app/api/proof</span></div>
+                  <div className="text-[#8b949e] mt-2 mb-1">Content-Type: application/json</div>
+                  <div className="mt-1">{`{`}</div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"file_hash"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"sha256..."</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"filename"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"report.pdf"</span></div>
+                  <div>{`}`}</div>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">2</div>
+                  <h3 className="font-semibold">Receive payment challenge</h3>
+                </div>
+                <p className="text-sm text-muted-foreground pl-11">xProof replies with payment terms on Base.</p>
+                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-x402-step2">
+                  <div><span className="text-[#f85149]">HTTP 402</span> <span className="text-[#8b949e]">Payment Required</span></div>
+                  <div className="mt-2">{`{`}</div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"x402Version"</span><span className="text-[#e6edf3]">: </span><span className="text-[#ffa657]">1</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"accepts"</span><span className="text-[#e6edf3]">: [{`{`}</span></div>
+                  <div className="pl-8"><span className="text-[#79c0ff]">"price"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"$0.05"</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-8"><span className="text-[#79c0ff]">"network"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"eip155:8453"</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-8"><span className="text-[#79c0ff]">"asset"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"USDC"</span></div>
+                  <div className="pl-4"><span className="text-[#e6edf3]">{`}]`}</span></div>
+                  <div>{`}`}</div>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">3</div>
+                  <h3 className="font-semibold">Pay & get proof</h3>
+                </div>
+                <p className="text-sm text-muted-foreground pl-11">Agent retries with payment receipt — gets blockchain proof.</p>
+                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-x402-step3">
+                  <div className="text-[#8b949e] mb-2"># Retry with USDC payment</div>
+                  <div><span className="text-[#79c0ff]">POST</span> <span className="text-[#a5d6ff]">https://xproof.app/api/proof</span></div>
+                  <div className="text-[#8b949e] mt-2">X-Payment: <span className="text-[#e6edf3]">eyJ...</span></div>
+                  <div className="mt-2 text-[#3fb950]">HTTP 200 OK</div>
+                  <div className="mt-1">{`{`}</div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"proof_id"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"prf_..."</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"tx_hash"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"0xab..."</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"verify_url"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"xproof.app/..."</span></div>
+                  <div>{`}`}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              {["USDC", "Base Mainnet", "eip155:8453", "No account needed", "$0.05 / cert"].map((label) => (
+                <Badge key={label} variant="outline" className="text-xs font-mono" data-testid={`badge-x402-${label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}>{label}</Badge>
+              ))}
+            </div>
+
+            <div className="mt-8 text-center">
+              <Button asChild variant="outline" data-testid="button-x402-docs">
+                <a href="/docs#x402">
+                  Full x402 integration guide
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">
         <div className="container">
