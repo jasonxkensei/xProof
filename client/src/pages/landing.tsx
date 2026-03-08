@@ -461,6 +461,97 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* API Key Flow */}
+      <section id="api-key" className="py-20 md:py-28">
+        <div className="container">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-16 text-center">
+              <Badge variant="outline" className="mb-4">API Key · Prepaid</Badge>
+              <h2 className="mb-4 text-3xl md:text-4xl font-bold">
+                For high-volume agents.<br className="hidden md:block" /> Register once, certify forever.
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                Get an API key with 10 free certifications. No wallet needed to start. Top up with USDC on Base or EGLD when ready.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {/* Step 1 */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">1</div>
+                  <h3 className="font-semibold">Register your agent</h3>
+                </div>
+                <p className="text-sm text-muted-foreground pl-11">One POST, get an API key and 10 free certs.</p>
+                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-apikey-step1">
+                  <div><span className="text-[#79c0ff]">POST</span> <span className="text-[#a5d6ff]">https://xproof.app/api/agent/register</span></div>
+                  <div className="text-[#8b949e] mt-2 mb-1">Content-Type: application/json</div>
+                  <div className="mt-1">{`{`}</div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"agent_name"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"my-agent"</span></div>
+                  <div>{`}`}</div>
+                  <div className="mt-2 text-[#3fb950]">HTTP 200 OK</div>
+                  <div className="mt-1">{`{`}</div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"api_key"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"pm_abc123..."</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"trial_quota"</span><span className="text-[#e6edf3]">: </span><span className="text-[#ffa657]">10</span></div>
+                  <div>{`}`}</div>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">2</div>
+                  <h3 className="font-semibold">Certify with your key</h3>
+                </div>
+                <p className="text-sm text-muted-foreground pl-11">Add your API key as a Bearer token.</p>
+                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-apikey-step2">
+                  <div><span className="text-[#79c0ff]">POST</span> <span className="text-[#a5d6ff]">https://xproof.app/api/proof</span></div>
+                  <div className="text-[#8b949e] mt-2">Authorization: Bearer <span className="text-[#e6edf3]">pm_abc123...</span></div>
+                  <div className="text-[#8b949e] mt-1 mb-1">Content-Type: application/json</div>
+                  <div className="mt-1">{`{`}</div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"file_hash"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"sha256..."</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"filename"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"report.pdf"</span></div>
+                  <div>{`}`}</div>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">3</div>
+                  <h3 className="font-semibold">Get blockchain proof</h3>
+                </div>
+                <p className="text-sm text-muted-foreground pl-11">Same response, same on-chain anchoring.</p>
+                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-apikey-step3">
+                  <div className="text-[#3fb950]">HTTP 200 OK</div>
+                  <div className="mt-1">{`{`}</div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"proof_id"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"prf_..."</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"tx_hash"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"0xab..."</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"verify_url"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"xproof.app/..."</span><span className="text-[#e6edf3]">,</span></div>
+                  <div className="pl-4"><span className="text-[#79c0ff]">"trial_remaining"</span><span className="text-[#e6edf3]">: </span><span className="text-[#ffa657]">9</span></div>
+                  <div>{`}`}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              {["10 free certs", "No wallet needed", "pm_ API key", "Top up anytime", "USDC or EGLD"].map((label) => (
+                <Badge key={label} variant="outline" className="text-xs font-mono" data-testid={`badge-apikey-${label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}>{label}</Badge>
+              ))}
+            </div>
+
+            <div className="mt-8 text-center">
+              <Button asChild variant="outline" data-testid="button-apikey-docs">
+                <a href="/docs">
+                  Full API documentation
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">
         <div className="container">
