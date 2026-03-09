@@ -189,6 +189,50 @@ app.use((req, res, next) => {
     }
   }
 
+  async function migrateSystemUserCertifications() {
+    const SYSTEM_WALLET = "erd1acp00000000000000000000000000000000000000000000000000000agent";
+    try {
+      const sysResult = await pool.query(
+        `SELECT id FROM users WHERE wallet_address = $1`, [SYSTEM_WALLET]
+      );
+      if (sysResult.rows.length === 0) return;
+      const systemUserId = sysResult.rows[0].id;
+
+      const countResult = await pool.query(
+        `SELECT COUNT(*) as total FROM certifications WHERE user_id = $1`, [systemUserId]
+      );
+      const total = Number(countResult.rows[0]?.total || 0);
+      if (total === 0) return;
+
+      const keyResult = await pool.query(
+        `SELECT DISTINCT ak.user_id FROM api_keys ak WHERE ak.user_id IS NOT NULL AND ak.user_id != $1`,
+        [systemUserId]
+      );
+      if (keyResult.rows.length !== 1) {
+        logger.warn("System user migration skipped: ambiguous owner", {
+          component: "migration",
+          systemCerts: total,
+          candidateOwners: keyResult.rows.length,
+        });
+        return;
+      }
+
+      const realUserId = keyResult.rows[0].user_id;
+      const updateResult = await pool.query(
+        `UPDATE certifications SET user_id = $1 WHERE user_id = $2`,
+        [realUserId, systemUserId]
+      );
+      logger.info("Migrated system user certifications", {
+        component: "migration",
+        reassigned: updateResult.rowCount,
+        fromUser: systemUserId,
+        toUser: realUserId,
+      });
+    } catch (err: any) {
+      logger.error("System user migration error", { component: "migration", error: err.message });
+    }
+  }
+
   server.listen({
     port,
     host: "0.0.0.0",
@@ -196,6 +240,7 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
     startTxQueueWorker();
+    migrateSystemUserCertifications();
     runDailyMaintenance();
     setInterval(runDailyMaintenance, 24 * 60 * 60 * 1000);
   });

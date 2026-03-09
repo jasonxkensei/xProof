@@ -2028,6 +2028,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await consumeCredit(creditInfo.userId);
       }
 
+      if (!ownerUserId) {
+        let [systemUser] = await db
+          .select()
+          .from(users)
+          .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+        if (!systemUser) {
+          [systemUser] = await db
+            .insert(users)
+            .values({
+              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+              subscriptionTier: "business",
+              subscriptionStatus: "active",
+            })
+            .returning();
+        }
+        ownerUserId = systemUser.id!;
+      }
+
       // Store certification with full audit log in metadata
       const [certification] = await db
         .insert(certifications)
@@ -2613,28 +2631,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         txVerified = true;
       }
 
-      // Find or create a system user for ACP certifications
-      let [systemUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+      let acpOwnerId: string | null = null;
+      const acpAuthHeader = req.headers.authorization;
+      if (acpAuthHeader && acpAuthHeader.startsWith("Bearer ")) {
+        const acpRawKey = acpAuthHeader.slice(7);
+        if (acpRawKey.startsWith("pm_")) {
+          const acpKeyHash = crypto.createHash("sha256").update(acpRawKey).digest("hex");
+          const [acpKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, acpKeyHash));
+          if (acpKey?.userId) acpOwnerId = acpKey.userId;
+        }
+      }
 
-      if (!systemUser) {
-        [systemUser] = await db
-          .insert(users)
-          .values({
-            walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
-            subscriptionTier: "business",
-            subscriptionStatus: "active",
-          })
-          .returning();
+      if (!acpOwnerId) {
+        let [systemUser] = await db
+          .select()
+          .from(users)
+          .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+
+        if (!systemUser) {
+          [systemUser] = await db
+            .insert(users)
+            .values({
+              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+              subscriptionTier: "business",
+              subscriptionStatus: "active",
+            })
+            .returning();
+        }
+        acpOwnerId = systemUser.id!;
       }
 
       // Create certification record
       const [certification] = await db
         .insert(certifications)
         .values({
-          userId: systemUser.id!,
+          userId: acpOwnerId,
           fileName: checkout.fileName,
           fileHash: checkout.fileHash,
           fileType: checkout.fileName.split(".").pop() || "unknown",
