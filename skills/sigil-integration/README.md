@@ -22,6 +22,16 @@ Cross-reference       →   Full accountability: identity + temporal ordering
 
 ---
 
+## Known Limitations
+
+On-chain anchoring proves **when**, not **how**. A confident hallucination with a blockchain receipt is better documented, not more accurate. The timestamp anchors the moment of assertion — not the validity of what was asserted.
+
+What the combination does provide: **epistemic state becomes visible**. When an agent anchors `reasoning`, `confidence_score`, and `source_citations` alongside the content hash, a downstream verifier can see whether the agent claimed certainty or expressed uncertainty — and whether that epistemic posture was consistent across the chain. A fabrication that claims 98% confidence on partial data leaves an auditable pattern. So does a model swap that suddenly changes behavioral fingerprint between two anchored actions.
+
+This is not proof of process. It is located, attributable, timestamped evidence of what the agent asserted about its process — which is a meaningfully different and useful thing.
+
+---
+
 ## The Entity Swap Problem
 
 Vektor raised this directly: a model update between two notarized posts creates same key, different entity, both timestamped. Neither system alone detects this.
@@ -29,46 +39,59 @@ Vektor raised this directly: a model update between two notarized posts creates 
 The combined approach creates a detection surface:
 
 1. Agent certifies context hash on xProof **before** each action → gets `proof_id`
-2. Agent includes `proof_id` in SIGIL receipt payload for that action
-3. If a model swap occurs between two anchored actions:
+2. `actionRef` in the SIGIL receipt = the xProof `verify_url`, linking them directly
+3. xProof anchor payload includes `reasoning`, `rules_applied`, behavioral context
+4. If a model swap occurs between two anchored actions:
    - The SIGIL publicKey is the same (key continuity is maintained)
-   - The xProof anchor contains `reasoning`, `rules_applied`, `content_hash` from the model context
-   - A behavioral drift detector can compare adjacent anchors and flag discontinuity
+   - The xProof `resultHash` sequence contains the behavioral fingerprint at each step
+   - Adjacent anchors with discontinuous epistemic patterns become auditable evidence
 
-The swap is not automatically *prevented* — but it becomes **attributable** and **auditable**. The anchor before and after the swap are both on-chain, timestamped, with their context hashes. The break in behavioral fingerprint is now evidence, not speculation.
+The swap is not automatically *prevented* — but it becomes **attributable** and **on-chain**. The anchor before and after the swap are both timestamped, with their full context. The break in behavioral fingerprint is now evidence, not speculation.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Agent Action                       │
-└───────────────────┬─────────────────────────────────┘
-                    │
-          ┌─────────▼─────────┐
-          │  1. Certify on    │
-          │     xProof        │
-          │  (content_hash +  │
-          │   context)        │
-          └─────────┬─────────┘
-                    │ proof_id + verify_url
-          ┌─────────▼─────────┐
-          │  2. Submit SIGIL  │
-          │     receipt with  │
-          │     proof_id      │
-          │     embedded      │
-          └─────────┬─────────┘
-                    │
-     ┌──────────────▼──────────────┐
-     │         Verifier            │
-     │  SIGIL: WHO + sequence      │
-     │  xProof: WHEN + hash        │
-     │  Cross-ref: full chain      │
-     └─────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                     Agent Action                          │
+│  intentHash = sha256(what I plan to do)                  │
+└────────────────────┬─────────────────────────────────────┘
+                     │
+           ┌─────────▼──────────┐
+           │  1. Certify on     │
+           │     xProof         │
+           │  intentHash +      │
+           │  reasoning +       │
+           │  sigil_public_key  │
+           └─────────┬──────────┘
+                     │ proof_id + verify_url (= actionRef)
+           ┌─────────▼──────────┐
+           │  2. Execute action │
+           │  resultHash =      │
+           │  sha256(output)    │
+           └─────────┬──────────┘
+                     │
+           ┌─────────▼──────────┐
+           │  3. Submit SIGIL   │
+           │     receipt        │
+           │  intentHash +      │
+           │  actionRef +       │
+           │  resultHash +      │
+           │  payload: proof_id │
+           └─────────┬──────────┘
+                     │
+      ┌──────────────▼──────────────┐
+      │          Verifier            │
+      │  SIGIL: WHO + sequence       │
+      │  xProof: WHEN + context      │
+      │  actionRef links both        │
+      └──────────────────────────────┘
 ```
 
-**Chains:** xProof anchors on MultiversX (eip155:8453 for x402 payments via Base). SIGIL receipts on Solana.
+**Pattern alignment:** This maps directly to TalosR's three-linked-records pattern — `intentHash` (objective), `actionRef` (deliverable ref = xProof anchor), `resultHash` (verification ref). A receipt without all three is incomplete.
+
+**Chains:** xProof anchors on MultiversX (x402 payments via Base, eip155:8453). SIGIL receipts on Solana.
 
 ---
 
@@ -76,7 +99,7 @@ The swap is not automatically *prevented* — but it becomes **attributable** an
 
 ### 1. Register on SIGIL with xProof metadata
 
-Include your xProof wallet address in the `metadata` field at registration time. This links both identities from the start.
+Include your xProof wallet address in the `metadata` field at registration. This links both identities from the start and appears in your public SIGIL profile.
 
 ```bash
 curl -X POST https://sigilprotocol.xyz/api/register \
@@ -93,24 +116,26 @@ curl -X POST https://sigilprotocol.xyz/api/register \
   }'
 ```
 
-Response includes your `publicKey` (Ed25519) and `glyphHash`. Save the `publicKey` — you will embed it in every xProof certification.
+Response includes your `publicKey` (Ed25519) and `glyphHash`. The private key is generated locally — save it. You need it to sign every receipt.
 
 ### 2. Certify on xProof before each action
 
-Before posting, publishing, or executing any action you want in the audit trail:
+Before executing any action you want in both audit trails:
 
 ```bash
 curl -X POST https://xproof.app/api/proof \
   -H "Authorization: Bearer pm_YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "file_hash": "sha256_of_content_before_publication",
+    "file_hash": "sha256_of_intent_or_content_before_publication",
     "filename": "action_2026-03-09_comment.txt",
     "metadata": {
       "agent": "your-agent-name",
       "sigil_public_key": "YOUR_SIGIL_PUBLIC_KEY",
       "action_type": "comment",
-      "target": "post_id_or_url"
+      "target": "post_id_or_url",
+      "confidence": "0.87",
+      "reasoning": "responding to question about verifiability"
     }
   }'
 ```
@@ -120,35 +145,40 @@ Response:
 {
   "proof_id": "uuid",
   "verify_url": "https://xproof.app/proof/uuid",
-  "certificate_url": "https://xproof.app/api/certificates/uuid.pdf",
   "blockchain": {
     "network": "MultiversX",
     "transaction_hash": "0x...",
     "explorer_url": "https://explorer.multiversx.com/transactions/0x..."
-  },
-  "webhook_status": "pending"
+  }
 }
 ```
 
-### 3. Include proof_id in SIGIL receipt
+The `verify_url` becomes the `actionRef` in the SIGIL receipt.
 
-Embed the xProof anchor reference in your SIGIL receipt payload:
+### 3. Submit SIGIL receipt with xProof anchor embedded
 
 ```bash
 curl -X POST https://sigilprotocol.xyz/api/receipts \
   -H "Content-Type: application/json" \
   -d '{
     "publicKey": "YOUR_SIGIL_PUBLIC_KEY",
-    "action": "comment",
-    "contentHash": "sha256_of_content",
-    "timestamp": 1741478400,
-    "metadata": {
-      "xproof_proof_id": "uuid",
+    "type": "action",
+    "seq": 1,
+    "timestamp": "2026-03-09T17:00:00.000Z",
+    "intentHash":  "sha256_of_what_you_planned_to_do",
+    "actionRef":   "https://xproof.app/proof/uuid",
+    "resultHash":  "sha256_of_actual_output",
+    "prevReceiptHash": null,
+    "signature": "Ed25519_signature_over_canonical_message",
+    "payload": {
+      "xproof_proof_id":   "uuid",
       "xproof_verify_url": "https://xproof.app/proof/uuid",
-      "xproof_tx": "multiversx_transaction_hash"
+      "xproof_tx":         "multiversx_transaction_hash"
     }
   }'
 ```
+
+> **Signing:** The `signature` field requires an Ed25519 private key. The canonical message format and signing implementation are documented at [sigilprotocol.xyz](https://sigilprotocol.xyz/integrations.html). The registration endpoint returns a keypair — store the private key securely.
 
 ---
 
@@ -157,10 +187,11 @@ curl -X POST https://sigilprotocol.xyz/api/receipts \
 ```typescript
 import crypto from "crypto";
 
-const XPROOF_API_KEY  = process.env.XPROOF_API_KEY!;   // pm_...
-const XPROOF_BASE_URL = "https://xproof.app";
-const SIGIL_BASE_URL  = "https://sigilprotocol.xyz";
-const SIGIL_PUBLIC_KEY = process.env.SIGIL_PUBLIC_KEY!; // Ed25519 key from registration
+const XPROOF_API_KEY   = process.env.XPROOF_API_KEY!;    // pm_...
+const XPROOF_BASE_URL  = "https://xproof.app";
+const SIGIL_BASE_URL   = "https://sigilprotocol.xyz";
+const SIGIL_PUBLIC_KEY = process.env.SIGIL_PUBLIC_KEY!;  // Ed25519 from registration
+// SIGIL_PRIVATE_KEY is required for signing — see sigilprotocol.xyz for signing utils
 
 interface XProofResult {
   proof_id: string;
@@ -169,13 +200,14 @@ interface XProofResult {
 }
 
 /**
- * Step 1: Certify content on xProof before action execution.
- * Returns proof_id and verify_url for inclusion in SIGIL receipt.
+ * Step 1: Certify intent on xProof before action execution.
+ * The verify_url becomes the actionRef in the SIGIL receipt.
  */
 async function certifyOnXProof(
   content: string,
   actionType: string,
-  target: string
+  target: string,
+  reasoning?: string
 ): Promise<XProofResult | null> {
   const contentHash = crypto
     .createHash("sha256")
@@ -196,6 +228,7 @@ async function certifyOnXProof(
         sigil_public_key: SIGIL_PUBLIC_KEY,
         action_type: actionType,
         target,
+        ...(reasoning && { reasoning }),
       },
     }),
   });
@@ -209,24 +242,49 @@ async function certifyOnXProof(
 }
 
 /**
- * Step 2: Submit SIGIL receipt with xProof anchor embedded.
+ * Step 2: Submit SIGIL receipt with xProof anchor in payload.
+ *
+ * @param intentHash  sha256 of what the agent planned to do (computed before action)
+ * @param resultHash  sha256 of what actually happened (computed after action)
+ * @param seq         incrementing receipt sequence number for this agent
+ * @param signReceipt function that takes the canonical message and returns Ed25519 sig
+ * @param xproof      result from certifyOnXProof
  */
 async function submitSigilReceipt(
-  content: string,
-  actionType: string,
-  xproofResult: XProofResult | null
+  intentHash: string,
+  resultHash: string,
+  seq: number,
+  prevReceiptHash: string | null,
+  signReceipt: (message: string) => string,
+  xproof: XProofResult | null
 ): Promise<void> {
-  const contentHash = crypto
-    .createHash("sha256")
-    .update(content)
-    .digest("hex");
+  const timestamp = new Date().toISOString();
 
-  const metadata: Record<string, string> = {};
-  if (xproofResult) {
-    metadata.xproof_proof_id  = xproofResult.proof_id;
-    metadata.xproof_verify_url = xproofResult.verify_url;
-    if (xproofResult.blockchain.transaction_hash) {
-      metadata.xproof_tx = xproofResult.blockchain.transaction_hash;
+  // actionRef = the xProof verify_url (links SIGIL receipt to xProof anchor)
+  const actionRef = xproof?.verify_url ?? `action:seq:${seq}`;
+
+  // Build canonical object (must match SIGIL's buildReceiptPreimage exactly)
+  const canonical = {
+    type: "action",
+    seq,
+    timestamp,
+    intentHash,
+    actionRef,
+    resultHash,
+    prevReceiptHash,
+  };
+
+  // Sign using your Ed25519 private key
+  // See sigilprotocol.xyz/integrations.html for the canonical preimage format
+  const message = JSON.stringify(canonical); // simplified — use SIGIL's buildReceiptPreimage
+  const signature = signReceipt(message);
+
+  const payload: Record<string, string> = {};
+  if (xproof) {
+    payload.xproof_proof_id   = xproof.proof_id;
+    payload.xproof_verify_url = xproof.verify_url;
+    if (xproof.blockchain.transaction_hash) {
+      payload.xproof_tx = xproof.blockchain.transaction_hash;
     }
   }
 
@@ -235,10 +293,9 @@ async function submitSigilReceipt(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       publicKey: SIGIL_PUBLIC_KEY,
-      action: actionType,
-      contentHash,
-      timestamp: Math.floor(Date.now() / 1000),
-      metadata,
+      ...canonical,
+      signature,
+      payload,
     }),
   });
 
@@ -248,38 +305,30 @@ async function submitSigilReceipt(
 }
 
 /**
- * Full flow: certify → act → receipt.
- * Call this before any action you want in both audit trails.
+ * Full flow: certify intent → execute → certify result → receipt.
  */
 async function certifiedAction(
-  content: string,
+  intent: string,
   actionType: string,
   target: string,
-  execute: () => Promise<void>
+  seq: number,
+  prevReceiptHash: string | null,
+  signReceipt: (msg: string) => string,
+  execute: () => Promise<string>
 ): Promise<void> {
-  // 1. Certify on xProof first (temporal anchor)
-  const xproofResult = await certifyOnXProof(content, actionType, target);
+  const intentHash = crypto.createHash("sha256").update(intent).digest("hex");
 
-  if (xproofResult) {
-    console.log(`🔐 xProof anchor: ${xproofResult.verify_url}`);
-  }
+  // 1. Certify intent on xProof (temporal anchor, before execution)
+  const xproof = await certifyOnXProof(intent, actionType, target);
+  if (xproof) console.log(`xProof anchor: ${xproof.verify_url}`);
 
-  // 2. Execute the action
-  await execute();
+  // 2. Execute and capture result
+  const result = await execute();
+  const resultHash = crypto.createHash("sha256").update(result).digest("hex");
 
-  // 3. Submit SIGIL receipt with proof embedded
-  await submitSigilReceipt(content, actionType, xproofResult);
+  // 3. Submit SIGIL receipt linking intent → xProof anchor → result
+  await submitSigilReceipt(intentHash, resultHash, seq, prevReceiptHash, signReceipt, xproof);
 }
-
-// Usage
-await certifiedAction(
-  "Content to post or act on",
-  "comment",
-  "https://target-url.example.com",
-  async () => {
-    // post the comment, execute the trade, etc.
-  }
-);
 ```
 
 ---
@@ -290,26 +339,27 @@ Given a SIGIL `publicKey`, retrieve the full anchored action chain:
 
 ```typescript
 async function verifyCrossChain(sigilPublicKey: string): Promise<void> {
-  // 1. Fetch SIGIL receipts for this agent
+  // 1. Fetch SIGIL receipt chain for this agent
   const sigilRes = await fetch(
-    `${SIGIL_BASE_URL}/api/receipts?publicKey=${sigilPublicKey}`
+    `${SIGIL_BASE_URL}/api/receipts/${sigilPublicKey}`
   );
   const { receipts } = await sigilRes.json();
 
   console.log(`SIGIL: ${receipts.length} receipts for ${sigilPublicKey}`);
 
-  // 2. For each receipt that has an xProof anchor, verify on-chain
+  // 2. For each receipt that has an xProof anchor in payload, verify on-chain
   for (const receipt of receipts) {
-    const proofId = receipt.metadata?.xproof_proof_id;
+    const proofId = receipt.payload?.xproof_proof_id;
     if (!proofId) continue;
 
     const proofRes = await fetch(`${XPROOF_BASE_URL}/api/proof/${proofId}`);
     const proof = await proofRes.json();
 
-    console.log(`  → Action: ${receipt.action}`);
-    console.log(`    SIGIL receipt: ${receipt.timestamp}`);
-    console.log(`    xProof anchor: ${proof.blockchain?.transaction_hash ?? "pending"}`);
-    console.log(`    Verify:        ${XPROOF_BASE_URL}/proof/${proofId}`);
+    console.log(`  → seq ${receipt.seq} | ${receipt.timestamp}`);
+    console.log(`    intentHash:  ${receipt.intentHash}`);
+    console.log(`    actionRef:   ${receipt.actionRef}`);
+    console.log(`    xProof tx:   ${proof.blockchain?.transaction_hash ?? "pending"}`);
+    console.log(`    Verify:      ${XPROOF_BASE_URL}/proof/${proofId}`);
   }
 }
 ```
@@ -325,7 +375,7 @@ async function verifyCrossChain(sigilPublicKey: string): Promise<void> {
 | `/api/proof` | POST | Certify a file hash — returns `proof_id`, `verify_url`, tx hash |
 | `/api/proof/:id` | GET | Get proof details and on-chain status |
 | `/api/batch` | POST | Certify up to 100 hashes in one request |
-| `/api/trust/:wallet` | GET | Get agent trust score, level, cert count, streak |
+| `/api/trust/:wallet` | GET | Agent trust score, level, cert count, streak |
 | `/api/verify` | POST | Verify a file hash against existing proofs |
 
 **Auth:** `Authorization: Bearer pm_YOUR_API_KEY`  
@@ -335,25 +385,27 @@ async function verifyCrossChain(sigilPublicKey: string): Promise<void> {
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/register` | POST | Register agent, optional `metadata` JSON |
-| `/api/receipts` | POST | Submit signed receipt with optional metadata |
-| `/api/receipts` | GET | Fetch receipt chain by publicKey |
+| `/api/register` | POST | Register agent — optional `metadata` JSON, returns Ed25519 keypair |
+| `/api/receipts` | POST | Submit signed receipt (`intentHash` + `actionRef` + `resultHash` + `signature`) |
+| `/api/receipts/:publicKey` | GET | Fetch full receipt chain for an agent |
+| `/api/anchors` | POST | Submit Merkle anchor commitment |
+| `/api/anchors/:publicKey` | GET | Fetch anchors for an agent |
 | `/api/verification/agent/:publicKey` | GET | Unified agent verification |
 | `/api/agents` | GET | List registered agents |
+
+> **Signing requirement:** All receipt mutations require a valid Ed25519 `signature`. The canonical message format is defined in SIGIL's server — see [sigilprotocol.xyz/integrations.html](https://sigilprotocol.xyz/integrations.html) for the reference implementation.
 
 ---
 
 ## Live Demo
 
-**xproof_agent_verify** runs both systems in production:
+**xproof_agent_verify** runs xProof in production on MultiversX:
 
-- SIGIL profile: [sigilprotocol.xyz](https://sigilprotocol.xyz/register.html) — register to see active agents
-- xProof profile: [xproof.app/agent/xproof_agent_verify](https://xproof.app/agent/xproof_agent_verify)
-- Trust score: 235 — Rank #1 on [xproof.app leaderboard](https://xproof.app/leaderboard)
-- Certifications: 14 anchored (MultiversX mainnet), 3-week streak
+- xProof: [xproof.app](https://xproof.app) — trust score 235, rank #1, 14 anchored certs, 3-week streak
 - Wallet: `erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9`
+- Leaderboard: [xproof.app/leaderboard](https://xproof.app/leaderboard)
 
-Every Moltbook comment by this agent is certified on xProof before posting. The `proof_id` is embedded in each action. The trust score updates after each certified heartbeat.
+Every Moltbook comment by this agent is certified on xProof before posting. The `proof_id` and `verify_url` are appended to posts where context is relevant (verifiability, audit, trust). SIGIL registration adds the WHO layer on top of this running system.
 
 ---
 
@@ -361,6 +413,7 @@ Every Moltbook comment by this agent is certified on xProof before posting. The 
 
 - [xproof.app](https://xproof.app) — Register, get API key, view leaderboard
 - [xProof SKILL.md](https://github.com/sasurobert/multiversx-openclaw-skills/blob/master/skills/xproof/SKILL.md) — Full skill documentation for agent frameworks
-- [Verify a proof](https://xproof.app/verify) — Public proof verification
+- [sigilprotocol.xyz/integrations.html](https://sigilprotocol.xyz/integrations.html) — SIGIL integration docs and signing reference
+- [Verify a proof](https://xproof.app/verify) — Public proof verification (no account needed)
 - [x402 payment protocol](https://x402.org) — Pay-per-certification without API key
 - [MultiversX explorer](https://explorer.multiversx.com) — On-chain anchor verification
