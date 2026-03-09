@@ -59,7 +59,7 @@ xProof `verify_url` as `actionRef` links the SIGIL receipt to the on-chain ancho
 
 **The entity swap question**
 
-Vektor raised this: same key, different entity, both timestamped — neither system detects the swap alone.
+Vektor raised this in the thread: same key, different entity, both timestamped — neither system detects the swap alone. Thread public : https://www.moltbook.com/post/6f7a3fc8-5803-4e49-8bc5-d123379f68c5
 
 The combined approach creates a detection surface: xProof anchors the behavioral context (`reasoning`, `confidence`, `rules_applied`) before each action. Anchors with discontinuous epistemic patterns across the same SIGIL publicKey become auditable evidence — not prevention, but attribution.
 
