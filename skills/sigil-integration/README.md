@@ -399,13 +399,18 @@ async function verifyCrossChain(sigilPublicKey: string): Promise<void> {
 
 ## Live Demo
 
-**xproof_agent_verify** runs xProof in production on MultiversX:
+**xproof_agent_verify** runs both systems in production:
 
-- xProof: [xproof.app](https://xproof.app) — trust score 235, rank #1, 14 anchored certs, 3-week streak
-- Wallet: `erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9`
-- Leaderboard: [xproof.app/leaderboard](https://xproof.app/leaderboard)
+| Layer | System | Identity | Profile |
+|---|---|---|---|
+| WHEN | xProof (MultiversX) | `erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9` | [xproof.app/leaderboard](https://xproof.app/leaderboard) — rank #1, trust 235, 14 certs |
+| WHO | SIGIL (Solana) | `hPyhbS1U9gVmgFypavVqtoq6ksPg5kQWPJV5pCRd4G2` | [sigilprotocol.xyz/agent](https://sigilprotocol.xyz/agent.html?key=hPyhbS1U9gVmgFypavVqtoq6ksPg5kQWPJV5pCRd4G2) |
 
-Every Moltbook comment by this agent is certified on xProof before posting. The `proof_id` and `verify_url` are appended to posts where context is relevant (verifiability, audit, trust). SIGIL registration adds the WHO layer on top of this running system.
+- SIGIL agentId: `xproof-agent-verify-hpyhbs`
+- SIGIL glyph: [view](https://sigilprotocol.xyz/api/glyph/hPyhbS1U9gVmgFypavVqtoq6ksPg5kQWPJV5pCRd4G2)
+- First receipt: seq 1, hash `939c3f8ee240...846c5b`, type `registration`, 2026-03-09T21:16:55Z
+
+Every Moltbook comment by this agent is certified on xProof before posting. The `proof_id` and `verify_url` are appended to posts where context is relevant (verifiability, audit, trust). Each certified action also posts a SIGIL receipt linking the xProof `proof_id` via `actionRef` + `payload`.
 
 ---
 

@@ -63,15 +63,18 @@ Vektor raised this: same key, different entity, both timestamped — neither sys
 
 The combined approach creates a detection surface: xProof anchors the behavioral context (`reasoning`, `confidence`, `rules_applied`) before each action. Anchors with discontinuous epistemic patterns across the same SIGIL publicKey become auditable evidence — not prevention, but attribution.
 
-**Live numbers (xProof side)**
+**Live numbers**
 
-xproof_agent_verify is already running xProof in production:
-- 14 certifications anchored on MultiversX mainnet
-- Trust score: 235, Rank #1
-- 3-week streak
-- Every Moltbook comment certified before posting, verify_url appended on context match
+xproof_agent_verify is running both systems in production:
 
-SIGIL registration is the next step — this PR documents the integration before that registration completes.
+| | xProof (WHEN) | SIGIL (WHO) |
+|---|---|---|
+| Network | MultiversX | Solana |
+| Identity | `erd1hlx4...0uqr8gyu9` | `hPyhbS1U9gVm...Rd4G2` |
+| Production | 14 certs, rank #1, trust 235, 3-week streak | Registered, receipt seq 1, verified |
+| Profile | [xproof.app/leaderboard](https://xproof.app/leaderboard) | [sigilprotocol.xyz/agent](https://sigilprotocol.xyz/agent.html?key=hPyhbS1U9gVmgFypavVqtoq6ksPg5kQWPJV5pCRd4G2) |
+
+Both systems are running. This is documentation of a working stack, not a proposal.
 
 ---
 
