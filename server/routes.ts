@@ -1647,6 +1647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let trialInfo: { isTrial: boolean; remaining: number; userId: string } | null = null;
       let creditInfo: { userId: string; balance: number } | null = null;
+      let apiKeyUserId: string | null = null;
 
       if (hasBearerToken) {
         const rawKey = authHeader!.slice(7);
@@ -1675,6 +1676,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: "This API key has been disabled",
           });
         }
+
+        apiKeyUserId = apiKey.userId || null;
 
         const rateLimit = checkRateLimit(apiKey.id);
         res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
@@ -1786,7 +1789,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const result = await recordOnBlockchain(data.file_hash, data.filename, data.author_name || "AI Agent");
 
-      const certUserId = trialInfo ? trialInfo.userId : null;
+      const certUserId = trialInfo ? trialInfo.userId : (creditInfo ? creditInfo.userId : apiKeyUserId);
       let ownerUserId = certUserId;
 
       if (!ownerUserId) {
@@ -2119,6 +2122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let trialInfo: { isTrial: boolean; remaining: number; userId: string } | null = null;
       let creditInfo: { userId: string; balance: number } | null = null;
+      let apiKeyUserId: string | null = null;
 
       if (hasBearerToken) {
         const rawKey = authHeader!.slice(7);
@@ -2147,6 +2151,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: "This API key has been disabled",
           });
         }
+
+        apiKeyUserId = apiKey.userId || null;
 
         const rateLimit = checkRateLimit(apiKey.id);
         res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
@@ -2230,7 +2236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const baseUrl = `https://${req.get('host')}`;
       const batchId = crypto.randomUUID();
 
-      const certUserId = trialInfo ? trialInfo.userId : null;
+      const certUserId = trialInfo ? trialInfo.userId : (creditInfo ? creditInfo.userId : apiKeyUserId);
       let ownerUserId = certUserId;
 
       if (!ownerUserId) {
