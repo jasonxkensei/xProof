@@ -349,6 +349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionUrl,
           blockchainStatus,
           isPublic: true,
+          authMethod: "web",
           ...(blockchainLatencyMs !== null ? { blockchainLatencyMs } : {}),
         })
         .returning();
@@ -615,6 +616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             transactionUrl: explorerUrl,
             blockchainStatus: broadcastBlockchainStatus,
             isPublic: true,
+            authMethod: "web",
           })
           .returning();
 
@@ -1829,6 +1831,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionUrl: result.transactionUrl,
           blockchainStatus: "confirmed",
           isPublic: true,
+          authMethod,
           ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
           ...(data.metadata ? { metadata: data.metadata } : {}),
         })
@@ -2059,6 +2062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionUrl: result.transactionUrl,
           blockchainStatus: "confirmed",
           isPublic: true,
+          authMethod,
           metadata: data as Record<string, any>,
           ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
         })
@@ -2323,6 +2327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             transactionUrl: result.transactionUrl,
             blockchainStatus: "confirmed",
             isPublic: true,
+            authMethod,
             ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
             ...(file.metadata ? { metadata: file.metadata } : {}),
           })
@@ -2674,6 +2679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionUrl: `${explorerUrl}/transactions/${data.tx_hash}`,
           blockchainStatus: txVerified ? "confirmed" : "pending",
           isPublic: true,
+          authMethod: "acp",
         })
         .returning();
 
@@ -6652,7 +6658,7 @@ export const xproofAuditPlugin: Plugin = {
   });
 
   // ============================================
-  // Public Stats Endpoint (no auth required)
+  // Public Stats Endpoint (no auth required) — uses auth_method column
   // ============================================
   app.get("/api/stats", async (req: any, res) => {
     try {
@@ -6666,14 +6672,8 @@ export const xproofAuditPlugin: Plugin = {
       const [last7dRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, d7));
       const [last30dRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, d30));
 
-      const systemUserId = "erd1acp00000000000000000000000000000000000000000000000000000agent";
-      const [systemUser] = await db.select().from(users).where(eq(users.walletAddress, systemUserId));
-      
-      let apiCerts = 0;
-      if (systemUser) {
-        const [apiRow] = await db.select({ count: count() }).from(certifications).where(eq(certifications.userId, systemUser.id));
-        apiCerts = apiRow.count;
-      }
+      const [apiCertsRow] = await db.select({ count: count() }).from(certifications).where(sql`${certifications.authMethod} IN ('api_key', 'x402', 'acp')`);
+      const apiCerts = apiCertsRow.count;
       const [trialCertsRow] = await db.select({ count: count() }).from(certifications).innerJoin(users, eq(certifications.userId, users.id)).where(sql`${users.isTrial} IS TRUE`);
       const trialCerts = trialCertsRow.count;
       const userCerts = Math.max(0, totalRow.count - apiCerts - trialCerts);
@@ -6803,14 +6803,8 @@ export const xproofAuditPlugin: Plugin = {
       const [last7dRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, d7));
       const [last30dRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, d30));
 
-      const systemUserId = "erd1acp00000000000000000000000000000000000000000000000000000agent";
-      const [systemUser] = await db.select().from(users).where(eq(users.walletAddress, systemUserId));
-      
-      let apiCerts = 0;
-      if (systemUser) {
-        const [apiRow] = await db.select({ count: count() }).from(certifications).where(eq(certifications.userId, systemUser.id));
-        apiCerts = apiRow.count;
-      }
+      const [apiCertsRow] = await db.select({ count: count() }).from(certifications).where(sql`${certifications.authMethod} IN ('api_key', 'x402', 'acp')`);
+      const apiCerts = apiCertsRow.count;
       const [trialCertsRow] = await db.select({ count: count() }).from(certifications).innerJoin(users, eq(certifications.userId, users.id)).where(sql`${users.isTrial} IS TRUE`);
       const trialCerts = trialCertsRow.count;
       const userCerts = Math.max(0, totalRow.count - apiCerts - trialCerts);

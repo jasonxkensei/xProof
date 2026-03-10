@@ -231,6 +231,38 @@ app.use((req, res, next) => {
     } catch (err: any) {
       logger.error("System user migration error", { component: "migration", error: err.message });
     }
+
+    try {
+      const nullCount = await pool.query(
+        `SELECT COUNT(*) as total FROM certifications WHERE auth_method IS NULL`
+      );
+      const toBackfill = Number(nullCount.rows[0]?.total || 0);
+      if (toBackfill > 0) {
+        const agentResult = await pool.query(`
+          UPDATE certifications SET auth_method = 'api_key'
+          WHERE auth_method IS NULL AND (
+            file_name LIKE 'heartbeat_%'
+            OR file_name LIKE 'action_%'
+            OR file_name LIKE 'audit-log-%'
+            OR file_name LIKE 'agent_action_%'
+            OR file_name LIKE 'action_log_%'
+            OR file_name LIKE 'moltbot_%'
+            OR (metadata IS NOT NULL AND metadata->>'agent_id' IS NOT NULL)
+          )
+        `);
+        const webResult = await pool.query(`
+          UPDATE certifications SET auth_method = 'web'
+          WHERE auth_method IS NULL
+        `);
+        logger.info("Backfilled auth_method on certifications", {
+          component: "migration",
+          agentCerts: agentResult.rowCount,
+          webCerts: webResult.rowCount,
+        });
+      }
+    } catch (err: any) {
+      logger.error("auth_method backfill error", { component: "migration", error: err.message });
+    }
   }
 
   server.listen({

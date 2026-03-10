@@ -82,6 +82,7 @@ export async function createMcpServer(ctx: McpContext) {
           transactionUrl: result.transactionUrl,
           blockchainStatus: "confirmed",
           isPublic: true,
+          authMethod: "api_key",
         }).returning();
 
         let webhookStatus = webhook_url ? "pending" : "not_requested";
@@ -352,6 +353,7 @@ export async function createMcpServer(ctx: McpContext) {
           transactionUrl: result.transactionUrl,
           blockchainStatus: "confirmed",
           isPublic: true,
+          authMethod: "api_key",
           metadata: params,
         }).returning();
 

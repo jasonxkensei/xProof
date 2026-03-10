@@ -52,6 +52,9 @@ xProof is the canonical implementation of the Agent Audit Log Standard, providin
 ### LLM-Ready Routes & AI Agent Discovery
 The platform offers machine-readable documentation and discovery endpoints for AI agents, including an MCP JSON-RPC 2.0 endpoint with tools like `certify_file`, `verify_proof`, `audit_agent_session`, and `.well-known` files for various specifications.
 
+### Certification Attribution & Auth Method Tracking
+Each certification stores an `auth_method` column (`web`, `api_key`, `x402`, `acp`) to track how it was created. This is used by the metrics/stats pages to accurately categorize certifications as agent vs human. All certification insert points (routes.ts, mcp.ts) set this value. A startup migration in `server/index.ts` backfills existing certifications and reassigns any misattributed to the system user (`erd1acp...agent`).
+
 ### Monitoring & Admin
 A health endpoint provides component checks and metrics. A metrics module tracks performance indicators. An admin dashboard offers insights into certifications, blockchain status, API key usage, and webhook delivery stats, protected by wallet authentication. Structured JSON logging is used for backend logs.
 
