@@ -669,7 +669,10 @@ export default function DocsPage() {
             </a>
             <Badge variant="outline">API Docs</Badge>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button asChild variant="ghost" size="sm" data-testid="link-4w-guide">
+              <a href="/docs/4w">4W Guide</a>
+            </Button>
             <Button asChild variant="ghost" size="sm" data-testid="link-trading-guide">
               <a href="/docs/trading">Trading Guide</a>
             </Button>
@@ -729,6 +732,25 @@ export default function DocsPage() {
               <p className="text-xs font-mono text-muted-foreground">
                 Base URL: <span className="text-primary">{BASE}</span>
               </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-4 border-primary/20 bg-primary/5 hover-elevate" data-testid="card-4w-guide-cta">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 shrink-0">
+                  <Shield className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">The 4W Certification Workflow</h3>
+                  <p className="text-xs text-muted-foreground">WHO acted, WHAT was produced, WHEN it happened, WHY the decision was made — full agent auditability.</p>
+                </div>
+              </div>
+              <Button asChild size="sm" variant="outline" data-testid="button-open-4w-guide">
+                <a href="/docs/4w">View integration guide</a>
+              </Button>
             </div>
           </CardContent>
         </Card>

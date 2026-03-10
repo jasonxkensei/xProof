@@ -97,7 +97,7 @@ async function certifyAsync(hash, payload) {
   const res = await fetch('${BASE}/api/proof', {
     method: 'POST',
     headers: { 'Authorization': 'Bearer YOUR_API_KEY' },
-    body: JSON.stringify({ hash, metadata: payload }),
+    body: JSON.stringify({ file_hash: hash, filename: 'trade_' + Date.now() + '.json', metadata: payload }),
     signal: AbortSignal.timeout(2000)
   });
   const { proof_id } = await res.json();
@@ -106,12 +106,13 @@ async function certifyAsync(hash, payload) {
 
 const settlementResponse = `{
   "proof_id":          "prf_abc123",
-  "hash":              "sha256...",
-  "status":            "pending",
-  "tx_hash":           null,
-  "block_height":      null,
-  "block_timestamp":   null,
-  "server_timestamp":  "2026-03-03T18:05:41.320Z"
+  "file_hash":         "sha256...",
+  "filename":          "trade_001.json",
+  "blockchain_status": "confirmed",
+  "transaction_hash":  "75afa1e6f24598...",
+  "transaction_url":   "https://explorer.multiversx.com/transactions/...",
+  "verify_url":        "https://xproof.app/verify/prf_abc123",
+  "certified_at":      "2026-03-03T18:05:41.320Z"
 }`;
 
 const clockSkewCode = `function checkClockSkew(serverTimestamp) {
@@ -131,7 +132,8 @@ curl -X POST ${BASE}/api/proof \\
      -H 'Authorization: Bearer YOUR_API_KEY' \\
      -H 'Content-Type: application/json' \\
      -d '{
-       "hash": "sha256(your_trade_payload)",
+       "file_hash": "sha256(your_trade_payload)",
+       "filename": "trade_001.json",
        "metadata": { "trade_id": "uuid", "market": "BTC/USDC" }
      }'
 
@@ -223,6 +225,21 @@ export default function DocsTradingPage() {
             <CodeBlock code={asyncPattern} language="typescript" />
           </section>
 
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="p-4 flex items-center gap-3 flex-wrap">
+              <Zap className="h-5 w-5 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-medium">
+                  Going further — certify the <em>reasoning</em> before acting, not just the output after.
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  The 4W workflow anchors WHO, WHAT, WHEN, and WHY for full auditability.{" "}
+                  <a href="/docs/4w" className="text-primary hover:underline" data-testid="link-4w-guide">Read the 4W integration guide</a>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           <section data-testid="section-circuit-breaker">
             <SectionHeader icon={AlertTriangle} number="03" title="Circuit breaker & local queue" />
             <p className="text-sm text-muted-foreground mb-4">
@@ -260,16 +277,17 @@ export default function DocsTradingPage() {
             <SectionHeader icon={Clock} number="04" title="Settlement model" />
             <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 mb-4">
               <p className="text-sm">
-                <strong>Immediate response (200 OK)</strong>
-                <span className="text-muted-foreground"> → proof_id issued, hash queued for broadcast</span>
+                <strong>API response (~363ms median)</strong>
+                <span className="text-muted-foreground"> → proof_id + transaction_hash returned immediately</span>
               </p>
               <p className="text-sm mt-1">
-                <strong>Settlement confirmation</strong>
-                <span className="text-muted-foreground"> → hash anchored in a MultiversX block (~6s finality)</span>
+                <strong>Blockchain finality (~6s)</strong>
+                <span className="text-muted-foreground"> → transaction included in a MultiversX block, async</span>
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                Your proof_id is valid immediately. Blockchain settlement is async.
-                Use <code className="text-primary">GET /api/proof/:id</code> to check settlement_status.
+                Your proof_id and tx_hash are valid immediately. Block inclusion is async and does not block your agent.
+                Use <code className="text-primary">GET /api/proof/:id</code> for a single proof or{" "}
+                <code className="text-primary">GET /api/proofs/status?ids=id1,id2,...</code> to check up to 50 proofs at once.
               </p>
             </div>
             <CodeBlock code={settlementResponse} />
@@ -297,9 +315,9 @@ export default function DocsTradingPage() {
                 </thead>
                 <tbody>
                   {[
-                    ["API response", "< 800 ms average"],
+                    ["API response", "~363 ms median (sub-second)"],
                     ["Hard timeout", "2 000 ms"],
-                    ["Blockchain finality", "~6 s (async only)"],
+                    ["Blockchain finality", "~6 s (async, does not block API)"],
                     ["Execution impact", "0 ms — fully async"],
                     ["Availability", "99.9% (MultiversX mainnet)"],
                   ].map(([metric, target], i) => (
