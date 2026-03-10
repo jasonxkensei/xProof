@@ -105,13 +105,13 @@ async function certifyAsync(hash, payload) {
 }`;
 
 const settlementResponse = `{
-  "proof_id":          "prf_abc123",
-  "file_hash":         "sha256...",
+  "proof_id":          "a3f2b1c4-7890-4def-abcd-1234567890ab",
+  "file_hash":         "44a61f03...64_char_hex",
   "filename":          "trade_001.json",
   "blockchain_status": "confirmed",
-  "transaction_hash":  "75afa1e6f24598...",
-  "transaction_url":   "https://explorer.multiversx.com/transactions/...",
-  "verify_url":        "https://xproof.app/verify/prf_abc123",
+  "transaction_hash":  "75afa1e6f24598d3c8b2a1...",
+  "transaction_url":   "https://explorer.multiversx.com/transactions/75afa1e6...",
+  "verify_url":        "https://xproof.app/verify/a3f2b1c4-7890-4def-abcd-1234567890ab",
   "certified_at":      "2026-03-03T18:05:41.320Z"
 }`;
 
@@ -138,7 +138,7 @@ curl -X POST ${BASE}/api/proof \\
      }'
 
 # 3. Check settlement status
-curl ${BASE}/api/proof/prf_abc123`;
+curl ${BASE}/api/proof/a3f2b1c4-7890-4def-abcd-1234567890ab`;
 
 export default function DocsTradingPage() {
   return (

@@ -68,10 +68,17 @@ function SectionHeader({ icon: Icon, number, title }: { icon: typeof Shield; num
 const dualCertCode = `async function certifyAndAct(agent: AgentContext) {
   // ── Step 1: Certify WHY (before acting) ──
   const reasoning = {
-    trigger: agent.trigger,
-    prompt_hash: sha256(agent.prompt),
-    decision: agent.decision,
-    risk_level: agent.riskLevel,
+    action_type: 'comment_reasoning',
+    agent: agent.sigilId,                    // SIGIL identity
+    sigil_profile: agent.sigilProfileUrl,    // public SIGIL profile
+    prompt_hash: sha256(agent.prompt),       // hash of the prompt, not the prompt itself
+    trigger_content_hash: sha256(agent.trigger), // hash of what triggered this action
+    decision_chain: [                        // auditable reasoning steps
+      '1. Identified relevant topic in post',
+      '2. Applied response rules (max 2 paragraphs, adopt framing)',
+      '3. Determined xProof relevance: not applicable',
+    ],
+    rules_applied: ['Max 2 paragraphs', 'Adopt commenter framing'],
     timestamp: new Date().toISOString(),
   };
   const whyHash = sha256(JSON.stringify(reasoning));
@@ -84,8 +91,8 @@ const dualCertCode = `async function certifyAndAct(agent: AgentContext) {
     },
     body: JSON.stringify({
       file_hash: whyHash,
-      filename: 'decision_' + Date.now() + '.json',
-      metadata: { type: 'decision', ...reasoning },
+      filename: 'action_comment_reasoning_' + Date.now() + '.json',
+      metadata: reasoning,
     }),
   }).then(r => r.json());
 
@@ -103,10 +110,13 @@ const dualCertCode = `async function certifyAndAct(agent: AgentContext) {
     },
     body: JSON.stringify({
       file_hash: outputHash,
-      filename: result.filename,
+      filename: 'action_comment_' + Date.now() + '.json',
       metadata: {
-        type: 'output',
-        why_proof_id: whyProof.proof_id,
+        action_type: 'comment',
+        agent: agent.sigilId,
+        why_proof_id: whyProof.proof_id,     // links WHAT back to WHY
+        target_author: result.targetAuthor,
+        content_preview: result.content.slice(0, 80),
       },
     }),
   }).then(r => r.json());
@@ -118,39 +128,35 @@ const dualCertCode = `async function certifyAndAct(agent: AgentContext) {
   };
 }`;
 
-const sessionLogCode = `interface SessionLog {
-  session_id: string;
-  agent_id: string;
-  who: string;           // wallet address or SIGIL identity
-  actions: {
-    why_proof_id: string; // decision certified BEFORE action
-    what_proof_id: string; // output certified AFTER action
-    when: string;         // block timestamp from proof response
-    description: string;
-  }[];
+const sessionLogCode = `interface ActionRecord {
+  type: string;              // "comment", "watchlist_comment", etc.
+  why_proof_id: string;      // decision certified BEFORE action
+  what_proof_id: string;     // output certified AFTER action
+  target_author?: string;    // who the action was directed at
+  verify_url: string;        // public verification link
 }
 
-async function buildSessionLog(
-  sessionId: string,
+// ── Session heartbeat: certify the full session as one proof ──
+async function certifyHeartbeat(
   agent: AgentContext,
-  actions: ActionResult[]
-): Promise<SessionLog> {
-  return {
-    session_id: sessionId,
-    agent_id: agent.id,
-    who: agent.wallet,
+  actions: ActionRecord[]
+): Promise<string> {
+  const heartbeat = {
+    session_id: crypto.randomUUID(),
+    agent: agent.sigilId,
+    sigil_profile: agent.sigilProfileUrl,
+    wallet: agent.walletAddress,
+    action_count: actions.length,
     actions: actions.map(a => ({
+      type: a.type,
       why_proof_id: a.why_proof_id,
       what_proof_id: a.what_proof_id,
-      when: a.server_timestamp,
-      description: a.description,
+      target_author: a.target_author,
     })),
+    timestamp: new Date().toISOString(),
   };
-}
 
-// Post the session log publicly for auditors
-async function publishSessionLog(log: SessionLog) {
-  const logHash = sha256(JSON.stringify(log));
+  const heartbeatHash = sha256(JSON.stringify(heartbeat));
   const proof = await fetch('${BASE}/api/proof', {
     method: 'POST',
     headers: {
@@ -158,32 +164,37 @@ async function publishSessionLog(log: SessionLog) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      file_hash: logHash,
-      filename: 'session_log_' + log.session_id + '.json',
-      metadata: { type: 'session_log', session_id: log.session_id },
+      file_hash: heartbeatHash,
+      filename: 'heartbeat_' + Date.now() + '.json',
+      metadata: heartbeat,
     }),
   }).then(r => r.json());
 
-  return { session_log_proof_id: proof.proof_id, log };
+  return proof.proof_id; // single proof covering the entire session
 }`;
 
 const verifyCode = `async function inspectSession(proofIds: string[]) {
-  // Batch-verify all proofs in a single request (up to 50)
+  // Batch-verify all proofs in a single request (up to 50, no auth)
   const ids = proofIds.join(',');
   const res = await fetch(
     '${BASE}/api/proofs/status?ids=' + ids
   ).then(r => r.json());
 
-  for (const proof of res.proofs) {
+  for (const p of res.proofs) {
+    if (p.status === 'not_found') continue;
     console.log(
-      proof.proof_id,
-      proof.blockchain_status,  // "confirmed" | "pending"
-      proof.transaction_hash,   // on-chain tx
-      proof.verify_url          // public verification link
+      p.proof_id,               // UUID
+      p.blockchain_status,      // "confirmed" | "pending"
+      p.transaction_hash,       // MultiversX tx hash
+      p.certified_at,           // ISO timestamp of certification
+      p.verify_url              // public verification page
     );
   }
 
-  return res.proofs;
+  // Each proof has: proof_id, file_hash, filename,
+  // blockchain_status, transaction_hash, transaction_url,
+  // certified_at, status ("found"|"not_found"), verify_url
+  return res.proofs.filter(p => p.status === 'found');
 }`;
 
 const curlExamples = `# 1. Register and get 10 free certs
@@ -196,32 +207,33 @@ curl -X POST ${BASE}/api/proof \\
      -H 'Authorization: Bearer YOUR_API_KEY' \\
      -H 'Content-Type: application/json' \\
      -d '{
-       "file_hash": "sha256(decision_payload)",
-       "filename": "decision_001.json",
+       "file_hash": "a1b2c3d4e5f6...64_char_hex_hash",
+       "filename": "action_comment_reasoning_1710000000000.json",
        "metadata": {
-         "type": "decision",
-         "trigger": "price_alert",
-         "decision": "approved",
-         "risk_level": "medium"
+         "action_type": "comment_reasoning",
+         "prompt_hash": "be54ca2a...",
+         "decision_chain": ["1. Evaluated topic", "2. Applied rules"],
+         "trigger_content_hash": "f603bdfd..."
        }
      }'
+# Returns: { "proof_id": "660bfd2b-...", ... }
 
 # 3. Certify WHAT (after acting)
 curl -X POST ${BASE}/api/proof \\
      -H 'Authorization: Bearer YOUR_API_KEY' \\
      -H 'Content-Type: application/json' \\
      -d '{
-       "file_hash": "sha256(output_content)",
-       "filename": "output_001.json",
+       "file_hash": "4746ff1e...64_char_hex_hash",
+       "filename": "action_comment_1710000000001.json",
        "metadata": {
-         "type": "output",
-         "filename": "result.json",
-         "why_proof_id": "prf_abc123"
+         "action_type": "comment",
+         "why_proof_id": "660bfd2b-4900-4a83-b60a-02bed8a07448",
+         "target_author": "mochimaru"
        }
      }'
 
-# 4. Batch-verify all session proofs
-curl "${BASE}/api/proofs/status?ids=prf_abc123,prf_def456"`;
+# 4. Batch-verify all session proofs (no auth required)
+curl "${BASE}/api/proofs/status?ids=660bfd2b-4900-4a83-b60a-02bed8a07448,8e1527ac-1fcd-41c8-8d3c-7a79e440fb2f"`;
 
 export default function Docs4WPage() {
   return (
@@ -289,7 +301,7 @@ export default function Docs4WPage() {
                     </div>
                     <h3 className="text-sm font-semibold" data-testid="text-who-title">WHO</h3>
                   </div>
-                  <p className="text-xs text-muted-foreground">Agent identity via SIGIL or wallet address. Continuous identity chain across sessions.</p>
+                  <p className="text-xs text-muted-foreground">Agent identity via SIGIL identity chain or MultiversX wallet address. Persistent across sessions — auditors can trace all actions to one identity.</p>
                 </CardContent>
               </Card>
               <Card className="border-primary/20">
@@ -311,7 +323,7 @@ export default function Docs4WPage() {
                     </div>
                     <h3 className="text-sm font-semibold" data-testid="text-why-title">WHY</h3>
                   </div>
-                  <p className="text-xs text-muted-foreground">Decision chain: reasoning, trigger, prompt hash. Anchored BEFORE acting — the key differentiator.</p>
+                  <p className="text-xs text-muted-foreground">Decision chain + trigger hash + prompt hash. Anchored BEFORE acting — cryptographic proof that intent preceded execution.</p>
                 </CardContent>
               </Card>
               <Card className="border-primary/20">
@@ -322,7 +334,7 @@ export default function Docs4WPage() {
                     </div>
                     <h3 className="text-sm font-semibold" data-testid="text-when-title">WHEN</h3>
                   </div>
-                  <p className="text-xs text-muted-foreground">MultiversX block timestamp. Independent of the agent — tamper-proof temporal anchor.</p>
+                  <p className="text-xs text-muted-foreground">Certification timestamp (<code className="text-primary text-[10px]">certified_at</code>) + on-chain transaction hash. Independent of the agent — tamper-proof temporal anchor.</p>
                 </CardContent>
               </Card>
             </div>
@@ -357,24 +369,24 @@ export default function Docs4WPage() {
           </section>
 
           <section data-testid="section-session-log">
-            <SectionHeader icon={Layers} number="03" title="Session Log Assembly" />
+            <SectionHeader icon={Layers} number="03" title="Session Heartbeat" />
             <p className="text-sm text-muted-foreground mb-4">
-              Collect all 4W proof IDs from a session into a structured log.
-              This log can be published publicly, allowing auditors to verify every action in the session.
+              At the end of a session, certify a heartbeat proof that aggregates all action proof IDs.
+              This creates a single on-chain anchor for the entire session — auditors only need this one proof to find every action.
             </p>
             <CodeBlock code={sessionLogCode} />
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-md border bg-muted/30 p-3">
                 <p className="text-xs font-medium text-foreground mb-1 flex items-center gap-1.5">
-                  <Layers className="h-3 w-3 text-primary" /> session_id
+                  <Layers className="h-3 w-3 text-primary" /> action_count
                 </p>
-                <p className="text-xs text-muted-foreground">Groups all actions within one agent run. Links WHY and WHAT proofs together.</p>
+                <p className="text-xs text-muted-foreground">Number of certified actions in the session. Each action has a paired WHY + WHAT proof.</p>
               </div>
               <div className="rounded-md border bg-muted/30 p-3">
                 <p className="text-xs font-medium text-foreground mb-1 flex items-center gap-1.5">
-                  <Shield className="h-3 w-3 text-primary" /> session_log_proof_id
+                  <Shield className="h-3 w-3 text-primary" /> heartbeat proof_id
                 </p>
-                <p className="text-xs text-muted-foreground">The session log itself is certified, creating a tamper-proof audit trail.</p>
+                <p className="text-xs text-muted-foreground">The heartbeat itself is certified on-chain. One proof covers the entire session audit trail.</p>
               </div>
             </div>
           </section>
@@ -397,11 +409,15 @@ export default function Docs4WPage() {
                 </thead>
                 <tbody>
                   {[
-                    ["proof_id", "Unique identifier for the certified hash"],
+                    ["proof_id", "UUID — unique identifier for the certified hash"],
+                    ["file_hash", "SHA-256 hash that was anchored"],
+                    ["filename", "Original filename submitted with the proof"],
                     ["blockchain_status", "\"confirmed\" = anchored on MultiversX"],
-                    ["transaction_hash", "On-chain tx — verifiable on any explorer"],
-                    ["verify_url", "Public link to verify the proof independently"],
-                    ["block_timestamp", "WHEN — independent temporal proof"],
+                    ["transaction_hash", "On-chain tx hash — verifiable on any explorer"],
+                    ["transaction_url", "Direct link to MultiversX explorer"],
+                    ["certified_at", "WHEN — ISO timestamp of certification"],
+                    ["verify_url", "Public verification page for this proof"],
+                    ["status", "\"found\" or \"not_found\" for each requested ID"],
                   ].map(([field, meaning], i) => (
                     <tr key={i} className={`border-b last:border-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
                       <td className="px-4 py-2.5 font-mono text-xs text-primary">{field}</td>
@@ -413,8 +429,33 @@ export default function Docs4WPage() {
             </div>
           </section>
 
+          <section data-testid="section-live-example">
+            <SectionHeader icon={Shield} number="05" title="Live Example: xproof_agent_verify" />
+            <p className="text-sm text-muted-foreground mb-4">
+              The xProof community agent implements 4W on every session.
+              Here is a real session output — every link is verifiable on-chain.
+            </p>
+            <div className="rounded-md border bg-muted/30 p-4 font-mono text-xs leading-relaxed space-y-1">
+              <p className="text-muted-foreground">WHO : <span className="text-foreground">xproof-agent-verify-hpyhbs (SIGIL)</span></p>
+              <p className="text-muted-foreground">WHAT: <span className="text-foreground">SHA-256 hash per action (xProof)</span></p>
+              <p className="text-muted-foreground">WHEN: <span className="text-foreground">MultiversX block timestamp</span></p>
+              <p className="text-muted-foreground">WHY : <span className="text-foreground">Decision chain anchored before every action</span></p>
+              <div className="border-t my-2 pt-2 border-border/50" />
+              <p className="text-muted-foreground">comment_reasoning <a href="https://xproof.app/proof/660bfd2b-4900-4a83-b60a-02bed8a07448" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">660bfd2b...</a></p>
+              <p className="text-muted-foreground">comment <a href="https://xproof.app/proof/8e1527ac-1fcd-41c8-8d3c-7a79e440fb2f" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">8e1527ac...</a></p>
+              <p className="text-muted-foreground">heartbeat <a href="https://xproof.app/proof/f2e1f2f7-d443-4fb9-b8f4-ee913ec7d85e" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">f2e1f2f7...</a></p>
+              <div className="border-t my-2 pt-2 border-border/50" />
+              <p className="text-muted-foreground">Trust Score: <span className="text-foreground">1623</span> · Level: <span className="text-foreground">Verified</span> · Certs: <span className="text-foreground">106</span></p>
+              <p className="text-muted-foreground">Leaderboard: <a href="https://xproof.app/leaderboard" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">xproof.app/leaderboard</a></p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Every action proof above links a WHY (reasoning) to a WHAT (output). The heartbeat aggregates all proof IDs into a single on-chain session anchor.
+              Each certification contributes to the agent's Trust Score — consistency beats volume.
+            </p>
+          </section>
+
           <section data-testid="section-quickstart">
-            <SectionHeader icon={Terminal} number="05" title="Quick start" />
+            <SectionHeader icon={Terminal} number="06" title="Quick start" />
             <p className="text-sm text-muted-foreground mb-4">
               Four curl commands demonstrate the full dual-certification flow.
               No account required for the first 10 free certifications.
