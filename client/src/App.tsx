@@ -25,6 +25,7 @@ import AgentComparePage from "@/pages/agent-compare";
 import DocsPage from "@/pages/docs";
 import DocsTradingPage from "@/pages/docs-trading";
 import Docs4WPage from "@/pages/docs-4w";
+import IncidentReportPage from "@/pages/incident-report";
 import { Shield, Loader2 } from "lucide-react";
 
 function Router() {
@@ -62,6 +63,7 @@ function Router() {
         <Route path="/docs" component={DocsPage} />
         <Route path="/docs/trading" component={DocsTradingPage} />
         <Route path="/docs/4w" component={Docs4WPage} />
+        <Route path="/incident/:wallet/:proofId" component={IncidentReportPage} />
         <Route path="/stats" component={AdminDashboard} />
         <Route path="/admin" component={AdminDashboard} />
         <Route>
@@ -93,6 +95,7 @@ function Router() {
       <Route path="/docs" component={DocsPage} />
       <Route path="/docs/trading" component={DocsTradingPage} />
       <Route path="/docs/4w" component={Docs4WPage} />
+      <Route path="/incident/:wallet/:proofId" component={IncidentReportPage} />
       <Route component={NotFound} />
     </Switch>
   );

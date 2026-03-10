@@ -14,6 +14,8 @@ import {
   Layers,
   Search,
   Terminal,
+  AlertTriangle,
+  CheckCircle,
 } from "lucide-react";
 
 const BASE = "https://xproof.app";
@@ -233,7 +235,33 @@ curl -X POST ${BASE}/api/proof \\
      }'
 
 # 4. Batch-verify all session proofs (no auth required)
-curl "${BASE}/api/proofs/status?ids=660bfd2b-4900-4a83-b60a-02bed8a07448,8e1527ac-1fcd-41c8-8d3c-7a79e440fb2f"`;
+curl "${BASE}/api/proofs/status?ids=660bfd2b-4900-4a83-b60a-02bed8a07448,8e1527ac-1fcd-41c8-8d3c-7a79e440fb2f"
+
+# 5. Incident report — reconstruct full 4W audit trail (no auth required)
+curl "${BASE}/api/agents/erd1hlx4xanncp2wm9aly2q.../incident-report?proof_id=660bfd2b-4900-4a83-b60a-02bed8a07448"`;
+
+const incidentReportCode = `// Reconstruct the 4W audit trail for a contested action
+const wallet = 'erd1hlx4xanncp2wm9aly2q6ywuthl2q...';
+const proofId = '660bfd2b-4900-4a83-b60a-02bed8a07448';
+
+const report = await fetch(
+  '${BASE}/api/agents/' + wallet + '/incident-report?proof_id=' + proofId
+).then(r => r.json());
+
+// report.verification:
+// {
+//   intent_preceded_execution: true,   // WHY certified before WHAT
+//   why_certified: true,               // decision chain exists
+//   what_certified: true,              // output hash exists
+//   session_anchored: true,            // heartbeat links to session
+//   all_confirmed: true                // all proofs on-chain
+// }
+
+// report.timeline: chronological WHY → WHAT with full metadata
+// report.session: heartbeat proof linking all actions
+
+// Visual report (shareable URL):
+// ${BASE}/incident/{wallet}/{proofId}`;
 
 export default function Docs4WPage() {
   return (
@@ -429,8 +457,34 @@ export default function Docs4WPage() {
             </div>
           </section>
 
+          <section data-testid="section-incident-report">
+            <SectionHeader icon={AlertTriangle} number="05" title="Incident Report" />
+            <p className="text-sm text-muted-foreground mb-4">
+              When an action is contested, the incident report endpoint reconstructs the full 4W audit trail automatically.
+              Pass any proof ID — WHY, WHAT, or heartbeat — and get the complete timeline with verification status.
+            </p>
+            <CodeBlock code={incidentReportCode} />
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-md border bg-muted/30 p-3">
+                <p className="text-xs font-medium text-foreground mb-1 flex items-center gap-1.5">
+                  <CheckCircle className="h-3 w-3 text-green-500" /> intent_preceded_execution
+                </p>
+                <p className="text-xs text-muted-foreground">True when WHY was certified before WHAT — cryptographic proof that intent preceded execution.</p>
+              </div>
+              <div className="rounded-md border bg-muted/30 p-3">
+                <p className="text-xs font-medium text-foreground mb-1 flex items-center gap-1.5">
+                  <Layers className="h-3 w-3 text-primary" /> session_anchored
+                </p>
+                <p className="text-xs text-muted-foreground">True when the action is linked to a session heartbeat — full session context is available.</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Visual report available at <code className="text-primary">/incident/:wallet/:proofId</code> — shareable link for regulators, auditors, or legal review.
+            </p>
+          </section>
+
           <section data-testid="section-live-example">
-            <SectionHeader icon={Shield} number="05" title="Live Example: xproof_agent_verify" />
+            <SectionHeader icon={Shield} number="06" title="Live Example: xproof_agent_verify" />
             <p className="text-sm text-muted-foreground mb-4">
               The xProof community agent implements 4W on every session.
               Here is a real session output — every link is verifiable on-chain.
@@ -452,12 +506,20 @@ export default function Docs4WPage() {
               Every action proof above links a WHY (reasoning) to a WHAT (output). The heartbeat aggregates all proof IDs into a single on-chain session anchor.
               Each certification contributes to the agent's Trust Score — consistency beats volume.
             </p>
+            <div className="mt-3">
+              <Button asChild variant="outline" size="sm" data-testid="link-live-incident-report">
+                <a href="/incident/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9/660bfd2b-4900-4a83-b60a-02bed8a07448">
+                  <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
+                  View incident report for this action
+                </a>
+              </Button>
+            </div>
           </section>
 
           <section data-testid="section-quickstart">
-            <SectionHeader icon={Terminal} number="06" title="Quick start" />
+            <SectionHeader icon={Terminal} number="07" title="Quick start" />
             <p className="text-sm text-muted-foreground mb-4">
-              Four curl commands demonstrate the full dual-certification flow.
+              Five curl commands demonstrate the full dual-certification and incident report flow.
               No account required for the first 10 free certifications.
             </p>
             <CodeBlock code={curlExamples} />
