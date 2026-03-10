@@ -24,7 +24,7 @@ import {
 import { CREDIT_PACKAGES, getPackage, verifyUsdcOnBase } from "./credits";
 import { auditLogSchema, AUDIT_LOG_JSON_SCHEMA, type AgentAuditLog } from "./auditSchema";
 import { getCertificationPriceEgld, getCertificationPriceUsd, getPricingInfo } from "./pricing";
-import { eq, desc, sql, and, gte, gt, count, isNotNull, type SQL } from "drizzle-orm";
+import { eq, desc, sql, and, gte, gt, count, isNotNull, inArray, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { getMetrics, bootstrapMetricsFromDb } from "./metrics";
 import { isX402Configured, verifyX402Payment, send402Response } from "./x402";
@@ -699,6 +699,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       logger.withRequest(req).error("Failed to fetch proof");
       res.status(500).json({ message: "Failed to fetch proof" });
+    }
+  });
+
+  app.get("/api/proofs/status", publicReadRateLimiter, async (req, res) => {
+    try {
+      const idsParam = req.query.ids;
+      if (!idsParam || typeof idsParam !== "string") {
+        return res.status(400).json({ error: "Missing required query parameter: ids (comma-separated proof UUIDs)" });
+      }
+
+      const ids = idsParam.split(",").map(id => id.trim()).filter(Boolean);
+      if (ids.length === 0) {
+        return res.status(400).json({ error: "No valid IDs provided" });
+      }
+      if (ids.length > 50) {
+        return res.status(400).json({ error: "Maximum 50 IDs per request" });
+      }
+
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      for (const id of ids) {
+        if (!uuidRegex.test(id)) {
+          return res.status(400).json({ error: `Invalid UUID format: ${id}` });
+        }
+      }
+
+      const results = await db
+        .select({
+          proof_id: certifications.id,
+          file_hash: certifications.fileHash,
+          filename: certifications.fileName,
+          blockchain_status: certifications.blockchainStatus,
+          transaction_hash: certifications.transactionHash,
+          transaction_url: certifications.transactionUrl,
+          certified_at: certifications.createdAt,
+        })
+        .from(certifications)
+        .where(and(
+          inArray(certifications.id, ids),
+          eq(certifications.isPublic, true)
+        ));
+
+      const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
+      const uniqueIds = [...new Set(ids)];
+      const resultMap = new Map(results.map(r => [r.proof_id, r]));
+      const response = uniqueIds.map(id => {
+        const r = resultMap.get(id);
+        if (!r) return { proof_id: id, status: "not_found", file_hash: null, filename: null, blockchain_status: null, transaction_hash: null, transaction_url: null, certified_at: null, verify_url: null };
+        return {
+          ...r,
+          status: "found",
+          verify_url: `${baseUrl}/verify/${r.proof_id}`,
+        };
+      });
+
+      res.json({ proofs: response });
+    } catch (error) {
+      logger.withRequest(req).error("Failed to fetch batch proof status");
+      res.status(500).json({ error: "Failed to fetch batch proof status" });
     }
   });
 
