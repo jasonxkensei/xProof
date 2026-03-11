@@ -6689,7 +6689,9 @@ export const xproofAuditPlugin: Plugin = {
         });
       }
 
-      const mcpServer = await createMcpServer({ baseUrl, auth });
+      const xPaymentHeader = req.headers["x-payment"] as string | undefined;
+      const host = req.get('host') || '';
+      const mcpServer = await createMcpServer({ baseUrl, auth, xPaymentHeader, host });
 
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,

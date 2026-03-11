@@ -9,10 +9,13 @@ import { getCertificationPriceUsd } from "./pricing";
 import { logger } from "./logger";
 import { auditLogSchema } from "./auditSchema";
 import { reconstructAuditTrail } from "./audit-trail";
+import { isX402Configured, verifyX402PaymentRaw, getInvestigatePaymentRequirements } from "./x402";
 
 interface McpContext {
   baseUrl: string;
   auth: { valid: boolean; keyHash?: string; apiKeyId?: number };
+  xPaymentHeader?: string;
+  host: string;
 }
 
 export async function createMcpServer(ctx: McpContext) {
@@ -23,7 +26,7 @@ export async function createMcpServer(ctx: McpContext) {
     version: "1.2.0",
   });
 
-  const { baseUrl, auth } = ctx;
+  const { baseUrl, auth, xPaymentHeader, host } = ctx;
 
   server.tool(
     "certify_file",
@@ -436,13 +439,44 @@ export async function createMcpServer(ctx: McpContext) {
 
   server.tool(
     "investigate_proof",
-    "Reconstruct the full 4W audit trail for a contested agent action. Returns WHO (agent identity + SIGIL), WHAT (SHA-256 hash on-chain), WHEN (MultiversX block timestamp), WHY (decision chain anchored before acting). Includes verification summary with intent_preceded_execution flag, chronological timeline of WHY/WHAT proofs, and session heartbeat anchor. No authentication required — all data is publicly verifiable on-chain.",
+    "Reconstruct the full 4W audit trail for a contested agent action. Returns WHO (agent identity + SIGIL), WHAT (SHA-256 hash on-chain), WHEN (MultiversX block timestamp), WHY (decision chain anchored before acting). Includes verification summary with intent_preceded_execution flag, chronological timeline of WHY/WHAT proofs, and session heartbeat anchor. Requires x402 payment ($0.05 USDC on Base via X-PAYMENT header) or API key authentication. Without payment, returns payment requirements with USDC address and amount.",
     {
       proof_id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).describe("UUID of any proof in the action pair — WHY (reasoning), WHAT (action), or heartbeat session proof"),
       wallet: z.string().min(3).describe("Agent wallet address (erd1...) that owns the proof"),
     },
     async ({ proof_id, wallet }) => {
       try {
+        if (!auth.valid) {
+          if (isX402Configured()) {
+            if (xPaymentHeader) {
+              const x402Result = await verifyX402PaymentRaw(xPaymentHeader, host, "investigate");
+              if (!x402Result.valid) {
+                return {
+                  content: [{ type: "text" as const, text: JSON.stringify({ error: "PAYMENT_FAILED", message: x402Result.error, incident_report_url: `${baseUrl}/incident/${wallet}/${proof_id}` }) }],
+                  isError: true,
+                };
+              }
+            } else {
+              const paymentInfo = await getInvestigatePaymentRequirements(host);
+              return {
+                content: [{ type: "text" as const, text: JSON.stringify({
+                  error: "PAYMENT_REQUIRED",
+                  message: "x402 payment required for investigate_proof. Include X-PAYMENT header with USDC payment on Base.",
+                  payment_requirements: paymentInfo,
+                  incident_report_url: `${baseUrl}/incident/${wallet}/${proof_id}`,
+                  hint: "Include the x-payment header in your MCP POST request to /mcp. Payment is $0.05 USDC on Base (EIP-155:8453).",
+                }) }],
+                isError: true,
+              };
+            }
+          } else {
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "API key required. Include Authorization: Bearer pm_xxx header.", incident_report_url: `${baseUrl}/incident/${wallet}/${proof_id}` }) }],
+              isError: true,
+            };
+          }
+        }
+
         const result = await reconstructAuditTrail(wallet, proof_id);
         return {
           content: [{

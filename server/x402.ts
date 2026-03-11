@@ -26,9 +26,9 @@ export function isX402Configured(): boolean {
   return !!X402_PAY_TO;
 }
 
-export async function getPaymentRequirements(route: "proof" | "batch") {
+export async function getPaymentRequirements(route: "proof" | "batch" | "investigate") {
   const priceUsd = await getCertificationPriceUsd();
-  const envPrice = route === "batch" ? process.env.X402_PRICE_BATCH : process.env.X402_PRICE_PROOF;
+  const envPrice = route === "batch" ? process.env.X402_PRICE_BATCH : route === "investigate" ? process.env.X402_PRICE_INVESTIGATE : process.env.X402_PRICE_PROOF;
   const price = envPrice || `$${priceUsd}`;
   return {
     scheme: "exact",
@@ -38,13 +38,17 @@ export async function getPaymentRequirements(route: "proof" | "batch") {
     maxTimeoutSeconds: 60,
     description: route === "batch"
       ? "xproof batch certification — per file in batch"
-      : "xproof single file certification",
+      : route === "investigate"
+        ? "xproof 4W incident investigation — full audit trail reconstruction"
+        : "xproof single file certification",
   };
 }
 
-export async function build402Response(req: Request, route: "proof" | "batch") {
+export async function build402Response(req: Request, route: "proof" | "batch" | "investigate") {
   const requirements = await getPaymentRequirements(route);
-  const resource = `https://${req.get('host')}/api/${route === "batch" ? "batch" : "proof"}`;
+  const resource = route === "investigate"
+    ? `https://${req.get('host')}/mcp`
+    : `https://${req.get('host')}/api/${route === "batch" ? "batch" : "proof"}`;
 
   const baseUrl = `https://${req.get('host')}`;
   return {
@@ -62,7 +66,7 @@ export async function build402Response(req: Request, route: "proof" | "batch") {
   };
 }
 
-export async function verifyX402Payment(req: Request, route: "proof" | "batch"): Promise<{ valid: boolean; error?: string }> {
+export async function verifyX402Payment(req: Request, route: "proof" | "batch" | "investigate"): Promise<{ valid: boolean; error?: string }> {
   if (!isX402Configured()) {
     return { valid: false, error: "x402 not configured" };
   }
@@ -75,7 +79,9 @@ export async function verifyX402Payment(req: Request, route: "proof" | "batch"):
   try {
     const server = getResourceServer();
     const requirements = await getPaymentRequirements(route);
-    const resource = `https://${req.get('host')}/api/${route === "batch" ? "batch" : "proof"}`;
+    const resource = route === "investigate"
+      ? `https://${req.get('host')}/mcp`
+      : `https://${req.get('host')}/api/${route === "batch" ? "batch" : "proof"}`;
 
     const paymentPayload = JSON.parse(
       Buffer.from(paymentHeader, "base64").toString("utf-8")
@@ -107,7 +113,60 @@ export async function verifyX402Payment(req: Request, route: "proof" | "batch"):
   }
 }
 
-export async function send402Response(res: Response, req: Request, route: "proof" | "batch") {
+export async function verifyX402PaymentRaw(paymentHeader: string, host: string, route: "proof" | "batch" | "investigate"): Promise<{ valid: boolean; error?: string }> {
+  if (!isX402Configured()) {
+    return { valid: false, error: "x402 not configured" };
+  }
+
+  try {
+    const server = getResourceServer();
+    const requirements = await getPaymentRequirements(route);
+    const resource = route === "investigate"
+      ? `https://${host}/mcp`
+      : `https://${host}/api/${route === "batch" ? "batch" : "proof"}`;
+
+    const paymentPayload = JSON.parse(
+      Buffer.from(paymentHeader, "base64").toString("utf-8")
+    );
+
+    const result = await server.verify(paymentPayload, {
+      ...requirements,
+      resource,
+      asset: "USDC",
+    });
+
+    if (result?.isValid) {
+      try {
+        await server.settle(paymentPayload, {
+          ...requirements,
+          resource,
+          asset: "USDC",
+        });
+      } catch (settleErr: any) {
+        logger.error("Settlement error (non-blocking)", { component: "x402", error: settleErr.message });
+      }
+      return { valid: true };
+    }
+
+    return { valid: false, error: "Payment verification failed" };
+  } catch (err: any) {
+    logger.error("Verification error", { component: "x402", error: err.message });
+    return { valid: false, error: `Payment verification error: ${err.message}` };
+  }
+}
+
+export async function getInvestigatePaymentRequirements(host: string) {
+  const requirements = await getPaymentRequirements("investigate");
+  return {
+    x402Version: 1,
+    accepts: [requirements],
+    resource: `https://${host}/mcp`,
+    description: requirements.description,
+    mimeType: "application/json",
+  };
+}
+
+export async function send402Response(res: Response, req: Request, route: "proof" | "batch" | "investigate") {
   const body = await build402Response(req, route);
   res.status(402).json(body);
 }
