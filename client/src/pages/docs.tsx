@@ -22,6 +22,7 @@ import {
   Globe,
   Wallet,
   Layers,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Endpoint {
@@ -836,6 +837,25 @@ export default function DocsPage() {
               </div>
               <Button asChild size="sm" variant="outline" data-testid="button-open-trading-guide">
                 <a href="/docs/trading">View integration guide</a>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-4 border-primary/20 bg-primary/5 hover-elevate" data-testid="card-base-violations-cta">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Violation Events on Base</h3>
+                  <p className="text-xs text-muted-foreground">Confirmed violations emitted as on-chain events on Base. Composable, public, no API dependency.</p>
+                </div>
+              </div>
+              <Button asChild size="sm" variant="outline" data-testid="button-open-base-violations">
+                <a href="/docs/base-violations">View contracts & docs</a>
               </Button>
             </div>
           </CardContent>
