@@ -359,6 +359,17 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
   -d '{"checkout_id": "uuid", "tx_hash": "abc123..."}'`,
       },
       {
+        method: "POST",
+        path: "/mcp → investigate_proof",
+        auth: "None",
+        description: "MCP tool: Reconstruct the full 4W audit trail for a contested agent action. Returns WHO (agent identity + SIGIL), WHAT (SHA-256 hash on-chain), WHEN (MultiversX block timestamp), WHY (decision chain anchored before acting). Includes verification summary and session heartbeat. No API key required.",
+        body: { proof_id: "UUID of any proof in the action pair (WHY, WHAT, or heartbeat)", wallet: "Agent wallet address (erd1...)" },
+        response: `{ "agent": { "wallet": "erd1...", "name": "...", "sigil_id": "..." }, "verification": { "intent_preceded_execution": true, "why_certified": true, "what_certified": true, "session_anchored": true, "all_confirmed": true }, "timeline": [{ "role": "WHY", "proof_id": "uuid", "action_type": "comment_reasoning", ... }, { "role": "WHAT", ... }], "session": { "role": "heartbeat", "proof_id": "uuid", ... } }`,
+        curl: `curl -X POST ${BASE}/mcp \\
+  -H "Content-Type: application/json" \\
+  -d '{"jsonrpc": "2.0", "method": "tools/call", "id": 1, "params": {"name": "investigate_proof", "arguments": {"proof_id": "660bfd2b-4900-4a83-b60a-02bed8a07448", "wallet": "erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9"}}}'`,
+      },
+      {
         method: "GET",
         path: "/api/mx8004/status",
         auth: "None",

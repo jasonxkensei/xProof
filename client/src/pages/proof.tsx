@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, ExternalLink, Download, Copy, CheckCircle, Calendar, Hash, User } from "lucide-react";
+import { Shield, ExternalLink, Download, Copy, CheckCircle, Calendar, Hash, User, FileSearch } from "lucide-react";
 import { format } from "date-fns";
 import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { useToast } from "@/hooks/use-toast";
@@ -59,6 +59,11 @@ export default function ProofPage() {
   }
 
   const isVerified = certification.blockchainStatus === "confirmed";
+  const meta = (certification.metadata || {}) as Record<string, any>;
+  const actionType = meta.action_type || null;
+  const isAgentAction = !!actionType || meta.type === "heartbeat";
+  const ownerWallet = (certification as any).ownerWallet as string | null;
+  const canInvestigate = isAgentAction && ownerWallet;
 
   return (
     <div className="min-h-screen bg-background">
@@ -203,7 +208,15 @@ export default function ProofPage() {
         </Card>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+        <div className="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
+          {canInvestigate && (
+            <Button asChild variant="outline" size="lg" data-testid="button-investigate">
+              <a href={`/incident/${ownerWallet}/${certification.id}`}>
+                <FileSearch className="mr-2 h-5 w-5" />
+                Investigate 4W audit trail
+              </a>
+            </Button>
+          )}
           <Button asChild variant="default" size="lg" data-testid="button-download-certificate">
             <a href={`/api/certificates/${certification.id}.pdf`} download>
               <Download className="mr-2 h-5 w-5" />

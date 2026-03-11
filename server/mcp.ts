@@ -8,6 +8,7 @@ import { recordOnBlockchain } from "./blockchain";
 import { getCertificationPriceUsd } from "./pricing";
 import { logger } from "./logger";
 import { auditLogSchema } from "./auditSchema";
+import { reconstructAuditTrail } from "./audit-trail";
 
 interface McpContext {
   baseUrl: string;
@@ -427,6 +428,32 @@ export async function createMcpServer(ctx: McpContext) {
       } catch (error: any) {
         return {
           content: [{ type: "text" as const, text: JSON.stringify({ error: "CHECK_ATTESTATIONS_FAILED", message: error.message }) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "investigate_proof",
+    "Reconstruct the full 4W audit trail for a contested agent action. Returns WHO (agent identity + SIGIL), WHAT (SHA-256 hash on-chain), WHEN (MultiversX block timestamp), WHY (decision chain anchored before acting). Includes verification summary with intent_preceded_execution flag, chronological timeline of WHY/WHAT proofs, and session heartbeat anchor. No authentication required — all data is publicly verifiable on-chain.",
+    {
+      proof_id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).describe("UUID of any proof in the action pair — WHY (reasoning), WHAT (action), or heartbeat session proof"),
+      wallet: z.string().min(3).describe("Agent wallet address (erd1...) that owns the proof"),
+    },
+    async ({ proof_id, wallet }) => {
+      try {
+        const result = await reconstructAuditTrail(wallet, proof_id);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify(result),
+          }],
+        };
+      } catch (error: any) {
+        const message = error.error || error.message || "Failed to reconstruct audit trail";
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "INVESTIGATION_FAILED", message, incident_report_url: `${baseUrl}/incident/${wallet}/${proof_id}` }) }],
           isError: true,
         };
       }
