@@ -105,7 +105,11 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
           AND blockchain_status = 'confirmed'
           AND metadata->>'action_type' = ${baseType}
           AND metadata->>'post_id' = ${postId}
-          AND (metadata->>'target_author' = ${targetAuthor} OR metadata->>'targetAuthor' = ${targetAuthor})
+          AND (
+            (${targetAuthor} IS NULL AND metadata->>'target_author' IS NULL AND metadata->>'targetAuthor' IS NULL)
+            OR metadata->>'target_author' = ${targetAuthor}
+            OR metadata->>'targetAuthor' = ${targetAuthor}
+          )
           AND created_at > ${contestedProof.createdAt}
         ORDER BY created_at ASC
         LIMIT 1
@@ -124,7 +128,11 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
           AND blockchain_status = 'confirmed'
           AND metadata->>'action_type' = ${reasoningType}
           AND metadata->>'post_id' = ${postId}
-          AND (metadata->>'target_author' = ${targetAuthor} OR metadata->>'targetAuthor' = ${targetAuthor})
+          AND (
+            (${targetAuthor} IS NULL AND metadata->>'target_author' IS NULL AND metadata->>'targetAuthor' IS NULL)
+            OR metadata->>'target_author' = ${targetAuthor}
+            OR metadata->>'targetAuthor' = ${targetAuthor}
+          )
           AND created_at < ${contestedProof.createdAt}
         ORDER BY created_at DESC
         LIMIT 1

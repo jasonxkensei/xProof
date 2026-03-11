@@ -7342,9 +7342,9 @@ export const xproofAuditPlugin: Plugin = {
   });
 
   // POST /api/admin/violations/:id/confirm — admin confirms a proposed violation
-  app.post("/api/admin/violations/:id/confirm", async (req, res) => {
+  app.post("/api/admin/violations/:id/confirm", isWalletAuthenticated, async (req: any, res) => {
     try {
-      const walletAddress = (req as any).walletAddress || req.headers["x-wallet-address"] as string;
+      const walletAddress = req.walletAddress;
       if (!walletAddress || !isAdminWallet(walletAddress)) {
         return res.status(403).json({ error: "Admin access required" });
       }
@@ -7367,9 +7367,9 @@ export const xproofAuditPlugin: Plugin = {
   });
 
   // POST /api/admin/violations/:id/reject — admin rejects a proposed violation
-  app.post("/api/admin/violations/:id/reject", async (req, res) => {
+  app.post("/api/admin/violations/:id/reject", isWalletAuthenticated, async (req: any, res) => {
     try {
-      const walletAddress = (req as any).walletAddress || req.headers["x-wallet-address"] as string;
+      const walletAddress = req.walletAddress;
       if (!walletAddress || !isAdminWallet(walletAddress)) {
         return res.status(403).json({ error: "Admin access required" });
       }

@@ -282,6 +282,19 @@ app.use((req, res, next) => {
         )
       `);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_violations_wallet ON agent_violations(wallet_address)`);
+      await pool.query(`
+        DO $$ BEGIN
+          ALTER TABLE agent_violations ADD CONSTRAINT chk_violation_type CHECK (type IN ('fault', 'breach'));
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await pool.query(`
+        DO $$ BEGIN
+          ALTER TABLE agent_violations ADD CONSTRAINT chk_violation_status CHECK (status IN ('proposed', 'confirmed', 'rejected'));
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+      `);
+      await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_violations_dedupe ON agent_violations(wallet_address, proof_id, type, reason) WHERE proof_id IS NOT NULL AND reason IS NOT NULL`);
       logger.info("agent_violations table ready", { component: "migration" });
     } catch (err: any) {
       logger.error("agent_violations migration error", { component: "migration", error: err.message });
