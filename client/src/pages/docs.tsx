@@ -21,6 +21,7 @@ import {
   Bell,
   Globe,
   Wallet,
+  Layers,
 } from "lucide-react";
 
 interface Endpoint {
@@ -509,6 +510,61 @@ assert hmac.compare_digest(expected, request.headers["X-xProof-Signature"])`,
   -H "Authorization: Bearer pm_xxx" \\
   -H "Content-Type: application/json" \\
   -d '{"package_id": "pack-100", "tx_hash": "0xabc..."}'`,
+      },
+    ],
+  },
+  {
+    id: "standard",
+    title: "Agent Proof Standard",
+    icon: Layers,
+    description: "Open composability — create and anchor proofs using the standard format",
+    endpoints: [
+      {
+        method: "GET",
+        path: "/api/standard/spec",
+        auth: "None",
+        description: "Returns the Agent Proof Standard specification: required/optional fields, signature scheme, hash format, and endpoint reference. Use this as a machine-readable schema for implementing the standard.",
+        response: `{ "name": "Agent Proof Standard", "version": "1.0", "proof_format": { "required": ["version", "agent_id", "instruction_hash", "action_hash", "timestamp", "signature"], "optional": ["action_type", "post_id", "target_author", "session_id", "chain_anchor", "metadata"] }, "signature_scheme": { "canonical": "version|agent_id|instruction_hash|action_hash|timestamp", "algorithms": ["Ed25519", "ECDSA (secp256k1)"] } }`,
+        curl: `curl ${BASE}/api/standard/spec`,
+      },
+      {
+        method: "POST",
+        path: "/api/standard/validate",
+        auth: "None (free)",
+        description: "Validate a proof against the standard format without creating anything. Returns field-level errors or a canonical hash if valid. Use this to test your implementation before anchoring.",
+        body: {
+          "proof.version": '"1.0" (required)',
+          "proof.agent_id": "string (required) — unique agent identifier",
+          "proof.instruction_hash": '"sha256:<64 hex chars>" (required) — hash of the reasoning/intent',
+          "proof.action_hash": '"sha256:<64 hex chars>" (required) — hash of the action executed',
+          "proof.timestamp": "ISO 8601 UTC (required)",
+          "proof.signature": '"hex:<128+ hex chars>" (required) — Ed25519 or ECDSA signature of canonical payload',
+        },
+        response: `{ "valid": true, "standard_version": "1.0", "canonical_hash": "abc123...", "fields_present": { "action_type": false, "metadata": true } }`,
+        curl: `curl -X POST ${BASE}/api/standard/validate \\
+  -H "Content-Type: application/json" \\
+  -d '{"proof": {"version": "1.0", "agent_id": "my-agent", "instruction_hash": "sha256:abc...64hex", "action_hash": "sha256:def...64hex", "timestamp": "2026-03-11T18:00:00.000Z", "signature": "hex:...128+hex"}}'`,
+      },
+      {
+        method: "POST",
+        path: "/api/standard/anchor",
+        auth: "Bearer pm_xxx or x402",
+        description: "Anchor a standard-format proof on the MultiversX blockchain. The canonical hash is recorded on-chain and a certification record is created. Returns proof_id, transaction hash, and explorer URL. Accepts the same auth methods as /api/proof.",
+        body: {
+          "proof.version": '"1.0" (required)',
+          "proof.agent_id": "string (required)",
+          "proof.instruction_hash": '"sha256:<64 hex chars>" (required)',
+          "proof.action_hash": '"sha256:<64 hex chars>" (required)',
+          "proof.timestamp": "ISO 8601 UTC (required)",
+          "proof.signature": '"hex:<128+ hex chars>" (required)',
+          "proof.action_type": "string (optional) — e.g. moderate, reply, trade",
+          "proof.metadata": "object (optional) — additional context",
+        },
+        response: `{ "proof_id": "uuid", "canonical_hash": "abc123...", "chain_anchor": { "chain": "multiversx", "network": "mainnet", "tx_hash": "abc...", "explorer_url": "https://explorer.multiversx.com/transactions/abc...", "status": "confirmed" }, "proof_url": "https://xproof.app/proof/uuid", "standard_version": "1.0", "auth_method": "api_key" }`,
+        curl: `curl -X POST ${BASE}/api/standard/anchor \\
+  -H "Authorization: Bearer pm_xxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{"proof": {"version": "1.0", "agent_id": "my-agent", "instruction_hash": "sha256:abc...64hex", "action_hash": "sha256:def...64hex", "timestamp": "2026-03-11T18:00:00.000Z", "signature": "hex:...128+hex"}}'`,
       },
     ],
   },
