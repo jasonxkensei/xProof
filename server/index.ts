@@ -265,6 +265,29 @@ app.use((req, res, next) => {
     }
   }
 
+  async function migrateAgentViolationsTable() {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS agent_violations (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          wallet_address VARCHAR NOT NULL,
+          proof_id VARCHAR,
+          type VARCHAR NOT NULL,
+          status VARCHAR NOT NULL DEFAULT 'proposed',
+          reason TEXT,
+          auto_confirmed BOOLEAN DEFAULT false,
+          detected_at TIMESTAMP DEFAULT now(),
+          confirmed_at TIMESTAMP,
+          notes TEXT
+        )
+      `);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_violations_wallet ON agent_violations(wallet_address)`);
+      logger.info("agent_violations table ready", { component: "migration" });
+    } catch (err: any) {
+      logger.error("agent_violations migration error", { component: "migration", error: err.message });
+    }
+  }
+
   server.listen({
     port,
     host: "0.0.0.0",
@@ -273,6 +296,7 @@ app.use((req, res, next) => {
     log(`serving on port ${port}`);
     startTxQueueWorker();
     migrateSystemUserCertifications();
+    migrateAgentViolationsTable();
     runDailyMaintenance();
     setInterval(runDailyMaintenance, 24 * 60 * 60 * 1000);
   });

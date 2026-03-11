@@ -7324,6 +7324,73 @@ export const xproofAuditPlugin: Plugin = {
     }
   });
 
+  // GET /api/agents/:wallet/violations — public, returns all violations for an agent
+  app.get("/api/agents/:wallet/violations", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      const rows = await db.execute(sql`
+        SELECT id, wallet_address, proof_id, type, status, reason, auto_confirmed, detected_at, confirmed_at, notes
+        FROM agent_violations
+        WHERE wallet_address = ${wallet}
+        ORDER BY detected_at DESC
+      `);
+      res.json({ violations: rows.rows });
+    } catch (err: any) {
+      logger.error("Violations fetch error", { error: err.message });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/violations/:id/confirm — admin confirms a proposed violation
+  app.post("/api/admin/violations/:id/confirm", async (req, res) => {
+    try {
+      const walletAddress = (req as any).walletAddress || req.headers["x-wallet-address"] as string;
+      if (!walletAddress || !isAdminWallet(walletAddress)) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { id } = req.params;
+      const notes = req.body?.notes || null;
+      const result = await db.execute(sql`
+        UPDATE agent_violations
+        SET status = 'confirmed', confirmed_at = NOW(), notes = ${notes}
+        WHERE id = ${id} AND status = 'proposed'
+        RETURNING *
+      `);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Violation not found or already confirmed" });
+      }
+      res.json({ success: true, violation: result.rows[0] });
+    } catch (err: any) {
+      logger.error("Violation confirm error", { error: err.message });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/violations/:id/reject — admin rejects a proposed violation
+  app.post("/api/admin/violations/:id/reject", async (req, res) => {
+    try {
+      const walletAddress = (req as any).walletAddress || req.headers["x-wallet-address"] as string;
+      if (!walletAddress || !isAdminWallet(walletAddress)) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { id } = req.params;
+      const notes = req.body?.notes || null;
+      const result = await db.execute(sql`
+        UPDATE agent_violations
+        SET status = 'rejected', notes = ${notes}
+        WHERE id = ${id} AND status = 'proposed'
+        RETURNING *
+      `);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Violation not found or not in proposed state" });
+      }
+      res.json({ success: true, violation: result.rows[0] });
+    } catch (err: any) {
+      logger.error("Violation reject error", { error: err.message });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // GET /api/agents/:wallet — public, returns a single agent profile
   app.get("/api/agents/:wallet", publicReadRateLimiter, async (req, res) => {
     try {
@@ -7451,6 +7518,8 @@ export const xproofAuditPlugin: Plugin = {
         auditCount: trust.auditCount,
         firstCertAt: trust.firstCertAt,
         lastCertAt: trust.lastCertAt,
+        violationPenalty: trust.violationPenalty,
+        violations: trust.violations,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -7470,7 +7539,8 @@ export const xproofAuditPlugin: Plugin = {
         return res.send(fallback);
       }
 
-      const svg = generateTrustBadgeSvg(trust.level, trust.score, trust.activeAttestations ?? 0);
+      const vCount = (trust.violations?.fault || 0) + (trust.violations?.breach || 0);
+      const svg = generateTrustBadgeSvg(trust.level, trust.score, trust.activeAttestations ?? 0, vCount);
       res.setHeader("Content-Type", "image/svg+xml");
       res.setHeader("Cache-Control", "max-age=300");
       res.send(svg);

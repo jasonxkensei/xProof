@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, TrendingDown, Flame, BadgeCheck, Award, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, TrendingDown, Flame, BadgeCheck, Award, ChevronLeft, ChevronRight, Sparkles, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,8 @@ interface LeaderboardEntry {
   scoreDelta7d: number;
   rank: number;
   previousLevel: string | null;
+  violationCount?: number;
+  violationPenalty?: number;
 }
 
 interface LeaderboardResponse {
@@ -379,6 +381,15 @@ export default function Leaderboard() {
                             >
                               <Sparkles className="mr-0.5 h-2.5 w-2.5" />
                               Promoted
+                            </Badge>
+                          )}
+                          {(entry.violationCount ?? 0) > 0 && (
+                            <Badge
+                              data-testid={`badge-violations-${entry.walletAddress}`}
+                              className="border border-red-500/30 bg-red-500/15 text-red-700 dark:text-red-400 text-[10px] px-1.5 py-0"
+                            >
+                              <AlertTriangle className="mr-0.5 h-2.5 w-2.5" />
+                              {entry.violationCount} violation{(entry.violationCount ?? 0) > 1 ? "s" : ""}
                             </Badge>
                           )}
                         </div>

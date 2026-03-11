@@ -1,6 +1,8 @@
 import { db } from "./db";
-import { certifications, users } from "@shared/schema";
+import { certifications, users, agentViolations } from "@shared/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
+
+export const VIOLATION_GAP_THRESHOLD_MS = 30 * 60 * 1000;
 
 export interface AuditTrailError {
   status: number;
@@ -181,7 +183,7 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
     intentPrecededExecution = new Date(whyEntry.certified_at).getTime() < new Date(whatEntry.certified_at).getTime();
   }
 
-  return {
+  const result = {
     agent: {
       wallet: user.walletAddress,
       name: user.agentName || null,
@@ -198,5 +200,77 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
     },
     timeline,
     session: sessionHeartbeat,
+    violations_created: 0,
   };
+
+  return result;
+}
+
+export async function detectAndRecordViolations(
+  wallet: string,
+  proofId: string,
+  verification: { intent_preceded_execution: boolean | null; why_certified: boolean; what_certified: boolean },
+  timeline: any[],
+): Promise<number> {
+  const anomalies: { type: "fault" | "breach"; reason: string; autoConfirm: boolean }[] = [];
+
+  if (verification.intent_preceded_execution === false) {
+    anomalies.push({
+      type: "fault",
+      reason: "WHAT was certified before WHY — execution preceded intent declaration",
+      autoConfirm: true,
+    });
+  }
+
+  if (verification.why_certified && !verification.what_certified) {
+    const whyEntry = timeline.find((t: any) => t.role === "WHY");
+    if (whyEntry) {
+      const whyTime = new Date(whyEntry.certified_at).getTime();
+      const now = Date.now();
+      if (now - whyTime > VIOLATION_GAP_THRESHOLD_MS) {
+        anomalies.push({
+          type: "fault",
+          reason: `WHY certified but no matching WHAT found after ${Math.round(VIOLATION_GAP_THRESHOLD_MS / 60000)} minutes`,
+          autoConfirm: true,
+        });
+      }
+    }
+  }
+
+  if (!verification.why_certified && verification.what_certified) {
+    anomalies.push({
+      type: "fault",
+      reason: "WHAT certified without any WHY — action executed without prior intent declaration",
+      autoConfirm: true,
+    });
+  }
+
+  let created = 0;
+  for (const anomaly of anomalies) {
+    const existing = await db.execute(sql`
+      SELECT id FROM agent_violations
+      WHERE wallet_address = ${wallet}
+        AND proof_id = ${proofId}
+        AND type = ${anomaly.type}
+        AND reason = ${anomaly.reason}
+      LIMIT 1
+    `);
+    if (existing.rows.length > 0) continue;
+
+    const status = anomaly.autoConfirm ? "confirmed" : "proposed";
+    const confirmedAt = anomaly.autoConfirm ? new Date() : null;
+
+    await db.insert(agentViolations).values({
+      walletAddress: wallet,
+      proofId,
+      type: anomaly.type,
+      status,
+      reason: anomaly.reason,
+      autoConfirmed: anomaly.autoConfirm,
+      confirmedAt,
+    });
+    created++;
+  }
+
+  return created;
 }

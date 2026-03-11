@@ -292,3 +292,24 @@ export const creditPurchases = pgTable("credit_purchases", {
 
 export type CreditPurchase = typeof creditPurchases.$inferSelect;
 export type InsertCreditPurchase = typeof creditPurchases.$inferInsert;
+
+export const agentViolations = pgTable("agent_violations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  walletAddress: varchar("wallet_address").notNull(),
+  proofId: varchar("proof_id"),
+  type: varchar("type").notNull(),
+  status: varchar("status").default("proposed").notNull(),
+  reason: text("reason"),
+  autoConfirmed: boolean("auto_confirmed").default(false),
+  detectedAt: timestamp("detected_at").defaultNow(),
+  confirmedAt: timestamp("confirmed_at"),
+  notes: text("notes"),
+});
+
+export const insertAgentViolationSchema = createInsertSchema(agentViolations).omit({
+  id: true,
+  detectedAt: true,
+  confirmedAt: true,
+});
+export type InsertAgentViolation = z.infer<typeof insertAgentViolationSchema>;
+export type AgentViolation = typeof agentViolations.$inferSelect;

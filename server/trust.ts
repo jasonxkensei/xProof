@@ -1,10 +1,12 @@
 import { db } from "./db";
-import { certifications, users } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { certifications, users, agentViolations } from "@shared/schema";
+import { eq, sql, and } from "drizzle-orm";
 
 export type TrustLevel = "Newcomer" | "Active" | "Trusted" | "Verified";
 
 export type TransparencyTier = "Tier 1" | "Tier 2" | "Tier 3";
+
+export const VIOLATION_PENALTY = { fault: -150, breach: -500 } as const;
 
 export interface TrustScore {
   score: number;
@@ -20,6 +22,8 @@ export interface TrustScore {
   auditCount: number;
   firstCertAt: string | null;
   lastCertAt: string | null;
+  violationPenalty: number;
+  violations: { fault: number; breach: number; proposed: number };
 }
 
 export function getTrustLevel(score: number): TrustLevel {
@@ -42,6 +46,29 @@ export function getTransparencyTier(metadataCount: number, auditCount: number): 
   if (auditCount >= 5) return "Tier 3";
   if (metadataCount >= 3) return "Tier 2";
   return "Tier 1";
+}
+
+async function computeViolationPenalty(walletAddress: string): Promise<{ penalty: number; fault: number; breach: number; proposed: number }> {
+  try {
+    const rows = await db.execute(sql`
+      SELECT type, status, COUNT(*)::int as cnt
+      FROM agent_violations
+      WHERE wallet_address = ${walletAddress}
+      GROUP BY type, status
+    `);
+    let faultConfirmed = 0;
+    let breachConfirmed = 0;
+    let proposed = 0;
+    for (const r of rows.rows as any[]) {
+      if (r.status === "confirmed" && r.type === "fault") faultConfirmed = Number(r.cnt);
+      if (r.status === "confirmed" && r.type === "breach") breachConfirmed = Number(r.cnt);
+      if (r.status === "proposed") proposed += Number(r.cnt);
+    }
+    const penalty = (faultConfirmed * VIOLATION_PENALTY.fault) + (breachConfirmed * VIOLATION_PENALTY.breach);
+    return { penalty, fault: faultConfirmed, breach: breachConfirmed, proposed };
+  } catch {
+    return { penalty: 0, fault: 0, breach: 0, proposed: 0 };
+  }
 }
 
 function computeTransparencyBonus(metadataCount: number, auditCount: number): number {
@@ -225,16 +252,18 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
   const [user] = await db.select({ walletAddress: users.walletAddress }).from(users).where(eq(users.id, userId));
   const walletAddress = user?.walletAddress || "";
 
-  const [streakWeeks, attestationResult, transparencyCounts] = await Promise.all([
+  const [streakWeeks, attestationResult, transparencyCounts, violationResult] = await Promise.all([
     computeStreakWeeks(userId),
     computeAttestationBonus(walletAddress),
     computeTransparencyCounts(userId),
+    computeViolationPenalty(walletAddress),
   ]);
 
   const { bonus: attestationBonus, count: activeAttestations } = attestationResult;
   const { metadataCount, auditCount } = transparencyCounts;
   const tBonus = computeTransparencyBonus(metadataCount, auditCount);
-  const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, attestationBonus, tBonus);
+  const rawScore = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, attestationBonus, tBonus);
+  const score = Math.max(0, rawScore + violationResult.penalty);
 
   return {
     score,
@@ -250,6 +279,8 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
     auditCount,
     firstCertAt: firstAt ? firstAt.toISOString() : null,
     lastCertAt: lastAt ? lastAt.toISOString() : null,
+    violationPenalty: violationResult.penalty,
+    violations: { fault: violationResult.fault, breach: violationResult.breach, proposed: violationResult.proposed },
   };
 }
 
@@ -282,6 +313,8 @@ export interface LeaderboardEntry {
   scoreDelta7d: number;
   rank: number;
   previousLevel: TrustLevel | null;
+  violationCount: number;
+  violationPenalty: number;
 }
 
 export interface LeaderboardFilters {
@@ -333,11 +366,12 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
   const cutoff7d = new Date();
   cutoff7d.setDate(cutoff7d.getDate() - 7);
 
-  const [streakMap, attestationMap, oldScoreMap, prevLevelMap] = await Promise.all([
+  const [streakMap, attestationMap, oldScoreMap, prevLevelMap, violationMap] = await Promise.all([
     computeStreakWeeksBatch(userIds),
     computeAttestationBonusBatch(walletAddresses),
     getOldScoreBatch(walletAddresses, cutoff7d),
     getPreviousLevelBatch(walletAddresses),
+    computeViolationPenaltyBatch(walletAddresses),
   ]);
 
   let entries = allRows.map((row) => {
@@ -352,7 +386,9 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
     const mCount = Number(row.metadata_count || 0);
     const aCount = Number(row.audit_count || 0);
     const tBonus = computeTransparencyBonus(mCount, aCount);
-    const score = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, attestationBonus, tBonus);
+    const vResult = violationMap.get(row.wallet_address) || { penalty: 0, fault: 0, breach: 0, proposed: 0 };
+    const rawScore = computeScore(confirmed, last30d, streakWeeks, firstAt, lastAt, attestationBonus, tBonus);
+    const score = Math.max(0, rawScore + vResult.penalty);
 
     return {
       walletAddress: row.wallet_address,
@@ -374,6 +410,8 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
       scoreDelta7d: oldScoreMap.has(row.wallet_address) ? score - (oldScoreMap.get(row.wallet_address) as number) : 0,
       rank: 0,
       previousLevel: prevLevelMap.get(row.wallet_address) ?? null,
+      violationCount: vResult.fault + vResult.breach,
+      violationPenalty: vResult.penalty,
     };
   });
 
@@ -405,6 +443,21 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
   const paged = entries.slice(start, start + limit);
 
   return { entries: paged, total, page, limit, totalPages };
+}
+
+async function computeViolationPenaltyBatch(walletAddresses: string[]): Promise<Map<string, { penalty: number; fault: number; breach: number; proposed: number }>> {
+  if (walletAddresses.length === 0) return new Map();
+  try {
+    const results = await Promise.all(
+      walletAddresses.map(async (wallet) => {
+        const result = await computeViolationPenalty(wallet);
+        return [wallet, result] as [string, { penalty: number; fault: number; breach: number; proposed: number }];
+      }),
+    );
+    return new Map(results);
+  } catch {
+    return new Map();
+  }
 }
 
 async function getOldScoreBatch(wallets: string[], cutoff: Date): Promise<Map<string, number>> {
@@ -445,14 +498,15 @@ async function getPreviousLevelBatch(wallets: string[]): Promise<Map<string, Tru
   }
 }
 
-export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestationCount = 0): string {
+export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestationCount = 0, violationCount = 0): string {
   const levelColor = getTrustLevelColor(level);
   const levelColorDark = adjustColor(levelColor, -20);
   const hasAttestations = attestationCount > 0;
 
   const labelText = "xproof";
   const attestedLabel = hasAttestations ? ` · ${attestationCount} attested` : "";
-  const statusText = `${level}${attestedLabel} (${score})`;
+  const violationLabel = violationCount > 0 ? ` · ${violationCount} violation${violationCount > 1 ? "s" : ""}` : "";
+  const statusText = `${level}${attestedLabel}${violationLabel} (${score})`;
   const pad = 10;
   const labelCharW = 6.8;
   const statusCharW = 6.2;
