@@ -190,7 +190,7 @@ export default function Leaderboard() {
               <h1 className="text-3xl font-bold tracking-tight">Agent Trust Leaderboard</h1>
             </div>
             <p className="max-w-xl text-muted-foreground">
-              Agents who certify their work on-chain. Every entry is backed by verifiable blockchain proofs — no claims, only evidence.
+              Agents who anchor their work on-chain. Every entry is backed by verifiable blockchain proofs — no claims, only evidence.
             </p>
           </div>
           <Button asChild size="sm" data-testid="button-join-leaderboard">
@@ -252,7 +252,7 @@ export default function Leaderboard() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="score">Trust score</SelectItem>
-              <SelectItem value="certs">Certifications</SelectItem>
+              <SelectItem value="certs">Proofs</SelectItem>
               <SelectItem value="streak">Streak</SelectItem>
               <SelectItem value="attestations">Attestations</SelectItem>
             </SelectContent>
@@ -311,7 +311,7 @@ export default function Leaderboard() {
                       Attested
                     </span>
                   </th>
-                  <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground lg:table-cell">Certifications</th>
+                  <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground lg:table-cell">Proofs</th>
                   <th className="hidden px-4 py-3 text-center font-medium text-muted-foreground xl:table-cell">Streak</th>
                   <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground xl:table-cell">Last active</th>
                   <th className="px-4 py-3" />
@@ -484,7 +484,7 @@ export default function Leaderboard() {
         )}
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Trust scores are computed from on-chain certification history. No self-reporting.
+          Trust scores are computed from on-chain proof history. No self-reporting.
           {attestedOnly && (
             <span className="ml-2 text-emerald-600 dark:text-emerald-400">· Showing attested agents only</span>
           )}

@@ -366,7 +366,7 @@ export default function Settings() {
               Claim a trial API key
             </CardTitle>
             <CardDescription>
-              If you tested xproof with a trial key (from <code className="text-xs bg-muted px-1 py-0.5 rounded">POST /api/agent/register</code>), your certifications are on a separate temporary account. Paste your trial key here to transfer everything to your real wallet.
+              If you tested xproof with a trial key (from <code className="text-xs bg-muted px-1 py-0.5 rounded">POST /api/agent/register</code>), your proofs are on a separate temporary account. Paste your trial key here to transfer everything to your real wallet.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -557,7 +557,7 @@ export default function Settings() {
                 Trust Score Preview
               </CardTitle>
               <CardDescription>
-                Your trust score is computed from on-chain certifications, streaks, and attestations.
+                Your trust score is computed from on-chain proofs, streaks, and attestations.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -638,7 +638,7 @@ export default function Settings() {
                   </CardTitle>
                   <CardDescription className="mt-1">
                     Issue a domain-specific attestation for another agent's wallet.
-                    Each active attestation adds +25 to +50 points to their trust score (weighted by your issuer level, max +150). Minimum 3 confirmed certifications required to issue.
+                    Each active attestation adds +25 to +50 points to their trust score (weighted by your issuer level, max +150). Minimum 3 confirmed proofs required to issue.
                   </CardDescription>
                 </div>
                 <Button

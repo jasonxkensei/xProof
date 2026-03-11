@@ -55,7 +55,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         method: "POST",
         path: "/api/agent/register",
         auth: "None",
-        description: "Register for a free trial with 10 certifications. Returns an API key (pm_xxx).",
+        description: "Register for a free trial with 10 proofs. Returns an API key (pm_xxx).",
         body: { agent_name: "string (required)", description: "string (optional)" },
         response: `{ "api_key": "pm_xxx", "trial": { "quota": 10, "remaining": 10 }, "endpoints": { ... } }`,
         curl: `curl -X POST ${BASE}/api/agent/register \\
@@ -66,8 +66,8 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         method: "GET",
         path: "/api/me",
         auth: "Bearer pm_xxx",
-        description: "Get your identity, quota, credit balance, and certification count.",
-        response: `{ "key_id": "...", "is_active": true, "account": { "is_trial": true, "trial_remaining": 8 }, "certifications": { "total": 2 } }`,
+        description: "Get your identity, quota, credit balance, and proof count.",
+        response: `{ "key_id": "...", "is_active": true, "account": { "is_trial": true, "trial_remaining": 8 }, "proofs": { "total": 2 } }`,
         curl: `curl ${BASE}/api/me \\
   -H "Authorization: Bearer pm_xxx"`,
       },
@@ -76,16 +76,16 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         path: "/api/trial",
         auth: "None",
         description: "Get information about the free trial program and registration flow.",
-        response: `{ "name": "xproof Agent Trial", "free_certifications": 10, "register": { ... } }`,
+        response: `{ "name": "xproof Agent Trial", "free_proofs": 10, "register": { ... } }`,
         curl: `curl ${BASE}/api/trial`,
       },
       {
         method: "POST",
         path: "/api/trial/claim",
         auth: "Wallet session (cookie)",
-        description: "Claim a trial account: transfers all certifications and the API key from a trial account to your authenticated wallet. Requires wallet login. Trust score is recalculated immediately.",
+        description: "Claim a trial account: transfers all proofs and the API key from a trial account to your authenticated wallet. Requires wallet login. Trust score is recalculated immediately.",
         body: { trial_api_key: "string (required, the pm_xxx key from trial registration)" },
-        response: `{ "success": true, "message": "...", "transferred": { "certifications": 5, "api_keys": 1 }, "api_key_prefix": "pm_xxx", "wallet": "erd1...", "trust_score": { "score": 120, "level": "Active" } }`,
+        response: `{ "success": true, "message": "...", "transferred": { "proofs": 5, "api_keys": 1 }, "api_key_prefix": "pm_xxx", "wallet": "erd1...", "trust_score": { "score": 120, "level": "Active" } }`,
         curl: `curl -X POST ${BASE}/api/trial/claim \\
   -H "Content-Type: application/json" \\
   -H "Cookie: your-session-cookie" \\
@@ -97,20 +97,20 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
     id: "core",
     title: "Core Endpoints",
     icon: FileText,
-    description: "Certify files, create proofs, and batch operations",
+    description: "Anchor proofs, verify files, and batch operations",
     endpoints: [
       {
         method: "POST",
         path: "/api/proof",
         auth: "Bearer pm_xxx or x402",
-        description: "Certify a file hash on the MultiversX blockchain. Single-call certification for agents.",
+        description: "Anchor a file hash on the MultiversX blockchain. Single-call proof for agents.",
         body: {
           file_hash: "string (64-char SHA-256 hex, required)",
           filename: "string (required)",
           author_name: "string (optional)",
           webhook_url: "string (optional, HTTPS URL for async notifications)",
         },
-        response: `{ "proof_id": "uuid", "file_hash": "abc123...", "tx_hash": "0x...", "status": "confirmed", "verify_url": "...", "certificate_url": "..." }`,
+        response: `{ "proof_id": "uuid", "file_hash": "abc123...", "tx_hash": "0x...", "status": "confirmed", "verify_url": "...", "proof_url": "..." }`,
         curl: `curl -X POST ${BASE}/api/proof \\
   -H "Authorization: Bearer pm_xxx" \\
   -H "Content-Type: application/json" \\
@@ -120,7 +120,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         method: "POST",
         path: "/api/batch",
         auth: "Bearer pm_xxx or x402",
-        description: "Certify multiple file hashes in a single request (up to 50).",
+        description: "Anchor multiple file hashes in a single request (up to 50).",
         body: {
           items: "array of { file_hash, filename, author_name? }",
           webhook_url: "string (optional)",
@@ -135,7 +135,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         method: "GET",
         path: "/api/proof/:id",
         auth: "None",
-        description: "Get a certification by its proof ID. Publicly accessible for verification.",
+        description: "Get a proof by its proof ID. Publicly accessible for verification.",
         response: `{ "id": "uuid", "fileName": "document.pdf", "fileHash": "abc...", "transactionHash": "0x...", "blockchainStatus": "confirmed", "createdAt": "..." }`,
         curl: `curl ${BASE}/api/proof/YOUR_PROOF_ID`,
       },
@@ -143,7 +143,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         method: "POST",
         path: "/api/audit",
         auth: "Bearer pm_xxx or x402",
-        description: "Certify an AI agent audit log on-chain. Uses the Agent Audit Log standard schema.",
+        description: "Anchor an AI agent audit log on-chain. Uses the Agent Audit Log standard schema.",
         body: {
           agent_id: "string (required)",
           session_id: "string (required)",
@@ -165,8 +165,8 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         method: "GET",
         path: "/api/proof/check",
         auth: "None",
-        description: "Check if a file hash has already been certified.",
-        response: `{ "exists": true, "certification": { ... } }`,
+        description: "Check if a file hash has already been anchored.",
+        response: `{ "exists": true, "proof": { ... } }`,
         curl: `curl "${BASE}/api/proof/check?hash=abc123..."`,
       },
       {
@@ -184,7 +184,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         method: "GET",
         path: "/api/pricing",
         auth: "None",
-        description: "Get current certification pricing information.",
+        description: "Get current proof pricing information.",
         response: `{ "current_price_usd": 0.05, "price_egld": "0.001", "volume_discount": true }`,
         curl: `curl ${BASE}/api/pricing`,
       },
@@ -201,7 +201,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         path: "/api/leaderboard",
         auth: "None",
         description: "Get the trust leaderboard. Returns top agents/wallets ranked by trust score.",
-        response: `[{ "wallet": "erd1...", "trust_score": 95, "certifications": 150, "rank": 1 }]`,
+        response: `[{ "wallet": "erd1...", "trust_score": 95, "proofs": 150, "rank": 1 }]`,
         curl: `curl ${BASE}/api/leaderboard`,
       },
       {
@@ -209,7 +209,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         path: "/api/trust/:wallet",
         auth: "None",
         description: "Get the trust score for a specific wallet address.",
-        response: `{ "wallet": "erd1...", "trust_score": 87, "certifications_count": 42, "attestations_received": 5 }`,
+        response: `{ "wallet": "erd1...", "trust_score": 87, "proofs_count": 42, "attestations_received": 5 }`,
         curl: `curl ${BASE}/api/trust/erd1abc...`,
       },
       {
@@ -225,7 +225,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         path: "/api/agents/:wallet",
         auth: "None",
         description: "Get the public profile and stats of an agent/wallet.",
-        response: `{ "wallet": "erd1...", "name": "Agent X", "category": "defi", "trust_score": 90, "certifications": 100 }`,
+        response: `{ "wallet": "erd1...", "name": "Agent X", "category": "defi", "trust_score": 90, "proofs": 100 }`,
         curl: `curl ${BASE}/api/agents/erd1abc...`,
       },
       {
@@ -330,8 +330,8 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         method: "GET",
         path: "/api/acp/products",
         auth: "Bearer pm_xxx",
-        description: "List available ACP (Agent Commerce Protocol) products for certification purchase with EGLD.",
-        response: `{ "products": [{ "id": "cert-1", "name": "Single Certification", "price_egld": "0.001" }] }`,
+        description: "List available ACP (Agent Commerce Protocol) products for proof purchase with EGLD.",
+        response: `{ "products": [{ "id": "proof-1", "name": "Single Proof", "price_egld": "0.001" }] }`,
         curl: `curl ${BASE}/api/acp/products \\
   -H "Authorization: Bearer pm_xxx"`,
       },
@@ -454,9 +454,9 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         method: "POST",
         path: "(your webhook URL)",
         auth: "HMAC-SHA256 signature",
-        description: `When you provide a webhook_url in POST /api/proof or /api/batch, xproof sends a POST request to your URL when the certification is confirmed on-chain. The request includes an X-xProof-Signature header containing an HMAC-SHA256 signature of the body, computed with your API key as the secret.`,
+        description: `When you provide a webhook_url in POST /api/proof or /api/batch, xproof sends a POST request to your URL when the proof is confirmed on-chain. The request includes an X-xProof-Signature header containing an HMAC-SHA256 signature of the body, computed with your API key as the secret.`,
         response: `{
-  "event": "certification.confirmed",
+  "event": "proof.confirmed",
   "proof_id": "uuid",
   "file_hash": "abc123...",
   "tx_hash": "0x...",
@@ -483,7 +483,7 @@ assert hmac.compare_digest(expected, request.headers["X-xProof-Signature"])`,
         method: "GET",
         path: "/api/credits/packages",
         auth: "None",
-        description: "List available prepaid certification packages with pricing.",
+        description: "List available prepaid proof packages with pricing.",
         response: `{ "packages": [{ "id": "pack-100", "certs": 100, "price_usdc": "5.00" }, ...], "payment": { "network": "eip155:8453", "asset": "USDC" } }`,
         curl: `curl ${BASE}/api/credits/packages`,
       },
@@ -549,7 +549,7 @@ assert hmac.compare_digest(expected, request.headers["X-xProof-Signature"])`,
         method: "POST",
         path: "/api/standard/anchor",
         auth: "Bearer pm_xxx or x402",
-        description: "Anchor a standard-format proof on the MultiversX blockchain. The canonical hash is recorded on-chain and a certification record is created. Returns proof_id, transaction hash, and explorer URL. Accepts the same auth methods as /api/proof.",
+        description: "Anchor a standard-format proof on the MultiversX blockchain. The canonical hash is recorded on-chain and a proof record is created. Returns proof_id, transaction hash, and explorer URL. Accepts the same auth methods as /api/proof.",
         body: {
           "proof.version": '"1.0" (required)',
           "proof.agent_id": "string (required)",
@@ -757,7 +757,7 @@ export default function DocsPage() {
         <div className="mb-10 text-center">
           <h1 className="text-3xl md:text-4xl font-bold mb-3" data-testid="text-docs-title">API Reference</h1>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto mb-6">
-            {totalEndpoints} endpoints for certifying files, auditing agents, and anchoring trust on MultiversX.
+            {totalEndpoints} endpoints for anchoring proofs, auditing agents, and building trust on MultiversX.
           </p>
 
           <div className="max-w-md mx-auto relative">
@@ -811,7 +811,7 @@ export default function DocsPage() {
                   <Shield className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-sm">The 4W Certification Workflow</h3>
+                  <h3 className="font-semibold text-sm">The 4W Proof Workflow</h3>
                   <p className="text-xs text-muted-foreground">WHO acted, WHAT was produced, WHEN it happened, WHY the decision was made — full agent auditability.</p>
                 </div>
               </div>
@@ -863,14 +863,14 @@ export default function DocsPage() {
               Quick Start
             </h2>
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">Get your first certification in 30 seconds:</p>
+              <p className="text-sm text-muted-foreground">Get your first proof in 30 seconds:</p>
               <div className="relative group/code">
                 <pre className="bg-muted/50 rounded-md p-3 pr-10 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all text-foreground">{`# 1. Register for free trial
 curl -X POST ${BASE}/api/agent/register \\
   -H "Content-Type: application/json" \\
   -d '{"agent_name": "my-agent"}'
 
-# 2. Use the returned API key to certify a file
+# 2. Use the returned API key to anchor a proof
 curl -X POST ${BASE}/api/proof \\
   -H "Authorization: Bearer pm_YOUR_KEY" \\
   -H "Content-Type: application/json" \\
@@ -878,7 +878,7 @@ curl -X POST ${BASE}/api/proof \\
 
 # 3. Verify the proof
 curl ${BASE}/api/proof/YOUR_PROOF_ID`}</pre>
-                <CopyButton text={`# 1. Register for free trial\ncurl -X POST ${BASE}/api/agent/register \\\n  -H "Content-Type: application/json" \\\n  -d '{"agent_name": "my-agent"}'\n\n# 2. Use the returned API key to certify a file\ncurl -X POST ${BASE}/api/proof \\\n  -H "Authorization: Bearer pm_YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "filename": "hello.txt"}'\n\n# 3. Verify the proof\ncurl ${BASE}/api/proof/YOUR_PROOF_ID`} />
+                <CopyButton text={`# 1. Register for free trial\ncurl -X POST ${BASE}/api/agent/register \\\n  -H "Content-Type: application/json" \\\n  -d '{"agent_name": "my-agent"}'\n\n# 2. Use the returned API key to anchor a proof\ncurl -X POST ${BASE}/api/proof \\\n  -H "Authorization: Bearer pm_YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "filename": "hello.txt"}'\n\n# 3. Verify the proof\ncurl ${BASE}/api/proof/YOUR_PROOF_ID`} />
               </div>
             </div>
           </CardContent>

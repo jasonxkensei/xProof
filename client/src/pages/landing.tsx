@@ -102,7 +102,7 @@ export default function Landing() {
               data-testid="button-certify-file"
             >
               <Upload className="mr-2 h-5 w-5" />
-              Certify a file
+              Submit a proof
             </Button>
             <Button 
               asChild 
@@ -118,7 +118,7 @@ export default function Landing() {
             </Button>
           </div>
           
-          <p className="mt-6 text-sm text-muted-foreground">{price} per certification • Unlimited</p>
+          <p className="mt-6 text-sm text-muted-foreground">{price} per proof • Unlimited</p>
         </div>
       </section>
       {/* Quick Start for Developers/Agents */}
@@ -161,7 +161,7 @@ export default function Landing() {
                   </div>
                   <h3 className="font-semibold mb-2">AI Agent (MCP)</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Connect via Model Context Protocol. Your agent can certify outputs, audit logs, and build trust autonomously.
+                    Connect via Model Context Protocol. Your agent can anchor decisions, audit logs, and build trust autonomously.
                   </p>
                   <Button asChild variant="outline" size="sm" data-testid="button-quickstart-agents">
                     <a href="/agents">
@@ -179,7 +179,7 @@ export default function Landing() {
                   </div>
                   <h3 className="font-semibold mb-2">Web Interface</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Connect your wallet, drag a file, and get a verifiable certificate. No code required.
+                    Connect your wallet, drag a file, and get a verifiable proof. No code required.
                   </p>
                   <Button variant="outline" size="sm" onClick={handleConnect} data-testid="button-quickstart-connect">
                     Connect wallet
@@ -243,7 +243,7 @@ export default function Landing() {
                 <h3 className="mb-3 text-xl font-semibold">Engraved on the blockchain</h3>
                 <p className="text-muted-foreground">
                   The fingerprint is permanently recorded on the blockchain. 
-                  You receive a PDF certificate with a QR code.
+                  You receive a verifiable proof with a QR code.
                 </p>
               </div>
             </div>
@@ -282,18 +282,18 @@ export default function Landing() {
                     <span className="text-5xl font-bold" data-testid="text-price">{price}</span>
                   </div>
                   <p className="text-muted-foreground">
-                    per certification
+                    per proof
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">Starting at {price} — price decreases as the network grows (all-time volume).</p>
                 </div>
                 <ul className="mb-8 space-y-3 text-sm">
                   <li className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                    <span><strong>Unlimited certifications</strong></span>
+                    <span><strong>Unlimited proofs</strong></span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                    <span>Downloadable PDF certificate</span>
+                    <span>Downloadable PDF proof</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-primary shrink-0" />
@@ -379,7 +379,7 @@ export default function Landing() {
                 Agents pay natively.<br className="hidden md:block" /> No signup, no API key.
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Any x402-compatible agent certifies in one round-trip. $0.05 in USDC on Base. No account required.
+                Any x402-compatible agent anchors proofs in one round-trip. $0.05 in USDC on Base. No account required.
               </p>
             </div>
 
@@ -388,7 +388,7 @@ export default function Landing() {
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">1</div>
-                  <h3 className="font-semibold">Request certification</h3>
+                  <h3 className="font-semibold">Submit proof</h3>
                 </div>
                 <p className="text-sm text-muted-foreground pl-11">Agent sends a POST with no credentials.</p>
                 <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-x402-step1">
@@ -444,7 +444,7 @@ export default function Landing() {
             </div>
 
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              {["USDC", "Base Mainnet", "eip155:8453", "No account needed", "$0.05 / cert"].map((label) => (
+              {["USDC", "Base Mainnet", "eip155:8453", "No account needed", "$0.05 / proof"].map((label) => (
                 <Badge key={label} variant="outline" className="text-xs font-mono" data-testid={`badge-x402-${label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}>{label}</Badge>
               ))}
             </div>
@@ -468,10 +468,10 @@ export default function Landing() {
             <div className="mb-16 text-center">
               <Badge variant="outline" className="mb-4">API Key · Prepaid</Badge>
               <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-                For high-volume agents.<br className="hidden md:block" /> Register once, certify forever.
+                For high-volume agents.<br className="hidden md:block" /> Register once, anchor forever.
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Get an API key with 10 free certifications. No wallet needed to start. Top up with USDC on Base or EGLD when ready.
+                Get an API key with 10 free proofs. No wallet needed to start. Top up with USDC on Base or EGLD when ready.
               </p>
             </div>
 
@@ -482,7 +482,7 @@ export default function Landing() {
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">1</div>
                   <h3 className="font-semibold">Register your agent</h3>
                 </div>
-                <p className="text-sm text-muted-foreground pl-11">One POST, get an API key and 10 free certs.</p>
+                <p className="text-sm text-muted-foreground pl-11">One POST, get an API key and 10 free proofs.</p>
                 <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-apikey-step1">
                   <div><span className="text-[#79c0ff]">POST</span> <span className="text-[#a5d6ff]">https://xproof.app/api/agent/register</span></div>
                   <div className="text-[#8b949e] mt-2 mb-1">Content-Type: application/json</div>
@@ -501,7 +501,7 @@ export default function Landing() {
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">2</div>
-                  <h3 className="font-semibold">Certify with your key</h3>
+                  <h3 className="font-semibold">Anchor with your key</h3>
                 </div>
                 <p className="text-sm text-muted-foreground pl-11">Add your API key as a Bearer token.</p>
                 <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-apikey-step2">
@@ -535,7 +535,7 @@ export default function Landing() {
             </div>
 
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              {["10 free certs", "No wallet needed", "pm_ API key", "Top up anytime", "USDC or EGLD"].map((label) => (
+              {["10 free proofs", "No wallet needed", "pm_ API key", "Top up anytime", "USDC or EGLD"].map((label) => (
                 <Badge key={label} variant="outline" className="text-xs font-mono" data-testid={`badge-apikey-${label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}>{label}</Badge>
               ))}
             </div>
@@ -604,17 +604,17 @@ export default function Landing() {
                 <AccordionContent className="text-muted-foreground">
                   The slightest change (even a single pixel) generates a completely different fingerprint. 
                   This is what guarantees integrity: if someone modifies your file, 
-                  it will no longer match the original certificate.
+                  it will no longer match the original proof.
                 </AccordionContent>
               </AccordionItem>
 
               <AccordionItem value="item-5">
                 <AccordionTrigger className="text-left" data-testid="faq-trigger-verify">
-                  How can someone verify my certificate?
+                  How can someone verify my proof?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Each certificate contains a QR code and a link to a public verification page. 
-                  Anyone can scan the QR or visit the link to see the certification details 
+                  Each proof contains a QR code and a link to a public verification page. 
+                  Anyone can scan the QR or visit the link to see the proof details 
                   and verify directly on the blockchain.
                 </AccordionContent>
               </AccordionItem>
@@ -625,7 +625,7 @@ export default function Landing() {
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
                   The wallet is used to securely identify you and to sign 
-                  your certifications. It works like an ultra-secure electronic signature. 
+                  your proofs. It works like an ultra-secure electronic signature. 
                   You can use the MultiversX DeFi Wallet browser extension.
                 </AccordionContent>
               </AccordionItem>

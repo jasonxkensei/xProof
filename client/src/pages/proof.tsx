@@ -47,7 +47,7 @@ export default function ProofPage() {
             <Shield className="mb-4 h-16 w-16 text-muted-foreground/50" />
             <h2 className="mb-2 text-2xl font-bold">Proof not found</h2>
             <p className="mb-6 text-muted-foreground">
-              The certification proof you are looking for does not exist or is not public.
+              The proof you are looking for does not exist or is not public.
             </p>
             <Button asChild data-testid="button-home">
               <a href="/">Back to home</a>
@@ -95,7 +95,7 @@ export default function ProofPage() {
             )}
           </div>
           <h1 className="mb-3 text-3xl md:text-4xl font-bold tracking-tight">
-            {isVerified ? "Verified on the blockchain" : "Certification in progress"}
+            {isVerified ? "Verified on the blockchain" : "Proof anchoring in progress"}
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl">
             The authenticity of this document has been {isVerified ? "verified" : "recorded"} on the MultiversX blockchain
@@ -151,7 +151,7 @@ export default function ProofPage() {
                 <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
                   <Calendar className="mt-0.5 h-5 w-5 text-primary" />
                   <div className="flex-1">
-                    <p className="mb-1 text-sm font-medium text-muted-foreground">Certification date</p>
+                    <p className="mb-1 text-sm font-medium text-muted-foreground">Proof date</p>
                     <p className="font-semibold" data-testid="text-proof-date">
                       {certification.createdAt ? format(new Date(certification.createdAt), "MM/dd/yyyy 'at' HH:mm") : "Unknown date"}
                     </p>
@@ -162,7 +162,7 @@ export default function ProofPage() {
                   <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
                     <User className="mt-0.5 h-5 w-5 text-primary" />
                     <div className="flex-1">
-                      <p className="mb-1 text-sm font-medium text-muted-foreground">Certified by</p>
+                      <p className="mb-1 text-sm font-medium text-muted-foreground">Anchored by</p>
                       <p className="font-semibold" data-testid="text-proof-author">
                         {certification.authorName}
                       </p>

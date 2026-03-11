@@ -235,7 +235,7 @@ export function ApiKeysSection() {
             <Key className="mb-3 h-10 w-10 text-muted-foreground/50" />
             <h3 className="mb-1 font-semibold">No API keys yet</h3>
             <p className="mb-4 text-sm text-muted-foreground max-w-xs">
-              Create an API key to authenticate your agents and automate certifications.
+              Create an API key to authenticate your agents and automate proofs.
             </p>
             <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="button-create-first-api-key">
               <Plus className="h-4 w-4 mr-2" />
