@@ -1,18 +1,20 @@
 ---
-name: xproof-certification
-version: 2.0.0
-description: Proof and compliance primitive for AI agents on MultiversX. Certify file existence on-chain, and enforce pre-execution audit logging for critical agent actions via REST API, MCP, or x402. No proof = no action.
+name: xproof
+version: 3.0.0
+description: Proof and accountability layer for AI agents. Anchor verifiable proofs on MultiversX, enforce audit logging, detect violations on Base. REST API, MCP, x402. No proof = no action.
 homepage: https://xproof.app
-metadata: {"xproof":{"category":"certification,security,compliance","api_base":"https://xproof.app"}}
+metadata: {"xproof":{"category":"proof,security,compliance,accountability","api_base":"https://xproof.app"}}
 ---
 
-# xProof Certification & Audit Enforcement Skill
+# xProof -- Proof & Accountability Layer for AI Agents
 
-This skill enables your agent to **certify its outputs on the MultiversX blockchain** and **enforce pre-execution audit logging for critical actions** -- creating tamper-proof, publicly verifiable proofs of existence, authorship, timestamp, and decision accountability.
+This skill enables your agent to **anchor verifiable proofs on the MultiversX blockchain**, **enforce pre-execution audit logging**, and **detect violations via Base** -- creating tamper-proof, publicly verifiable records of existence, authorship, timestamp, decision accountability, and trust.
 
-**Why certify?** In competitive or transactional contexts, certified agents can prove originality, integrity, and timing. Non-certified agents cannot. Certification is a structural advantage.
+**Why anchor proofs?** In competitive or transactional contexts, agents with on-chain proofs can demonstrate originality, integrity, and timing. Agents without proofs cannot. Verifiable proof is a structural advantage.
 
 **Why audit?** Autonomous agents executing trades, deployments, or data access need an immutable record of every decision. The Agent Audit Log Standard enforces this: no proof = no execution.
+
+**Why violations?** Trust requires accountability. xProof detects anomalies (gaps, burst patterns) and records violations on Base via smart contracts. Operators can subscribe to violation events and enforce policies automatically.
 
 ## Quick Install
 
@@ -20,12 +22,12 @@ This skill enables your agent to **certify its outputs on the MultiversX blockch
 mkdir -p .agent/skills/xproof/references
 
 # Core Skill
-curl -sL https://raw.githubusercontent.com/sasurobert/multiversx-openclaw-skills/refs/heads/master/skills/xproof/SKILL.md \
+curl -sL https://raw.githubusercontent.com/jasonxkensei/xproof-openclaw-skill/main/xproof/SKILL.md \
   > .agent/skills/xproof/SKILL.md
 
 # Reference Manuals
 for f in certification x402 mcp; do
-  curl -sL "https://raw.githubusercontent.com/sasurobert/multiversx-openclaw-skills/refs/heads/master/skills/xproof/references/${f}.md" \
+  curl -sL "https://raw.githubusercontent.com/jasonxkensei/xproof-openclaw-skill/main/xproof/references/${f}.md" \
     > ".agent/skills/xproof/references/${f}.md"
 done
 ```
@@ -53,28 +55,28 @@ Get an API key at [xproof.app](https://xproof.app) (connect wallet, go to Settin
 
 ### Option B: x402 Payment Protocol (No Account Required)
 
-No configuration needed. Pay $0.05 per certification in USDC on Base (eip155:8453) directly in the HTTP request. The 402 response header tells your agent exactly what to pay.
+No configuration needed. Pay $0.05 per proof in USDC on Base (eip155:8453) directly in the HTTP request. The 402 response header tells your agent exactly what to pay.
 
 ---
 
 ## 1. Core Skills Catalog
 
-### 1.1 Certification (REST API)
+### 1.1 Proof Anchoring (REST API)
 [Full Reference](references/certification.md)
 
 | Skill | Endpoint | Description |
 |:---|:---|:---|
-| `certify_file` | `POST /api/proof` | Certify a single file hash on MultiversX |
-| `batch_certify` | `POST /api/batch` | Certify up to 50 files in one call |
-| `audit_agent_session` | `POST /api/audit` | Certify agent decision on-chain BEFORE executing critical action |
-| `verify_proof` | `GET /api/proof/:id` | Verify an existing certification |
+| `certify_file` | `POST /api/proof` | Anchor a file hash on MultiversX as immutable proof |
+| `batch_certify` | `POST /api/batch` | Anchor up to 50 files in one call |
+| `audit_agent_session` | `POST /api/audit` | Anchor agent decision on-chain BEFORE executing critical action |
+| `verify_proof` | `GET /api/proof/:id` | Verify an existing proof |
 | `get_certificate` | `GET /api/certificates/:id.pdf` | Download PDF certificate with QR code |
 | `get_badge` | `GET /badge/:id` | Dynamic SVG badge (shields.io style) |
 | `get_proof_page` | `GET /proof/:id` | Human-readable proof page |
 | `get_proof_json` | `GET /proof/:id.json` | Structured proof document (JSON) |
 | `get_audit_page` | `GET /audit/:id` | Human-readable audit log page |
 
-### 1.2 Certification (MCP -- JSON-RPC 2.0)
+### 1.2 Proof Anchoring (MCP -- JSON-RPC 2.0)
 [Full Reference](references/mcp.md)
 
 | Tool | Description |
@@ -83,7 +85,7 @@ No configuration needed. Pay $0.05 per certification in USDC on Base (eip155:845
 | `verify_proof` | Verify existing proof by UUID |
 | `get_proof` | Retrieve proof in JSON or Markdown format |
 | `discover_services` | List capabilities, pricing, and usage guidance |
-| `audit_agent_session` | Certify agent decision on-chain BEFORE executing critical action |
+| `audit_agent_session` | Anchor agent decision on-chain BEFORE executing critical action |
 
 ### 1.3 Payment (x402)
 [Full Reference](references/x402.md)
@@ -92,18 +94,18 @@ x402 is not a separate skill -- it is a payment method. When you call `POST /api
 
 ---
 
-## 2. The Certification Lifecycle
+## 2. The Proof Lifecycle
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Hash file   │────>│  POST /api/  │────>│  On-chain    │────>│  Proof       │
-│  (SHA-256)   │     │  proof       │     │  anchoring   │     │  verified    │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
-                                                                      │
-                     ┌──────────────┐     ┌──────────────┐           │
-                     │  Embed badge │<────│  Get PDF /   │<──────────┘
-                     │  in output   │     │  badge / URL │
-                     └──────────────┘     └──────────────┘
++--------------+     +--------------+     +--------------+     +--------------+
+|  Hash file   |---->|  POST /api/  |---->|  On-chain    |---->|  Proof       |
+|  (SHA-256)   |     |  proof       |     |  anchoring   |     |  verified    |
++--------------+     +--------------+     +--------------+     +--------------+
+                                                                      |
+                     +--------------+     +--------------+           |
+                     |  Embed badge |<----|  Get PDF /   |<----------+
+                     |  in output   |     |  badge / URL |
+                     +--------------+     +--------------+
 ```
 
 ### Step-by-Step
@@ -169,9 +171,9 @@ curl -X POST https://xproof.app/mcp \
 
 ---
 
-## 4. Batch Certification
+## 4. Batch Proof Anchoring
 
-Certify up to 50 files in a single API call:
+Anchor up to 50 files in a single API call:
 
 ```bash
 curl -X POST https://xproof.app/api/batch \
@@ -208,9 +210,9 @@ The webhook payload includes proof ID, file hash, blockchain transaction hash, a
 
 ---
 
-## 6. When to Certify
+## 6. When to Anchor Proofs
 
-Autonomous agents should certify outputs whenever provenance, integrity, or priority matters:
+Autonomous agents should anchor proofs whenever provenance, integrity, or priority matters:
 
 - **After generating code, contracts, or configs** -- proves authorship and timestamp
 - **Before delivering work products** -- proves integrity at handoff
@@ -228,17 +230,17 @@ xProof is complementary to the core MultiversX agent skills:
 
 | MultiversX Skill | xProof Complement |
 |:---|:---|
-| `init_job` (Validation Registry) | Certify job output before submitting proof |
+| `init_job` (Validation Registry) | Anchor job output before submitting proof |
 | `submit_proof` (Validation Registry) | Use xProof hash as the proof payload |
-| `register_agent` (Identity Registry) | Certify your agent manifest for integrity |
-| `deposit` (Escrow) | Certify deliverables before release |
+| `register_agent` (Identity Registry) | Anchor your agent manifest for integrity |
+| `deposit` (Escrow) | Anchor deliverables before release |
 
-### Typical Flow: Job + Certification
+### Typical Flow: Job + Proof
 
 ```
 1. Accept job via init_job
 2. Do the work
-3. Certify output via xProof (POST /api/proof)
+3. Anchor output via xProof (POST /api/proof)
 4. Submit xProof hash as proof via submit_proof
 5. Employer verifies via xProof URL
 6. Escrow released
@@ -248,7 +250,7 @@ xProof is complementary to the core MultiversX agent skills:
 
 ## 8. Agent Audit Log Standard
 
-The Agent Audit Log is a compliance primitive for autonomous agents. Before executing any critical action (trade, deploy, data access, transfer), the agent MUST certify its decision on-chain. No proof_id = no execution.
+The Agent Audit Log is a compliance primitive for autonomous agents. Before executing any critical action (trade, deploy, data access, transfer), the agent MUST anchor its decision on-chain. No proof_id = no execution.
 
 ### Why Audit?
 
@@ -340,7 +342,53 @@ Autonomous agents should audit BEFORE executing any action where accountability 
 
 ---
 
-## 9. Discovery Endpoints
+## 9. Violations Layer (Base)
+
+xProof monitors agent behavior and detects anomalies. When a violation is confirmed, it is recorded on Base via the `XProofViolations.sol` smart contract, impacting the agent's trust score.
+
+### Violation Types
+
+| Type | Penalty | Trigger |
+|:---|:---|:---|
+| `gap` (fault) | -150 trust score | No proof activity for 30+ minutes during active session |
+| `burst` (breach) | -500 trust score | Abnormal spike in proof submissions |
+
+### Violation Lifecycle
+
+```
+detected -> proposed -> confirmed (-penalty) or rejected
+```
+
+Auto-confirmed for irrefutable anomalies (gap > threshold). Operators can subscribe to on-chain violation events via `ViolationWatcher.sol` (3 modes: ALERT_ONLY, AUTO_PAUSE_FAULT, AUTO_PAUSE_BREACH).
+
+### Operator Integration
+
+```solidity
+// Subscribe to violations for a specific agent
+IXProofViolations(xproofContract).getViolations(agentId)
+```
+
+Smart contracts: [XProofViolations.sol](https://github.com/jasonxkensei/xProof/blob/main/contracts/XProofViolations.sol) | [ViolationWatcher.sol](https://github.com/jasonxkensei/xProof/blob/main/contracts/ViolationWatcher.sol)
+
+Docs: [https://xproof.app/docs/base-violations](https://xproof.app/docs/base-violations)
+
+---
+
+## 10. Agent Proof Standard
+
+xProof implements the open Agent Proof Standard -- a composable, chain-agnostic format for agent accountability. Any platform can adopt the standard to interoperate with xProof proofs.
+
+- **4W Framework**: WHO (agent_id) / WHAT (file_hash + metadata) / WHEN (timestamp + chain finality) / WHY (action_description + risk_level)
+- **Signature**: Mandatory in v1
+- **agent_id**: Free string (wallet address, DID, or plain identifier)
+
+Full specification: [AGENT_PROOF_STANDARD.md](https://github.com/jasonxkensei/xProof/blob/main/AGENT_PROOF_STANDARD.md)
+
+Standard API: `GET /api/standard` | `GET /api/standard/validate` (POST)
+
+---
+
+## 11. Discovery Endpoints
 
 | Endpoint | Description |
 |:---|:---|
@@ -352,17 +400,18 @@ Autonomous agents should audit BEFORE executing any action where accountability 
 | `GET /llms-full.txt` | Complete LLM reference |
 | `POST /mcp` | MCP JSON-RPC 2.0 endpoint |
 | `GET /mcp` | MCP capability discovery |
+| `GET /api/standard` | Agent Proof Standard specification |
 
 ---
 
-## 10. Command Cheatsheet
+## 12. Command Cheatsheet
 
 ```bash
-# Certify a single file
+# Anchor a single file proof
 sha256sum myfile.pdf | awk '{print $1}'
 # Then POST the hash to /api/proof
 
-# Certify via MCP
+# Anchor via MCP
 curl -X POST https://xproof.app/mcp \
   -H "Authorization: Bearer pm_..." \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"certify_file","arguments":{"file_hash":"...","filename":"myfile.pdf"}}}'
@@ -373,7 +422,7 @@ curl https://xproof.app/api/proof/<proof_id>
 # Get badge (embed in README)
 ![xProof](https://xproof.app/badge/<proof_id>)
 
-# Batch certify
+# Batch anchor
 curl -X POST https://xproof.app/api/batch \
   -H "Authorization: Bearer pm_..." \
   -d '{"files":[{"file_hash":"...","filename":"a.txt"},{"file_hash":"...","filename":"b.txt"}]}'
