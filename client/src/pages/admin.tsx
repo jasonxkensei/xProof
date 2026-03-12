@@ -76,6 +76,8 @@ interface PublicStats {
   agents?: {
     unique_active: number;
     total_api_keys: number;
+    trial_agents: number;
+    trial_certifications_used: number;
   };
   generated_at: string;
 }

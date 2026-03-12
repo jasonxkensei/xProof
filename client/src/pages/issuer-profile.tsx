@@ -81,7 +81,7 @@ export default function IssuerProfilePage() {
         <div className="flex flex-col items-center gap-4">
           <XCircle className="h-10 w-10 text-destructive" />
           <p className="text-muted-foreground">Issuer not found</p>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild data-testid="button-back-leaderboard">
             <Link href="/leaderboard">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Leaderboard
@@ -104,7 +104,7 @@ export default function IssuerProfilePage() {
     <div className="min-h-screen bg-background">
       <div className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 py-3">
-          <Button variant="ghost" size="sm" asChild>
+          <Button variant="ghost" size="sm" asChild data-testid="button-nav-leaderboard">
             <Link href="/leaderboard">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Leaderboard
@@ -256,7 +256,7 @@ export default function IssuerProfilePage() {
                           )}
                         </p>
                       </div>
-                      <Button variant="ghost" size="sm" asChild>
+                      <Button variant="ghost" size="sm" asChild data-testid={`button-view-agent-${att.id}`}>
                         <Link href={`/agent/${att.subject_wallet}`}>
                           <ExternalLink className="mr-1 h-3 w-3" />
                           Agent
@@ -306,7 +306,7 @@ export default function IssuerProfilePage() {
                           )}
                         </p>
                       </div>
-                      <Button variant="ghost" size="sm" asChild>
+                      <Button variant="ghost" size="sm" asChild data-testid={`button-view-agent-revoked-${att.id}`}>
                         <Link href={`/agent/${att.subject_wallet}`}>
                           <ExternalLink className="mr-1 h-3 w-3" />
                           Agent

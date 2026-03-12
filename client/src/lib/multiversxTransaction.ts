@@ -164,9 +164,9 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
     throw new Error("No wallet provider found. Please connect your wallet first.");
   }
   
-  logger.log("🔧 Provider type:", provider.constructor.name);
-  logger.log("✍️ Requesting signature from wallet...");
-  logger.log("📝 If you have 2FA enabled, complete the verification in your wallet");
+  logger.log("Provider type:", provider.constructor.name);
+  logger.log("Requesting signature from wallet...");
+  logger.log("If you have 2FA enabled, complete the verification in your wallet");
   
   try {
     // Initialize provider if needed
@@ -192,18 +192,18 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
       throw new Error("Transaction signing was cancelled or failed");
     }
     
-    logger.log("✅ Transaction signed successfully");
+    logger.log("Transaction signed successfully");
     
     // Log for debugging
-    logger.log("📋 Signed transactions:", signedTransactions.length);
+    logger.log("Signed transactions:", signedTransactions.length);
     
     // Use TransactionManager to send (this is the official SDK approach)
     const txManager = TransactionManager.getInstance();
     
-    logger.log("📤 Sending via TransactionManager...");
+    logger.log("Sending via TransactionManager...");
     const sentTransactions = await txManager.send(signedTransactions);
     
-    logger.log("📋 Sent transactions response:", sentTransactions);
+    logger.log("Sent transactions response:", sentTransactions);
     
     // Extract transaction hash
     let txHash = "";
@@ -230,7 +230,7 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
           }
         });
       } catch (trackError) {
-        logger.log("⚠️ Track error (non-fatal):", trackError);
+        logger.log("Track error (non-fatal):", trackError);
       }
       
       throw new Error(
@@ -268,7 +268,7 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
       explorerUrl: `${MAINNET_EXPLORER}/transactions/${txHash}`,
     };
   } catch (error: any) {
-    console.error("Transaction error:", error);
+    logger.error("Transaction error:", error);
     
     if (error.message?.includes("cancelled") || error.message?.includes("denied")) {
       throw new Error("Transaction was cancelled by user");
@@ -279,16 +279,16 @@ export async function signAndSendTransaction(transaction: Transaction): Promise<
 }
 
 export async function sendCertificationTransaction(params: TransactionParams): Promise<MultiversXTransactionResult> {
-  logger.log("🔐 Creating certification transaction for Mainnet...");
-  logger.log("📄 File hash:", params.fileHash);
-  logger.log("👤 User:", params.userAddress);
+  logger.log("Creating certification transaction for Mainnet...");
+  logger.log("File hash:", params.fileHash);
+  logger.log("User:", params.userAddress);
   
   const transaction = await createCertificationTransaction(params);
-  logger.log("📝 Transaction created, requesting signature from wallet...");
+  logger.log("Transaction created, requesting signature from wallet...");
   
   const result = await signAndSendTransaction(transaction);
-  logger.log("✅ Transaction sent successfully!");
-  logger.log("🔗 Explorer:", result.explorerUrl);
+  logger.log("Transaction sent successfully");
+  logger.log("Explorer:", result.explorerUrl);
   
   return result;
 }

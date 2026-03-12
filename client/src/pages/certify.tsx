@@ -289,8 +289,6 @@ export default function Certify() {
         description: "Your file has been certified on the MultiversX blockchain",
       });
     } catch (error: any) {
-      console.error("Certification error:", error);
-
       if (error.status === 409 || error.message?.includes("already been certified")) {
         try {
           const checkRes = await fetch(`/api/proof/check?hash=${encodeURIComponent(fileHash)}`);

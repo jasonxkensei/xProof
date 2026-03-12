@@ -70,8 +70,8 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
         
         return true;
       } else {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.error('Backend sync failed:', response.status, errorText);
+        const errorBody = await response.text().catch(() => 'Unknown error');
+        logger.error('Backend sync failed:', response.status, errorBody);
         
         setError('Sync failed. Please try again.');
         setLoading(false);
@@ -87,7 +87,7 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
         return false;
       }
     } catch (err) {
-      console.error('Sync error:', err);
+      logger.error('Sync error:', err);
       setError('Server connection error.');
       setLoading(false);
       setWaitingForConnection(false);
@@ -125,53 +125,40 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
     syncAttempted.current = false;
     
     try {
-      console.log('[wallet] Clearing SDK state before login...');
-      try { logoutAction(); } catch (e) { console.log('[wallet] logoutAction cleanup (non-fatal):', e); }
+      try { logoutAction(); } catch (_e) { /* cleanup non-fatal */ }
       
-      console.log('[wallet] Creating extension provider...');
       const provider = await ProviderFactory.create({ 
         type: ProviderTypeEnum.extension 
       });
       providerRef.current = provider;
-      console.log('[wallet] Provider created:', typeof provider);
       
       if (typeof provider.init === 'function') {
-        console.log('[wallet] Initializing provider...');
         await provider.init();
       }
       
-      console.log('[wallet] Calling provider.login()...');
       const loginResult = await provider.login();
-      console.log('[wallet] Login result:', JSON.stringify(loginResult, null, 2));
       
       let walletAddress = '';
       
       if (loginResult && typeof loginResult === 'object' && 'address' in loginResult) {
         walletAddress = (loginResult as any).address;
-        console.log('[wallet] Address from loginResult:', walletAddress);
       }
       
       if (!walletAddress) {
         try {
           if (typeof (provider as any).getAddress === 'function') {
             walletAddress = await (provider as any).getAddress();
-            console.log('[wallet] Address from getAddress():', walletAddress);
           }
-        } catch (e) {
-          console.log('[wallet] getAddress() failed:', e);
-        }
+        } catch (_e) { /* fallback */ }
       }
       
       if (!walletAddress && (provider as any).account?.address) {
         walletAddress = (provider as any).account.address;
-        console.log('[wallet] Address from provider.account:', walletAddress);
       }
       
       if (walletAddress && walletAddress.startsWith('erd1')) {
-        console.log('[wallet] Got address immediately, syncing:', walletAddress);
         await syncAndRedirect(walletAddress);
       } else {
-        console.log('[wallet] No address yet, starting polling...');
         setWaitingForConnection(true);
         let attempts = 0;
         const maxAttempts = 30;
@@ -182,19 +169,17 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
             if (typeof (provider as any).getAddress === 'function') {
               addr = await (provider as any).getAddress();
             }
-          } catch (e) {}
+          } catch (_e) { /* retry */ }
           
           if (!addr && (provider as any).account?.address) {
             addr = (provider as any).account.address;
           }
           
           if (addr && addr.startsWith('erd1')) {
-            console.log('[wallet] Polling found address at attempt', attempts, ':', addr);
             clearInterval(checkAddress);
             setWaitingForConnection(false);
             await syncAndRedirect(addr);
           } else if (attempts >= maxAttempts) {
-            console.log('[wallet] Polling timed out after', maxAttempts, 'attempts');
             clearInterval(checkAddress);
             setWaitingForConnection(false);
             setLoading(false);
@@ -203,7 +188,7 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
         }, 500);
       }
     } catch (err: any) {
-      console.error('[wallet] Extension login error:', err);
+      logger.error('Extension login error:', err);
       const errorMsg = err.message || "Please install the MultiversX DeFi Wallet extension";
       setError(`Error: ${errorMsg}`);
       toast({

@@ -50,7 +50,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     setTimeout(() => setCopied(false), 2000);
   }
   return (
-    <Button size="icon" variant="ghost" onClick={copy}>
+    <Button size="icon" variant="ghost" onClick={copy} data-testid={`button-copy-${label.toLowerCase().replace(/\s+/g, '-')}`}>
       {copied
         ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
         : <Copy className="h-3.5 w-3.5" />

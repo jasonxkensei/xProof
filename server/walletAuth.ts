@@ -78,17 +78,9 @@ export function verifyWalletSignature(
     // Construct the exact message that was signed
     const messageToSign = `xproof Login\n\nSign this message to authenticate.\n\nNonce: ${nonce}`;
     
-    // In development mode with simulated wallet, skip signature verification
     if (process.env.NODE_ENV === 'development') {
       logger.info("Development mode: Accepting simulated wallet signature", { component: "auth" });
-      // TODO: In production, implement full signature verification using XPortal wallet's real signatures
-      // The XPortal browser extension provides ed25519 signatures that can be verified with UserVerifier
-      // For now, we trust the development environment
     } else {
-      // Production signature verification
-      // TODO: Implement proper MultiversX ed25519 signature verification
-      // This requires using the official XPortal wallet extension which provides real signatures
-      // For now, reject all signatures in production until proper verification is implemented
       logger.error("Production signature verification not yet implemented", { component: "auth" });
       return false;
     }
