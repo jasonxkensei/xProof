@@ -131,7 +131,8 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
           AND metadata->>'action_type' = ${reasoningType}
           AND metadata->>'post_id' = ${postId}
           AND (
-            (${targetAuthor}::text IS NULL AND metadata->>'target_author' IS NULL AND metadata->>'targetAuthor' IS NULL)
+            metadata->>'target_author' IS NULL
+            OR metadata->>'target_author' = ''
             OR metadata->>'target_author' = ${targetAuthor}::text
             OR metadata->>'targetAuthor' = ${targetAuthor}::text
           )
