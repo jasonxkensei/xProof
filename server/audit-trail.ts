@@ -106,9 +106,9 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
           AND metadata->>'action_type' = ${baseType}
           AND metadata->>'post_id' = ${postId}
           AND (
-            (${targetAuthor} IS NULL AND metadata->>'target_author' IS NULL AND metadata->>'targetAuthor' IS NULL)
-            OR metadata->>'target_author' = ${targetAuthor}
-            OR metadata->>'targetAuthor' = ${targetAuthor}
+            (${targetAuthor}::text IS NULL AND metadata->>'target_author' IS NULL AND metadata->>'targetAuthor' IS NULL)
+            OR metadata->>'target_author' = ${targetAuthor}::text
+            OR metadata->>'targetAuthor' = ${targetAuthor}::text
           )
           AND created_at > ${contestedProof.createdAt}
         ORDER BY created_at ASC
@@ -129,9 +129,9 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
           AND metadata->>'action_type' = ${reasoningType}
           AND metadata->>'post_id' = ${postId}
           AND (
-            (${targetAuthor} IS NULL AND metadata->>'target_author' IS NULL AND metadata->>'targetAuthor' IS NULL)
-            OR metadata->>'target_author' = ${targetAuthor}
-            OR metadata->>'targetAuthor' = ${targetAuthor}
+            (${targetAuthor}::text IS NULL AND metadata->>'target_author' IS NULL AND metadata->>'targetAuthor' IS NULL)
+            OR metadata->>'target_author' = ${targetAuthor}::text
+            OR metadata->>'targetAuthor' = ${targetAuthor}::text
           )
           AND created_at < ${contestedProof.createdAt}
         ORDER BY created_at DESC

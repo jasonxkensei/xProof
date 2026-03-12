@@ -27,7 +27,7 @@ function CopyInline({ text }: { text: string }) {
     <Button
       size="icon"
       variant="ghost"
-      className="h-5 w-5 shrink-0"
+      className="shrink-0"
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
       data-testid="button-copy-inline"
     >
@@ -148,7 +148,7 @@ function TimelineEntry({ entry, isLast }: { entry: any; isLast: boolean }) {
                   className="font-mono text-primary hover:underline truncate"
                   data-testid="link-explorer"
                 >
-                  {entry.transaction_hash?.slice(0, 16)}...
+                  {entry.transaction_hash ? `${entry.transaction_hash.slice(0, 16)}...` : "pending"}
                 </a>
                 <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
               </div>
@@ -329,7 +329,7 @@ export default function IncidentReportPage() {
                               className="font-mono text-primary hover:underline truncate"
                               data-testid="link-session-explorer"
                             >
-                              {data.session.transaction_hash?.slice(0, 16)}...
+                              {data.session.transaction_hash ? `${data.session.transaction_hash.slice(0, 16)}...` : "pending"}
                             </a>
                           </div>
                           <div className="flex items-center gap-2">
