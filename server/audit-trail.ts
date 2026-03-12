@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { certifications, users, agentViolations } from "@shared/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
+import { computeTrustScoreByWallet, type TrustScore } from "./trust";
 
 export const VIOLATION_GAP_THRESHOLD_MS = 30 * 60 * 1000;
 
@@ -9,7 +10,7 @@ export interface AuditTrailError {
   error: string;
 }
 
-function formatProofEntry(proof: any, role: string) {
+function formatProofEntry(proof: any, role: string, wallet?: string) {
   const m = (proof.metadata || {}) as Record<string, any>;
   return {
     role,
@@ -22,6 +23,7 @@ function formatProofEntry(proof: any, role: string) {
     transaction_url: proof.transactionUrl,
     certified_at: proof.createdAt,
     verify_url: `https://xproof.app/proof/${proof.id}`,
+    incident_url: wallet ? `https://xproof.app/incident/${wallet}/${proof.id}` : null,
     explorer_url: proof.transactionUrl,
     metadata: {
       sigil_agent_id: m.sigil_agent_id || null,
@@ -73,7 +75,7 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
   let pairedProof: any = null;
 
   if (isHeartbeat) {
-    sessionHeartbeat = formatProofEntry(contestedProof, "heartbeat");
+    sessionHeartbeat = formatProofEntry(contestedProof, "heartbeat", wallet);
     const actionProofs = meta.action_proofs || meta.actions || [];
     if (actionProofs.length > 0) {
       const actionIds = actionProofs.map((a: any) => a.proof_id || a.why_proof_id || a.what_proof_id).filter(Boolean);
@@ -87,7 +89,7 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
           const cm = (cert.metadata || {}) as Record<string, any>;
           const at = cm.action_type || "";
           const role = at.endsWith("_reasoning") ? "WHY" : "WHAT";
-          timeline.push(formatProofEntry(cert, role));
+          timeline.push(formatProofEntry(cert, role, wallet));
         }
       }
     }
@@ -97,7 +99,7 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
 
     if (isReasoning && postId) {
       const baseType = actionType!.replace(/_reasoning$/, "");
-      timeline.push(formatProofEntry(contestedProof, "WHY"));
+      timeline.push(formatProofEntry(contestedProof, "WHY", wallet));
 
       const pairResults = await db.execute(sql`
         SELECT * FROM certifications
@@ -117,7 +119,7 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
       if (pairResults.rows.length > 0) {
         const row = pairResults.rows[0] as any;
         pairedProof = { id: row.id, fileHash: row.file_hash, fileName: row.file_name, blockchainStatus: row.blockchain_status, transactionHash: row.transaction_hash, transactionUrl: row.transaction_url, createdAt: row.created_at, metadata: row.metadata };
-        timeline.push(formatProofEntry(pairedProof, "WHAT"));
+        timeline.push(formatProofEntry(pairedProof, "WHAT", wallet));
       }
     } else if (isAction && postId) {
       const reasoningType = actionType + "_reasoning";
@@ -140,11 +142,11 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
       if (pairResults.rows.length > 0) {
         const row = pairResults.rows[0] as any;
         pairedProof = { id: row.id, fileHash: row.file_hash, fileName: row.file_name, blockchainStatus: row.blockchain_status, transactionHash: row.transaction_hash, transactionUrl: row.transaction_url, createdAt: row.created_at, metadata: row.metadata };
-        timeline.push(formatProofEntry(pairedProof, "WHY"));
+        timeline.push(formatProofEntry(pairedProof, "WHY", wallet));
       }
-      timeline.push(formatProofEntry(contestedProof, "WHAT"));
+      timeline.push(formatProofEntry(contestedProof, "WHAT", wallet));
     } else {
-      timeline.push(formatProofEntry(contestedProof, "contested"));
+      timeline.push(formatProofEntry(contestedProof, "contested", wallet));
     }
 
     const allProofIds = timeline.map((t) => t.proof_id);
@@ -163,8 +165,9 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
     for (const hb of heartbeatCandidates.rows as any[]) {
       const hbMeta = hb.metadata || {};
       const actionProofs = hbMeta.action_proofs || hbMeta.actions || [];
-      const proofIdsInHb = actionProofs.map((a: any) => a.proof_id);
-      if (allProofIds.some((id: string) => proofIdsInHb.includes(id))) {
+      const allIdsInHb = actionProofs.map((a: any) => a.proof_id || a.why_proof_id || a.what_proof_id).filter(Boolean);
+      const certifiedInSession = allIdsInHb.length;
+      if (allProofIds.some((id: string) => allIdsInHb.includes(id))) {
         sessionHeartbeat = {
           role: "heartbeat",
           proof_id: hb.id,
@@ -173,9 +176,13 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
           transaction_hash: hb.transaction_hash,
           certified_at: hb.created_at,
           verify_url: `https://xproof.app/proof/${hb.id}`,
+          incident_url: `https://xproof.app/incident/${wallet}/${hb.id}`,
           session_summary: hbMeta.summary || null,
           session_timestamp: hbMeta.timestamp || null,
           total_actions_in_session: actionProofs.length,
+          certified_actions_in_session: certifiedInSession,
+          session_duration_sec: hbMeta.summary ? parseSessionDuration(hbMeta.summary) : null,
+          karma: hbMeta.summary ? parseKarma(hbMeta.summary) : null,
         };
         break;
       }
@@ -191,20 +198,91 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
     intentPrecededExecution = new Date(whyEntry.certified_at).getTime() < new Date(whatEntry.certified_at).getTime();
   }
 
+  const whyCount = timeline.filter((t) => t.role === "WHY").length;
+  const whatCount = timeline.filter((t) => t.role === "WHAT").length;
+  const confirmedCount = timeline.filter((t) => t.blockchain_status === "confirmed").length;
+
+  const verification = {
+    intent_preceded_execution: intentPrecededExecution,
+    why_certified: !!whyEntry,
+    what_certified: !!whatEntry,
+    session_anchored: !!sessionHeartbeat,
+    all_confirmed: timeline.every((t) => t.blockchain_status === "confirmed"),
+  };
+
+  const checks = [
+    verification.intent_preceded_execution,
+    verification.why_certified,
+    verification.what_certified,
+    verification.session_anchored,
+    verification.all_confirmed,
+  ].filter((v) => v !== null);
+  const passCount = checks.filter(Boolean).length;
+  const failCount = checks.filter((v) => v === false).length;
+
+  let verdict: "clean" | "anomaly" | "incomplete" = "clean";
+  let verdictLabel = "Behavior Verified";
+  let verdictDetail = "All 4W checks passed. This agent followed the proof protocol correctly.";
+
+  if (failCount > 0) {
+    verdict = "anomaly";
+    const failures: string[] = [];
+    if (verification.intent_preceded_execution === false) failures.push("execution preceded intent");
+    if (!verification.why_certified) failures.push("no WHY proof found");
+    if (!verification.what_certified) failures.push("no WHAT proof found");
+    if (!verification.session_anchored) failures.push("session not anchored");
+    if (!verification.all_confirmed) failures.push("unconfirmed proofs present");
+    verdictLabel = "Anomaly Detected";
+    verdictDetail = `${failCount} check${failCount > 1 ? "s" : ""} failed: ${failures.join(", ")}.`;
+  } else if (checks.length < 5) {
+    verdict = "incomplete";
+    verdictLabel = "Partial Verification";
+    verdictDetail = `${passCount} of ${checks.length} applicable checks passed. Some checks could not be evaluated.`;
+  }
+
+  let trust: TrustScore | null = null;
+  try {
+    trust = await computeTrustScoreByWallet(wallet);
+  } catch {}
+
   const result = {
     agent: {
       wallet: user.walletAddress,
       name: user.agentName || null,
       sigil_id: meta.sigil_agent_id || timeline[0]?.metadata?.sigil_agent_id || null,
+      profile_url: `https://xproof.app/agents/${wallet}`,
     },
     contested_proof_id: proofId,
     report_generated_at: new Date().toISOString(),
-    verification: {
-      intent_preceded_execution: intentPrecededExecution,
-      why_certified: !!whyEntry,
-      what_certified: !!whatEntry,
-      session_anchored: !!sessionHeartbeat,
-      all_confirmed: timeline.every((t) => t.blockchain_status === "confirmed"),
+    verdict: {
+      status: verdict,
+      label: verdictLabel,
+      detail: verdictDetail,
+      checks_passed: passCount,
+      checks_failed: failCount,
+      checks_total: checks.length,
+    },
+    trust: trust ? {
+      score: trust.score,
+      level: trust.level,
+      cert_total: trust.certTotal,
+      streak_weeks: trust.streakWeeks,
+      violation_penalty: trust.violationPenalty,
+      violations: trust.violations,
+    } : null,
+    verification,
+    summary: {
+      why_count: whyCount,
+      what_count: whatCount,
+      total_proofs: timeline.length,
+      confirmed_proofs: confirmedCount,
+      time_span: timeline.length >= 2
+        ? {
+            first: timeline[0].certified_at,
+            last: timeline[timeline.length - 1].certified_at,
+            duration_sec: Math.round((new Date(timeline[timeline.length - 1].certified_at).getTime() - new Date(timeline[0].certified_at).getTime()) / 1000),
+          }
+        : null,
     },
     timeline,
     session: sessionHeartbeat,
@@ -281,4 +359,14 @@ export async function detectAndRecordViolations(
   }
 
   return created;
+}
+
+function parseSessionDuration(summary: string): number | null {
+  const match = summary.match(/(\d+)s/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+function parseKarma(summary: string): number | null {
+  const match = summary.match(/karma\s+(\d+)/i);
+  return match ? parseInt(match[1], 10) : null;
 }
