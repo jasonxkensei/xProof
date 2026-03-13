@@ -356,8 +356,9 @@ function TimelineEntry({ entry, isLast }: { entry: any; isLast: boolean }) {
   );
 }
 
-function SessionBlock({ session, wallet }: { session: any; wallet: string }) {
+function SessionBlock({ session, wallet, currentProofId }: { session: any; wallet: string; currentProofId: string }) {
   if (!session) return null;
+  const isCurrentProof = session.proof_id === currentProofId;
 
   return (
     <div className="relative flex gap-4" data-testid="timeline-session">
@@ -418,16 +419,18 @@ function SessionBlock({ session, wallet }: { session: any; wallet: string }) {
               </div>
             )}
 
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-3 w-3 text-muted-foreground shrink-0" />
-              <a
-                href={`/incident/${wallet}/${session.proof_id}`}
-                className="text-primary hover:underline font-medium"
-                data-testid="link-session-incident"
-              >
-                View full session report
-              </a>
-            </div>
+            {!isCurrentProof && (
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-3 w-3 text-muted-foreground shrink-0" />
+                <a
+                  href={`/incident/${wallet}/${session.proof_id}`}
+                  className="text-primary hover:underline font-medium"
+                  data-testid="link-session-incident"
+                >
+                  View full session report
+                </a>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -590,7 +593,7 @@ export default function IncidentReportPage() {
                   />
                 ))}
 
-                <SessionBlock session={data.session} wallet={wallet} />
+                <SessionBlock session={data.session} wallet={wallet} currentProofId={proofId} />
               </div>
             </div>
 
