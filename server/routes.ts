@@ -713,6 +713,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/proof/hash/:hash", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { hash } = req.params;
+      if (!hash || !/^[a-f0-9]{64}$/i.test(hash)) {
+        return res.status(400).json({ error: "Valid 64-char SHA-256 hash required" });
+      }
+
+      const [cert] = await db
+        .select()
+        .from(certifications)
+        .where(eq(certifications.fileHash, hash.toLowerCase()));
+
+      if (!cert || !cert.isPublic) {
+        return res.status(404).json({ error: "No proof found for this hash" });
+      }
+
+      let ownerWallet: string | null = null;
+      if (cert.userId) {
+        const [owner] = await db
+          .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
+          .from(users)
+          .where(eq(users.id, cert.userId));
+        if (owner?.isPublicProfile) ownerWallet = owner.walletAddress;
+      }
+
+      res.json({
+        proof_id: cert.id,
+        file_hash: cert.fileHash,
+        filename: cert.fileName,
+        status: cert.blockchainStatus,
+        created_at: cert.createdAt,
+        proof_url: `https://xproof.app/proof/${cert.id}`,
+        blockchain: {
+          transaction_hash: cert.transactionHash,
+          transaction_url: cert.transactionUrl,
+          network: "MultiversX",
+        },
+        owner_wallet: ownerWallet,
+      });
+    } catch (err: any) {
+      logger.error("Proof hash lookup error", { error: err.message });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/artifact/trust/:hash", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { hash } = req.params;
+      if (!hash || !/^[a-f0-9]{64}$/i.test(hash)) {
+        return res.status(400).json({ error: "Valid 64-char SHA-256 hash required" });
+      }
+
+      const [cert] = await db
+        .select()
+        .from(certifications)
+        .where(eq(certifications.fileHash, hash.toLowerCase()));
+
+      if (!cert) {
+        return res.status(404).json({ error: "No proof found for this hash", verified: false, score: 0 });
+      }
+
+      let agentTrust: any = null;
+      let agentWallet: string | null = null;
+      if (cert.userId) {
+        const [owner] = await db
+          .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
+          .from(users)
+          .where(eq(users.id, cert.userId));
+        if (owner?.walletAddress) {
+          agentWallet = owner.walletAddress;
+          agentTrust = await computeTrustScoreByWallet(owner.walletAddress);
+        }
+      }
+
+      const verified = cert.blockchainStatus === "confirmed";
+      const agentVerified = agentTrust ? agentTrust.score >= 100 : false;
+      let score = 0;
+      if (verified) score++;
+      if (agentVerified) score++;
+      if (agentTrust && agentTrust.certTotal >= 10) score++;
+
+      res.json({
+        score,
+        verified,
+        agent_verified: agentVerified,
+        proof_id: cert.id,
+        file_hash: cert.fileHash,
+        anchored_at: cert.createdAt,
+        blockchain_status: cert.blockchainStatus,
+        agent_wallet: agentWallet,
+        agent_trust: agentTrust ? {
+          score: agentTrust.score,
+          level: agentTrust.level,
+          certTotal: agentTrust.certTotal,
+        } : null,
+        proof_url: `https://xproof.app/proof/${cert.id}`,
+      });
+    } catch (err: any) {
+      logger.error("Artifact trust lookup error", { error: err.message });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/proofs/status", publicReadRateLimiter, async (req, res) => {
     try {
       const idsParam = req.query.ids;
