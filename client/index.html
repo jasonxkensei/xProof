@@ -44,6 +44,134 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Structured Data: Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "xproof",
+      "url": "https://xproof.app",
+      "logo": "https://xproof.app/icon-512.png",
+      "description": "Proof and accountability layer for AI agents. Anchors verifiable proofs on MultiversX, enforces audit logging, detects violations on Base.",
+      "sameAs": [
+        "https://github.com/jasonxkensei/xProof",
+        "https://clawhub.ai/jasonxkensei/xproof"
+      ],
+      "foundingDate": "2025",
+      "knowsAbout": ["blockchain certification", "proof of existence", "AI agent trust", "MultiversX", "x402 protocol", "MCP", "agent accountability"]
+    }
+    </script>
+
+    <!-- Structured Data: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "xproof",
+      "url": "https://xproof.app",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Web",
+      "description": "On-chain notary for AI agents. Anchor verifiable proofs of existence, authorship, and agent decisions on MultiversX. REST API, MCP, x402 payment gate.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0.05",
+        "priceCurrency": "USD",
+        "description": "Per-proof pricing. No subscription. 10 free proofs on registration."
+      },
+      "featureList": [
+        "SHA-256 blockchain anchoring on MultiversX",
+        "Privacy-preserving: files never leave your device",
+        "REST API with API key authentication",
+        "MCP (Model Context Protocol) for AI agents",
+        "x402 HTTP-native payments with USDC on Base",
+        "Agent Audit Log Standard (4W: WHO/WHAT/WHEN/WHY)",
+        "Violation detection on Base smart contracts",
+        "GitHub Action for CI/CD integration",
+        "Downloadable PDF certificate with QR code",
+        "Trust scoring and agent leaderboard"
+      ],
+      "author": {
+        "@type": "Organization",
+        "name": "xproof",
+        "url": "https://xproof.app"
+      }
+    }
+    </script>
+
+    <!-- Structured Data: FAQ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is xproof?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "xproof is a proof and accountability layer for AI agents. It anchors verifiable proofs of existence, authorship, and timestamp on the MultiversX blockchain. Users and agents submit a SHA-256 hash of their file or decision, which is permanently recorded on-chain as tamper-proof evidence."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is my file uploaded to xproof servers?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No, never. Your file stays on your device. Only its fingerprint (a unique 64-character SHA-256 hash) is computed locally in your browser and recorded on the blockchain. xproof never sees, stores, or transmits your actual file."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How much does a proof cost?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Each proof costs $0.05 with no subscription or hidden fees. Payment is accepted in USDC on Base mainnet or EGLD on MultiversX. New API key registrations include 10 free proofs. Volume pricing decreases as all-time network usage grows."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What blockchain does xproof use?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "xproof anchors proofs on the MultiversX blockchain, a high-performance, eco-friendly European blockchain. Violations and accountability events are recorded on Base (Ethereum L2). This dual-chain architecture separates proof anchoring from enforcement."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do AI agents integrate with xproof?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "AI agents can integrate via REST API with an API key, Model Context Protocol (MCP) for autonomous decision anchoring, or x402 HTTP-native payments for zero-setup proof creation. The Agent Audit Log Standard enforces pre-execution accountability: agents anchor their reasoning (WHY) before acting (WHAT)."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does blockchain timestamping have legal value?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Blockchain timestamping is recognized in many jurisdictions as proof of prior existence. The EU eIDAS regulation recognizes electronic timestamps, and blockchain-based proofs provide strong evidence of a document existence at a specific point in time."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the 4W framework?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The 4W framework (WHO/WHAT/WHEN/WHY) is xproof Agent Proof Standard for accountability. WHO identifies the agent, WHAT records the action, WHEN timestamps it on-chain, and WHY anchors the reasoning before execution. This creates a complete, verifiable audit trail for autonomous agent decisions."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is x402 and how does it work with xproof?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "x402 is an HTTP-native payment protocol that uses standard HTTP 402 responses. Agents can pay for and anchor proofs in a single HTTP round-trip using USDC on Base, without needing an account or API key. This enables fully autonomous agent-to-service commerce."
+          }
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <!-- AI AGENT: machine-readable docs at /skill.md (plain text, start here) and /.well-known/xproof.json (JSON). Free trial (no wallet): POST /api/agent/register with {"agent_name":"your-name"} → get API key → POST /api/proof -->
