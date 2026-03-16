@@ -816,6 +816,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/agentproof/:wallet — dedicated endpoint for AgentProof oracle integration
+  // Returns the full proof layer data for a given agent wallet, formatted for leaderboard enrichment
+  app.get("/api/agentproof/:wallet", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      if (!wallet || wallet.length < 10) {
+        return res.status(400).json({ error: "Valid wallet address required" });
+      }
+
+      const trust = await computeTrustScoreByWallet(wallet);
+      if (!trust) {
+        return res.status(404).json({
+          error: "Wallet not found on xProof",
+          wallet,
+          proof_layer: null,
+          integrated: false,
+        });
+      }
+
+      const preExecution = trust.auditCount;
+      const postExecution = trust.certTotal;
+      const totalAnchors = preExecution + postExecution;
+      const hasBothPhases = preExecution > 0 && postExecution > 0;
+      const proofCoveragePercent = totalAnchors > 0
+        ? Math.round((Math.min(preExecution, postExecution) / Math.max(preExecution, postExecution)) * 100)
+        : 0;
+
+      res.json({
+        wallet,
+        integrated: true,
+        proof_layer: {
+          pre_execution_audits: preExecution,
+          post_execution_proofs: postExecution,
+          total_anchors: totalAnchors,
+          has_full_cycle: hasBothPhases,
+          proof_coverage_pct: proofCoveragePercent,
+          streak_weeks: trust.streakWeeks,
+          transparency_tier: trust.transparencyTier,
+          active_last_30d: trust.certLast30d > 0,
+          first_anchor: trust.firstCertAt,
+          last_anchor: trust.lastCertAt,
+          violations: trust.violations?.length ?? 0,
+          violation_penalty: trust.violationPenalty,
+        },
+        trust: {
+          score: trust.score,
+          level: trust.level,
+          score_breakdown: {
+            base: trust.certTotal * 10,
+            streak_bonus: Math.min(100, trust.streakWeeks * 8),
+            transparency_bonus: trust.transparencyBonus,
+            violation_penalty: trust.violationPenalty,
+          },
+        },
+        links: {
+          profile: `https://xproof.app/agent/${wallet}`,
+          trust_badge: `https://xproof.app/badge/trust/${wallet}.svg`,
+          trust_badge_md: `https://xproof.app/badge/trust/${wallet}/markdown`,
+          verify_api: `https://xproof.app/api/trust/${wallet}`,
+        },
+        schema_version: "1.0",
+        source: "xproof.app",
+      });
+    } catch (err: any) {
+      logger.error("AgentProof endpoint error", { error: err.message });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/proofs/status", publicReadRateLimiter, async (req, res) => {
     try {
       const idsParam = req.query.ids;
