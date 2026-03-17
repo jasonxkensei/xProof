@@ -885,6 +885,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/skworld/:wallet — dedicated endpoint for SKWorld/CapAuth integration (LuminaSKStacks)
+  // Returns xProof proof layer data formatted for CapAuth identity anchoring + OOF behavioral monitoring
+  // CapAuth maps: persistent PGP key → wallet; xProof maps: wallet → proof history + architectural transitions
+  app.get("/api/skworld/:wallet", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      if (!wallet || wallet.length < 10) {
+        return res.status(400).json({ error: "Valid wallet address required" });
+      }
+
+      const trust = await computeTrustScoreByWallet(wallet);
+      if (!trust) {
+        return res.status(404).json({
+          error: "Wallet not found on xProof",
+          wallet,
+          capauth_compatible: false,
+          integration: null,
+        });
+      }
+
+      // Look up user to query their certifications
+      const [user] = await db.select({ id: users.id }).from(users).where(eq(users.walletAddress, wallet));
+      if (!user) {
+        return res.status(404).json({ error: "User not found", wallet });
+      }
+
+      // Fetch all public certs with metadata for this user — filter for model/strategy hash in JS
+      const archCerts = await db
+        .select({
+          id: certifications.id,
+          createdAt: certifications.createdAt,
+          metadata: certifications.metadata,
+          blockchainStatus: certifications.blockchainStatus,
+          transactionHash: certifications.transactionHash,
+        })
+        .from(certifications)
+        .where(
+          and(
+            eq(certifications.userId, user.id),
+            eq(certifications.isPublic, true),
+            sql`${certifications.metadata} IS NOT NULL`
+          )
+        )
+        .orderBy(certifications.createdAt);
+
+      // Build architectural transition timeline — each unique model_hash or strategy_hash = a new identity epoch
+      const modelHashes: string[] = [];
+      const stratHashes: string[] = [];
+      const transitions: Array<{ timestamp: string; model_hash: string | null; strategy_hash: string | null; proof_id: string; anchored: boolean }> = [];
+
+      for (const cert of archCerts) {
+        const meta = cert.metadata as Record<string, unknown> | null;
+        if (!meta) continue;
+        const mh = (meta.model_hash as string) ?? null;
+        const sh = (meta.strategy_hash as string) ?? null;
+        const prevMh = modelHashes.at(-1) ?? null;
+        const prevSh = stratHashes.at(-1) ?? null;
+        const isTransition = mh !== prevMh || sh !== prevSh;
+        if (isTransition) {
+          transitions.push({
+            timestamp: cert.createdAt?.toISOString() ?? "",
+            model_hash: mh,
+            strategy_hash: sh,
+            proof_id: cert.id,
+            anchored: cert.blockchainStatus === "confirmed",
+          });
+          if (mh) modelHashes.push(mh);
+          if (sh) stratHashes.push(sh);
+        }
+      }
+
+      // Heartbeat alignment — count proofs in last 30 days (OOF: action vs silence ratio)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const recentProofs = await db
+        .select({ id: certifications.id, createdAt: certifications.createdAt })
+        .from(certifications)
+        .where(
+          and(
+            eq(certifications.userId, user.id),
+            eq(certifications.isPublic, true),
+            sql`${certifications.createdAt} > ${thirtyDaysAgo.toISOString()}`
+          )
+        );
+
+      const proofDaysLast30 = new Set(
+        recentProofs.map(p => p.createdAt?.toISOString().slice(0, 10) ?? "")
+      ).size;
+      const silenceDaysLast30 = 30 - proofDaysLast30;
+      const actionSilenceRatio = silenceDaysLast30 > 0
+        ? parseFloat((proofDaysLast30 / silenceDaysLast30).toFixed(2))
+        : proofDaysLast30 > 0 ? null : 0;
+
+      const distinctModelHashes = [...new Set(modelHashes)];
+      const distinctStratHashes = [...new Set(stratHashes)];
+      const architecturalEpochs = transitions.length;
+      const latestTransition = transitions.at(-1) ?? null;
+
+      const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
+
+      res.json({
+        wallet,
+        capauth_compatible: true,
+        // ── Identity continuity layer (CapAuth side anchors here)
+        identity: {
+          architectural_epochs: architecturalEpochs,
+          distinct_model_hashes: distinctModelHashes.length,
+          distinct_strategy_hashes: distinctStratHashes.length,
+          latest_transition: latestTransition
+            ? {
+                timestamp: latestTransition.timestamp,
+                model_hash: latestTransition.model_hash,
+                strategy_hash: latestTransition.strategy_hash,
+                proof_id: latestTransition.proof_id,
+                on_chain: latestTransition.anchored,
+              }
+            : null,
+          transition_history: transitions,
+          // How to use: store your CapAuth PGP key_id in metadata.sigil_agent_id when certifying
+          capauth_integration_hint: "POST /api/certify with metadata.sigil_agent_id = <your_pgp_key_id> to bind CapAuth identity to xProof anchor",
+        },
+        // ── OOF/heartbeat compatibility layer
+        behavioral: {
+          proofs_last_30d: recentProofs.length,
+          active_days_last_30d: proofDaysLast30,
+          silence_days_last_30d: silenceDaysLast30,
+          action_silence_ratio: actionSilenceRatio,
+          // OOF baseline: first_anchor is the FEB equivalent for behavioral continuity
+          feb_equivalent_timestamp: trust.firstCertAt,
+          last_heartbeat: trust.lastCertAt,
+          streak_weeks: trust.streakWeeks,
+        },
+        // ── Trust score (violations = confirmed architectural/behavioral anomalies)
+        trust: {
+          score: trust.score,
+          level: trust.level,
+          violations: {
+            fault: trust.violations?.fault ?? 0,
+            breach: trust.violations?.breach ?? 0,
+            proposed: trust.violations?.proposed ?? 0,
+            penalty: trust.violationPenalty,
+          },
+          transparency_tier: trust.transparencyTier,
+        },
+        // ── Links for CapAuth <> xProof cross-referencing
+        links: {
+          profile: `${baseUrl}/agent/${wallet}`,
+          trust_badge_svg: `${baseUrl}/badge/trust/${wallet}.svg`,
+          transition_history_api: `${baseUrl}/api/proofs/search?wallet=${wallet}`,
+          model_hash_search: `${baseUrl}/api/proofs/search?model_hash=<hash>`,
+          violations_api: `${baseUrl}/api/agents/${wallet}/violations`,
+        },
+        schema_version: "1.0",
+        source: "xproof.app",
+        partner: "skworld.io",
+      });
+    } catch (err: any) {
+      logger.error("SKWorld endpoint error", { error: err.message });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/proofs/status", publicReadRateLimiter, async (req, res) => {
     try {
       const idsParam = req.query.ids;
