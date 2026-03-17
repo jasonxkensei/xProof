@@ -8,7 +8,7 @@ import { recordOnBlockchain } from "./blockchain";
 import { getCertificationPriceUsd } from "./pricing";
 import { logger } from "./logger";
 import { auditLogSchema } from "./auditSchema";
-import { reconstructAuditTrail, detectAndRecordViolations } from "./audit-trail";
+import { reconstructAuditTrail } from "./audit-trail";
 import { isX402Configured, verifyX402PaymentRaw, getInvestigatePaymentRequirements } from "./x402";
 
 interface McpContext {
@@ -478,14 +478,6 @@ export async function createMcpServer(ctx: McpContext) {
         }
 
         const result = await reconstructAuditTrail(wallet, proof_id);
-
-        const violationsCreated = await detectAndRecordViolations(
-          wallet,
-          proof_id,
-          result.verification,
-          result.timeline,
-        );
-        result.violations_created = violationsCreated;
 
         return {
           content: [{

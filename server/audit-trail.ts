@@ -290,6 +290,8 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
     violations_created: 0,
   };
 
+  result.violations_created = await detectAndRecordViolations(wallet, proofId, verification, timeline);
+
   return result;
 }
 
@@ -301,6 +303,7 @@ export async function detectAndRecordViolations(
 ): Promise<number> {
   const anomalies: { type: "fault" | "breach"; reason: string; autoConfirm: boolean }[] = [];
 
+  // Irrefutable: WHAT timestamp precedes WHY on-chain → auto-confirm fault
   if (verification.intent_preceded_execution === false) {
     anomalies.push({
       type: "fault",
@@ -309,21 +312,22 @@ export async function detectAndRecordViolations(
     });
   }
 
+  // WHY exists but WHAT is missing: always record as proposed immediately (public transparency);
+  // auto-confirm once the 30-min irrefutable window has passed
   if (verification.why_certified && !verification.what_certified) {
     const whyEntry = timeline.find((t: any) => t.role === "WHY");
     if (whyEntry) {
-      const whyTime = new Date(whyEntry.certified_at).getTime();
-      const now = Date.now();
-      if (now - whyTime > VIOLATION_GAP_THRESHOLD_MS) {
-        anomalies.push({
-          type: "fault",
-          reason: `WHY certified but no matching WHAT found after ${Math.round(VIOLATION_GAP_THRESHOLD_MS / 60000)} minutes`,
-          autoConfirm: true,
-        });
-      }
+      const gapMs = Date.now() - new Date(whyEntry.certified_at).getTime();
+      const autoConfirm = gapMs > VIOLATION_GAP_THRESHOLD_MS;
+      anomalies.push({
+        type: "fault",
+        reason: `WHY certified but no matching WHAT found after ${Math.round(VIOLATION_GAP_THRESHOLD_MS / 60000)} minutes`,
+        autoConfirm,
+      });
     }
   }
 
+  // WHAT exists but WHY is missing: potential deliberate omission → breach, requires admin review
   if (!verification.why_certified && verification.what_certified) {
     anomalies.push({
       type: "breach",

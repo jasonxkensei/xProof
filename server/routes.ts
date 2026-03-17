@@ -857,7 +857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           active_last_30d: trust.certLast30d > 0,
           first_anchor: trust.firstCertAt,
           last_anchor: trust.lastCertAt,
-          violations: trust.violations?.length ?? 0,
+          violations: (trust.violations?.fault ?? 0) + (trust.violations?.breach ?? 0),
           violation_penalty: trust.violationPenalty,
         },
         trust: {
