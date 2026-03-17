@@ -1412,7 +1412,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const isUuid = uuidRegex.test(identifier);
-      const isWallet = identifier.startsWith("erd1") || identifier.startsWith("erd");
+      // Canonical MultiversX wallet format: starts with "erd1" and is at least 58 chars
+      const isWallet = /^erd1[0-9a-z]{50,}$/.test(identifier);
       const lookupMode: "character_id" | "wallet" | "unknown" = isUuid
         ? "character_id"
         : isWallet
@@ -1444,7 +1445,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Direct wallet lookup — pull character metadata from certs as well
         trust = await computeTrustScoreByWallet(identifier);
         if (trust) {
-          elizaLinked = true;
           linkedWallet = identifier;
           // Pull character info from certs belonging to this wallet
           const [userRow] = await db
@@ -1464,7 +1464,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               )
               .orderBy(certifications.createdAt);
 
+            // eliza_linked: true only when Eliza-tagged certs exist (not just wallet trust)
             if (elizaCerts.length > 0) {
+              elizaLinked = true;
               const agentIds = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_agent_id).filter(Boolean))];
               const characterNames = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_character_name).filter(Boolean))];
               const sessionIds = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_session_id).filter(Boolean))];
