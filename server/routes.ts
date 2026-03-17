@@ -1068,20 +1068,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } | null = null;
       let sigilReachable = false;
 
+      const controller = new AbortController();
+      const sigilTimeout = setTimeout(() => controller.abort(), 5000);
       try {
-        const controller = new AbortController();
-        const sigilTimeout = setTimeout(() => controller.abort(), 5000);
         const sigilRes = await fetch(
           `https://sigilprotocol.xyz/api/verification/agent/${encodeURIComponent(public_key)}/compact`,
           { signal: controller.signal, headers: { "Accept": "application/json" } }
         );
-        clearTimeout(sigilTimeout);
         if (sigilRes.ok) {
           sigilData = await sigilRes.json() as typeof sigilData;
           sigilReachable = true;
         }
       } catch {
         sigilReachable = false;
+      } finally {
+        clearTimeout(sigilTimeout);
       }
 
       // ── 2. Find linked xProof certs by metadata.sigil_public_key
