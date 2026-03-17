@@ -288,9 +288,12 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
     timeline,
     session: sessionHeartbeat,
     violations_created: 0,
+    violationsCreated: 0,
   };
 
-  result.violations_created = await detectAndRecordViolations(wallet, proofId, verification, timeline);
+  const vCount = await detectAndRecordViolations(wallet, proofId, verification, timeline);
+  result.violations_created = vCount;
+  result.violationsCreated = vCount;
 
   return result;
 }
@@ -339,14 +342,26 @@ export async function detectAndRecordViolations(
   let created = 0;
   for (const anomaly of anomalies) {
     const existing = await db.execute(sql`
-      SELECT id FROM agent_violations
+      SELECT id, status FROM agent_violations
       WHERE wallet_address = ${wallet}
         AND proof_id = ${proofId}
         AND type = ${anomaly.type}
         AND reason = ${anomaly.reason}
       LIMIT 1
     `);
-    if (existing.rows.length > 0) continue;
+
+    if (existing.rows.length > 0) {
+      const row = existing.rows[0] as { id: string; status: string };
+      // Escalate proposed → confirmed when anomaly is now irrefutable (e.g. 30-min gap passed)
+      if (row.status === "proposed" && anomaly.autoConfirm) {
+        await db.execute(sql`
+          UPDATE agent_violations
+          SET status = 'confirmed', auto_confirmed = true, confirmed_at = NOW()
+          WHERE id = ${row.id}
+        `);
+      }
+      continue;
+    }
 
     const status = anomaly.autoConfirm ? "confirmed" : "proposed";
     const confirmedAt = anomaly.autoConfirm ? new Date() : null;
