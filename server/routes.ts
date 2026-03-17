@@ -1389,6 +1389,206 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/eliza/:identifier — ElizaOS partner integration (github.com/jasonxkensei/plugin-xproof, registry)
+  // Bridges ElizaOS character identity (WHO) with xProof proof anchoring (WHAT/WHEN/WHY).
+  // Two lookup modes:
+  //   - MultiversX wallet (erd1...) → direct trust score
+  //   - ElizaOS character UUID → metadata lookup via metadata.eliza_agent_id
+  // Link: certify with metadata.eliza_agent_id = <character_uuid> and optionally
+  //   metadata.eliza_character_name, metadata.eliza_session_id, metadata.eliza_runtime.
+  app.get("/api/eliza/:identifier", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { identifier } = req.params;
+      if (!identifier || identifier.length < 5) {
+        return res.status(400).json({
+          error: "Valid identifier required: ElizaOS character UUID or MultiversX wallet address",
+          examples: {
+            character_uuid: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            mx_wallet: "erd1abc...",
+          },
+        });
+      }
+
+      const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const isUuid = uuidRegex.test(identifier);
+      const isWallet = identifier.startsWith("erd1") || identifier.startsWith("erd");
+      const lookupMode: "character_id" | "wallet" | "unknown" = isUuid
+        ? "character_id"
+        : isWallet
+        ? "wallet"
+        : "unknown";
+
+      if (lookupMode === "unknown") {
+        return res.status(400).json({
+          error: "Identifier must be a standard UUID (ElizaOS character ID) or a MultiversX wallet address (erd1...)",
+          received: identifier,
+        });
+      }
+
+      let elizaLinked = false;
+      let linkedWallet: string | null = null;
+      let trust: Awaited<ReturnType<typeof computeTrustScoreByWallet>> = null;
+      let characterStats: {
+        agent_id: string | null;
+        character_name: string | null;
+        runtime_version: string | null;
+        certified_sessions: number;
+        certified_action_types: string[];
+        first_certified_at: string | null;
+        last_certified_at: string | null;
+        total_certs: number;
+      } | null = null;
+
+      if (lookupMode === "wallet") {
+        // Direct wallet lookup — pull character metadata from certs as well
+        trust = await computeTrustScoreByWallet(identifier);
+        if (trust) {
+          elizaLinked = true;
+          linkedWallet = identifier;
+          // Pull character info from certs belonging to this wallet
+          const [userRow] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.walletAddress, identifier));
+
+          if (userRow) {
+            const elizaCerts = await db
+              .select({ metadata: certifications.metadata, createdAt: certifications.createdAt })
+              .from(certifications)
+              .where(
+                and(
+                  eq(certifications.userId, userRow.id),
+                  sql`${certifications.metadata}->>'eliza_agent_id' IS NOT NULL`
+                )
+              )
+              .orderBy(certifications.createdAt);
+
+            if (elizaCerts.length > 0) {
+              const agentIds = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_agent_id).filter(Boolean))];
+              const characterNames = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_character_name).filter(Boolean))];
+              const sessionIds = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_session_id).filter(Boolean))];
+              const actionTypes = [...new Set(elizaCerts.map(c => (c.metadata as any)?.action_type).filter(Boolean))];
+              const runtimes = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_runtime).filter(Boolean))];
+              characterStats = {
+                agent_id: agentIds[0] ?? null,
+                character_name: characterNames[0] ?? null,
+                runtime_version: runtimes[0] ?? null,
+                certified_sessions: sessionIds.length,
+                certified_action_types: actionTypes,
+                first_certified_at: elizaCerts[0]?.createdAt?.toISOString() ?? null,
+                last_certified_at: elizaCerts.at(-1)?.createdAt?.toISOString() ?? null,
+                total_certs: elizaCerts.length,
+              };
+            }
+          }
+        }
+      } else {
+        // UUID lookup — find certs with metadata.eliza_agent_id = identifier
+        const linkedCerts = await db
+          .select({
+            userId: certifications.userId,
+            metadata: certifications.metadata,
+            createdAt: certifications.createdAt,
+          })
+          .from(certifications)
+          .where(
+            and(
+              eq(certifications.isPublic, true),
+              sql`LOWER(${certifications.metadata}->>'eliza_agent_id') = ${identifier.toLowerCase()}`
+            )
+          )
+          .orderBy(certifications.createdAt);
+
+        if (linkedCerts.length > 0) {
+          elizaLinked = true;
+          // Resolve wallet from userId
+          const userId = linkedCerts[0].userId;
+          const [userRow] = await db
+            .select({ walletAddress: users.walletAddress })
+            .from(users)
+            .where(eq(users.id, userId));
+
+          if (userRow?.walletAddress) {
+            linkedWallet = userRow.walletAddress;
+            trust = await computeTrustScoreByWallet(linkedWallet);
+          }
+
+          // Character stats from cert metadata
+          const characterNames = [...new Set(linkedCerts.map(c => (c.metadata as any)?.eliza_character_name).filter(Boolean))];
+          const sessionIds = [...new Set(linkedCerts.map(c => (c.metadata as any)?.eliza_session_id).filter(Boolean))];
+          const actionTypes = [...new Set(linkedCerts.map(c => (c.metadata as any)?.action_type).filter(Boolean))];
+          const runtimes = [...new Set(linkedCerts.map(c => (c.metadata as any)?.eliza_runtime).filter(Boolean))];
+
+          characterStats = {
+            agent_id: identifier,
+            character_name: characterNames[0] ?? null,
+            runtime_version: runtimes[0] ?? null,
+            certified_sessions: sessionIds.length,
+            certified_action_types: actionTypes,
+            first_certified_at: linkedCerts[0]?.createdAt?.toISOString() ?? null,
+            last_certified_at: linkedCerts.at(-1)?.createdAt?.toISOString() ?? null,
+            total_certs: linkedCerts.length,
+          };
+        }
+      }
+
+      res.json({
+        identifier,
+        lookup_mode: lookupMode,
+        eliza_linked: elizaLinked,
+        // ── Character identity (ElizaOS WHO layer)
+        character: characterStats,
+        // ── xProof trust (MultiversX WHAT/WHEN/WHY layer)
+        xproof: elizaLinked
+          ? {
+              wallet: linkedWallet,
+              trust_score: trust?.score ?? null,
+              trust_level: trust?.level ?? null,
+              total_certs: trust?.certTotal ?? null,
+              certs_last_30d: trust?.certLast30d ?? null,
+              streak_weeks: trust?.streakWeeks ?? null,
+              transparency_tier: trust?.transparencyTier ?? null,
+              violations: trust
+                ? {
+                    fault: trust.violations?.fault ?? 0,
+                    breach: trust.violations?.breach ?? 0,
+                    proposed: trust.violations?.proposed ?? 0,
+                  }
+                : null,
+              profile_url: linkedWallet ? `${baseUrl}/agent/${linkedWallet}` : null,
+              trust_badge_svg: linkedWallet ? `${baseUrl}/badge/trust/${linkedWallet}.svg` : null,
+            }
+          : null,
+        // ── WHO/WHAT/WHEN/WHY convergence (same pattern as SIGIL)
+        convergence: {
+          elizaos_anchors: "WHO — character identity, runtime version, model configuration",
+          xproof_anchors: "WHAT/WHEN/WHY — decision provenance anchored on MultiversX",
+          combined_coverage: "full 4W stack",
+        },
+        // ── Ready-to-use config block for plugin-xproof
+        plugin_config: {
+          xproof_api: `${baseUrl}/api`,
+          certify_endpoint: `${baseUrl}/api/proof`,
+          verify_endpoint: `${baseUrl}/api/eliza/{eliza_agent_id}`,
+          metadata_schema: {
+            eliza_agent_id: "<character-uuid>",
+            eliza_character_name: "<optional>",
+            eliza_session_id: "<current-session-uuid>",
+            eliza_runtime: "<0.x.x>",
+            action_type: "<message|search|generate|...>",
+          },
+        },
+        schema_version: "1.0",
+        source: "xproof.app",
+        partner: "elizaos",
+      });
+    } catch (err: any) {
+      logger.error("ElizaOS endpoint error", { error: err.message });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/proofs/status", publicReadRateLimiter, async (req, res) => {
     try {
       const idsParam = req.query.ids;
@@ -4426,6 +4626,63 @@ Bootstrap-oriented dashboard for MultiversX bots built on the Moltbot starter ki
   "recommended_action": "continue",
   "schema_version": "1.0",
   "partner": "mx-moltbot-starter-kit"
+}
+\`\`\`
+
+#### ElizaOS (plugin-xproof / elizaos-registry)
+
+\`GET ${baseUrl}/api/eliza/{identifier}\`
+
+Bridges ElizaOS character identity (WHO layer) with xProof proof anchoring (WHAT/WHEN/WHY). The ElizaOS side = character UUID, runtime version, session IDs, action types. The xProof side = WHEN and WHY per action, anchored on MultiversX. The convergence field explicitly names the split.
+
+**Two lookup modes:**
+- MultiversX wallet (\`erd1...\`) → direct trust score + ElizaOS character stats from cert metadata
+- ElizaOS character UUID → cert metadata lookup via \`metadata.eliza_agent_id\`, then resolves to wallet
+
+**Integration (plugin-xproof):** When certifying, add to metadata:
+\`\`\`json
+{
+  "eliza_agent_id": "<character-uuid>",
+  "eliza_character_name": "<optional>",
+  "eliza_session_id": "<session-uuid>",
+  "eliza_runtime": "0.1.9",
+  "action_type": "message"
+}
+\`\`\`
+
+**Response example (UUID lookup):**
+\`\`\`json
+{
+  "identifier": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "lookup_mode": "character_id",
+  "eliza_linked": true,
+  "character": {
+    "agent_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "character_name": "ElizaAgent",
+    "runtime_version": "0.1.9",
+    "certified_sessions": 12,
+    "certified_action_types": ["message", "search", "generate"],
+    "total_certs": 88
+  },
+  "xproof": {
+    "wallet": "erd1...",
+    "trust_score": 1350,
+    "trust_level": "Trusted",
+    "total_certs": 88,
+    "violations": { "fault": 0, "breach": 0 }
+  },
+  "convergence": {
+    "elizaos_anchors": "WHO — character identity, runtime version, model configuration",
+    "xproof_anchors": "WHAT/WHEN/WHY — decision provenance anchored on MultiversX",
+    "combined_coverage": "full 4W stack"
+  },
+  "plugin_config": {
+    "certify_endpoint": "${baseUrl}/api/proof",
+    "verify_endpoint": "${baseUrl}/api/eliza/{eliza_agent_id}",
+    "metadata_schema": { "eliza_agent_id": "<character-uuid>", "eliza_session_id": "<uuid>", "action_type": "<string>" }
+  },
+  "schema_version": "1.0",
+  "partner": "elizaos"
 }
 \`\`\`
 

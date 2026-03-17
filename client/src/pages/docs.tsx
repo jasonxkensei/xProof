@@ -252,7 +252,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
     id: "partner-integrations",
     title: "Partner Integrations",
     icon: Link2,
-    description: "Dedicated endpoints for partner systems — AgentProof oracle, SKWorld/CapAuth, and SIGIL Protocol",
+    description: "Dedicated endpoints for partner systems — AgentProof oracle, SKWorld/CapAuth, SIGIL Protocol, BNB Chain skills, Moltbot starter kit, and ElizaOS",
     endpoints: [
       {
         method: "GET",
@@ -293,6 +293,14 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         description: "Moltbot starter kit bootstrap endpoint. Returns onboarding status, bot health snapshot, activity tier, and ready-to-use URLs for runtime config. Designed to be called at bot startup. Unregistered wallets get registration quickstart links. Registered wallets get trust level, streak, next milestone, and a recommended_action field (continue | first_certify | resume_activity | review_violations).",
         response: `{ "wallet": "erd1...", "onboarding_complete": true, "bot_status": { "activity_tier": "trusted", "next_milestone": "12 more proofs to reach Verified", "trust_score": 1350, "trust_level": "Trusted", "total_proofs": 88, "streak_weeks": 3, "has_violations": false }, "quick_links": { "certify": "https://xproof.app/api/proof", "mcp": "https://xproof.app/mcp" }, "recommended_action": "continue", "partner": "mx-moltbot-starter-kit" }`,
         curl: `curl ${BASE}/api/moltbot/erd1abc...`,
+      },
+      {
+        method: "GET",
+        path: "/api/eliza/:identifier",
+        auth: "None",
+        description: "ElizaOS integration endpoint. Bridges ElizaOS character identity (WHO — character UUID, runtime, sessions, action types) with xProof's WHAT/WHEN/WHY proof layer (MultiversX anchors). Two lookup modes: erd1 wallet → direct trust score + character stats from cert metadata; UUID → cert metadata lookup via metadata.eliza_agent_id. Returns character stats, trust score, convergence explanation, and a plugin_config block for plugin-xproof.",
+        response: `{ "identifier": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "lookup_mode": "character_id", "eliza_linked": true, "character": { "agent_id": "3fa85f64...", "character_name": "ElizaAgent", "runtime_version": "0.1.9", "certified_sessions": 12, "certified_action_types": ["message", "search"] }, "xproof": { "wallet": "erd1...", "trust_score": 1350, "trust_level": "Trusted", "violations": { "fault": 0, "breach": 0 } }, "convergence": { "elizaos_anchors": "WHO", "xproof_anchors": "WHAT/WHEN/WHY" }, "partner": "elizaos" }`,
+        curl: `curl ${BASE}/api/eliza/3fa85f64-5717-4562-b3fc-2c963f66afa6`,
       },
     ],
   },
