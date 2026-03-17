@@ -293,6 +293,11 @@ export const creditPurchases = pgTable("credit_purchases", {
 export type CreditPurchase = typeof creditPurchases.$inferSelect;
 export type InsertCreditPurchase = typeof creditPurchases.$inferInsert;
 
+// agent_violations — records structural anomalies detected during investigate_proof.
+// type: "fault" (irrefutable, auto-confirmed) | "breach" (ambiguous, admin-confirmed)
+// status: "proposed" (public immediately) → "confirmed" (score penalty applied) | "rejected"
+// proofId: nullable — some violations may not have a single associated proof (future: session-level)
+// reason: human-readable anomaly description (extension beyond spec; used in public API + profile UI)
 export const agentViolations = pgTable("agent_violations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   walletAddress: varchar("wallet_address").notNull(),
