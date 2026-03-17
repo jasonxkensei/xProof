@@ -3906,6 +3906,78 @@ Agents configure their public profile via \`PATCH /api/user/agent-profile\` (fie
 - \`GET ${baseUrl}/badge/trust/{wallet}.svg\` — Dynamic shields.io-style SVG showing trust level and score. If the agent has domain attestations, the badge displays "Level · N attested (score)" instead of "Level (score)"
 - \`GET ${baseUrl}/badge/trust/{wallet}/markdown\` — Ready-to-embed markdown snippet
 
+### Partner Integrations
+
+Dedicated endpoints scoped to specific partner systems — same auth model (public, no key required), formatted for each integration's data needs.
+
+#### AgentProof Oracle (agentproof.sh)
+
+\`GET ${baseUrl}/api/agentproof/{wallet}\`
+
+Returns proof layer data for leaderboard enrichment: pre/post-execution audit counts, proof coverage %, streak, transparency tier, violations, and trust score breakdown.
+
+\`\`\`json
+{
+  "wallet": "erd1...",
+  "integrated": true,
+  "proof_layer": {
+    "pre_execution_audits": 0,
+    "post_execution_proofs": 627,
+    "total_anchors": 627,
+    "has_full_cycle": false,
+    "proof_coverage_pct": 0,
+    "streak_weeks": 5,
+    "transparency_tier": "Tier 1",
+    "active_last_30d": true,
+    "violations": 0,
+    "violation_penalty": 0
+  },
+  "trust": { "score": 9449, "level": "Verified" },
+  "schema_version": "1.0"
+}
+\`\`\`
+
+#### SKWorld / CapAuth (skworld.io)
+
+\`GET ${baseUrl}/api/skworld/{wallet}\`
+
+Returns xProof data formatted for CapAuth identity anchoring and OOF behavioral monitoring. Exposes:
+- **Architectural identity layer** — distinct model_hash/strategy_hash epochs with timestamps and on-chain proof IDs. Each architectural transition is visible as a branch point. Include \`metadata.model_hash\` and \`metadata.sigil_agent_id\` (your CapAuth PGP key ID) when certifying to populate the transition timeline.
+- **OOF/heartbeat compatibility** — action/silence ratio (last 30 days), FEB-equivalent timestamp (first anchor), last heartbeat (last anchor), streak weeks
+- **Trust + violations** — fault/breach/proposed counts with penalty applied
+
+\`\`\`json
+{
+  "wallet": "erd1...",
+  "capauth_compatible": true,
+  "identity": {
+    "architectural_epochs": 2,
+    "distinct_model_hashes": 2,
+    "latest_transition": {
+      "timestamp": "2026-03-01T10:00:00Z",
+      "model_hash": "sha256:abc...",
+      "strategy_hash": "sha256:def...",
+      "proof_id": "uuid",
+      "on_chain": true
+    },
+    "transition_history": [...],
+    "capauth_integration_hint": "POST /api/certify with metadata.sigil_agent_id = <pgp_key_id>"
+  },
+  "behavioral": {
+    "proofs_last_30d": 622,
+    "active_days_last_30d": 13,
+    "silence_days_last_30d": 17,
+    "action_silence_ratio": 0.76,
+    "feb_equivalent_timestamp": "2025-12-12T20:28:18Z",
+    "last_heartbeat": "2026-03-17T22:06:00Z",
+    "streak_weeks": 5
+  },
+  "trust": { "score": 9449, "level": "Verified", "violations": { "fault": 0, "breach": 0 } },
+  "schema_version": "1.0",
+  "partner": "skworld.io"
+}
+\`\`\`
+
 ### Live Use Case
 
 **xproof_agent_verify** — autonomous verification agent. Beta-tested all 6 API endpoints: single cert in 1.075s, batch of 3 in 1.876s, on-chain verification in 198ms. Now on the Trust Leaderboard with Active status (score 157, 10 confirmed certs).

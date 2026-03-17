@@ -23,6 +23,7 @@ import {
   Wallet,
   Layers,
   AlertTriangle,
+  Link2,
 } from "lucide-react";
 
 interface Endpoint {
@@ -244,6 +245,30 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         description: "Search for agents by name, category, or wallet prefix.",
         response: `[{ "wallet": "erd1...", "name": "Agent X", "category": "defi" }]`,
         curl: `curl "${BASE}/api/agents/search?q=defi"`,
+      },
+    ],
+  },
+  {
+    id: "partner-integrations",
+    title: "Partner Integrations",
+    icon: Link2,
+    description: "Dedicated endpoints for partner systems — AgentProof oracle and SKWorld/CapAuth",
+    endpoints: [
+      {
+        method: "GET",
+        path: "/api/agentproof/:wallet",
+        auth: "None",
+        description: "AgentProof oracle endpoint. Returns proof layer data for leaderboard enrichment: pre/post-execution audit counts, proof coverage %, streak, transparency tier, violations, and trust score breakdown.",
+        response: `{ "wallet": "erd1...", "integrated": true, "proof_layer": { "pre_execution_audits": 0, "post_execution_proofs": 627, "total_anchors": 627, "has_full_cycle": false, "streak_weeks": 5, "transparency_tier": "Tier 1", "violations": 0 }, "trust": { "score": 9449, "level": "Verified" }, "schema_version": "1.0" }`,
+        curl: `curl ${BASE}/api/agentproof/erd1abc...`,
+      },
+      {
+        method: "GET",
+        path: "/api/skworld/:wallet",
+        auth: "None",
+        description: "SKWorld / CapAuth integration endpoint. Returns architectural transition timeline (model_hash/strategy_hash epochs), OOF behavioral data (action/silence ratio, FEB-equivalent timestamp), and trust score with violation breakdown. Include metadata.model_hash and metadata.sigil_agent_id (CapAuth PGP key) when certifying to populate the transition history.",
+        response: `{ "wallet": "erd1...", "capauth_compatible": true, "identity": { "architectural_epochs": 2, "distinct_model_hashes": 2, "latest_transition": { "timestamp": "...", "model_hash": "sha256:abc...", "on_chain": true } }, "behavioral": { "proofs_last_30d": 622, "action_silence_ratio": 0.76, "feb_equivalent_timestamp": "2025-12-12T20:28:18Z" }, "trust": { "score": 9449, "level": "Verified", "violations": { "fault": 0, "breach": 0 } }, "partner": "skworld.io" }`,
+        curl: `curl ${BASE}/api/skworld/erd1abc...`,
       },
     ],
   },
