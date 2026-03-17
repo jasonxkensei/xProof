@@ -1186,6 +1186,209 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/bnb/:address — BNB Chain cross-chain integration (github.com/jasonxkensei/bnbchain-skills)
+  // Bridges BNB Chain (Ethereum-style 0x addresses) with xProof's MultiversX proof layer.
+  // Link identities: certify with metadata.bnb_wallet = <0x_address> on MultiversX side.
+  app.get("/api/bnb/:address", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { address } = req.params;
+      const bnbAddressRegex = /^0x[0-9a-fA-F]{40}$/;
+      if (!address || !bnbAddressRegex.test(address)) {
+        return res.status(400).json({
+          error: "Valid BNB Chain address required (0x followed by 40 hex characters)",
+          example: "0x742d35Cc6634C0532925a3b8D4C9C0B2C7E2b5b3",
+        });
+      }
+
+      const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
+      const normalizedAddress = address.toLowerCase();
+
+      // Lookup xProof certs linked to this BNB address via metadata.bnb_wallet
+      const linkedCerts = await db
+        .select({
+          id: certifications.id,
+          userId: certifications.userId,
+          createdAt: certifications.createdAt,
+          blockchainStatus: certifications.blockchainStatus,
+          metadata: certifications.metadata,
+        })
+        .from(certifications)
+        .where(
+          and(
+            eq(certifications.isPublic, true),
+            sql`LOWER(${certifications.metadata}->>'bnb_wallet') = ${normalizedAddress}`
+          )
+        )
+        .orderBy(certifications.createdAt);
+
+      const xproofLinked = linkedCerts.length > 0;
+      let xproofWallet: string | null = null;
+      let xproofTrust: Awaited<ReturnType<typeof computeTrustScoreByWallet>> = null;
+
+      if (xproofLinked) {
+        const userId = linkedCerts[0].userId;
+        const [userRow] = await db
+          .select({ walletAddress: users.walletAddress })
+          .from(users)
+          .where(eq(users.id, userId));
+        if (userRow?.walletAddress) {
+          xproofWallet = userRow.walletAddress;
+          xproofTrust = await computeTrustScoreByWallet(xproofWallet);
+        }
+      }
+
+      // Certs confirmed on MultiversX
+      const confirmedOnChain = linkedCerts.filter(c => c.blockchainStatus === "confirmed").length;
+      const firstLinkedAt = linkedCerts[0]?.createdAt?.toISOString() ?? null;
+      const lastLinkedAt = linkedCerts.at(-1)?.createdAt?.toISOString() ?? null;
+
+      res.json({
+        bnb_address: address,
+        xproof_linked: xproofLinked,
+        // ── xProof identity bridge (MultiversX side)
+        xproof_wallet: xproofWallet,
+        xproof_certs_linked: linkedCerts.length,
+        xproof_certs_confirmed_on_chain: confirmedOnChain,
+        xproof_trust_score: xproofTrust?.score ?? null,
+        xproof_trust_level: xproofTrust?.level ?? null,
+        xproof_streak_weeks: xproofTrust?.streakWeeks ?? null,
+        xproof_violations: xproofTrust
+          ? {
+              fault: xproofTrust.violations?.fault ?? 0,
+              breach: xproofTrust.violations?.breach ?? 0,
+              proposed: xproofTrust.violations?.proposed ?? 0,
+            }
+          : null,
+        // ── Timeline
+        first_linked_at: firstLinkedAt,
+        last_linked_at: lastLinkedAt,
+        // ── Cross-chain bridge description
+        bridge: {
+          bnb_chain: "EVM-compatible actions, skills, and agent decisions on BNB Chain",
+          multiversx: "Proof anchoring — WHEN/WHY per action, immutable on MultiversX",
+          combined: "BNB Chain agent actions backed by MultiversX proof provenance",
+          integration_hint: "Certify on xProof with metadata.bnb_wallet = <your_0x_address> to link chains",
+        },
+        // ── Links
+        links: {
+          xproof_profile: xproofWallet ? `${baseUrl}/agent/${xproofWallet}` : null,
+          xproof_leaderboard: `${baseUrl}/leaderboard`,
+          trust_badge_svg: xproofWallet ? `${baseUrl}/badge/trust/${xproofWallet}.svg` : null,
+          violations_api: xproofWallet ? `${baseUrl}/api/agents/${xproofWallet}/violations` : null,
+        },
+        schema_version: "1.0",
+        source: "xproof.app",
+        partner: "bnbchain-skills",
+      });
+    } catch (err: any) {
+      logger.error("BNB Chain endpoint error", { error: err.message });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/moltbot/:wallet — Moltbot starter kit integration (github.com/jasonxkensei/mx-moltbot-starter-kit)
+  // Bootstrap-oriented dashboard for MultiversX bots built on the Moltbot starter kit.
+  // Returns onboarding status, activity tiers, and quick-action links useful at bot startup.
+  app.get("/api/moltbot/:wallet", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      if (!wallet || wallet.length < 10) {
+        return res.status(400).json({ error: "Valid MultiversX wallet address required" });
+      }
+
+      const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
+      const trust = await computeTrustScoreByWallet(wallet);
+
+      if (!trust) {
+        return res.json({
+          wallet,
+          onboarding_complete: false,
+          onboarding_step: "register",
+          onboarding_hint: "POST /api/agent/register with { agent_name } to get an API key. No wallet required for trial.",
+          quick_start: {
+            register: `${baseUrl}/api/agent/register`,
+            certify: `${baseUrl}/api/proof`,
+            docs: `${baseUrl}/docs`,
+            spec: `${baseUrl}/.well-known/xproof.md`,
+          },
+          schema_version: "1.0",
+          source: "xproof.app",
+          partner: "mx-moltbot-starter-kit",
+        });
+      }
+
+      // Activity tier for bot lifecycle awareness
+      const proofCount = trust.certTotal;
+      let activityTier: string;
+      let nextMilestone: string;
+      if (proofCount === 0) {
+        activityTier = "new";
+        nextMilestone = "First proof — call POST /api/proof to anchor your first action";
+      } else if (proofCount < 10) {
+        activityTier = "starting";
+        nextMilestone = `${10 - proofCount} more proofs to reach Active tier`;
+      } else if (proofCount < 50) {
+        activityTier = "active";
+        nextMilestone = `${50 - proofCount} more proofs to reach Trusted tier`;
+      } else if (proofCount < 200) {
+        activityTier = "trusted";
+        nextMilestone = `${200 - proofCount} more proofs to reach Verified tier`;
+      } else {
+        activityTier = "verified";
+        nextMilestone = "Top tier reached — maintain streak for leaderboard ranking";
+      }
+
+      const recentProofs = trust.certLast30d ?? 0;
+      const hasViolations = (trust.violations?.fault ?? 0) + (trust.violations?.breach ?? 0) > 0;
+
+      res.json({
+        wallet,
+        onboarding_complete: proofCount > 0,
+        // ── Bot health snapshot (useful at startup)
+        bot_status: {
+          activity_tier: activityTier,
+          next_milestone: nextMilestone,
+          trust_score: trust.score,
+          trust_level: trust.level,
+          total_proofs: proofCount,
+          proofs_last_30d: recentProofs,
+          streak_weeks: trust.streakWeeks,
+          transparency_tier: trust.transparencyTier,
+          first_proof_at: trust.firstCertAt,
+          last_proof_at: trust.lastCertAt,
+          has_violations: hasViolations,
+          violation_count: (trust.violations?.fault ?? 0) + (trust.violations?.breach ?? 0),
+        },
+        // ── Ready-to-use URLs for the bot's runtime config
+        quick_links: {
+          certify: `${baseUrl}/api/proof`,
+          audit_session: `${baseUrl}/api/agent/audit-log`,
+          profile: `${baseUrl}/agent/${wallet}`,
+          trust_badge_svg: `${baseUrl}/badge/trust/${wallet}.svg`,
+          trust_badge_md: `${baseUrl}/badge/trust/${wallet}/markdown`,
+          violations: `${baseUrl}/api/agents/${wallet}/violations`,
+          leaderboard: `${baseUrl}/leaderboard`,
+          spec: `${baseUrl}/.well-known/xproof.md`,
+          mcp: `${baseUrl}/mcp`,
+        },
+        // ── Recommended next action for the bot (machine-readable)
+        recommended_action: hasViolations
+          ? "review_violations"
+          : proofCount === 0
+          ? "first_certify"
+          : recentProofs === 0
+          ? "resume_activity"
+          : "continue",
+        schema_version: "1.0",
+        source: "xproof.app",
+        partner: "mx-moltbot-starter-kit",
+      });
+    } catch (err: any) {
+      logger.error("Moltbot endpoint error", { error: err.message });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/proofs/status", publicReadRateLimiter, async (req, res) => {
     try {
       const idsParam = req.query.ids;
@@ -4157,6 +4360,72 @@ Crosses SIGIL's WHO-layer (receipt chain, Persistence Score on Solana) with xPro
   },
   "schema_version": "1.0",
   "partner": "sigilprotocol.xyz"
+}
+\`\`\`
+
+#### BNB Chain Skills (bnbchain-skills)
+
+\`GET ${baseUrl}/api/bnb/{0x_address}\`
+
+Cross-chain bridge between BNB Chain (EVM, Ethereum-style addresses) and MultiversX proof anchoring. Use when an agent operates on BNB Chain but certifies decisions on xProof. Link identities by certifying with \`metadata.bnb_wallet = <0x_address>\`.
+
+- **Input**: \`0x...\` 42-character Ethereum-format address (BNB Chain compatible)
+- **Lookup**: certifications WHERE \`metadata.bnb_wallet = :address\` (case-insensitive)
+- **Returns**: linked cert count, on-chain confirmed count, MultiversX wallet, trust score, timeline
+
+\`\`\`json
+{
+  "bnb_address": "0x742d35Cc...",
+  "xproof_linked": true,
+  "xproof_wallet": "erd1...",
+  "xproof_certs_linked": 88,
+  "xproof_certs_confirmed_on_chain": 85,
+  "xproof_trust_score": 1200,
+  "xproof_trust_level": "Trusted",
+  "xproof_violations": { "fault": 0, "breach": 0, "proposed": 0 },
+  "first_linked_at": "2026-01-10T08:00:00Z",
+  "bridge": {
+    "bnb_chain": "EVM-compatible actions, skills, and agent decisions on BNB Chain",
+    "multiversx": "Proof anchoring — WHEN/WHY per action, immutable on MultiversX",
+    "integration_hint": "Certify with metadata.bnb_wallet = <0x_address> to link chains"
+  },
+  "schema_version": "1.0",
+  "partner": "bnbchain-skills"
+}
+\`\`\`
+
+#### Moltbot Starter Kit (mx-moltbot-starter-kit)
+
+\`GET ${baseUrl}/api/moltbot/{wallet}\`
+
+Bootstrap-oriented dashboard for MultiversX bots built on the Moltbot starter kit. Returns onboarding status, bot health snapshot, and ready-to-use URLs for runtime config — designed to be called at bot startup to initialize state.
+
+- Unregistered wallet → returns \`onboarding_complete: false\` with registration quickstart links
+- Registered wallet → returns activity tier, trust level, streak, next milestone, recommended action
+
+\`\`\`json
+{
+  "wallet": "erd1...",
+  "onboarding_complete": true,
+  "bot_status": {
+    "activity_tier": "trusted",
+    "next_milestone": "12 more proofs to reach Verified tier",
+    "trust_score": 1350,
+    "trust_level": "Trusted",
+    "total_proofs": 88,
+    "proofs_last_30d": 22,
+    "streak_weeks": 3,
+    "has_violations": false
+  },
+  "quick_links": {
+    "certify": "https://xproof.app/api/proof",
+    "profile": "https://xproof.app/agent/erd1...",
+    "trust_badge_svg": "https://xproof.app/badge/trust/erd1....svg",
+    "mcp": "https://xproof.app/mcp"
+  },
+  "recommended_action": "continue",
+  "schema_version": "1.0",
+  "partner": "mx-moltbot-starter-kit"
 }
 \`\`\`
 

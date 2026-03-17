@@ -278,6 +278,22 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         response: `{ "sigil_public_key": "hPyhbS1U9...", "sigil_reachable": true, "persistence_score": 87, "receipt_count": 241, "critical_pass": true, "xproof_linked": true, "xproof_certs_linked": 441, "xproof_trust_score": 4760, "xproof_trust_level": "Verified", "convergence": { "sigil_anchors": "WHO — cryptographic identity continuity", "xproof_anchors": "WHAT/WHEN/WHY — decision provenance", "combined_coverage": "full 4W stack" }, "partner": "sigilprotocol.xyz" }`,
         curl: `curl ${BASE}/api/sigil/hPyhbS1U9...`,
       },
+      {
+        method: "GET",
+        path: "/api/bnb/:address",
+        auth: "None",
+        description: "BNB Chain cross-chain integration. Bridges EVM Ethereum-style 0x addresses with xProof's MultiversX proof layer. Lookup key is the agent's BNB Chain address. Returns linked cert count, on-chain confirmed count, MultiversX wallet, trust score, and bridge description. Link identities by certifying with metadata.bnb_wallet = your 0x address.",
+        response: `{ "bnb_address": "0x742d35Cc...", "xproof_linked": true, "xproof_wallet": "erd1...", "xproof_certs_linked": 88, "xproof_certs_confirmed_on_chain": 85, "xproof_trust_score": 1200, "xproof_trust_level": "Trusted", "xproof_violations": { "fault": 0, "breach": 0 }, "bridge": { "bnb_chain": "EVM actions on BNB Chain", "multiversx": "Proof anchoring on MultiversX", "integration_hint": "Certify with metadata.bnb_wallet = <0x_address>" }, "partner": "bnbchain-skills" }`,
+        curl: `curl ${BASE}/api/bnb/0x742d35Cc6634C0532925a3b8D4C9C0B2C7E2b5b3`,
+      },
+      {
+        method: "GET",
+        path: "/api/moltbot/:wallet",
+        auth: "None",
+        description: "Moltbot starter kit bootstrap endpoint. Returns onboarding status, bot health snapshot, activity tier, and ready-to-use URLs for runtime config. Designed to be called at bot startup. Unregistered wallets get registration quickstart links. Registered wallets get trust level, streak, next milestone, and a recommended_action field (continue | first_certify | resume_activity | review_violations).",
+        response: `{ "wallet": "erd1...", "onboarding_complete": true, "bot_status": { "activity_tier": "trusted", "next_milestone": "12 more proofs to reach Verified", "trust_score": 1350, "trust_level": "Trusted", "total_proofs": 88, "streak_weeks": 3, "has_violations": false }, "quick_links": { "certify": "https://xproof.app/api/proof", "mcp": "https://xproof.app/mcp" }, "recommended_action": "continue", "partner": "mx-moltbot-starter-kit" }`,
+        curl: `curl ${BASE}/api/moltbot/erd1abc...`,
+      },
     ],
   },
   {
