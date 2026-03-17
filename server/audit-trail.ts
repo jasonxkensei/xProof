@@ -326,9 +326,9 @@ export async function detectAndRecordViolations(
 
   if (!verification.why_certified && verification.what_certified) {
     anomalies.push({
-      type: "fault",
-      reason: "WHAT certified without any WHY — action executed without prior intent declaration",
-      autoConfirm: true,
+      type: "breach",
+      reason: "WHAT certified without any WHY — action executed without prior intent declaration (potential deliberate omission)",
+      autoConfirm: false,
     });
   }
 

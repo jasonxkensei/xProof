@@ -479,16 +479,13 @@ export async function createMcpServer(ctx: McpContext) {
 
         const result = await reconstructAuditTrail(wallet, proof_id);
 
-        const paidInvestigation = !auth.valid && isX402Configured() && xPaymentHeader;
-        if (paidInvestigation) {
-          const violationsCreated = await detectAndRecordViolations(
-            wallet,
-            proof_id,
-            result.verification,
-            result.timeline,
-          );
-          result.violations_created = violationsCreated;
-        }
+        const violationsCreated = await detectAndRecordViolations(
+          wallet,
+          proof_id,
+          result.verification,
+          result.timeline,
+        );
+        result.violations_created = violationsCreated;
 
         return {
           content: [{
