@@ -252,7 +252,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
     id: "partner-integrations",
     title: "Partner Integrations",
     icon: Link2,
-    description: "Dedicated endpoints for partner systems — AgentProof oracle and SKWorld/CapAuth",
+    description: "Dedicated endpoints for partner systems — AgentProof oracle, SKWorld/CapAuth, and SIGIL Protocol",
     endpoints: [
       {
         method: "GET",
@@ -269,6 +269,14 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         description: "SKWorld / CapAuth integration endpoint. Returns architectural transition timeline (model_hash/strategy_hash epochs), OOF behavioral data (action/silence ratio, FEB-equivalent timestamp), and trust score with violation breakdown. Include metadata.model_hash and metadata.sigil_agent_id (CapAuth PGP key) when certifying to populate the transition history.",
         response: `{ "wallet": "erd1...", "capauth_compatible": true, "identity": { "architectural_epochs": 2, "distinct_model_hashes": 2, "latest_transition": { "timestamp": "...", "model_hash": "sha256:abc...", "on_chain": true } }, "behavioral": { "proofs_last_30d": 622, "action_silence_ratio": 0.76, "feb_equivalent_timestamp": "2025-12-12T20:28:18Z" }, "trust": { "score": 9449, "level": "Verified", "violations": { "fault": 0, "breach": 0 } }, "partner": "skworld.io" }`,
         curl: `curl ${BASE}/api/skworld/erd1abc...`,
+      },
+      {
+        method: "GET",
+        path: "/api/sigil/:public_key",
+        auth: "None",
+        description: "SIGIL Protocol integration endpoint. Crosses SIGIL's WHO-layer (Solana receipt chain, Persistence Score) with xProof's WHEN/WHY-layer (MultiversX decision anchors). Returns persistence_score, receipt_count, critical_pass from SIGIL live API (5s timeout, graceful fallback), plus linked xProof certs and trust score. The convergence field explicitly states what each layer anchors. Link identities by certifying with metadata.sigil_public_key = your SIGIL key.",
+        response: `{ "sigil_public_key": "hPyhbS1U9...", "sigil_reachable": true, "persistence_score": 87, "receipt_count": 241, "critical_pass": true, "xproof_linked": true, "xproof_certs_linked": 441, "xproof_trust_score": 4760, "xproof_trust_level": "Verified", "convergence": { "sigil_anchors": "WHO — cryptographic identity continuity", "xproof_anchors": "WHAT/WHEN/WHY — decision provenance", "combined_coverage": "full 4W stack" }, "partner": "sigilprotocol.xyz" }`,
+        curl: `curl ${BASE}/api/sigil/hPyhbS1U9...`,
       },
     ],
   },

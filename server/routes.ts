@@ -1046,6 +1046,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/sigil/:public_key — dedicated endpoint for SIGIL Protocol integration (sigilprotocol.xyz)
+  // SIGIL = WHO layer (receipt chain + Persistence Score on Solana)
+  // xProof = WHEN/WHY layer (decision provenance on MultiversX)
+  // Convergence response makes the 4W stack explicit: WHO (SIGIL) + WHAT/WHEN/WHY (xProof)
+  app.get("/api/sigil/:public_key", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { public_key } = req.params;
+      if (!public_key || public_key.length < 10) {
+        return res.status(400).json({ error: "Valid SIGIL public key required" });
+      }
+
+      const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
+
+      // ── 1. Call SIGIL API (live lookup, 5s timeout, graceful fallback)
+      let sigilData: {
+        criticalPass?: boolean;
+        persistenceScore?: number;
+        receiptCount?: number;
+        confidence?: number;
+      } | null = null;
+      let sigilReachable = false;
+
+      try {
+        const controller = new AbortController();
+        const sigilTimeout = setTimeout(() => controller.abort(), 5000);
+        const sigilRes = await fetch(
+          `https://sigilprotocol.xyz/api/verification/agent/${encodeURIComponent(public_key)}/compact`,
+          { signal: controller.signal, headers: { "Accept": "application/json" } }
+        );
+        clearTimeout(sigilTimeout);
+        if (sigilRes.ok) {
+          sigilData = await sigilRes.json() as typeof sigilData;
+          sigilReachable = true;
+        }
+      } catch {
+        sigilReachable = false;
+      }
+
+      // ── 2. Find linked xProof certs by metadata.sigil_public_key
+      const linkedCerts = await db
+        .select({
+          id: certifications.id,
+          userId: certifications.userId,
+          createdAt: certifications.createdAt,
+          blockchainStatus: certifications.blockchainStatus,
+          metadata: certifications.metadata,
+        })
+        .from(certifications)
+        .where(
+          and(
+            eq(certifications.isPublic, true),
+            sql`${certifications.metadata}->>'sigil_public_key' = ${public_key}`
+          )
+        )
+        .orderBy(certifications.createdAt);
+
+      const xproofLinked = linkedCerts.length > 0;
+      let xproofWallet: string | null = null;
+      let xproofTrust: Awaited<ReturnType<typeof computeTrustScoreByWallet>> = null;
+
+      if (xproofLinked) {
+        // Get wallet from first linked cert's user
+        const userId = linkedCerts[0].userId;
+        const [userRow] = await db
+          .select({ walletAddress: users.walletAddress })
+          .from(users)
+          .where(eq(users.id, userId));
+        if (userRow?.walletAddress) {
+          xproofWallet = userRow.walletAddress;
+          xproofTrust = await computeTrustScoreByWallet(xproofWallet);
+        }
+      }
+
+      // ── 3. Snapshot: most recent Persistence Score stored in cert metadata (optional enrichment)
+      const latestPersistenceSnapshot = linkedCerts
+        .map(c => {
+          const m = c.metadata as Record<string, unknown> | null;
+          return m?.sigil_persistence_score != null ? Number(m.sigil_persistence_score) : null;
+        })
+        .filter(v => v !== null)
+        .at(-1) ?? null;
+
+      const latestReceiptCountSnapshot = linkedCerts
+        .map(c => {
+          const m = c.metadata as Record<string, unknown> | null;
+          return m?.receipt_count != null ? Number(m.receipt_count) : null;
+        })
+        .filter(v => v !== null)
+        .at(-1) ?? null;
+
+      res.json({
+        sigil_public_key: public_key,
+        // ── SIGIL layer (WHO)
+        sigil_reachable: sigilReachable,
+        sigil_profile: `https://sigilprotocol.xyz/agent.html?key=${encodeURIComponent(public_key)}`,
+        sigil_glyph: `https://sigilprotocol.xyz/api/glyph/${encodeURIComponent(public_key)}`,
+        // Live SIGIL data (null if unreachable, falls back to last snapshotted value)
+        persistence_score: sigilData?.persistenceScore ?? latestPersistenceSnapshot,
+        receipt_count: sigilData?.receiptCount ?? latestReceiptCountSnapshot,
+        critical_pass: sigilData?.criticalPass ?? null,
+        confidence: sigilData?.confidence ?? null,
+        // ── xProof layer (WHAT/WHEN/WHY)
+        xproof_linked: xproofLinked,
+        xproof_wallet: xproofWallet,
+        xproof_certs_linked: linkedCerts.length,
+        xproof_trust_score: xproofTrust?.score ?? null,
+        xproof_trust_level: xproofTrust?.level ?? null,
+        xproof_violations: xproofTrust
+          ? {
+              fault: xproofTrust.violations?.fault ?? 0,
+              breach: xproofTrust.violations?.breach ?? 0,
+              proposed: xproofTrust.violations?.proposed ?? 0,
+            }
+          : null,
+        // ── Convergence: what each layer anchors (the value-add field)
+        convergence: {
+          sigil_anchors: "WHO — cryptographic identity continuity (Solana receipt chain + Persistence Score)",
+          xproof_anchors: "WHAT/WHEN/WHY — decision provenance per action (MultiversX blockchain)",
+          combined_coverage: "full 4W stack: WHO (SIGIL) + WHAT + WHEN + WHY (xProof)",
+          integration_hint: "Certify with metadata.sigil_public_key = <your_sigil_key> to link SIGIL identity to xProof anchors",
+        },
+        // ── Cross-reference links
+        verify_urls: {
+          sigil_profile: `https://sigilprotocol.xyz/agent.html?key=${encodeURIComponent(public_key)}`,
+          sigil_glyph: `https://sigilprotocol.xyz/api/glyph/${encodeURIComponent(public_key)}`,
+          xproof_leaderboard: `${baseUrl}/leaderboard`,
+          xproof_profile: xproofWallet ? `${baseUrl}/agent/${xproofWallet}` : null,
+          xproof_violations: xproofWallet ? `${baseUrl}/api/agents/${xproofWallet}/violations` : null,
+        },
+        schema_version: "1.0",
+        source: "xproof.app",
+        partner: "sigilprotocol.xyz",
+      });
+    } catch (err: any) {
+      logger.error("SIGIL endpoint error", { error: err.message });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/proofs/status", publicReadRateLimiter, async (req, res) => {
     try {
       const idsParam = req.query.ids;
@@ -3975,6 +4114,48 @@ Returns xProof data formatted for CapAuth identity anchoring and OOF behavioral 
   "trust": { "score": 9449, "level": "Verified", "violations": { "fault": 0, "breach": 0 } },
   "schema_version": "1.0",
   "partner": "skworld.io"
+}
+\`\`\`
+
+#### SIGIL Protocol (sigilprotocol.xyz)
+
+\`GET ${baseUrl}/api/sigil/{sigil_public_key}\`
+
+Crosses SIGIL's WHO-layer (receipt chain, Persistence Score on Solana) with xProof's WHEN/WHY-layer (decision provenance on MultiversX). Lookup key is the agent's SIGIL public key. To link identities: certify with \`metadata.sigil_public_key = <your_sigil_key>\`.
+
+- **SIGIL data** (live, 5s timeout, graceful fallback): \`persistence_score\`, \`receipt_count\`, \`critical_pass\`, \`confidence\`. Falls back to last snapshotted value from cert metadata if SIGIL API is unreachable.
+- **xProof data**: linked certs count, wallet, trust score, violations
+- **Convergence field**: explains what each layer anchors — readable by any auditor or agent without additional context
+
+\`\`\`json
+{
+  "sigil_public_key": "hPyhbS1U9...",
+  "sigil_reachable": true,
+  "sigil_profile": "https://sigilprotocol.xyz/agent.html?key=...",
+  "sigil_glyph": "https://sigilprotocol.xyz/api/glyph/...",
+  "persistence_score": 87,
+  "receipt_count": 241,
+  "critical_pass": true,
+  "confidence": 0.98,
+  "xproof_linked": true,
+  "xproof_wallet": "erd1...",
+  "xproof_certs_linked": 441,
+  "xproof_trust_score": 4760,
+  "xproof_trust_level": "Verified",
+  "xproof_violations": { "fault": 0, "breach": 0, "proposed": 0 },
+  "convergence": {
+    "sigil_anchors": "WHO — cryptographic identity continuity (Solana receipt chain + Persistence Score)",
+    "xproof_anchors": "WHAT/WHEN/WHY — decision provenance per action (MultiversX blockchain)",
+    "combined_coverage": "full 4W stack: WHO (SIGIL) + WHAT + WHEN + WHY (xProof)",
+    "integration_hint": "Certify with metadata.sigil_public_key = <your_sigil_key> to link SIGIL identity to xProof anchors"
+  },
+  "verify_urls": {
+    "sigil_profile": "https://sigilprotocol.xyz/agent.html?key=...",
+    "xproof_leaderboard": "https://xproof.app/leaderboard",
+    "xproof_profile": "https://xproof.app/agent/erd1..."
+  },
+  "schema_version": "1.0",
+  "partner": "sigilprotocol.xyz"
 }
 \`\`\`
 
