@@ -15,6 +15,7 @@ import {
   BadgeCheck,
   Calendar,
   BarChart2,
+  AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +80,19 @@ interface AgentProfile {
     createdAt: string | null;
   }[];
   attestations: AttestationRecord[];
+}
+
+interface ViolationRecord {
+  id: string;
+  wallet_address: string;
+  proof_id: string | null;
+  type: "fault" | "breach";
+  status: "proposed" | "confirmed" | "rejected";
+  reason: string | null;
+  auto_confirmed: boolean;
+  detected_at: string;
+  confirmed_at: string | null;
+  notes: string | null;
 }
 
 const TRUST_LEVEL_STYLES: Record<string, { badge: string }> = {
@@ -565,6 +579,12 @@ export default function AgentProfilePage() {
     enabled: !!wallet,
   });
 
+  const { data: violationsData } = useQuery<{ violations: ViolationRecord[] }>({
+    queryKey: ["/api/agents", wallet, "violations"],
+    queryFn: () => fetch(`/api/agents/${wallet}/violations`).then((r) => r.json()),
+    enabled: !!wallet,
+  });
+
   function copyWallet() {
     navigator.clipboard.writeText(wallet || "");
     setCopied(true);
@@ -866,6 +886,106 @@ export default function AgentProfilePage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Violations */}
+            {(() => {
+              const violations = violationsData?.violations ?? [];
+              const confirmed = violations.filter((v) => v.status === "confirmed");
+              const proposed = violations.filter((v) => v.status === "proposed");
+              if (violations.length === 0) return (
+                <Card data-testid="card-violations">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                      Violations
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground" data-testid="text-violations-empty">
+                      No violations recorded.
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+              return (
+                <Card data-testid="card-violations">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      Violations
+                      <span className="ml-auto flex items-center gap-2">
+                        {confirmed.length > 0 && (
+                          <span className="inline-flex items-center rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-400" data-testid="badge-confirmed-violations">
+                            {confirmed.length} confirmed
+                          </span>
+                        )}
+                        {proposed.length > 0 && (
+                          <span className="inline-flex items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid="badge-proposed-violations">
+                            {proposed.length} proposed
+                          </span>
+                        )}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {violations.map((v) => (
+                        <div
+                          key={v.id}
+                          data-testid={`violation-row-${v.id}`}
+                          className="rounded-md border bg-muted/30 p-4 space-y-2"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                data-testid={`badge-violation-type-${v.id}`}
+                                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${
+                                  v.type === "breach"
+                                    ? "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400"
+                                    : "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-400"
+                                }`}
+                              >
+                                {v.type === "breach" ? "Breach" : "Fault"}
+                              </span>
+                              <span
+                                data-testid={`badge-violation-status-${v.id}`}
+                                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
+                                  v.status === "confirmed"
+                                    ? "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400"
+                                    : v.status === "rejected"
+                                    ? "border-border bg-muted text-muted-foreground"
+                                    : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                }`}
+                              >
+                                {v.status === "confirmed" && v.auto_confirmed ? "Auto-confirmed" : v.status.charAt(0).toUpperCase() + v.status.slice(1)}
+                              </span>
+                            </div>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-violation-time-${v.id}`}>
+                              {formatDistanceToNow(new Date(v.detected_at), { addSuffix: true })}
+                            </span>
+                          </div>
+                          {v.reason && (
+                            <p className="text-xs text-muted-foreground" data-testid={`text-violation-reason-${v.id}`}>
+                              {v.reason}
+                            </p>
+                          )}
+                          {v.proof_id && (
+                            <Link
+                              href={`/proof/${v.proof_id}`}
+                              data-testid={`link-violation-proof-${v.id}`}
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline underline-offset-2"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              View proof
+                            </Link>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             <Card data-testid="card-audit-timeline">
               <CardHeader>
