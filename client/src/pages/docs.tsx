@@ -252,7 +252,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
     id: "partner-integrations",
     title: "Partner Integrations",
     icon: Link2,
-    description: "Dedicated endpoints for partner systems — AgentProof oracle, SKWorld/CapAuth, SIGIL Protocol, BNB Chain skills, Moltbot starter kit, and ElizaOS",
+    description: "Dedicated endpoints for partner systems — AgentProof oracle, SKWorld/CapAuth, SIGIL Protocol, BNB Chain skills, Moltbot starter kit, ElizaOS, xAI/Grok, and MPP",
     endpoints: [
       {
         method: "GET",
@@ -301,6 +301,22 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         description: "ElizaOS integration endpoint. Bridges ElizaOS character identity (WHO — character UUID, runtime, sessions, action types) with xProof's WHAT/WHEN/WHY proof layer (MultiversX anchors). Two lookup modes: erd1 wallet → direct trust score + character stats from cert metadata; UUID → cert metadata lookup via metadata.eliza_agent_id. Returns character stats, trust score, convergence explanation, and a plugin_config block for plugin-xproof.",
         response: `{ "identifier": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "lookup_mode": "character_id", "eliza_linked": true, "character": { "agent_id": "3fa85f64...", "character_name": "ElizaAgent", "runtime_version": "0.1.9", "certified_sessions": 12, "certified_action_types": ["message", "search"] }, "xproof": { "wallet": "erd1...", "trust_score": 1350, "trust_level": "Trusted", "violations": { "fault": 0, "breach": 0 } }, "convergence": { "elizaos_anchors": "WHO", "xproof_anchors": "WHAT/WHEN/WHY" }, "partner": "elizaos" }`,
         curl: `curl ${BASE}/api/eliza/3fa85f64-5717-4562-b3fc-2c963f66afa6`,
+      },
+      {
+        method: "GET",
+        path: "/api/xai/:identifier",
+        auth: "None",
+        description: "xAI/Grok integration endpoint. Bridges xAI agent identity (WHO — Grok reasoning engine, model, sessions) with xProof's WHAT/WHEN/WHY proof layer (MultiversX anchors). Two lookup modes: erd1 wallet or xAI agent ID string. Returns agent stats, trust score, convergence explanation, and integration config. Link identities by certifying with metadata.xai_agent_id = <agent_id>.",
+        response: `{ "identifier": "grok-agent-001", "lookup_mode": "agent_id", "xai_linked": true, "agent": { "agent_id": "grok-agent-001", "model": "grok-3", "certified_sessions": 8, "certified_action_types": ["reason", "generate"], "total_certs": 42 }, "xproof": { "wallet": "erd1...", "trust_score": 1350, "trust_level": "Trusted", "violations": { "fault": 0, "breach": 0 } }, "convergence": { "xai_anchors": "WHO — Grok reasoning engine", "xproof_anchors": "WHAT/WHEN/WHY — decision provenance anchored on MultiversX" }, "partner": "xai" }`,
+        curl: `curl ${BASE}/api/xai/grok-agent-001`,
+      },
+      {
+        method: "GET",
+        path: "/api/mpp/:payment_intent_id",
+        auth: "None",
+        description: "Machine Payments Protocol integration. Links autonomous agent payments (HOW — Stripe/Tempo settlement) with xProof decision provenance (WHY — intent anchored before transaction). Lookup by Stripe payment intent ID. Returns payment details, linked certs, trust score, and convergence explanation. Link by certifying with metadata.mpp_payment_intent_id = <pi_xxx>.",
+        response: `{ "payment_intent_id": "pi_3abc123def456", "mpp_linked": true, "mpp_network": "tempo", "mpp_amount": "25.00", "mpp_currency": "usd", "xproof_wallet": "erd1...", "xproof_certs_linked": 3, "xproof_trust_score": 1350, "convergence": { "mpp_anchors": "HOW — payment execution via Stripe/Tempo", "xproof_anchors": "WHY — decision intent anchored before transaction" }, "partner": "mpp" }`,
+        curl: `curl ${BASE}/api/mpp/pi_3abc123def456`,
       },
     ],
   },

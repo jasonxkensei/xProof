@@ -90,6 +90,17 @@ Users who test xproof via `POST /api/agent/register` get a trial account with a 
 ### Rate Limiting
 Endpoint-specific rate limiters complement the global 100 req/min limit: `publicReadRateLimiter` (60/min) on agent profiles, trust lookups, and ACP discovery; `publicSearchRateLimiter` (30/min) on leaderboard, agent search, and trust history; `publicCompareRateLimiter` (20/min) on agent comparison. Defined in `server/reliability.ts`.
 
+### Partner Integration Endpoints
+8 dedicated partner endpoints (public, no auth required) bridge external systems with xProof's proof layer:
+- **AgentProof** (`/api/agentproof/:wallet`) — leaderboard oracle
+- **SKWorld/CapAuth** (`/api/skworld/:wallet`) — architectural identity + OOF behavioral
+- **SIGIL Protocol** (`/api/sigil/:public_key`) — WHO layer cross-chain (Solana)
+- **BNB Chain** (`/api/bnb/:address`) — EVM cross-chain bridge
+- **Moltbot** (`/api/moltbot/:wallet`) — bot bootstrap dashboard
+- **ElizaOS** (`/api/eliza/:identifier`) — character identity bridge (UUID or wallet)
+- **xAI/Grok** (`/api/xai/:identifier`) — Grok reasoning engine bridge (agent ID or wallet), metadata: `xai_agent_id`, `xai_model`, `xai_session_id`
+- **MPP** (`/api/mpp/:payment_intent_id`) — Machine Payments Protocol, links payment execution (HOW) with decision provenance (WHY), metadata: `mpp_payment_intent_id`, `mpp_amount`, `mpp_currency`, `mpp_network`
+
 ### ElizaOS Plugin NPM Package
 The `xproof-eliza-plugin` (v2.0.0) provides modular actions for ElizaOS agents, including `AUDIT_BEFORE_EXECUTE`, `CERTIFY_CONTENT`, `CERTIFY_HASH`, `CERTIFY_BATCH`, `VERIFY_PROOF`, and an audit state provider. A key feature is the `AuditRequiredError` for enforcing on-chain proof before execution.
 

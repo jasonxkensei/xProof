@@ -1591,6 +1591,289 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/xai/:identifier — xAI/Grok integration
+  // Bridges xAI agent identity with xProof proof anchoring (WHAT/WHEN/WHY).
+  // Two lookup modes:
+  //   - MultiversX wallet (erd1...) → direct trust score + xAI-tagged cert stats
+  //   - Agent ID string → metadata lookup via metadata.xai_agent_id
+  // Link: certify with metadata.xai_agent_id = <agent_id> and optionally
+  //   metadata.xai_model, metadata.xai_session_id, metadata.action_type.
+  app.get("/api/xai/:identifier", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { identifier } = req.params;
+      if (!identifier || identifier.length < 5) {
+        return res.status(400).json({
+          error: "Valid identifier required: xAI agent ID or MultiversX wallet address",
+          examples: {
+            agent_id: "grok-agent-001",
+            mx_wallet: "erd1abc...",
+          },
+        });
+      }
+
+      const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
+      const isWallet = /^erd1[0-9a-z]{50,}$/.test(identifier);
+      const lookupMode: "agent_id" | "wallet" = isWallet ? "wallet" : "agent_id";
+
+      let xaiLinked = false;
+      let linkedWallet: string | null = null;
+      let trust: Awaited<ReturnType<typeof computeTrustScoreByWallet>> = null;
+      let agentStats: {
+        agent_id: string | null;
+        model: string | null;
+        certified_sessions: number;
+        certified_action_types: string[];
+        first_certified_at: string | null;
+        last_certified_at: string | null;
+        total_certs: number;
+      } | null = null;
+
+      if (lookupMode === "wallet") {
+        trust = await computeTrustScoreByWallet(identifier);
+        if (trust) {
+          linkedWallet = identifier;
+          const [userRow] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.walletAddress, identifier));
+
+          if (userRow) {
+            const xaiCerts = await db
+              .select({ metadata: certifications.metadata, createdAt: certifications.createdAt })
+              .from(certifications)
+              .where(
+                and(
+                  eq(certifications.userId, userRow.id),
+                  sql`${certifications.metadata}->>'xai_agent_id' IS NOT NULL`
+                )
+              )
+              .orderBy(certifications.createdAt);
+
+            if (xaiCerts.length > 0) {
+              xaiLinked = true;
+              const agentIds = [...new Set(xaiCerts.map(c => (c.metadata as any)?.xai_agent_id).filter(Boolean))];
+              const models = [...new Set(xaiCerts.map(c => (c.metadata as any)?.xai_model).filter(Boolean))];
+              const sessionIds = [...new Set(xaiCerts.map(c => (c.metadata as any)?.xai_session_id).filter(Boolean))];
+              const actionTypes = [...new Set(xaiCerts.map(c => (c.metadata as any)?.action_type).filter(Boolean))];
+
+              agentStats = {
+                agent_id: agentIds[0] ?? null,
+                model: models[0] ?? null,
+                certified_sessions: sessionIds.length,
+                certified_action_types: actionTypes,
+                first_certified_at: xaiCerts[0]?.createdAt?.toISOString() ?? null,
+                last_certified_at: xaiCerts.at(-1)?.createdAt?.toISOString() ?? null,
+                total_certs: xaiCerts.length,
+              };
+            }
+          }
+        }
+      } else {
+        const linkedCerts = await db
+          .select({
+            userId: certifications.userId,
+            metadata: certifications.metadata,
+            createdAt: certifications.createdAt,
+          })
+          .from(certifications)
+          .where(
+            and(
+              eq(certifications.isPublic, true),
+              sql`LOWER(${certifications.metadata}->>'xai_agent_id') = ${identifier.toLowerCase()}`
+            )
+          )
+          .orderBy(certifications.createdAt);
+
+        if (linkedCerts.length > 0) {
+          xaiLinked = true;
+          const userId = linkedCerts[0].userId;
+          const [userRow] = await db
+            .select({ walletAddress: users.walletAddress })
+            .from(users)
+            .where(eq(users.id, userId));
+
+          if (userRow?.walletAddress) {
+            linkedWallet = userRow.walletAddress;
+            trust = await computeTrustScoreByWallet(linkedWallet);
+          }
+
+          const models = [...new Set(linkedCerts.map(c => (c.metadata as any)?.xai_model).filter(Boolean))];
+          const sessionIds = [...new Set(linkedCerts.map(c => (c.metadata as any)?.xai_session_id).filter(Boolean))];
+          const actionTypes = [...new Set(linkedCerts.map(c => (c.metadata as any)?.action_type).filter(Boolean))];
+
+          agentStats = {
+            agent_id: identifier,
+            model: models[0] ?? null,
+            certified_sessions: sessionIds.length,
+            certified_action_types: actionTypes,
+            first_certified_at: linkedCerts[0]?.createdAt?.toISOString() ?? null,
+            last_certified_at: linkedCerts.at(-1)?.createdAt?.toISOString() ?? null,
+            total_certs: linkedCerts.length,
+          };
+        }
+      }
+
+      res.json({
+        identifier,
+        lookup_mode: lookupMode,
+        xai_linked: xaiLinked,
+        agent: agentStats,
+        xproof: xaiLinked
+          ? {
+              wallet: linkedWallet,
+              trust_score: trust?.score ?? null,
+              trust_level: trust?.level ?? null,
+              total_certs: trust?.certTotal ?? null,
+              certs_last_30d: trust?.certLast30d ?? null,
+              streak_weeks: trust?.streakWeeks ?? null,
+              transparency_tier: trust?.transparencyTier ?? null,
+              violations: trust
+                ? {
+                    fault: trust.violations?.fault ?? 0,
+                    breach: trust.violations?.breach ?? 0,
+                    proposed: trust.violations?.proposed ?? 0,
+                  }
+                : null,
+              profile_url: linkedWallet ? `${baseUrl}/agent/${linkedWallet}` : null,
+              trust_badge_svg: linkedWallet ? `${baseUrl}/badge/trust/${linkedWallet}.svg` : null,
+            }
+          : null,
+        convergence: {
+          xai_anchors: "WHO — Grok reasoning engine, model identity, session context",
+          xproof_anchors: "WHAT/WHEN/WHY — decision provenance anchored on MultiversX before output",
+          combined_coverage: "full 4W stack: WHO (xAI/Grok) + WHAT + WHEN + WHY (xProof)",
+        },
+        integration: {
+          xproof_api: `${baseUrl}/api`,
+          certify_endpoint: `${baseUrl}/api/proof`,
+          verify_endpoint: `${baseUrl}/api/xai/{xai_agent_id}`,
+          metadata_schema: {
+            xai_agent_id: "<agent-id>",
+            xai_model: "<grok-3|grok-3-mini|...>",
+            xai_session_id: "<optional-session-id>",
+            action_type: "<reason|generate|search|...>",
+          },
+        },
+        schema_version: "1.0",
+        source: "xproof.app",
+        partner: "xai",
+      });
+    } catch (err: any) {
+      logger.error("xAI endpoint error", { error: err.message });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/mpp/:payment_intent_id — Machine Payments Protocol integration (Stripe + Tempo)
+  // Links autonomous agent payments (HOW) with xProof decision provenance (WHY).
+  // Lookup: certifications WHERE metadata.mpp_payment_intent_id = :payment_intent_id
+  // Link: certify with metadata.mpp_payment_intent_id = <pi_xxx> before or after payment.
+  app.get("/api/mpp/:payment_intent_id", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { payment_intent_id } = req.params;
+      if (!payment_intent_id || payment_intent_id.length < 5) {
+        return res.status(400).json({
+          error: "Valid payment intent ID required (Stripe pi_xxx or equivalent)",
+          example: "pi_3abc123def456",
+        });
+      }
+
+      const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
+
+      const linkedCerts = await db
+        .select({
+          id: certifications.id,
+          userId: certifications.userId,
+          createdAt: certifications.createdAt,
+          blockchainStatus: certifications.blockchainStatus,
+          metadata: certifications.metadata,
+        })
+        .from(certifications)
+        .where(
+          and(
+            eq(certifications.isPublic, true),
+            sql`${certifications.metadata}->>'mpp_payment_intent_id' = ${payment_intent_id}`
+          )
+        )
+        .orderBy(certifications.createdAt);
+
+      const mppLinked = linkedCerts.length > 0;
+      let xproofWallet: string | null = null;
+      let xproofTrust: Awaited<ReturnType<typeof computeTrustScoreByWallet>> = null;
+
+      if (mppLinked) {
+        const userId = linkedCerts[0].userId;
+        const [userRow] = await db
+          .select({ walletAddress: users.walletAddress })
+          .from(users)
+          .where(eq(users.id, userId));
+        if (userRow?.walletAddress) {
+          xproofWallet = userRow.walletAddress;
+          xproofTrust = await computeTrustScoreByWallet(xproofWallet);
+        }
+      }
+
+      const confirmedOnChain = linkedCerts.filter(c => c.blockchainStatus === "confirmed").length;
+      const firstLinkedAt = linkedCerts[0]?.createdAt?.toISOString() ?? null;
+      const lastLinkedAt = linkedCerts.at(-1)?.createdAt?.toISOString() ?? null;
+
+      const paymentMeta = mppLinked ? (linkedCerts[0].metadata as any) : null;
+      const amount = paymentMeta?.mpp_amount ?? null;
+      const currency = paymentMeta?.mpp_currency ?? null;
+      const network = paymentMeta?.mpp_network ?? "tempo";
+
+      res.json({
+        payment_intent_id,
+        mpp_linked: mppLinked,
+        mpp_network: network,
+        mpp_amount: amount,
+        mpp_currency: currency,
+        xproof_wallet: xproofWallet,
+        xproof_certs_linked: linkedCerts.length,
+        xproof_certs_confirmed_on_chain: confirmedOnChain,
+        xproof_trust_score: xproofTrust?.score ?? null,
+        xproof_trust_level: xproofTrust?.level ?? null,
+        xproof_violations: xproofTrust
+          ? {
+              fault: xproofTrust.violations?.fault ?? 0,
+              breach: xproofTrust.violations?.breach ?? 0,
+              proposed: xproofTrust.violations?.proposed ?? 0,
+            }
+          : null,
+        first_linked_at: firstLinkedAt,
+        last_linked_at: lastLinkedAt,
+        convergence: {
+          mpp_anchors: "HOW — payment execution via Stripe/Tempo settlement layer",
+          xproof_anchors: "WHY — decision intent anchored on MultiversX before transaction",
+          combined_coverage: "payment provenance: intent before transaction, proof after settlement",
+          integration_hint: "Certify with metadata.mpp_payment_intent_id = <pi_xxx> to link payment to proof",
+        },
+        links: {
+          xproof_profile: xproofWallet ? `${baseUrl}/agent/${xproofWallet}` : null,
+          xproof_leaderboard: `${baseUrl}/leaderboard`,
+          trust_badge_svg: xproofWallet ? `${baseUrl}/badge/trust/${xproofWallet}.svg` : null,
+          violations_api: xproofWallet ? `${baseUrl}/api/agents/${xproofWallet}/violations` : null,
+        },
+        integration: {
+          certify_endpoint: `${baseUrl}/api/proof`,
+          verify_endpoint: `${baseUrl}/api/mpp/{payment_intent_id}`,
+          metadata_schema: {
+            mpp_payment_intent_id: "<pi_xxx>",
+            mpp_amount: "<amount-string>",
+            mpp_currency: "<usd|eur|...>",
+            mpp_network: "<tempo|stripe|...>",
+          },
+        },
+        schema_version: "1.0",
+        source: "xproof.app",
+        partner: "mpp",
+      });
+    } catch (err: any) {
+      logger.error("MPP endpoint error", { error: err.message });
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/proofs/status", publicReadRateLimiter, async (req, res) => {
     try {
       const idsParam = req.query.ids;
@@ -4685,6 +4968,104 @@ Bridges ElizaOS character identity (WHO layer) with xProof proof anchoring (WHAT
   },
   "schema_version": "1.0",
   "partner": "elizaos"
+}
+\`\`\`
+
+#### xAI / Grok (xai)
+
+\`GET ${baseUrl}/api/xai/{identifier}\`
+
+Bridges xAI agent identity (WHO — Grok reasoning engine, model, session context) with xProof proof anchoring (WHAT/WHEN/WHY on MultiversX). The xAI side = agent ID, model version, session IDs, action types. The xProof side = WHEN and WHY per action, anchored before output. The convergence field explicitly names the split.
+
+**Two lookup modes:**
+- MultiversX wallet (\`erd1...\`) → direct trust score + xAI-tagged cert stats from metadata
+- xAI agent ID string → cert metadata lookup via \`metadata.xai_agent_id\`, then resolves to wallet
+
+**Integration:** When certifying, add to metadata:
+\`\`\`json
+{
+  "xai_agent_id": "<agent-id>",
+  "xai_model": "grok-3",
+  "xai_session_id": "<optional-session-id>",
+  "action_type": "reason"
+}
+\`\`\`
+
+**Response example (agent ID lookup):**
+\`\`\`json
+{
+  "identifier": "grok-agent-001",
+  "lookup_mode": "agent_id",
+  "xai_linked": true,
+  "agent": {
+    "agent_id": "grok-agent-001",
+    "model": "grok-3",
+    "certified_sessions": 8,
+    "certified_action_types": ["reason", "generate", "search"],
+    "total_certs": 42
+  },
+  "xproof": {
+    "wallet": "erd1...",
+    "trust_score": 1350,
+    "trust_level": "Trusted",
+    "violations": { "fault": 0, "breach": 0 }
+  },
+  "convergence": {
+    "xai_anchors": "WHO — Grok reasoning engine, model identity, session context",
+    "xproof_anchors": "WHAT/WHEN/WHY — decision provenance anchored on MultiversX before output",
+    "combined_coverage": "full 4W stack: WHO (xAI/Grok) + WHAT + WHEN + WHY (xProof)"
+  },
+  "integration": {
+    "certify_endpoint": "${baseUrl}/api/proof",
+    "verify_endpoint": "${baseUrl}/api/xai/{xai_agent_id}",
+    "metadata_schema": { "xai_agent_id": "<agent-id>", "xai_model": "<model>", "action_type": "<string>" }
+  },
+  "schema_version": "1.0",
+  "partner": "xai"
+}
+\`\`\`
+
+#### Machine Payments Protocol (mpp)
+
+\`GET ${baseUrl}/api/mpp/{payment_intent_id}\`
+
+Links autonomous agent payments (HOW — Stripe/Tempo settlement layer) with xProof decision provenance (WHY — intent anchored on MultiversX before transaction). Lookup key is a Stripe payment intent ID (\`pi_xxx\`) or equivalent payment reference.
+
+- **Input**: Payment intent ID string
+- **Lookup**: certifications WHERE \`metadata.mpp_payment_intent_id = :id\`
+- **Returns**: payment details (amount, currency, network), linked cert count, on-chain confirmed count, trust score, convergence
+
+**Integration:** When certifying, add to metadata:
+\`\`\`json
+{
+  "mpp_payment_intent_id": "pi_3abc123def456",
+  "mpp_amount": "25.00",
+  "mpp_currency": "usd",
+  "mpp_network": "tempo"
+}
+\`\`\`
+
+**Response example:**
+\`\`\`json
+{
+  "payment_intent_id": "pi_3abc123def456",
+  "mpp_linked": true,
+  "mpp_network": "tempo",
+  "mpp_amount": "25.00",
+  "mpp_currency": "usd",
+  "xproof_wallet": "erd1...",
+  "xproof_certs_linked": 3,
+  "xproof_certs_confirmed_on_chain": 3,
+  "xproof_trust_score": 1350,
+  "xproof_trust_level": "Trusted",
+  "convergence": {
+    "mpp_anchors": "HOW — payment execution via Stripe/Tempo settlement layer",
+    "xproof_anchors": "WHY — decision intent anchored on MultiversX before transaction",
+    "combined_coverage": "payment provenance: intent before transaction, proof after settlement",
+    "integration_hint": "Certify with metadata.mpp_payment_intent_id = <pi_xxx> to link payment to proof"
+  },
+  "schema_version": "1.0",
+  "partner": "mpp"
 }
 \`\`\`
 
