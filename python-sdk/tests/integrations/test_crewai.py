@@ -100,3 +100,27 @@ class TestXProofCrewCallback:
         assert "when" in call_kwargs
         assert "why" in call_kwargs
         assert call_kwargs["metadata"]["agent_role"] == "agent-x"
+
+    def test_task_output_hash_matches_what(self, mock_client):
+        import hashlib
+        cb = XProofCrewCallback(client=mock_client, crew_name="test-crew")
+        output = "My research findings"
+        cb.on_task_complete("researcher", "Research task", output)
+
+        call_kwargs = mock_client.certify_hash.call_args.kwargs
+        expected_hash = hashlib.sha256(
+            json.dumps(output, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        assert call_kwargs["file_hash"] == expected_hash
+        assert call_kwargs["what"] == expected_hash
+
+    def test_crew_complete_includes_task_proof_ids(self, mock_client):
+        cb = XProofCrewCallback(client=mock_client, crew_name="audit-crew")
+        cb.on_task_complete("agent-a", "Task A", "output-a")
+        cb.on_task_complete("agent-b", "Task B", "output-b")
+
+        result = cb.on_crew_complete("audit-crew", "Full audit", {"done": True})
+        last_call = mock_client.certify_hash.call_args.kwargs
+        assert last_call["metadata"]["task_proof_ids"] == ["proof-crew", "proof-crew"]
+        assert last_call["metadata"]["task_count"] == 2
+        assert result["tasks_certified"] == 2
