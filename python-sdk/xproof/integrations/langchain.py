@@ -166,7 +166,7 @@ class XProofCallbackHandler(BaseCallbackHandler):
 
     def on_tool_end(
         self,
-        output: str,
+        output: Any,
         *,
         run_id: UUID,
         parent_run_id: Optional[UUID] = None,
