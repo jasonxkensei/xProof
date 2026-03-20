@@ -1,3 +1,4 @@
+import { basename } from "path";
 import {
   XProofError,
   AuthenticationError,
@@ -7,6 +8,7 @@ import {
   RateLimitError,
   ServerError,
 } from "./errors.js";
+import { hashFile } from "./hash.js";
 import {
   parseCertification,
   parseBatchResult,
@@ -56,6 +58,18 @@ export class XProofClient {
     });
     client.registration = result;
     return client;
+  }
+
+  async certify(
+    path: string,
+    author: string,
+    fileName?: string,
+    fourW?: FourWOptions
+  ): Promise<Certification> {
+    this.requireAuth();
+    const fileHash = await hashFile(path);
+    const resolvedName = fileName ?? basename(path);
+    return this.certifyHash(fileHash, resolvedName, author, fourW);
   }
 
   async certifyHash(

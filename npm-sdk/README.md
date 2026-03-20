@@ -19,12 +19,8 @@ import { XProofClient } from "xproof";
 const client = await XProofClient.register("my-agent");
 console.log(client.registration?.trial.remaining); // 10 free certs
 
-// 2. Certify
-const cert = await client.certifyHash(
-  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "report.pdf",
-  "my-agent"
-);
+// 2. Certify a file (hashes locally, sends hash to API)
+const cert = await client.certify("./report.pdf", "my-agent");
 console.log(cert.transactionHash);
 
 // 3. Verify
@@ -130,7 +126,8 @@ try {
 | Method | Description |
 |--------|-------------|
 | `XProofClient.register(agentName)` | Register agent, get trial key |
-| `certifyHash(hash, name, author, fourW?)` | Certify by hash |
+| `certify(path, author, fileName?, fourW?)` | Certify file (hashes locally) |
+| `certifyHash(hash, name, author, fourW?)` | Certify by pre-computed hash |
 | `batchCertify(files)` | Batch certify (up to 50) |
 | `verify(proofId)` | Look up by proof ID |
 | `verifyHash(fileHash)` | Look up by file hash |

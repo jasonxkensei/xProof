@@ -323,6 +323,74 @@ describe("XProofClient", () => {
     const cert = await client.certifyHash("a".repeat(64), "f", "a");
     expect(cert.createdAt).toBe("2026-03-20T12:00:00Z");
   });
+
+  describe("certify (file-path)", () => {
+    it("hashes file and delegates to certifyHash", async () => {
+      const fetchMock = mockFetch(201, {
+        id: "cert-file",
+        fileName: "test.txt",
+        fileHash: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        transactionHash: "tx-file",
+        transactionUrl: "https://explorer.example/tx-file",
+        createdAt: "2026-03-20T12:00:00Z",
+      });
+      globalThis.fetch = fetchMock;
+
+      const { writeFileSync, unlinkSync } = await import("fs");
+      const { join } = await import("path");
+      const { tmpdir } = await import("os");
+      const tmpPath = join(tmpdir(), `xproof-test-${Date.now()}.txt`);
+      writeFileSync(tmpPath, "hello");
+
+      try {
+        const client = new XProofClient({ apiKey: "pm_test" });
+        const cert = await client.certify(tmpPath, "test-author");
+        expect(cert.id).toBe("cert-file");
+
+        const call = fetchMock.mock.calls[0];
+        const body = JSON.parse(call[1].body);
+        expect(body.file_hash).toHaveLength(64);
+        expect(body.filename).toContain("xproof-test-");
+        expect(body.author_name).toBe("test-author");
+      } finally {
+        unlinkSync(tmpPath);
+      }
+    });
+
+    it("uses custom fileName when provided", async () => {
+      const fetchMock = mockFetch(201, {
+        id: "cert-custom",
+        fileName: "custom.txt",
+        fileHash: "abc",
+        transactionHash: "tx",
+        transactionUrl: "",
+        createdAt: "2026-03-20T12:00:00Z",
+      });
+      globalThis.fetch = fetchMock;
+
+      const { writeFileSync, unlinkSync } = await import("fs");
+      const { join } = await import("path");
+      const { tmpdir } = await import("os");
+      const tmpPath = join(tmpdir(), `xproof-test2-${Date.now()}.txt`);
+      writeFileSync(tmpPath, "world");
+
+      try {
+        const client = new XProofClient({ apiKey: "pm_test" });
+        await client.certify(tmpPath, "author", "custom.txt");
+
+        const call = fetchMock.mock.calls[0];
+        const body = JSON.parse(call[1].body);
+        expect(body.filename).toBe("custom.txt");
+      } finally {
+        unlinkSync(tmpPath);
+      }
+    });
+
+    it("requires auth", async () => {
+      const client = new XProofClient();
+      await expect(client.certify("/tmp/x.txt", "a")).rejects.toThrow("apiKey is required");
+    });
+  });
 });
 
 const INTEGRATION = process.env.XPROOF_INTEGRATION === "1";
