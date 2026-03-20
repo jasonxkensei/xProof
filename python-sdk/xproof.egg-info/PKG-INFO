@@ -1,3 +1,37 @@
+Metadata-Version: 2.4
+Name: xproof
+Version: 0.1.0
+Summary: Python SDK for xProof — blockchain-anchored proof-of-existence for AI agents on MultiversX
+Author-email: xProof <contact@xproof.app>
+License-Expression: MIT
+Project-URL: Homepage, https://xproof.app
+Project-URL: Repository, https://github.com/jasonxkensei/xproof
+Project-URL: Documentation, https://xproof.app/docs
+Project-URL: Issues, https://github.com/jasonxkensei/xproof/issues
+Project-URL: Changelog, https://github.com/jasonxkensei/xproof/releases
+Keywords: blockchain,multiversx,proof-of-existence,certification,sha256,ai-agents,accountability,audit-trail,web3
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Security :: Cryptography
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Typing :: Typed
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests>=2.25.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: responses>=0.20.0; extra == "dev"
+Dynamic: license-file
+
 # xProof Python SDK
 
 Python SDK for [xProof](https://xproof.app) — blockchain-anchored proof-of-existence for AI agents on MultiversX.
@@ -60,31 +94,6 @@ proof = client.verify_hash("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495
 # Get current pricing (no auth required)
 pricing = client.get_pricing()
 print(pricing.price_usd)
-```
-
-## 4W Framework (WHO / WHAT / WHEN / WHY)
-
-xProof certifications support the 4W accountability framework via optional
-keyword arguments:
-
-```python
-from xproof import XProofClient, hash_bytes
-
-client = XProofClient(api_key="pm_your_key")
-
-action_data = b'{"action": "generate_report", "model": "gpt-4"}'
-action_hash = hash_bytes(action_data)
-
-cert = client.certify_hash(
-    file_hash=action_hash,
-    file_name="agent-action.json",
-    author="research-agent",
-    who="erd1abc...or-agent-id",
-    what=action_hash,
-    when="2026-03-20T12:00:00Z",
-    why=hash_bytes(b"Summarize Q1 earnings report"),
-    metadata={"model": "gpt-4", "session_id": "sess-123"},
-)
 ```
 
 ## Batch Certification

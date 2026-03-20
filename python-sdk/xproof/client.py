@@ -1,6 +1,5 @@
 """Main client for the xProof API."""
 
-import mimetypes
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -174,14 +173,27 @@ class XProofClient:
         path: Union[str, Path],
         author: str,
         file_name: Optional[str] = None,
+        *,
+        who: Optional[str] = None,
+        what: Optional[str] = None,
+        when: Optional[str] = None,
+        why: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Certification:
         """Certify a file by path. The file is hashed locally (SHA-256).
+
+        Supports the xProof 4W framework via optional keyword arguments.
 
         Args:
             path: Path to the file to certify.
             author: Author / owner name for the certification.
             file_name: Override the file name recorded on-chain
                        (defaults to the basename of *path*).
+            who: 4W — agent identity.
+            what: 4W — action hash or description.
+            when: 4W — ISO-8601 timestamp.
+            why: 4W — instruction or reason.
+            metadata: Arbitrary key-value metadata stored alongside the proof.
 
         Returns:
             A :class:`Certification` with the on-chain proof details.
@@ -192,15 +204,16 @@ class XProofClient:
         p = Path(path)
         file_hash = hash_file(p)
         resolved_name = file_name or p.name
-        file_type = mimetypes.guess_type(str(p))[0] or "application/octet-stream"
-        file_size = p.stat().st_size
 
         return self.certify_hash(
             file_hash=file_hash,
             file_name=resolved_name,
             author=author,
-            file_type=file_type,
-            file_size=file_size,
+            who=who,
+            what=what,
+            when=when,
+            why=why,
+            metadata=metadata,
         )
 
     def certify_hash(
@@ -208,17 +221,33 @@ class XProofClient:
         file_hash: str,
         file_name: str,
         author: str,
-        file_type: str = "application/octet-stream",
-        file_size: int = 0,
+        *,
+        who: Optional[str] = None,
+        what: Optional[str] = None,
+        when: Optional[str] = None,
+        why: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Certification:
         """Certify a file using a pre-computed SHA-256 hash.
+
+        Supports the xProof 4W framework via optional keyword arguments:
+
+        - **who**: Agent identity (wallet, name, or ID)
+        - **what**: Action hash or description being certified
+        - **when**: ISO-8601 timestamp of the action
+        - **why**: Instruction hash, goal, or reason for the action
+
+        Any additional key-value pairs can be passed via *metadata*.
 
         Args:
             file_hash: 64-character lowercase hex SHA-256 digest.
             file_name: Original file name.
             author: Author / owner name.
-            file_type: MIME type (default ``application/octet-stream``).
-            file_size: File size in bytes.
+            who: 4W — agent identity.
+            what: 4W — action hash or description.
+            when: 4W — ISO-8601 timestamp.
+            why: 4W — instruction or reason.
+            metadata: Arbitrary key-value metadata stored alongside the proof.
 
         Returns:
             A :class:`Certification` with the on-chain proof details.
@@ -226,11 +255,23 @@ class XProofClient:
         if not self.api_key:
             raise ValueError("api_key is required — call register() or pass an api_key")
 
+        proof_metadata: Dict[str, Any] = dict(metadata) if metadata else {}
+        if who is not None:
+            proof_metadata["who"] = who
+        if what is not None:
+            proof_metadata["what"] = what
+        if when is not None:
+            proof_metadata["when"] = when
+        if why is not None:
+            proof_metadata["why"] = why
+
         payload: Dict[str, Any] = {
             "filename": file_name,
             "file_hash": file_hash,
             "author_name": author,
         }
+        if proof_metadata:
+            payload["metadata"] = proof_metadata
         data = self._request("POST", "/api/proof", json=payload)
         return Certification.from_dict(data)
 
@@ -245,9 +286,7 @@ class XProofClient:
         - ``path`` (str): Path to the file **or**
         - ``file_hash`` (str): Pre-computed SHA-256 hex hash
         - ``file_name`` (str): File name (required when using ``file_hash``)
-        - ``author`` (str): Author name
-
-        Optional keys: ``file_type``, ``file_size``.
+        - ``author`` (str): Author name (applied to the entire batch)
 
         Args:
             files: List of file descriptors.
@@ -270,22 +309,19 @@ class XProofClient:
                 p = Path(f["path"])
                 fhash = hash_file(p)
                 fname = f.get("file_name", p.name)
-                ftype = f.get("file_type", mimetypes.guess_type(str(p))[0] or "application/octet-stream")
-                fsize = f.get("file_size", p.stat().st_size)
             elif "file_hash" in f:
                 fhash = f["file_hash"]
                 fname = f.get("file_name", "unknown")
-                ftype = f.get("file_type", "application/octet-stream")
-                fsize = f.get("file_size", 0)
             else:
                 raise ValueError("Each file entry must contain either 'path' or 'file_hash'")
 
-            entries.append(
-                {
-                    "filename": fname,
-                    "file_hash": fhash,
-                }
-            )
+            entry: Dict[str, Any] = {
+                "filename": fname,
+                "file_hash": fhash,
+            }
+            if f.get("metadata"):
+                entry["metadata"] = f["metadata"]
+            entries.append(entry)
 
         payload: Dict[str, Any] = {"files": entries}
         author = None

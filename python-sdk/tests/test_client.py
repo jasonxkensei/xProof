@@ -360,6 +360,49 @@ def test_batch_sends_snake_case_fields():
 
 
 @responses.activate
+def test_certify_hash_with_4w_metadata():
+    responses.add(
+        responses.POST,
+        f"{BASE}/api/proof",
+        json={"id": "p-4w", "fileName": "f", "fileHash": "h", "transactionHash": "t", "transactionUrl": "", "createdAt": ""},
+        status=201,
+    )
+    client = XProofClient(api_key="pm_test")
+    client.certify_hash(
+        "c" * 64,
+        "action.json",
+        "agent-x",
+        who="erd1abc...",
+        what="sha256-of-action",
+        when="2026-03-20T12:00:00Z",
+        why="sha256-of-instruction",
+        metadata={"custom_key": "custom_value"},
+    )
+    req_body = json.loads(responses.calls[0].request.body)
+    assert "metadata" in req_body
+    meta = req_body["metadata"]
+    assert meta["who"] == "erd1abc..."
+    assert meta["what"] == "sha256-of-action"
+    assert meta["when"] == "2026-03-20T12:00:00Z"
+    assert meta["why"] == "sha256-of-instruction"
+    assert meta["custom_key"] == "custom_value"
+
+
+@responses.activate
+def test_certify_hash_without_4w():
+    responses.add(
+        responses.POST,
+        f"{BASE}/api/proof",
+        json={"id": "p-no4w", "fileName": "f", "fileHash": "h", "transactionHash": "t", "transactionUrl": "", "createdAt": ""},
+        status=201,
+    )
+    client = XProofClient(api_key="pm_test")
+    client.certify_hash("d" * 64, "doc.pdf", "author")
+    req_body = json.loads(responses.calls[0].request.body)
+    assert "metadata" not in req_body
+
+
+@responses.activate
 def test_no_auth_for_public_endpoints():
     responses.add(
         responses.GET,

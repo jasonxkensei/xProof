@@ -1,0 +1,5 @@
+requests>=2.25.0
+
+[dev]
+pytest>=7.0
+responses>=0.20.0
