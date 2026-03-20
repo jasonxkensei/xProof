@@ -1,25 +1,22 @@
-"""CrewAI + xProof integration example.
+"""CrewAI + xProof: 3-agent crew with on-chain certification.
 
-Demonstrates a 3-agent crew (researcher, writer, reviewer) where each
-agent's contribution is independently verifiable via xProof.
+Each agent's task output is certified with 4W metadata:
+  WHO  = agent role (researcher, writer, reviewer)
+  WHAT = SHA-256 hash of the output
+  WHEN = UTC timestamp
+  WHY  = task description
 
-Usage:
-    pip install xproof
-    python crewai_example.py
-
-Note: This example uses XProofCrewCallback directly (no CrewAI dependency
-required to run the demo). In a real CrewAI setup, hook on_task_complete
-into CrewAI's task lifecycle.
+Run: python main.py
 """
 
 from xproof import XProofClient
-from xproof.integrations.crewai import XProofTool, XProofCrewCallback
+from xproof.integrations.crewai import XProofCertifyTool, XProofCrewCallback
 
 
 def main():
     client = XProofClient.register("crewai-demo")
-    print(f"Registered with trial key: {client.registration.api_key[:12]}...")
-    print(f"Trial certifications remaining: {client.registration.trial.remaining}")
+    print(f"Registered: {client.registration.api_key[:12]}...")
+    print(f"Trial remaining: {client.registration.trial.remaining}")
     print()
 
     callback = XProofCrewCallback(client=client, crew_name="research-crew")
@@ -74,8 +71,14 @@ def main():
     print("--- Verification ---")
     for cert in callback.certifications:
         verified = client.verify(cert["proof_id"])
-        print(f"  {cert['agent_role']}: verified={verified.id == cert['proof_id']}")
+        status = "verified" if verified.id == cert["proof_id"] else "FAILED"
+        print(f"  {cert['agent_role']}: {status}")
 
+    print()
+
+    tool = XProofCertifyTool(client=client)
+    result = tool._run("Final stamp of approval on the full report.")
+    print(f"  Explicit tool certification: {result}")
     print()
     print("All agent contributions are independently verifiable on-chain.")
 

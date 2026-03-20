@@ -1,0 +1,72 @@
+name: npm SDK CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'npm-sdk/**'
+      - '.github/workflows/npm-sdk.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'npm-sdk/**'
+      - '.github/workflows/npm-sdk.yml'
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18', '20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        working-directory: npm-sdk
+        run: npm install
+
+      - name: Run tests
+        working-directory: npm-sdk
+        run: npm test
+
+      - name: Build package
+        working-directory: npm-sdk
+        run: npm run build
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && github.event.action == 'published'
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        working-directory: npm-sdk
+        run: npm install
+
+      - name: Build
+        working-directory: npm-sdk
+        run: npm run build
+
+      - name: Publish to npm
+        working-directory: npm-sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public

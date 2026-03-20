@@ -4,7 +4,7 @@ except ImportError:
     pass
 
 try:
-    from .crewai import XProofTool, XProofCrewCallback
+    from .crewai import XProofCertifyTool, XProofTool, XProofCrewCallback
     try:
         from .crewai import XProofCrewTool
     except ImportError:

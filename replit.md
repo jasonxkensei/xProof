@@ -102,13 +102,17 @@ Endpoint-specific rate limiters complement the global 100 req/min limit: `public
 - **MPP** (`/api/mpp/:payment_intent_id`) — Machine Payments Protocol, links payment execution (HOW) with decision provenance (WHY), metadata: `mpp_payment_intent_id`, `mpp_amount`, `mpp_currency`, `mpp_network`
 
 ### Python SDK (`python-sdk/`)
-PyPI-ready package (`xproof`, v0.1.0). `XProofClient` with `register()`, `certify()`, `certify_hash()`, `batch_certify()`, `verify()`, `verify_hash()`, `get_pricing()`. Full 4W framework support (who/what/when/why metadata). Typed error hierarchy. SHA-256 hash utilities. 38 unit tests. Integrations:
-- `xproof.integrations.langchain.XProofCallbackHandler` — auto-certifies LLM/tool/chain events with 4W metadata
-- `xproof.integrations.crewai.XProofTool` / `XProofCrewCallback` — agent tool + crew-level auto-certification
+PyPI-ready package (`xproof`, v0.1.0). `XProofClient` with `register()`, `certify()`, `certify_hash()`, `batch_certify()`, `verify()`, `verify_hash()`, `get_pricing()`. Full 4W framework support (who/what/when/why metadata). Typed error hierarchy. SHA-256 hash utilities. 44 unit tests (+ 2 integration skipped). Integrations:
+- `xproof.integrations.langchain.XProofCallbackHandler` — auto-certifies LLM/tool/chain events with 4W metadata (12 tests)
+- `xproof.integrations.crewai.XProofCertifyTool` / `XProofCrewTool` / `XProofCrewCallback` — agent certification tools + crew-level auto-certification (7 tests). `XProofCertifyTool` = lightweight (no crewai dep), `XProofCrewTool` = native CrewAI BaseTool. `XProofTool` is a backwards-compatible alias for `XProofCertifyTool`.
+- Standalone examples: `examples/crewai-crew/` (3-agent crew demo with requirements.txt), `examples/langchain-chain/` (LangChain callback demo with requirements.txt)
+- CI/CD: `.github/workflows/python-sdk.yml` — tests on Python 3.9-3.12, publishes to PyPI on GitHub release
 
 ### npm SDK (`npm-sdk/`)
-npm-ready package (`xproof`, v0.1.0). TypeScript, zero dependencies beyond native `fetch` (Node 18+). Dual ESM/CJS output via tsup. `XProofClient` mirrors Python SDK API. Full 4W support. Typed errors. Hash utilities. 23 unit tests. Vercel AI middleware at `xproof/vercel`:
-- `xproofMiddleware()` — certifies `generateText`/`streamText` results with model, prompt hash, result hash, 4W metadata
+npm-ready package (`xproof`, v0.1.0). TypeScript, zero dependencies beyond native `fetch` (Node 18+). Dual ESM/CJS output via tsup. `XProofClient` mirrors Python SDK API. Full 4W support. Typed errors. Hash utilities. 44 unit tests (+ 2 integration skipped). Vercel AI middleware at `xproof/vercel`:
+- `xproofMiddleware()` — automatic middleware (`wrapGenerate`/`wrapStream`) + manual helpers (`certifyGeneration`/`certifyStream`). Features: shouldCertify filter, batch mode with auto-flush, configurable WHY and default metadata, proofs array tracking.
+- Standalone example: `examples/vercel-ai-nextjs/` (package.json + main.ts runnable demo + nextjs-route.ts reference)
+- CI/CD: `.github/workflows/npm-sdk.yml` — tests on Node 18/20/22, publishes to npm on GitHub release
 
 ### ElizaOS Plugin NPM Package
 The `xproof-eliza-plugin` (v2.0.0) provides modular actions for ElizaOS agents, including `AUDIT_BEFORE_EXECUTE`, `CERTIFY_CONTENT`, `CERTIFY_HASH`, `CERTIFY_BATCH`, `VERIFY_PROOF`, and an audit state provider. A key feature is the `AuditRequiredError` for enforcing on-chain proof before execution.

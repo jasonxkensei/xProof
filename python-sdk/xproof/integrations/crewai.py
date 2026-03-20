@@ -18,15 +18,19 @@ def _hash_data(data: Any) -> str:
     return hashlib.sha256(serialized.encode()).hexdigest()
 
 
-class XProofTool:
-    """CrewAI-compatible tool that lets agents certify their work products.
+class XProofCertifyTool:
+    """Lightweight tool for explicit agent certification (no CrewAI dependency).
+
+    Use this when you want agents to certify specific outputs without
+    requiring the ``crewai`` package. For the native CrewAI ``BaseTool``
+    wrapper, use :class:`XProofCrewTool` instead.
 
     Example::
 
-        from xproof.integrations.crewai import XProofTool
+        from xproof.integrations.crewai import XProofCertifyTool
 
-        tool = XProofTool(api_key="pm_...")
-        # Use in a CrewAI agent's tools list
+        tool = XProofCertifyTool(api_key="pm_...")
+        result = tool._run("My research findings")
     """
 
     name: str = "xproof_certify"
@@ -74,12 +78,23 @@ class XProofTool:
         })
 
 
+XProofTool = XProofCertifyTool
+
+
 if CrewAIBaseTool is not None:
 
     class XProofCrewTool(CrewAIBaseTool):
-        """Native CrewAI BaseTool wrapper for xProof certification.
+        """Native CrewAI ``BaseTool`` for xProof certification.
 
-        Use this when CrewAI is installed and you want full framework integration.
+        Requires the ``crewai`` package. Wraps :class:`XProofCertifyTool`
+        so it integrates natively with CrewAI's tool system.
+
+        Example::
+
+            from xproof.integrations.crewai import XProofCrewTool
+
+            tool = XProofCrewTool(api_key="pm_...", agent_name="researcher")
+            # Add to a CrewAI agent's tools list
         """
 
         name: str = "xproof_certify"
@@ -92,7 +107,7 @@ if CrewAIBaseTool is not None:
 
         def __init__(self, api_key: str = "", agent_name: str = "crewai-agent", **kwargs: Any) -> None:
             super().__init__(**kwargs)
-            self._xproof_tool = XProofTool(api_key=api_key, agent_name=agent_name)
+            self._xproof_tool = XProofCertifyTool(api_key=api_key, agent_name=agent_name)
 
         def _run(self, input_text: str) -> str:
             return self._xproof_tool._run(input_text)
