@@ -29,3 +29,15 @@ def hash_file(path: Union[str, Path]) -> str:
                 break
             sha256.update(chunk)
     return sha256.hexdigest()
+
+
+def hash_bytes(data: bytes) -> str:
+    """Compute the SHA-256 hex digest of raw bytes.
+
+    Args:
+        data: The bytes to hash.
+
+    Returns:
+        The lowercase hex SHA-256 digest (64 characters).
+    """
+    return hashlib.sha256(data).hexdigest()

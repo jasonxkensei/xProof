@@ -122,3 +122,40 @@ class PricingInfo:
             payment_methods=data.get("payment_methods", []),
             raw=data,
         )
+
+
+@dataclass
+class TrialInfo:
+    """Trial quota information returned by agent registration."""
+
+    quota: int = 0
+    used: int = 0
+    remaining: int = 0
+
+
+@dataclass
+class RegistrationResult:
+    """Result of agent self-service registration."""
+
+    api_key: str
+    agent_name: str
+    trial: TrialInfo = field(default_factory=TrialInfo)
+    endpoints: Dict[str, str] = field(default_factory=dict)
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "RegistrationResult":
+        """Create a RegistrationResult from an API response dictionary."""
+        trial_data = data.get("trial", {})
+        trial = TrialInfo(
+            quota=trial_data.get("quota", 0),
+            used=trial_data.get("used", 0),
+            remaining=trial_data.get("remaining", 0),
+        )
+        return cls(
+            api_key=data.get("api_key", ""),
+            agent_name=data.get("agent_name", ""),
+            trial=trial,
+            endpoints=data.get("endpoints", {}),
+            raw=data,
+        )

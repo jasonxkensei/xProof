@@ -5,18 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "xproof"
 version = "0.1.0"
-description = "Python SDK for xProof — blockchain proof-of-existence on MultiversX"
+description = "Python SDK for xProof — blockchain-anchored proof-of-existence for AI agents on MultiversX"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.8"
 authors = [
-    {name = "xProof"},
+    {name = "xProof", email = "contact@xproof.app"},
 ]
-keywords = ["blockchain", "multiversx", "proof-of-existence", "certification", "sha256"]
+keywords = [
+    "blockchain", "multiversx", "proof-of-existence", "certification",
+    "sha256", "ai-agents", "accountability", "audit-trail", "web3",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -24,6 +26,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Security :: Cryptography",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
@@ -32,11 +35,26 @@ dependencies = [
     "requests>=2.25.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "responses>=0.20.0",
+]
+
 [project.urls]
 Homepage = "https://xproof.app"
 Repository = "https://github.com/jasonxkensei/xproof"
-Documentation = "https://xproof.app/api/pricing"
+Documentation = "https://xproof.app/docs"
 Issues = "https://github.com/jasonxkensei/xproof/issues"
+Changelog = "https://github.com/jasonxkensei/xproof/releases"
 
 [tool.setuptools.packages.find]
 include = ["xproof*"]
+
+[tool.setuptools.package-data]
+xproof = ["py.typed"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests that hit the live xProof API (deselect with '-m \"not integration\"')",
+]

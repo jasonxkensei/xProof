@@ -1,7 +1,6 @@
 """Main client for the xProof API."""
 
 import mimetypes
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -16,8 +15,10 @@ from .exceptions import (
     ValidationError,
     XProofError,
 )
-from .models import BatchResult, Certification, PricingInfo
+from .models import BatchResult, Certification, PricingInfo, RegistrationResult
 from .utils import hash_file
+
+__version__ = "0.1.0"
 
 DEFAULT_BASE_URL = "https://xproof.app"
 DEFAULT_TIMEOUT = 30
@@ -28,6 +29,8 @@ class XProofClient:
 
     Args:
         api_key: Your xProof API key (starts with ``pm_``).
+            Pass an empty string or omit if you plan to call
+            :meth:`register` first.
         base_url: Override the API base URL (default: ``https://xproof.app``).
         timeout: Request timeout in seconds (default: 30).
 
@@ -42,13 +45,10 @@ class XProofClient:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str = "",
         base_url: str = DEFAULT_BASE_URL,
         timeout: int = DEFAULT_TIMEOUT,
     ) -> None:
-        if not api_key:
-            raise ValueError("api_key is required")
-
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -56,11 +56,12 @@ class XProofClient:
         self._session = requests.Session()
         self._session.headers.update(
             {
-                "X-API-Key": self.api_key,
                 "Content-Type": "application/json",
-                "User-Agent": "xproof-python/0.1.0",
+                "User-Agent": f"xproof-python/{__version__}",
             }
         )
+        if api_key:
+            self._session.headers["Authorization"] = f"Bearer {api_key}"
 
     def _request(
         self,
@@ -70,26 +71,12 @@ class XProofClient:
         params: Optional[Dict[str, Any]] = None,
         auth_required: bool = True,
     ) -> Dict[str, Any]:
-        """Send an HTTP request to the xProof API and return parsed JSON.
-
-        Args:
-            method: HTTP method (GET, POST, etc.).
-            path: API path (e.g. ``/api/proof``).
-            json: JSON request body.
-            params: Query parameters.
-            auth_required: Whether to include the API key header.
-
-        Returns:
-            Parsed JSON response as a dictionary.
-
-        Raises:
-            XProofError: On any API error.
-        """
+        """Send an HTTP request to the xProof API and return parsed JSON."""
         url = f"{self.base_url}{path}"
 
-        headers: Dict[str, str] = {}
+        headers: Optional[Dict[str, str]] = None
         if not auth_required:
-            headers["X-API-Key"] = ""
+            headers = {"Authorization": ""}
 
         try:
             resp = self._session.request(
@@ -98,12 +85,12 @@ class XProofClient:
                 json=json,
                 params=params,
                 timeout=self.timeout,
-                headers=headers if not auth_required else None,
+                headers=headers,
             )
         except requests.RequestException as exc:
             raise XProofError(f"Request failed: {exc}") from exc
 
-        if resp.status_code == 200 or resp.status_code == 201:
+        if resp.status_code in (200, 201):
             return resp.json()  # type: ignore[no-any-return]
 
         self._handle_error(resp)
@@ -139,6 +126,49 @@ class XProofClient:
 
         raise XProofError(message, status_code=status, response=body)
 
+    @classmethod
+    def register(
+        cls,
+        agent_name: str,
+        base_url: str = DEFAULT_BASE_URL,
+        timeout: int = DEFAULT_TIMEOUT,
+    ) -> "XProofClient":
+        """Register a new agent and return a configured client.
+
+        This is the zero-friction entry point: no wallet, no payment, no
+        browser. The returned client is already authenticated with the
+        trial API key and ready to certify.
+
+        Args:
+            agent_name: A human-readable name for the agent.
+            base_url: Override the API base URL.
+            timeout: Request timeout in seconds.
+
+        Returns:
+            A new :class:`XProofClient` already configured with the
+            trial API key. Access registration details via
+            ``client.registration``.
+
+        Example::
+
+            client = XProofClient.register("my-research-agent")
+            print(client.registration.trial.remaining)  # 10
+            cert = client.certify_hash(...)
+        """
+        temp = cls(api_key="", base_url=base_url, timeout=timeout)
+        data = temp._request(
+            "POST",
+            "/api/agent/register",
+            json={"agent_name": agent_name},
+            auth_required=False,
+        )
+        result = RegistrationResult.from_dict(data)
+        new_client = cls(api_key=result.api_key, base_url=base_url, timeout=timeout)
+        new_client.registration = result
+        return new_client
+
+    registration: Optional[RegistrationResult] = None
+
     def certify(
         self,
         path: Union[str, Path],
@@ -156,6 +186,9 @@ class XProofClient:
         Returns:
             A :class:`Certification` with the on-chain proof details.
         """
+        if not self.api_key:
+            raise ValueError("api_key is required — call register() or pass an api_key")
+
         p = Path(path)
         file_hash = hash_file(p)
         resolved_name = file_name or p.name
@@ -190,12 +223,13 @@ class XProofClient:
         Returns:
             A :class:`Certification` with the on-chain proof details.
         """
-        payload = {
-            "fileName": file_name,
-            "fileHash": file_hash,
-            "fileType": file_type,
-            "fileSize": file_size,
-            "authorName": author,
+        if not self.api_key:
+            raise ValueError("api_key is required — call register() or pass an api_key")
+
+        payload: Dict[str, Any] = {
+            "filename": file_name,
+            "file_hash": file_hash,
+            "author_name": author,
         }
         data = self._request("POST", "/api/proof", json=payload)
         return Certification.from_dict(data)
@@ -224,6 +258,9 @@ class XProofClient:
         Raises:
             ValueError: If more than 50 files are provided.
         """
+        if not self.api_key:
+            raise ValueError("api_key is required — call register() or pass an api_key")
+
         if len(files) > 50:
             raise ValueError("Batch certification supports a maximum of 50 files")
 
@@ -245,15 +282,21 @@ class XProofClient:
 
             entries.append(
                 {
-                    "fileName": fname,
-                    "fileHash": fhash,
-                    "fileType": ftype,
-                    "fileSize": fsize,
-                    "authorName": f.get("author", ""),
+                    "filename": fname,
+                    "file_hash": fhash,
                 }
             )
 
-        data = self._request("POST", "/api/batch", json={"files": entries})
+        payload: Dict[str, Any] = {"files": entries}
+        author = None
+        for f in files:
+            if f.get("author"):
+                author = f["author"]
+                break
+        if author:
+            payload["author_name"] = author
+
+        data = self._request("POST", "/api/batch", json=payload)
         return BatchResult.from_dict(data)
 
     def verify(self, proof_id: str) -> Certification:
