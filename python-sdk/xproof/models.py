@@ -38,7 +38,7 @@ class Certification:
                 data.get("transactionUrl", "")
                 or blockchain.get("explorer_url", "")
             ),
-            created_at=data.get("createdAt", data.get("created_at", "")),
+            created_at=data.get("createdAt", data.get("created_at", data.get("timestamp", ""))),
             author_name=data.get("authorName", data.get("author_name", "")),
             file_type=data.get("fileType", data.get("file_type", "")),
             file_size=data.get("fileSize", data.get("file_size", 0)),
@@ -54,14 +54,23 @@ class BatchResultSummary:
     """Summary of a batch certification request."""
 
     total: int = 0
-    certified: int = 0
-    failed: int = 0
+    created: int = 0
+    existing: int = 0
+
+    @property
+    def certified(self) -> int:
+        return self.created
+
+    @property
+    def failed(self) -> int:
+        return self.total - self.created - self.existing
 
 
 @dataclass
 class BatchResult:
     """Result of a batch certification request."""
 
+    batch_id: str = ""
     results: List[Certification] = field(default_factory=list)
     summary: BatchResultSummary = field(default_factory=BatchResultSummary)
 
@@ -71,14 +80,17 @@ class BatchResult:
         raw_results = data.get("results", [])
         results = [Certification.from_dict(r) for r in raw_results]
 
-        raw_summary = data.get("summary", {})
         summary = BatchResultSummary(
-            total=raw_summary.get("total", 0),
-            certified=raw_summary.get("certified", 0),
-            failed=raw_summary.get("failed", 0),
+            total=data.get("total", len(raw_results)),
+            created=data.get("created", 0),
+            existing=data.get("existing", 0),
         )
 
-        return cls(results=results, summary=summary)
+        return cls(
+            batch_id=data.get("batch_id", ""),
+            results=results,
+            summary=summary,
+        )
 
 
 @dataclass

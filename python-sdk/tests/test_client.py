@@ -16,6 +16,7 @@ from xproof import (
     ServerError,
     ValidationError,
     XProofClient,
+    XProofError,
     hash_file,
 )
 from xproof.utils import hash_bytes
@@ -117,34 +118,40 @@ def test_batch_certify():
         responses.POST,
         f"{BASE}/api/batch",
         json={
+            "batch_id": "batch-001",
+            "total": 2,
+            "created": 2,
+            "existing": 0,
             "results": [
                 {
-                    "id": "proof-b1",
-                    "fileName": "a.pdf",
-                    "fileHash": "h1",
-                    "transactionHash": "tx1",
-                    "transactionUrl": "",
-                    "createdAt": "",
+                    "file_hash": "h1",
+                    "filename": "a.pdf",
+                    "proof_id": "proof-b1",
+                    "verify_url": "https://example.com/proof/proof-b1",
+                    "badge_url": "https://example.com/badge/proof-b1",
+                    "status": "created",
                 },
                 {
-                    "id": "proof-b2",
-                    "fileName": "b.pdf",
-                    "fileHash": "h2",
-                    "transactionHash": "tx2",
-                    "transactionUrl": "",
-                    "createdAt": "",
+                    "file_hash": "h2",
+                    "filename": "b.pdf",
+                    "proof_id": "proof-b2",
+                    "verify_url": "https://example.com/proof/proof-b2",
+                    "badge_url": "https://example.com/badge/proof-b2",
+                    "status": "created",
                 },
             ],
-            "summary": {"total": 2, "certified": 2, "failed": 0},
         },
-        status=200,
+        status=201,
     )
     client = XProofClient(api_key="pm_test")
     result = client.batch_certify([
         {"file_hash": "h1", "file_name": "a.pdf", "author": "A"},
         {"file_hash": "h2", "file_name": "b.pdf", "author": "B"},
     ])
+    assert result.batch_id == "batch-001"
     assert result.summary.total == 2
+    assert result.summary.created == 2
+    assert result.summary.existing == 0
     assert result.summary.certified == 2
     assert len(result.results) == 2
     assert result.results[0].id == "proof-b1"
@@ -181,7 +188,7 @@ def test_verify():
 def test_verify_hash():
     responses.add(
         responses.GET,
-        f"{BASE}/api/verify/abc123",
+        f"{BASE}/api/proof/hash/abc123",
         json={
             "id": "proof-vh",
             "fileName": "doc.pdf",
@@ -414,3 +421,38 @@ def test_no_auth_for_public_endpoints():
     client.get_pricing()
     req = responses.calls[0].request
     assert req.headers.get("Authorization", "") == ""
+
+
+@responses.activate
+def test_json_decode_error_raises_xproof_error():
+    responses.add(
+        responses.POST,
+        f"{BASE}/api/proof",
+        body="<html>Not Found</html>",
+        status=200,
+        content_type="text/html",
+    )
+    client = XProofClient(api_key="pm_test")
+    with pytest.raises(XProofError, match="Unexpected non-JSON response"):
+        client.certify_hash("e" * 64, "test.pdf", "author")
+
+
+@responses.activate
+def test_verify_hash_uses_correct_endpoint():
+    responses.add(
+        responses.GET,
+        f"{BASE}/api/proof/hash/abc123def",
+        json={
+            "id": "proof-ep",
+            "fileName": "check.pdf",
+            "fileHash": "abc123def",
+            "transactionHash": "tx-ep",
+            "transactionUrl": "",
+            "createdAt": "",
+        },
+        status=200,
+    )
+    client = XProofClient(api_key="pm_test")
+    cert = client.verify_hash("abc123def")
+    assert cert.id == "proof-ep"
+    assert responses.calls[0].request.url == f"{BASE}/api/proof/hash/abc123def"

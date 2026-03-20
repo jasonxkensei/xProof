@@ -90,7 +90,13 @@ class XProofClient:
             raise XProofError(f"Request failed: {exc}") from exc
 
         if resp.status_code in (200, 201):
-            return resp.json()  # type: ignore[no-any-return]
+            try:
+                return resp.json()  # type: ignore[no-any-return]
+            except ValueError as exc:
+                raise XProofError(
+                    f"Unexpected non-JSON response from {method} {url}: "
+                    f"{resp.text[:200]}"
+                ) from exc
 
         self._handle_error(resp)
         return {}
@@ -363,7 +369,7 @@ class XProofClient:
         Raises:
             NotFoundError: If no certification exists for this hash.
         """
-        data = self._request("GET", f"/api/verify/{file_hash}", auth_required=False)
+        data = self._request("GET", f"/api/proof/hash/{file_hash}", auth_required=False)
         return Certification.from_dict(data)
 
     def get_pricing(self) -> PricingInfo:
