@@ -324,3 +324,30 @@ describe("XProofClient", () => {
     expect(cert.createdAt).toBe("2026-03-20T12:00:00Z");
   });
 });
+
+const INTEGRATION = process.env.XPROOF_INTEGRATION === "1";
+
+describe.skipIf(!INTEGRATION)("Integration: live API", () => {
+  it("register → certifyHash → verifyHash round-trip", async () => {
+    const client = await XProofClient.register(`npm-sdk-test-${Date.now()}`);
+    expect(client.registration).not.toBeNull();
+    expect(client.registration!.apiKey).toMatch(/^pm_/);
+    expect(client.registration!.trial.remaining).toBeGreaterThan(0);
+
+    const hash =
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    const cert = await client.certifyHash(hash, "empty.txt", "npm-sdk-test");
+    expect(cert.id).toBeTruthy();
+    expect(cert.fileHash).toBe(hash);
+    expect(cert.transactionHash).toBeTruthy();
+
+    const verified = await client.verifyHash(hash);
+    expect(verified.id).toBe(cert.id);
+  }, 30_000);
+
+  it("getPricing returns pricing info", async () => {
+    const client = new XProofClient();
+    const pricing = await client.getPricing();
+    expect(pricing.priceUsd).toBeGreaterThanOrEqual(0);
+  }, 10_000);
+});
