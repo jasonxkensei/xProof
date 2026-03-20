@@ -437,6 +437,110 @@ describe("xproofMiddleware", () => {
     });
   });
 
+  describe("wrapStream chunk variants", () => {
+    it("uses finish event text when available", async () => {
+      const fetchMock = mockFetch(201, CERT_RESPONSE);
+      globalThis.fetch = fetchMock;
+
+      const mw = xproofMiddleware({ apiKey: "pm_test" });
+
+      const chunks = [
+        { type: "text-delta", textDelta: "Hel" },
+        { type: "text-delta", textDelta: "lo" },
+        { type: "finish", text: "Hello" },
+      ];
+
+      const readable = new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk);
+          controller.close();
+        },
+      });
+
+      const result = await mw.middleware.wrapStream({
+        doStream: vi.fn().mockResolvedValue({ stream: readable }),
+        params: { prompt: "greet" },
+        model: { modelId: "gpt-4" },
+      });
+
+      const reader = result.stream.getReader();
+      while (!(await reader.read()).done) {}
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(fetchMock).toHaveBeenCalledOnce();
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.metadata.result_hash).toBeDefined();
+    });
+
+    it("accumulates content field chunks", async () => {
+      const fetchMock = mockFetch(201, CERT_RESPONSE);
+      globalThis.fetch = fetchMock;
+
+      const mw = xproofMiddleware({ apiKey: "pm_test" });
+
+      const chunks = [
+        { content: "chunk1" },
+        { content: "chunk2" },
+      ];
+
+      const readable = new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk);
+          controller.close();
+        },
+      });
+
+      const result = await mw.middleware.wrapStream({
+        doStream: vi.fn().mockResolvedValue({ stream: readable }),
+        params: { prompt: "test" },
+        model: { modelId: "gpt-4" },
+      });
+
+      const reader = result.stream.getReader();
+      while (!(await reader.read()).done) {}
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(fetchMock).toHaveBeenCalledOnce();
+    });
+
+    it("auto-flushes batch in stream mode", async () => {
+      const fetchMock = mockFetch(201, {
+        batch_id: "b-stream",
+        total: 1,
+        created: 1,
+        existing: 0,
+        results: [{ ...CERT_RESPONSE, id: "ps1" }],
+      });
+      globalThis.fetch = fetchMock;
+
+      const mw = xproofMiddleware({
+        apiKey: "pm_test",
+        batchMode: true,
+        batchFlushSize: 1,
+      });
+
+      const readable = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: "text-delta", textDelta: "ok" });
+          controller.close();
+        },
+      });
+
+      const result = await mw.middleware.wrapStream({
+        doStream: vi.fn().mockResolvedValue({ stream: readable }),
+        params: { prompt: "test" },
+        model: { modelId: "gpt-4" },
+      });
+
+      const reader = result.stream.getReader();
+      while (!(await reader.read()).done) {}
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(mw.pendingCount).toBe(0);
+    });
+  });
+
   describe("4W metadata consistency", () => {
     it("prompt and result produce deterministic hashes", async () => {
       const fetchMock = mockFetch(201, CERT_RESPONSE);

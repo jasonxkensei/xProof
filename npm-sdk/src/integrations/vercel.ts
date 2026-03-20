@@ -240,6 +240,7 @@ export function xproofMiddleware(options: XProofMiddlewareOptions = {}) {
 
       const originalStream = result.stream;
       const chunks: string[] = [];
+      let finishText: string | undefined;
 
       const transformStream = new TransformStream({
         transform(chunk, controller) {
@@ -249,12 +250,16 @@ export function xproofMiddleware(options: XProofMiddlewareOptions = {}) {
             const c = chunk as Record<string, unknown>;
             if (c.type === "text-delta" && typeof c.textDelta === "string") {
               chunks.push(c.textDelta);
+            } else if (c.type === "finish" && typeof c.text === "string") {
+              finishText = c.text as string;
+            } else if (typeof c.content === "string") {
+              chunks.push(c.content);
             }
           }
           controller.enqueue(chunk);
         },
         async flush() {
-          const fullText = chunks.join("");
+          const fullText = finishText ?? chunks.join("");
           const resultHash = hashData(fullText);
           const { interactionHash, fileName, fourW } = buildCertPayload(
             modelId,
@@ -273,6 +278,9 @@ export function xproofMiddleware(options: XProofMiddlewareOptions = {}) {
               timestamp: fourW.when!,
               metadata: fourW.metadata,
             });
+            if (pendingBatch.length >= batchFlushSize) {
+              await flushBatch();
+            }
           } else {
             await certifyOne(interactionHash, fileName, fourW).catch(() => {});
           }
