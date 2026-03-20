@@ -27,8 +27,6 @@ export interface XProofMiddlewareOptions {
   apiKey?: string;
   client?: XProofClient;
   agentName?: string;
-  certifyGenerate?: boolean;
-  certifyStream?: boolean;
 }
 
 function hashData(data: unknown): string {
@@ -54,9 +52,6 @@ export function xproofMiddleware(options: XProofMiddlewareOptions = {}) {
   const client =
     options.client ?? new XProofClient({ apiKey: options.apiKey ?? "" });
   const agentName = options.agentName ?? "vercel-ai-agent";
-  const certifyGenerate = options.certifyGenerate ?? true;
-  const certifyStream = options.certifyStream ?? true;
-
   return {
     /**
      * Certify a generateText result.
