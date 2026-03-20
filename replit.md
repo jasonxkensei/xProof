@@ -109,7 +109,7 @@ PyPI-ready package (`xproof`, v0.1.0). `XProofClient` with `register()`, `certif
 - CI/CD: `.github/workflows/python-sdk.yml` — tests on Python 3.9-3.12, publishes to PyPI on GitHub release
 
 ### npm SDK (`npm-sdk/`)
-npm-ready package (`xproof`, v0.1.0). TypeScript, zero dependencies beyond native `fetch` (Node 18+). Dual ESM/CJS output via tsup. `XProofClient` mirrors Python SDK API. Full 4W support. Typed errors. Hash utilities. 44 unit tests (+ 2 integration skipped). Vercel AI middleware at `xproof/vercel`:
+npm-ready package (`@xproof/xproof`, v0.1.0) — published at https://www.npmjs.com/package/@xproof/xproof. TypeScript, zero dependencies beyond native `fetch` (Node 18+). Dual ESM/CJS output via tsup. `XProofClient` mirrors Python SDK API. Full 4W support. Typed errors. Hash utilities. 44 unit tests (+ 2 integration skipped). Vercel AI middleware at `@xproof/xproof/vercel`:
 - `xproofMiddleware()` — automatic middleware (`wrapGenerate`/`wrapStream`) + manual helpers (`certifyGeneration`/`certifyStream`). Features: shouldCertify filter, batch mode with auto-flush, configurable WHY and default metadata, proofs array tracking.
 - Standalone example: `examples/vercel-ai-nextjs/` (package.json + main.ts runnable demo + nextjs-route.ts reference)
 - CI/CD: `.github/workflows/npm-sdk.yml` — tests on Node 18/20/22, publishes to npm on GitHub release

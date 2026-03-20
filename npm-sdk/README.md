@@ -5,7 +5,7 @@ Official TypeScript/JavaScript SDK for the [xProof](https://xproof.app) blockcha
 ## Installation
 
 ```bash
-npm install xproof
+npm install @xproof/xproof
 ```
 
 Requires Node.js 18+ (uses native `fetch`).
@@ -13,7 +13,7 @@ Requires Node.js 18+ (uses native `fetch`).
 ## Quick Start
 
 ```typescript
-import { XProofClient } from "xproof";
+import { XProofClient } from "@xproof/xproof";
 
 // 1. Register (zero-friction, no wallet needed)
 const client = await XProofClient.register("my-agent");
@@ -39,7 +39,7 @@ const client = new XProofClient({ apiKey: "pm_your_key" });
 Certifications support the 4W accountability framework:
 
 ```typescript
-import { XProofClient, hashString } from "xproof";
+import { XProofClient, hashString } from "@xproof/xproof";
 
 const client = new XProofClient({ apiKey: "pm_your_key" });
 
@@ -74,7 +74,7 @@ console.log(result.summary.created); // 2
 ## Hash Utilities
 
 ```typescript
-import { hashFile, hashBuffer, hashString } from "xproof";
+import { hashFile, hashBuffer, hashString } from "@xproof/xproof";
 
 const fileHash = await hashFile("./document.pdf");
 const bufferHash = hashBuffer(Buffer.from("hello"));
@@ -96,7 +96,7 @@ import {
   AuthenticationError,
   ConflictError,
   RateLimitError,
-} from "xproof";
+} from "@xproof/xproof";
 
 try {
   await client.certifyHash(hash, name, author);
