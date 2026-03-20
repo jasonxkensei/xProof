@@ -101,6 +101,15 @@ Endpoint-specific rate limiters complement the global 100 req/min limit: `public
 - **xAI/Grok** (`/api/xai/:identifier`) — Grok reasoning engine bridge (agent ID or wallet), metadata: `xai_agent_id`, `xai_model`, `xai_session_id`
 - **MPP** (`/api/mpp/:payment_intent_id`) — Machine Payments Protocol, links payment execution (HOW) with decision provenance (WHY), metadata: `mpp_payment_intent_id`, `mpp_amount`, `mpp_currency`, `mpp_network`
 
+### Python SDK (`python-sdk/`)
+PyPI-ready package (`xproof`, v0.1.0). `XProofClient` with `register()`, `certify()`, `certify_hash()`, `batch_certify()`, `verify()`, `verify_hash()`, `get_pricing()`. Full 4W framework support (who/what/when/why metadata). Typed error hierarchy. SHA-256 hash utilities. 38 unit tests. Integrations:
+- `xproof.integrations.langchain.XProofCallbackHandler` — auto-certifies LLM/tool/chain events with 4W metadata
+- `xproof.integrations.crewai.XProofTool` / `XProofCrewCallback` — agent tool + crew-level auto-certification
+
+### npm SDK (`npm-sdk/`)
+npm-ready package (`xproof`, v0.1.0). TypeScript, zero dependencies beyond native `fetch` (Node 18+). Dual ESM/CJS output via tsup. `XProofClient` mirrors Python SDK API. Full 4W support. Typed errors. Hash utilities. 23 unit tests. Vercel AI middleware at `xproof/vercel`:
+- `xproofMiddleware()` — certifies `generateText`/`streamText` results with model, prompt hash, result hash, 4W metadata
+
 ### ElizaOS Plugin NPM Package
 The `xproof-eliza-plugin` (v2.0.0) provides modular actions for ElizaOS agents, including `AUDIT_BEFORE_EXECUTE`, `CERTIFY_CONTENT`, `CERTIFY_HASH`, `CERTIFY_BATCH`, `VERIFY_PROOF`, and an audit state provider. A key feature is the `AuditRequiredError` for enforcing on-chain proof before execution.
 

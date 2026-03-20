@@ -1,23 +1,32 @@
 """Integration test against the live xProof API.
 
-Run with: pytest python-sdk/tests/test_integration.py -v
+Run with: pytest python-sdk/tests/test_integration.py -m integration -v
 This test hits the real API and uses the trial flow.
+Skips automatically when rate-limited or when XPROOF_INTEGRATION env is not set.
 """
 
 import hashlib
+import os
 import time
 import uuid
 
 import pytest
 
-from xproof import XProofClient, ConflictError
+from xproof import XProofClient, ConflictError, RateLimitError
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not os.environ.get("XPROOF_INTEGRATION"),
+    reason="Set XPROOF_INTEGRATION=1 to run live integration tests",
+)
 def test_full_trial_flow():
     """Register trial -> certify_hash -> verify -> verify_hash."""
     unique_name = f"sdk-test-{uuid.uuid4().hex[:8]}"
-    client = XProofClient.register(unique_name)
+    try:
+        client = XProofClient.register(unique_name)
+    except RateLimitError:
+        pytest.skip("Rate-limited — trial registration limit reached")
 
     assert client.api_key.startswith("pm_")
     assert client.registration is not None
@@ -50,6 +59,10 @@ def test_full_trial_flow():
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not os.environ.get("XPROOF_INTEGRATION"),
+    reason="Set XPROOF_INTEGRATION=1 to run live integration tests",
+)
 def test_pricing_endpoint():
     """Pricing is a public endpoint, no auth needed."""
     client = XProofClient()

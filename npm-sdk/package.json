@@ -1,0 +1,66 @@
+{
+  "name": "xproof",
+  "version": "0.1.0",
+  "description": "Official SDK for the xProof blockchain certification API — proof and accountability layer for autonomous agents",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./vercel": {
+      "import": {
+        "types": "./dist/integrations/vercel.d.mts",
+        "default": "./dist/integrations/vercel.mjs"
+      },
+      "require": {
+        "types": "./dist/integrations/vercel.d.ts",
+        "default": "./dist/integrations/vercel.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "xproof",
+    "blockchain",
+    "certification",
+    "multiversx",
+    "ai-agent",
+    "accountability",
+    "proof",
+    "autonomous-agent"
+  ],
+  "author": "xProof",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xproof-io/xproof-js"
+  },
+  "homepage": "https://xproof.app",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

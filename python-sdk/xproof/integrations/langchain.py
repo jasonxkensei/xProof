@@ -1,0 +1,231 @@
+"""LangChain callback handler for automatic xProof certification."""
+
+import hashlib
+import json
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Union
+from uuid import UUID
+
+try:
+    from langchain_core.callbacks import BaseCallbackHandler
+except ImportError:
+    try:
+        from langchain.callbacks.base import BaseCallbackHandler
+    except ImportError:
+        raise ImportError(
+            "langchain is required for this integration. "
+            "Install it with: pip install langchain-core"
+        )
+
+from ..client import XProofClient
+
+
+def _hash_data(data: Any) -> str:
+    serialized = json.dumps(data, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode()).hexdigest()
+
+
+class XProofCallbackHandler(BaseCallbackHandler):
+    """LangChain callback handler that certifies agent actions on-chain.
+
+    Automatically creates blockchain-anchored proofs for LLM calls,
+    tool invocations, and chain completions using the xProof 4W framework.
+
+    Example::
+
+        from xproof.integrations.langchain import XProofCallbackHandler
+
+        handler = XProofCallbackHandler(api_key="pm_...")
+        chain.invoke(input, config={"callbacks": [handler]})
+    """
+
+    def __init__(
+        self,
+        api_key: str = "",
+        client: Optional[XProofClient] = None,
+        agent_name: str = "langchain-agent",
+        certify_llm: bool = True,
+        certify_tools: bool = True,
+        certify_chains: bool = False,
+        batch_mode: bool = False,
+    ) -> None:
+        super().__init__()
+        self.client = client or XProofClient(api_key=api_key)
+        self.agent_name = agent_name
+        self.certify_llm = certify_llm
+        self.certify_tools = certify_tools
+        self.certify_chains = certify_chains
+        self.batch_mode = batch_mode
+        self._pending: List[Dict[str, Any]] = []
+        self._run_context: Dict[str, str] = {}
+
+    def _certify(
+        self,
+        action_type: str,
+        data_hash: str,
+        file_name: str,
+        context: str = "",
+        parent_run_id: Optional[str] = None,
+    ) -> None:
+        entry = {
+            "file_hash": data_hash,
+            "file_name": file_name,
+            "author": self.agent_name,
+            "metadata": {
+                "who": self.agent_name,
+                "what": data_hash,
+                "when": datetime.now(timezone.utc).isoformat(),
+                "why": context or action_type,
+                "action_type": action_type,
+                "framework": "langchain",
+            },
+        }
+        if parent_run_id:
+            entry["metadata"]["parent_run_id"] = parent_run_id
+
+        if self.batch_mode:
+            self._pending.append(entry)
+        else:
+            self.client.certify_hash(
+                file_hash=entry["file_hash"],
+                file_name=entry["file_name"],
+                author=entry["author"],
+                metadata=entry["metadata"],
+            )
+
+    def flush(self) -> None:
+        """Send all pending certifications in a batch."""
+        if not self._pending:
+            return
+        self.client.batch_certify(self._pending)
+        self._pending.clear()
+
+    def on_llm_start(
+        self,
+        serialized: Dict[str, Any],
+        prompts: List[str],
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        **kwargs: Any,
+    ) -> None:
+        if not self.certify_llm:
+            return
+        model_name = serialized.get("name", serialized.get("id", ["unknown"])[-1])
+        self._run_context[str(run_id)] = model_name
+
+    def on_llm_end(
+        self,
+        response: Any,
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        **kwargs: Any,
+    ) -> None:
+        if not self.certify_llm:
+            return
+        model_name = self._run_context.pop(str(run_id), "unknown-model")
+        output_text = ""
+        if hasattr(response, "generations"):
+            for gen_list in response.generations:
+                for gen in gen_list:
+                    output_text += getattr(gen, "text", "")
+
+        data_hash = _hash_data({"model": model_name, "output": output_text})
+        self._certify(
+            action_type="llm_call",
+            data_hash=data_hash,
+            file_name=f"llm-{model_name}-{str(run_id)[:8]}.json",
+            context=f"LLM call to {model_name}",
+            parent_run_id=str(parent_run_id) if parent_run_id else None,
+        )
+
+    def on_tool_start(
+        self,
+        serialized: Dict[str, Any],
+        input_str: str,
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        **kwargs: Any,
+    ) -> None:
+        if not self.certify_tools:
+            return
+        tool_name = serialized.get("name", "unknown-tool")
+        self._run_context[str(run_id)] = tool_name
+
+    def on_tool_end(
+        self,
+        output: str,
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        **kwargs: Any,
+    ) -> None:
+        if not self.certify_tools:
+            return
+        tool_name = self._run_context.pop(str(run_id), "unknown-tool")
+        data_hash = _hash_data({"tool": tool_name, "output": str(output)})
+        self._certify(
+            action_type="tool_call",
+            data_hash=data_hash,
+            file_name=f"tool-{tool_name}-{str(run_id)[:8]}.json",
+            context=f"Tool invocation: {tool_name}",
+            parent_run_id=str(parent_run_id) if parent_run_id else None,
+        )
+
+    def on_chain_start(
+        self,
+        serialized: Dict[str, Any],
+        inputs: Dict[str, Any],
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        **kwargs: Any,
+    ) -> None:
+        if not self.certify_chains:
+            return
+        chain_name = serialized.get("name", serialized.get("id", ["unknown"])[-1])
+        self._run_context[str(run_id)] = chain_name
+
+    def on_chain_end(
+        self,
+        outputs: Dict[str, Any],
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        **kwargs: Any,
+    ) -> None:
+        if not self.certify_chains:
+            return
+        chain_name = self._run_context.pop(str(run_id), "unknown-chain")
+        data_hash = _hash_data({"chain": chain_name, "outputs": outputs})
+        self._certify(
+            action_type="chain_completion",
+            data_hash=data_hash,
+            file_name=f"chain-{chain_name}-{str(run_id)[:8]}.json",
+            context=f"Chain completion: {chain_name}",
+            parent_run_id=str(parent_run_id) if parent_run_id else None,
+        )
+
+    def on_chain_error(
+        self,
+        error: BaseException,
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        **kwargs: Any,
+    ) -> None:
+        self._run_context.pop(str(run_id), None)
+        if self.batch_mode:
+            self.flush()
+
+    def on_llm_error(
+        self,
+        error: BaseException,
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        **kwargs: Any,
+    ) -> None:
+        self._run_context.pop(str(run_id), None)
