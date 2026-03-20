@@ -112,7 +112,10 @@ class XProofCallbackHandler(BaseCallbackHandler):
         if not self.certify_llm:
             return
         model_name = serialized.get("name", serialized.get("id", ["unknown"])[-1])
-        self._run_context[str(run_id)] = model_name
+        prompt_hash = _hash_data(prompts)
+        self._run_context[str(run_id)] = json.dumps(
+            {"model": model_name, "prompt_hash": prompt_hash}
+        )
 
     def on_llm_end(
         self,
@@ -124,14 +127,18 @@ class XProofCallbackHandler(BaseCallbackHandler):
     ) -> None:
         if not self.certify_llm:
             return
-        model_name = self._run_context.pop(str(run_id), "unknown-model")
+        ctx_raw = self._run_context.pop(str(run_id), '{"model":"unknown-model","prompt_hash":""}')
+        ctx = json.loads(ctx_raw)
+        model_name = ctx["model"]
+        prompt_hash = ctx["prompt_hash"]
+
         output_text = ""
         if hasattr(response, "generations"):
             for gen_list in response.generations:
                 for gen in gen_list:
                     output_text += getattr(gen, "text", "")
 
-        data_hash = _hash_data({"model": model_name, "output": output_text})
+        data_hash = _hash_data({"model": model_name, "prompt_hash": prompt_hash, "output": output_text})
         self._certify(
             action_type="llm_call",
             data_hash=data_hash,
@@ -152,7 +159,10 @@ class XProofCallbackHandler(BaseCallbackHandler):
         if not self.certify_tools:
             return
         tool_name = serialized.get("name", "unknown-tool")
-        self._run_context[str(run_id)] = tool_name
+        input_hash = _hash_data(input_str)
+        self._run_context[str(run_id)] = json.dumps(
+            {"tool": tool_name, "input_hash": input_hash}
+        )
 
     def on_tool_end(
         self,
@@ -164,8 +174,11 @@ class XProofCallbackHandler(BaseCallbackHandler):
     ) -> None:
         if not self.certify_tools:
             return
-        tool_name = self._run_context.pop(str(run_id), "unknown-tool")
-        data_hash = _hash_data({"tool": tool_name, "output": str(output)})
+        ctx_raw = self._run_context.pop(str(run_id), '{"tool":"unknown-tool","input_hash":""}')
+        ctx = json.loads(ctx_raw)
+        tool_name = ctx["tool"]
+        input_hash = ctx["input_hash"]
+        data_hash = _hash_data({"tool": tool_name, "input_hash": input_hash, "output": str(output)})
         self._certify(
             action_type="tool_call",
             data_hash=data_hash,
@@ -196,17 +209,21 @@ class XProofCallbackHandler(BaseCallbackHandler):
         parent_run_id: Optional[UUID] = None,
         **kwargs: Any,
     ) -> None:
-        if not self.certify_chains:
-            return
-        chain_name = self._run_context.pop(str(run_id), "unknown-chain")
-        data_hash = _hash_data({"chain": chain_name, "outputs": outputs})
-        self._certify(
-            action_type="chain_completion",
-            data_hash=data_hash,
-            file_name=f"chain-{chain_name}-{str(run_id)[:8]}.json",
-            context=f"Chain completion: {chain_name}",
-            parent_run_id=str(parent_run_id) if parent_run_id else None,
-        )
+        if self.certify_chains:
+            chain_name = self._run_context.pop(str(run_id), "unknown-chain")
+            data_hash = _hash_data({"chain": chain_name, "outputs": outputs})
+            self._certify(
+                action_type="chain_completion",
+                data_hash=data_hash,
+                file_name=f"chain-{chain_name}-{str(run_id)[:8]}.json",
+                context=f"Chain completion: {chain_name}",
+                parent_run_id=str(parent_run_id) if parent_run_id else None,
+            )
+        else:
+            self._run_context.pop(str(run_id), None)
+
+        if self.batch_mode and parent_run_id is None:
+            self.flush()
 
     def on_chain_error(
         self,

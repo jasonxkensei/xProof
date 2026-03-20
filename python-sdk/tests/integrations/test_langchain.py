@@ -52,6 +52,32 @@ def test_llm_end_certifies(handler, mock_client):
     assert "when" in call_kwargs.kwargs["metadata"]
 
 
+def test_llm_includes_prompt_hash(handler, mock_client):
+    import hashlib
+    run_id = uuid4()
+    prompts = ["What is 2+2?"]
+    handler.on_llm_start({"name": "gpt-4"}, prompts, run_id=run_id)
+
+    response = MagicMock()
+    gen = MagicMock()
+    gen.text = "4"
+    response.generations = [[gen]]
+
+    handler.on_llm_end(response, run_id=run_id)
+    call_kwargs = mock_client.certify_hash.call_args
+    file_hash = call_kwargs.kwargs["file_hash"]
+    expected_prompt_hash = hashlib.sha256(
+        json.dumps(prompts, sort_keys=True, default=str).encode()
+    ).hexdigest()
+    expected_data_hash = hashlib.sha256(
+        json.dumps(
+            {"model": "gpt-4", "prompt_hash": expected_prompt_hash, "output": "4"},
+            sort_keys=True, default=str,
+        ).encode()
+    ).hexdigest()
+    assert file_hash == expected_data_hash
+
+
 def test_tool_end_certifies(handler, mock_client):
     run_id = uuid4()
     handler.on_tool_start(
@@ -65,6 +91,27 @@ def test_tool_end_certifies(handler, mock_client):
     call_kwargs = mock_client.certify_hash.call_args
     assert call_kwargs.kwargs["metadata"]["action_type"] == "tool_call"
     assert "tool-search" in call_kwargs.kwargs["file_name"]
+
+
+def test_tool_includes_input_hash(handler, mock_client):
+    import hashlib
+    run_id = uuid4()
+    tool_input = "search query"
+    handler.on_tool_start({"name": "web_search"}, tool_input, run_id=run_id)
+    handler.on_tool_end("result data", run_id=run_id)
+
+    call_kwargs = mock_client.certify_hash.call_args
+    file_hash = call_kwargs.kwargs["file_hash"]
+    expected_input_hash = hashlib.sha256(
+        json.dumps(tool_input, sort_keys=True, default=str).encode()
+    ).hexdigest()
+    expected_data_hash = hashlib.sha256(
+        json.dumps(
+            {"tool": "web_search", "input_hash": expected_input_hash, "output": "result data"},
+            sort_keys=True, default=str,
+        ).encode()
+    ).hexdigest()
+    assert file_hash == expected_data_hash
 
 
 def test_chain_events_disabled_by_default(handler, mock_client):
@@ -109,7 +156,7 @@ def test_tools_disabled(mock_client):
     mock_client.certify_hash.assert_not_called()
 
 
-def test_batch_mode(mock_client):
+def test_batch_mode_manual_flush(mock_client):
     handler = XProofCallbackHandler(
         client=mock_client, agent_name="test-agent", batch_mode=True
     )
@@ -128,6 +175,44 @@ def test_batch_mode(mock_client):
     handler.flush()
     mock_client.batch_certify.assert_called_once()
     assert len(handler._pending) == 0
+
+
+def test_batch_mode_auto_flush_on_root_chain_end(mock_client):
+    handler = XProofCallbackHandler(
+        client=mock_client, agent_name="test-agent", batch_mode=True
+    )
+
+    run_id1 = uuid4()
+    handler.on_tool_start({"name": "search"}, "q", run_id=run_id1)
+    handler.on_tool_end("result", run_id=run_id1)
+
+    mock_client.certify_hash.assert_not_called()
+    assert len(handler._pending) == 1
+
+    chain_run_id = uuid4()
+    handler.on_chain_start({"name": "agent"}, {"input": "hi"}, run_id=chain_run_id)
+    handler.on_chain_end({"output": "bye"}, run_id=chain_run_id, parent_run_id=None)
+
+    mock_client.batch_certify.assert_called_once()
+    assert len(handler._pending) == 0
+
+
+def test_batch_mode_no_flush_on_nested_chain_end(mock_client):
+    handler = XProofCallbackHandler(
+        client=mock_client, agent_name="test-agent", batch_mode=True
+    )
+
+    run_id1 = uuid4()
+    handler.on_tool_start({"name": "search"}, "q", run_id=run_id1)
+    handler.on_tool_end("result", run_id=run_id1)
+
+    parent_id = uuid4()
+    child_id = uuid4()
+    handler.on_chain_start({"name": "sub"}, {"input": "x"}, run_id=child_id)
+    handler.on_chain_end({"output": "y"}, run_id=child_id, parent_run_id=parent_id)
+
+    mock_client.batch_certify.assert_not_called()
+    assert len(handler._pending) == 1
 
 
 def test_4w_metadata_present(handler, mock_client):
