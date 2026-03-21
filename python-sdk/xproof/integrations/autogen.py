@@ -141,8 +141,8 @@ class XProofAutoGenHooks:
 
 def register_xproof_hooks(
     agent: Any,
-    api_key: str = "",
     client: Optional[XProofClient] = None,
+    api_key: str = "",
     agent_name: Optional[str] = None,
     certify_received: bool = True,
     certify_sent: bool = True,

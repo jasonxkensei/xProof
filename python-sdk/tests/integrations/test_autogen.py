@@ -153,6 +153,16 @@ def test_batch_mode_flush_empty(mock_client):
     mock_client.batch_certify.assert_not_called()
 
 
+def test_register_xproof_hooks_positional_client(mock_client):
+    agent = FakeAgent(name="positional")
+    hooks = register_xproof_hooks(agent, mock_client)
+
+    assert hooks.agent_name == "positional"
+    recv_hook = agent._hooks["process_last_received_message"][0]
+    recv_hook("hello")
+    mock_client.certify_hash.assert_called_once()
+
+
 def test_register_xproof_hooks(mock_client):
     agent = FakeAgent(name="analyst")
     hooks = register_xproof_hooks(agent, client=mock_client)
