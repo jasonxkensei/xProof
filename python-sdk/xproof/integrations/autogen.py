@@ -11,7 +11,7 @@ architecture is out of scope.
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from ..client import XProofClient
 
