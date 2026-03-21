@@ -46,6 +46,9 @@ llamaindex = [
 autogen = [
     "pyautogen>=0.2.0",
 ]
+openai-agents = [
+    "openai-agents>=0.0.3",
+]
 
 [project.urls]
 Homepage = "https://xproof.app"

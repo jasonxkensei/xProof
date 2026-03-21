@@ -25,3 +25,8 @@ try:
         pass
 except ImportError:
     pass
+
+try:
+    from .openai_agents import XProofRunHooks, XProofTracingProcessor
+except ImportError:
+    pass
