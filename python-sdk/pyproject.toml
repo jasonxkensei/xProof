@@ -40,6 +40,9 @@ dev = [
     "pytest>=7.0",
     "responses>=0.20.0",
 ]
+llamaindex = [
+    "llama-index-core>=0.10.0",
+]
 
 [project.urls]
 Homepage = "https://xproof.app"

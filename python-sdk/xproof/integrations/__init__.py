@@ -4,6 +4,11 @@ except ImportError:
     pass
 
 try:
+    from .llamaindex import XProofLlamaIndexHandler
+except ImportError:
+    pass
+
+try:
     from .crewai import XProofCertifyTool, XProofTool, XProofCrewCallback
     try:
         from .crewai import XProofCrewTool
