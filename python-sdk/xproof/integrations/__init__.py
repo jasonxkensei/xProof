@@ -16,3 +16,12 @@ try:
         pass
 except ImportError:
     pass
+
+try:
+    from .autogen import XProofAutoGenHooks, register_xproof_hooks
+    try:
+        from .autogen import XProofConversableAgent
+    except (ImportError, AttributeError):
+        pass
+except ImportError:
+    pass

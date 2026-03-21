@@ -43,6 +43,9 @@ dev = [
 llamaindex = [
     "llama-index-core>=0.10.0",
 ]
+autogen = [
+    "pyautogen>=0.2.0",
+]
 
 [project.urls]
 Homepage = "https://xproof.app"
