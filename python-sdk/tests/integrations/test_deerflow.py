@@ -120,3 +120,22 @@ def test_content_fallback_for_missing_key(skill, mock_client):
     input_data = json.dumps({"file_name": "test.json"})
     skill._run(input_data)
     mock_client.certify_hash.assert_called_once()
+
+
+def test_dict_input(skill, mock_client):
+    result = skill._run({
+        "content": "Dict-based input",
+        "file_name": "dict-test.json",
+        "author": "dict-agent",
+        "why": "Testing dict input",
+    })
+    mock_client.certify_hash.assert_called_once()
+
+    call_kwargs = mock_client.certify_hash.call_args.kwargs
+    assert call_kwargs["file_name"] == "dict-test.json"
+    assert call_kwargs["author"] == "dict-agent"
+    assert call_kwargs["metadata"]["who"] == "dict-agent"
+    assert call_kwargs["metadata"]["why"] == "Testing dict input"
+
+    parsed = json.loads(result)
+    assert parsed["status"] == "certified"

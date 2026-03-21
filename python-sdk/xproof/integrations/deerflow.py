@@ -62,21 +62,27 @@ class XProofDeerFlowSkill:
         self.client = client or XProofClient(api_key=api_key)
         self.agent_name = agent_name
 
-    def _run(self, input_text: str) -> str:
+    def _run(self, input_text: Any) -> str:
         """Certify the input content and return a JSON result.
 
         Args:
-            input_text: Plain text content or a JSON string with
-                ``content``, optional ``file_name``, ``author``, ``why``.
+            input_text: Plain text content, a JSON string, or a dict
+                with ``content``, optional ``file_name``, ``author``,
+                ``why``.
 
         Returns:
             JSON string with ``proof_id``, ``file_hash``,
             ``transaction_hash``, and ``status``.
         """
-        try:
-            data = json.loads(input_text)
-        except (json.JSONDecodeError, TypeError):
-            data = {"content": input_text}
+        if isinstance(input_text, dict):
+            data = input_text
+        elif isinstance(input_text, str):
+            try:
+                data = json.loads(input_text)
+            except (json.JSONDecodeError, TypeError):
+                data = {"content": input_text}
+        else:
+            data = {"content": str(input_text)}
 
         content = data.get("content", input_text)
         file_name = data.get("file_name", "deerflow-output.json")
