@@ -26,7 +26,7 @@ def _hash_data(data: Any) -> str:
     return hashlib.sha256(serialized.encode()).hexdigest()
 
 
-class XProofLlamaIndexHandler(BaseCallbackHandler):
+class XProofCallbackHandler(BaseCallbackHandler):
     """LlamaIndex callback handler that certifies agent actions on-chain.
 
     Automatically creates blockchain-anchored proofs for LLM calls,
@@ -218,3 +218,6 @@ class XProofLlamaIndexHandler(BaseCallbackHandler):
                 context=f"Tool invocation: {tool_name}",
                 event_id=event_id,
             )
+
+
+XProofLlamaIndexHandler = XProofCallbackHandler

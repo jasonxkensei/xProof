@@ -1,6 +1,6 @@
 """LlamaIndex + xProof: automatic query and LLM call certification.
 
-Uses XProofLlamaIndexHandler to certify every LLM interaction and
+Uses XProofCallbackHandler to certify every LLM interaction and
 query completion with 4W metadata (WHO, WHAT, WHEN, WHY) on MultiversX.
 
 Run: python main.py
@@ -12,9 +12,9 @@ LlamaIndex CallbackManager.
 Production usage::
 
     from llama_index.core.callbacks import CallbackManager
-    from xproof.integrations.llamaindex import XProofLlamaIndexHandler
+    from xproof.integrations.llamaindex import XProofCallbackHandler
 
-    handler = XProofLlamaIndexHandler(api_key="pm_...")
+    handler = XProofCallbackHandler(api_key="pm_...")
     callback_manager = CallbackManager([handler])
 
     # Attach to your query engine
@@ -25,7 +25,7 @@ Production usage::
 from llama_index.core.callbacks.schema import CBEventType
 
 from xproof import XProofClient
-from xproof.integrations.llamaindex import XProofLlamaIndexHandler
+from xproof.integrations.llamaindex import XProofCallbackHandler
 
 
 def main():
@@ -34,7 +34,7 @@ def main():
     print(f"Trial remaining: {client.registration.trial.remaining}")
     print()
 
-    handler = XProofLlamaIndexHandler(
+    handler = XProofCallbackHandler(
         client=client,
         agent_name="llamaindex-demo-agent",
         batch_mode=True,

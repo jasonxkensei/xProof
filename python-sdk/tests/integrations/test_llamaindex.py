@@ -47,7 +47,7 @@ sys.modules.setdefault("llama_index.core.callbacks", MagicMock())
 sys.modules.setdefault("llama_index.core.callbacks.base", fake_callbacks_base)
 sys.modules.setdefault("llama_index.core.callbacks.schema", fake_callbacks_schema)
 
-from xproof.integrations.llamaindex import XProofLlamaIndexHandler
+from xproof.integrations.llamaindex import XProofCallbackHandler
 
 
 def _hash_data(data: Any) -> str:
@@ -69,7 +69,7 @@ def mock_client():
 
 @pytest.fixture
 def handler(mock_client):
-    return XProofLlamaIndexHandler(client=mock_client, agent_name="test-agent")
+    return XProofCallbackHandler(client=mock_client, agent_name="test-agent")
 
 
 def test_llm_end_certifies(handler, mock_client):
@@ -195,7 +195,7 @@ def test_function_call_includes_tool_name_in_hash(handler, mock_client):
 
 
 def test_llm_disabled(mock_client):
-    handler = XProofLlamaIndexHandler(
+    handler = XProofCallbackHandler(
         client=mock_client, agent_name="test-agent", certify_llm=False
     )
     event_id = "evt-llm-off"
@@ -213,7 +213,7 @@ def test_llm_disabled(mock_client):
 
 
 def test_query_disabled(mock_client):
-    handler = XProofLlamaIndexHandler(
+    handler = XProofCallbackHandler(
         client=mock_client, agent_name="test-agent", certify_query=False
     )
     event_id = "evt-query-off"
@@ -231,7 +231,7 @@ def test_query_disabled(mock_client):
 
 
 def test_function_call_disabled(mock_client):
-    handler = XProofLlamaIndexHandler(
+    handler = XProofCallbackHandler(
         client=mock_client, agent_name="test-agent", certify_function_call=False
     )
     event_id = "evt-func-off"
@@ -264,7 +264,7 @@ def test_untracked_event_ignored(handler, mock_client):
 
 
 def test_batch_mode_manual_flush(mock_client):
-    handler = XProofLlamaIndexHandler(
+    handler = XProofCallbackHandler(
         client=mock_client, agent_name="test-agent", batch_mode=True
     )
 
@@ -301,7 +301,7 @@ def test_batch_mode_manual_flush(mock_client):
 
 
 def test_batch_mode_auto_flush_on_end_trace(mock_client):
-    handler = XProofLlamaIndexHandler(
+    handler = XProofCallbackHandler(
         client=mock_client, agent_name="test-agent", batch_mode=True
     )
 

@@ -4,7 +4,7 @@ except ImportError:
     pass
 
 try:
-    from .llamaindex import XProofLlamaIndexHandler
+    from .llamaindex import XProofCallbackHandler as XProofLlamaIndexHandler
 except ImportError:
     pass
 
