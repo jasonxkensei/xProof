@@ -61,13 +61,15 @@ class XProofRunHooks:
         data_hash: str,
         file_name: str,
         context: str = "",
+        who_override: Optional[str] = None,
     ) -> None:
+        who = who_override or self.agent_name
         entry = {
             "file_hash": data_hash,
             "file_name": file_name,
-            "author": self.agent_name,
+            "author": who,
             "metadata": {
-                "who": self.agent_name,
+                "who": who,
                 "what": data_hash,
                 "when": datetime.now(timezone.utc).isoformat(),
                 "why": context or action_type,
@@ -120,6 +122,7 @@ class XProofRunHooks:
             data_hash=data_hash,
             file_name=f"tool-{tool_name}-{data_hash[:8]}.json",
             context=f"Tool {tool_name} completed by {agent_label}",
+            who_override=agent_label,
         )
 
     async def on_agent_end(
@@ -146,6 +149,7 @@ class XProofRunHooks:
             data_hash=data_hash,
             file_name=f"agent-{agent_label}-{data_hash[:8]}.json",
             context=f"Agent {agent_label} run completed",
+            who_override=agent_label,
         )
 
         if self.batch_mode:

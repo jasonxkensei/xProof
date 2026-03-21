@@ -180,6 +180,19 @@ def test_agent_name_from_agent_object(mock_client):
 
     call_kwargs = mock_client.certify_hash.call_args.kwargs
     assert "agent-custom-agent" in call_kwargs["file_name"]
+    assert call_kwargs["author"] == "custom-agent"
+    assert call_kwargs["metadata"]["who"] == "custom-agent"
+
+
+def test_tool_end_who_uses_runtime_agent(mock_client):
+    hooks = XProofRunHooks(client=mock_client, agent_name="default")
+    agent = FakeAgent("runtime-agent")
+    tool = FakeTool("calc")
+    _run(hooks.on_tool_end(FakeContext(), agent, tool, "42"))
+
+    call_kwargs = mock_client.certify_hash.call_args.kwargs
+    assert call_kwargs["author"] == "runtime-agent"
+    assert call_kwargs["metadata"]["who"] == "runtime-agent"
 
 
 def test_on_agent_start_noop(hooks, mock_client):
