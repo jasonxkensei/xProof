@@ -120,13 +120,12 @@ class XProofAutoGenHooks:
             )
         return message
 
-    def on_send(self, message: Any, **kwargs: Any) -> Any:
+    def on_send(self, message: Any, *args: Any, **kwargs: Any) -> Any:
         """Hook for ``process_message_before_send``.
 
         Certifies the outgoing message content and returns it unchanged.
-        Compatible with both the 2-arg signature ``(message,)`` and the
-        3-arg signature ``(message, recipient, silent)`` used by newer
-        pyautogen releases.
+        Accepts extra positional args (``recipient``, ``silent``) that
+        newer pyautogen releases pass to the hook callback.
         """
         if self.certify_sent:
             text = _extract_text(message)
@@ -191,14 +190,10 @@ def register_xproof_hooks(
         hook=hooks.on_received,
     )
 
-    if hasattr(agent, "register_hook"):
-        try:
-            agent.register_hook(
-                hookable_method="process_message_before_send",
-                hook=hooks.on_send,
-            )
-        except ValueError:
-            pass
+    agent.register_hook(
+        hookable_method="process_message_before_send",
+        hook=hooks.on_send,
+    )
 
     return hooks
 

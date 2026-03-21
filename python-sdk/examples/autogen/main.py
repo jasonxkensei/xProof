@@ -9,89 +9,76 @@ Run: python main.py
 Requirements:
     pip install pyautogen xproof
 
-For real usage, attach hooks to agents with a real LLM config and
-xProof API key.  This demo uses the standalone XProofAutoGenHooks class
-to simulate the flow without requiring a running LLM backend.
+This demo simulates two agents exchanging messages with xProof hooks
+attached, certifying each message on-chain.  It uses mock objects for
+the xProof client so no real API key or LLM backend is required.
 """
 
-import json
-from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-from xproof.integrations.autogen import (
-    XProofAutoGenHooks,
-    register_xproof_hooks,
-)
+from xproof.integrations.autogen import register_xproof_hooks
 
 
-def demo_standalone_hooks():
-    """Demo: use XProofAutoGenHooks directly (no pyautogen needed)."""
-    print("=== Standalone Hooks Demo ===\n")
+class FakeAgent:
+    """Minimal stand-in for autogen.ConversableAgent."""
 
+    def __init__(self, name: str):
+        self.name = name
+        self._hooks: dict = {}
+
+    def register_hook(self, hookable_method: str, hook):
+        self._hooks.setdefault(hookable_method, []).append(hook)
+
+    def _run_hooks(self, hookable_method: str, message):
+        for hook in self._hooks.get(hookable_method, []):
+            message = hook(message)
+        return message
+
+    def receive(self, message: str, sender: "FakeAgent"):
+        return self._run_hooks("process_last_received_message", message)
+
+    def send(self, message: str, recipient: "FakeAgent"):
+        message = self._run_hooks("process_message_before_send", message)
+        recipient.receive(message, sender=self)
+        return message
+
+
+def main():
     mock_client = MagicMock()
     mock_client.certify_hash.return_value = MagicMock(
-        id="proof-123",
-        file_hash="abc123",
-        transaction_hash="tx-456",
+        id="proof-001", file_hash="abc", transaction_hash="tx-001"
     )
 
-    hooks = XProofAutoGenHooks(
-        client=mock_client,
-        agent_name="analyst",
-        batch_mode=True,
-    )
+    alice = FakeAgent("alice")
+    bob = FakeAgent("bob")
 
-    hooks.on_received("What are the Q3 revenue figures?")
-    hooks.on_send("Based on my analysis, Q3 revenue was $4.2M, up 15% YoY.")
-    hooks.on_received("Can you break that down by region?")
-    hooks.on_send("North America: $2.1M, Europe: $1.3M, Asia: $0.8M.")
+    alice_hooks = register_xproof_hooks(alice, client=mock_client, agent_name="alice")
+    bob_hooks = register_xproof_hooks(bob, client=mock_client, agent_name="bob")
 
-    print(f"Buffered {len(hooks._pending)} certifications in batch mode")
-    for i, entry in enumerate(hooks._pending, 1):
-        meta = entry["metadata"]
-        print(f"  {i}. {meta['action_type']}: {meta['who']} ({meta['why']})")
+    print("=== Two-Agent Conversation with xProof Certification ===\n")
 
-    hooks.flush()
-    print(f"\nFlushed. batch_certify called: {mock_client.batch_certify.called}")
-    print(f"Certifications sent: {len(mock_client.batch_certify.call_args[0][0])}")
+    alice.send("Hi Bob, can you summarise the Q3 earnings report?", bob)
+    print("[alice -> bob] Hi Bob, can you summarise the Q3 earnings report?")
 
+    bob.send("Sure! Q3 revenue was $4.2M, up 15% YoY.", alice)
+    print("[bob -> alice] Sure! Q3 revenue was $4.2M, up 15% YoY.")
 
-def demo_register_hooks():
-    """Demo: use register_xproof_hooks with a fake agent."""
-    print("\n=== Register Hooks Demo ===\n")
+    alice.send("Thanks! Can you break that down by region?", bob)
+    print("[alice -> bob] Thanks! Can you break that down by region?")
 
-    class FakeAgent:
-        def __init__(self, name):
-            self.name = name
-            self._hooks = {}
+    bob.send("North America: $2.1M, Europe: $1.3M, Asia: $0.8M.", alice)
+    print("[bob -> alice] North America: $2.1M, Europe: $1.3M, Asia: $0.8M.")
 
-        def register_hook(self, hookable_method, hook):
-            self._hooks.setdefault(hookable_method, []).append(hook)
-            print(f"  Registered hook: {hookable_method}")
+    total_calls = mock_client.certify_hash.call_count
+    print(f"\nTotal certify_hash calls: {total_calls}")
+    print("(Each send triggers a 'message_sent' cert on the sender,")
+    print(" and each receive triggers a 'message_received' cert on the receiver.)")
 
-    mock_client = MagicMock()
-    mock_client.certify_hash.return_value = MagicMock(
-        id="proof-789",
-        file_hash="def789",
-        transaction_hash="tx-012",
-    )
-
-    assistant = FakeAgent("research-assistant")
-    print(f"Creating agent: {assistant.name}")
-    hooks = register_xproof_hooks(assistant, client=mock_client)
-    print()
-
-    recv_hook = assistant._hooks["process_last_received_message"][0]
-    msg = recv_hook("Summarise the latest AI safety research.")
-    print(f"Received message processed (returned unchanged): {msg[:40]}...")
-
-    send_hook = assistant._hooks["process_message_before_send"][0]
-    reply = send_hook("Here is a summary of recent AI safety papers...")
-    print(f"Sent message processed (returned unchanged): {reply[:40]}...")
-
-    print(f"\nTotal certify_hash calls: {mock_client.certify_hash.call_count}")
+    print("\nSample certification metadata:")
+    for i, call in enumerate(mock_client.certify_hash.call_args_list[:4], 1):
+        meta = call.kwargs["metadata"]
+        print(f"  {i}. {meta['action_type']} by {meta['who']}")
 
 
 if __name__ == "__main__":
-    demo_standalone_hooks()
-    demo_register_hooks()
+    main()

@@ -205,6 +205,15 @@ def test_extract_text_other():
     assert _extract_text(42) == "42"
 
 
+def test_on_send_with_extra_positional_args(hooks, mock_client):
+    result = hooks.on_send("Reply", "recipient_agent", False)
+
+    assert result == "Reply"
+    mock_client.certify_hash.assert_called_once()
+    call_kwargs = mock_client.certify_hash.call_args.kwargs
+    assert call_kwargs["metadata"]["action_type"] == "message_sent"
+
+
 def test_file_name_format(hooks, mock_client):
     hooks.on_received("test")
     call_kwargs = mock_client.certify_hash.call_args.kwargs
