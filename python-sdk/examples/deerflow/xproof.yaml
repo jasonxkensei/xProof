@@ -1,0 +1,75 @@
+name: xproof_certify
+display_name: xProof Blockchain Certification
+description: >
+  Certify any agent output on the MultiversX blockchain for
+  proof-of-existence and accountability. Creates an immutable,
+  timestamped record using the xProof 4W framework
+  (Who, What, When, Why).
+category: trust
+author: xProof
+version: "0.1.0"
+homepage: https://xproof.app
+repository: https://github.com/jasonxkensei/xproof
+
+parameters:
+  - name: content
+    type: string
+    required: true
+    description: The text content to certify on-chain.
+  - name: file_name
+    type: string
+    required: false
+    default: "deerflow-output.json"
+    description: A descriptive name for the certification record.
+  - name: author
+    type: string
+    required: false
+    description: >
+      Override the agent name used in the certification metadata.
+      Defaults to the skill's configured agent_name.
+  - name: why
+    type: string
+    required: false
+    default: "DeerFlow agent certification"
+    description: >
+      Reason or context for the certification (maps to the 4W "Why" field).
+
+output:
+  type: json
+  fields:
+    - name: proof_id
+      type: string
+      description: Unique identifier for the blockchain proof.
+    - name: file_hash
+      type: string
+      description: SHA-256 hash of the certified content.
+    - name: transaction_hash
+      type: string
+      description: MultiversX transaction hash anchoring the proof.
+    - name: status
+      type: string
+      description: Always "certified" on success.
+
+example:
+  input: |
+    {
+      "content": "Q3 revenue analysis: $4.2M, up 15% YoY",
+      "file_name": "q3-analysis.json",
+      "why": "Quarterly earnings certification"
+    }
+  output: |
+    {
+      "proof_id": "proof-abc123",
+      "file_hash": "a1b2c3d4e5f6...",
+      "transaction_hash": "0xdeadbeef...",
+      "status": "certified"
+    }
+
+dependencies:
+  python:
+    - "xproof>=0.1.0"
+
+env:
+  - name: XPROOF_API_KEY
+    required: true
+    description: Your xProof API key (get one at https://xproof.app).

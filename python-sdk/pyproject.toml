@@ -49,6 +49,9 @@ autogen = [
 openai-agents = [
     "openai-agents>=0.0.3",
 ]
+deerflow = [
+    "xproof>=0.1.0",
+]
 
 [project.urls]
 Homepage = "https://xproof.app"

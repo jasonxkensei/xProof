@@ -30,3 +30,8 @@ try:
     from .openai_agents import XProofRunHooks, XProofTracingProcessor
 except ImportError:
     pass
+
+try:
+    from .deerflow import XProofDeerFlowSkill
+except ImportError:
+    pass
