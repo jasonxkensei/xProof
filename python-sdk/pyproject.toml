@@ -41,7 +41,7 @@ dev = [
     "responses>=0.20.0",
 ]
 llamaindex = [
-    "llama-index-core>=0.10.0",
+    "llama-index-core>=0.10.24",
 ]
 autogen = [
     "pyautogen>=0.2.0",

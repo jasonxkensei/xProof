@@ -1964,8 +1964,8 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "build", specifier = ">=1.4.0" },
-    { name = "langchain-core", specifier = ">=0.3.80" },
-    { name = "llama-index-core", specifier = ">=0.10.0" },
+    { name = "langchain-core", specifier = ">=0.3.81" },
+    { name = "llama-index-core", specifier = ">=0.10.24" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "responses", specifier = ">=0.26.0" },
