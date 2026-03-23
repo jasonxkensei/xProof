@@ -20,7 +20,6 @@ import {
   Bot,
   User,
   Zap,
-  Eye,
   Globe,
   Target,
 } from "lucide-react";
@@ -68,7 +67,6 @@ interface PublicStats {
     certifications_until_next_tier: number | null;
   };
   traffic?: {
-    total_visits: number;
     unique_ips: number;
     human_visitors: number;
     agent_visitors: number;
@@ -282,13 +280,7 @@ export default function AdminDashboard() {
             )}
 
             {stats?.traffic && (
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-6">
-                <StatCard
-                  title="Total Visits"
-                  value={stats.traffic.total_visits}
-                  subtitle="All page views"
-                  icon={Eye}
-                />
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
                 <StatCard
                   title="Unique Visitors"
                   value={stats.traffic.human_visitors}
