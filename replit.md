@@ -102,10 +102,14 @@ Endpoint-specific rate limiters complement the global 100 req/min limit: `public
 - **MPP** (`/api/mpp/:payment_intent_id`) — Machine Payments Protocol, links payment execution (HOW) with decision provenance (WHY), metadata: `mpp_payment_intent_id`, `mpp_amount`, `mpp_currency`, `mpp_network`
 
 ### Python SDK (`python-sdk/`)
-PyPI-ready package (`xproof`, v0.1.0). `XProofClient` with `register()`, `certify()`, `certify_hash()`, `batch_certify()`, `verify()`, `verify_hash()`, `get_pricing()`. Full 4W framework support (who/what/when/why metadata). Typed error hierarchy. SHA-256 hash utilities. 44 unit tests (+ 2 integration skipped). Integrations:
-- `xproof.integrations.langchain.XProofCallbackHandler` — auto-certifies LLM/tool/chain events with 4W metadata (12 tests)
-- `xproof.integrations.crewai.XProofCertifyTool` / `XProofCrewTool` / `XProofCrewCallback` — agent certification tools + crew-level auto-certification (7 tests). `XProofCertifyTool` = lightweight (no crewai dep), `XProofCrewTool` = native CrewAI BaseTool. `XProofTool` is a backwards-compatible alias for `XProofCertifyTool`.
-- Standalone examples: `examples/crewai-crew/` (3-agent crew demo with requirements.txt), `examples/langchain-chain/` (LangChain callback demo with requirements.txt)
+PyPI package (`xproof`, v0.2.0). `XProofClient` with `register()`, `certify()`, `certify_hash()`, `batch_certify()`, `verify()`, `verify_hash()`, `get_pricing()`. Full 4W framework support (who/what/when/why metadata). Typed error hierarchy. SHA-256 hash utilities. 121 unit tests (+ 2 integration skipped). Integrations:
+- `xproof.integrations.langchain.XProofCallbackHandler` — auto-certifies LLM/tool/chain events with 4W metadata
+- `xproof.integrations.crewai.XProofCertifyTool` / `XProofCrewTool` / `XProofCrewCallback` — agent certification tools + crew-level auto-certification. `XProofCertifyTool` = lightweight (no crewai dep), `XProofCrewTool` = native CrewAI BaseTool. `XProofTool` is a backwards-compatible alias for `XProofCertifyTool`.
+- `xproof.integrations.llamaindex.XProofCallbackHandler` — certifies LLM, query, and function call events via LlamaIndex's callback system
+- `xproof.integrations.autogen.register_xproof_hooks` / `XProofConversableAgent` — message-level hooks for AutoGen multi-agent conversations
+- `xproof.integrations.openai_agents.XProofRunHooks` / `XProofTracingProcessor` — RunHooks + TracingProcessor for OpenAI Agents SDK
+- `xproof.integrations.deerflow.XProofDeerFlowSkill` — native DeerFlow skill for certifying agent outputs
+- Standalone examples repo: `github.com/jasonxkensei/xproof-examples` (LangChain, CrewAI, LlamaIndex, OpenAI Agents, AutoGen, DeerFlow, Vercel)
 - CI/CD: `.github/workflows/python-sdk.yml` — tests on Python 3.9-3.12, publishes to PyPI on GitHub release
 
 ### npm SDK (`npm-sdk/`)
