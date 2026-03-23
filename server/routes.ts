@@ -8239,11 +8239,18 @@ export const xproofAuditPlugin: Plugin = {
       const [last7dRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, d7));
       const [last30dRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, d30));
 
-      const [apiCertsRow] = await db.select({ count: count() }).from(certifications).where(sql`${certifications.authMethod} IN ('api_key', 'x402', 'acp')`);
-      const apiCerts = apiCertsRow.count;
-      const [trialCertsRow] = await db.select({ count: count() }).from(certifications).innerJoin(users, eq(certifications.userId, users.id)).where(sql`${users.isTrial} IS TRUE`);
-      const trialCerts = trialCertsRow.count;
-      const userCerts = Math.max(0, totalRow.count - apiCerts - trialCerts);
+      const sourceBreakdown = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE c.auth_method IN ('api_key', 'x402', 'acp') AND (u.is_trial IS NOT TRUE OR u.id IS NULL)) as api_certs,
+          COUNT(*) FILTER (WHERE u.is_trial IS TRUE) as trial_certs,
+          COUNT(*) FILTER (WHERE (u.is_trial IS NOT TRUE OR u.id IS NULL) AND (c.auth_method IS NULL OR c.auth_method NOT IN ('api_key', 'x402', 'acp'))) as user_certs
+        FROM certifications c
+        LEFT JOIN users u ON c.user_id = u.id
+      `);
+      const src = (sourceBreakdown.rows[0] as Record<string, string>) || {};
+      const apiCerts = parseInt(src.api_certs || "0");
+      const trialCerts = parseInt(src.trial_certs || "0");
+      const userCerts = parseInt(src.user_certs || "0");
 
       const webhookStats = await db.execute(sql`
         SELECT 
@@ -8370,11 +8377,18 @@ export const xproofAuditPlugin: Plugin = {
       const [last7dRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, d7));
       const [last30dRow] = await db.select({ count: count() }).from(certifications).where(gte(certifications.createdAt, d30));
 
-      const [apiCertsRow] = await db.select({ count: count() }).from(certifications).where(sql`${certifications.authMethod} IN ('api_key', 'x402', 'acp')`);
-      const apiCerts = apiCertsRow.count;
-      const [trialCertsRow] = await db.select({ count: count() }).from(certifications).innerJoin(users, eq(certifications.userId, users.id)).where(sql`${users.isTrial} IS TRUE`);
-      const trialCerts = trialCertsRow.count;
-      const userCerts = Math.max(0, totalRow.count - apiCerts - trialCerts);
+      const adminSourceBreakdown = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE c.auth_method IN ('api_key', 'x402', 'acp') AND (u.is_trial IS NOT TRUE OR u.id IS NULL)) as api_certs,
+          COUNT(*) FILTER (WHERE u.is_trial IS TRUE) as trial_certs,
+          COUNT(*) FILTER (WHERE (u.is_trial IS NOT TRUE OR u.id IS NULL) AND (c.auth_method IS NULL OR c.auth_method NOT IN ('api_key', 'x402', 'acp'))) as user_certs
+        FROM certifications c
+        LEFT JOIN users u ON c.user_id = u.id
+      `);
+      const adminSrc = (adminSourceBreakdown.rows[0] as Record<string, string>) || {};
+      const apiCerts = parseInt(adminSrc.api_certs || "0");
+      const trialCerts = parseInt(adminSrc.trial_certs || "0");
+      const userCerts = parseInt(adminSrc.user_certs || "0");
 
       const [activeKeysRow] = await db.select({ count: count() }).from(apiKeys).where(eq(apiKeys.isActive, true));
 
@@ -9423,7 +9437,7 @@ export const xproofAuditPlugin: Plugin = {
       }
 
       logger.info("Batch attestation", { issuer: issuerWallet, created: results.length, errors: errors.length });
-      res.status(201).json({ created: results.length, errors: errors.length, results, errors });
+      res.status(201).json({ created: results.length, error_count: errors.length, results, errors });
     } catch (err: any) {
       if (err.name === "ZodError") {
         return res.status(400).json({ message: "Validation error", errors: err.errors });
