@@ -342,6 +342,21 @@ class TestTracingProcessor:
         assert call_kwargs["metadata"]["action_type"] == "tool_span_end"
         assert "span-tool-my_tool" in call_kwargs["file_name"]
 
+    def test_function_span_falsey_output_is_not_collapsed_to_fallback(self, mock_client):
+        """Falsey outputs (0, False) must not be silently replaced by the fallback chain."""
+        processor = XProofTracingProcessor(client=mock_client, agent_name="agent")
+        span = MagicMock()
+        span.span_data = MagicMock(spec=["type", "name", "output"])
+        span.span_data.type = "function"
+        span.span_data.name = "counter"
+        span.span_data.output = 0
+        span.span_id = "span-zero"
+        processor.on_span_end(span)
+
+        call_kwargs = mock_client.certify_hash.call_args.kwargs
+        expected_hash = _hash_data({"span_kind": "function", "tool": "counter", "output": "0"})
+        assert call_kwargs["file_hash"] == expected_hash
+
     def test_span_without_data_ignored(self, processor, mock_client):
         span = MagicMock()
         span.span_data = None

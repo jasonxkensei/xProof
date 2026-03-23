@@ -261,11 +261,12 @@ class XProofTracingProcessor:
             # Robust output fallback: FunctionSpanData may expose output under
             # different attribute names across SDK versions.  Try "output" first,
             # then "result" (used in some pre-release builds), then empty string.
-            output = (
-                getattr(span_data, "output", None)
-                or getattr(span_data, "result", None)
-                or ""
-            )
+            # Use explicit None checks to preserve valid falsey values (0, False, "").
+            output = getattr(span_data, "output", None)
+            if output is None:
+                output = getattr(span_data, "result", None)
+            if output is None:
+                output = ""
             data_hash = _hash_data({
                 "span_kind": kind,
                 "tool": tool_name,
