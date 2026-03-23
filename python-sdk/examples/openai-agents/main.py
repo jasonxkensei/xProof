@@ -108,22 +108,28 @@ class XProofTracingProcessor:
 
     def on_span_end(self, span):
         span_type = getattr(span.span_data, "type", None)
-        if span_type not in ("tool", "agent"):
+        # The real SDK uses "function" for local tool spans (FunctionSpanData.type),
+        # not "tool". Accept both for compatibility.
+        if span_type not in ("tool", "function", "agent"):
             return
         output = getattr(span.span_data, "output", str(span.span_id))
+        # Use the runtime span name (tool name or agent name) as WHO,
+        # not the static agent_name set at construction time.
         name = getattr(span.span_data, "name", self.agent_name)
         file_hash = hashlib.sha256(json.dumps(output, default=str).encode()).hexdigest()
+        action_type = "agent_span" if span_type == "agent" else "tool_span"
         self.client.certify_hash(
             file_hash=file_hash,
-            file_name=f"{span_type}_span.json",
-            author=self.agent_name,
+            file_name=f"{action_type}_{name}.json",
+            author=name,
             metadata={
-                "who": self.agent_name,
+                "who": name,
                 "what": file_hash,
                 "when": datetime.now(timezone.utc).isoformat(),
-                "why": f"{span_type}_span",
+                "why": f"{action_type}",
                 "framework": "openai-agents",
-                "action_type": f"{span_type}_span",
+                "action_type": action_type,
+                "span_type": span_type,
                 "span_name": name,
                 "span_id": str(span.span_id),
             },
@@ -188,27 +194,32 @@ async def demo_tracing_processor():
         id="proof-002", file_hash="def", transaction_hash="tx-002"
     )
 
-    processor = XProofTracingProcessor(client=mock_client, agent_name="trace-agent")
+    # agent_name is the fallback only — runtime span names take priority for WHO
+    processor = XProofTracingProcessor(client=mock_client, agent_name="fallback-agent")
 
-    tool_span = MagicMock()
-    tool_span.span_data = MagicMock(type="tool", name="web_search", output="results")
-    tool_span.span_id = "span-001"
-    processor.on_span_end(tool_span)
-    print("Tool span 'web_search' certified")
+    # Real OpenAI Agents SDK uses type="function" for local tool spans
+    function_span = MagicMock()
+    function_span.span_data = MagicMock(type="function", name="web_search", output="10 results")
+    function_span.span_id = "span-001"
+    processor.on_span_end(function_span)
+    print("Function span 'web_search' certified  (WHO = 'web_search')")
 
     agent_span = MagicMock()
     agent_span.span_data = MagicMock(type="agent", name="analyst", output="report")
     agent_span.span_id = "span-002"
     processor.on_span_end(agent_span)
-    print("Agent span 'analyst' certified")
+    print("Agent span 'analyst' certified  (WHO = 'analyst')")
 
     llm_span = MagicMock()
-    llm_span.span_data = MagicMock(type="llm", name="gpt-4", output="hello")
+    llm_span.span_data = MagicMock(type="generation", name="gpt-4o", output="hello")
     llm_span.span_id = "span-003"
     processor.on_span_end(llm_span)
-    print("LLM span 'gpt-4' skipped (not tool/agent)")
+    print("Generation span 'gpt-4o' skipped (not tool/function/agent)")
 
     print(f"\nTotal certify_hash calls: {mock_client.certify_hash.call_count}")
+    for i, call in enumerate(mock_client.certify_hash.call_args_list, 1):
+        meta = call.kwargs["metadata"]
+        print(f"  {i}. {meta['action_type']} by WHO={meta['who']}")
 
 
 async def main():

@@ -184,7 +184,8 @@ class XProofTracingProcessor:
     """Span-based tracing processor for xProof certification.
 
     Implements the ``TracingProcessor`` interface from the OpenAI Agents
-    SDK.  Certifies completed spans whose kind is ``tool`` or ``agent``.
+    SDK.  Certifies completed spans whose kind is ``tool``, ``function``
+    (the real type used for local tools in the SDK), or ``agent``.
 
     Example::
 
@@ -215,13 +216,15 @@ class XProofTracingProcessor:
         data_hash: str,
         file_name: str,
         context: str = "",
+        who_override: Optional[str] = None,
     ) -> None:
+        who = who_override or self.agent_name
         entry = {
             "file_hash": data_hash,
             "file_name": file_name,
-            "author": self.agent_name,
+            "author": who,
             "metadata": {
-                "who": self.agent_name,
+                "who": who,
                 "what": data_hash,
                 "when": datetime.now(timezone.utc).isoformat(),
                 "why": context or action_type,
@@ -240,19 +243,23 @@ class XProofTracingProcessor:
         """Called when a span starts. No-op — certification happens on end."""
 
     def on_span_end(self, span: Any) -> None:
-        """Certify a completed span if its kind is tool or agent."""
+        """Certify a completed span if its kind is tool, function, or agent.
+
+        The OpenAI Agents SDK uses ``"function"`` for local tool spans
+        (``FunctionSpanData.type``), not ``"tool"``.  Both are accepted so
+        the processor works regardless of which SDK version is installed.
+        """
         span_data = getattr(span, "span_data", None)
         if span_data is None:
             return
 
         kind = getattr(span_data, "type", None)
-        span_name = getattr(span, "span_id", "unknown")
 
-        if kind == "tool" and self.certify_tool_spans:
+        if kind in ("tool", "function") and self.certify_tool_spans:
             tool_name = getattr(span_data, "name", "unknown-tool")
             output = getattr(span_data, "output", "")
             data_hash = _hash_data({
-                "span_kind": "tool",
+                "span_kind": kind,
                 "tool": tool_name,
                 "output": str(output),
             })
@@ -261,6 +268,7 @@ class XProofTracingProcessor:
                 data_hash=data_hash,
                 file_name=f"span-tool-{tool_name}-{data_hash[:8]}.json",
                 context=f"Tool span {tool_name} completed",
+                who_override=tool_name,
             )
         elif kind == "agent" and self.certify_agent_spans:
             agent_label = getattr(span_data, "name", self.agent_name)
@@ -275,6 +283,7 @@ class XProofTracingProcessor:
                 data_hash=data_hash,
                 file_name=f"span-agent-{agent_label}-{data_hash[:8]}.json",
                 context=f"Agent span {agent_label} completed",
+                who_override=agent_label,
             )
 
     def force_flush(self) -> None:

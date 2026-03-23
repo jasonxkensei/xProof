@@ -270,11 +270,45 @@ class TestTracingProcessor:
 
         call_kwargs = mock_client.certify_hash.call_args.kwargs
         meta = call_kwargs["metadata"]
-        assert meta["who"] == "trace-agent"
+        assert meta["who"] == "search"
         assert "what" in meta
         assert "when" in meta
         assert "why" in meta
         assert meta["framework"] == "openai-agents"
+
+    def test_function_span_certifies(self, processor, mock_client):
+        """The real OpenAI Agents SDK uses type 'function' for local tool spans."""
+        span = self._make_span("function", name="web_search", output="10 results")
+        processor.on_span_end(span)
+        mock_client.certify_hash.assert_called_once()
+
+        call_kwargs = mock_client.certify_hash.call_args.kwargs
+        assert call_kwargs["metadata"]["action_type"] == "tool_span_end"
+        assert "span-tool-web_search" in call_kwargs["file_name"]
+
+    def test_who_uses_span_name_not_constructor_default(self, mock_client):
+        """WHO must reflect the runtime span name, not the static agent_name."""
+        processor = XProofTracingProcessor(
+            client=mock_client, agent_name="static-default"
+        )
+        span = self._make_span("function", name="runtime-tool", output="done")
+        processor.on_span_end(span)
+
+        call_kwargs = mock_client.certify_hash.call_args.kwargs
+        assert call_kwargs["author"] == "runtime-tool"
+        assert call_kwargs["metadata"]["who"] == "runtime-tool"
+
+    def test_agent_span_who_uses_runtime_name(self, mock_client):
+        """WHO for agent spans must use span_data.name, not static agent_name."""
+        processor = XProofTracingProcessor(
+            client=mock_client, agent_name="static-default"
+        )
+        span = self._make_span("agent", name="analyst", output="report")
+        processor.on_span_end(span)
+
+        call_kwargs = mock_client.certify_hash.call_args.kwargs
+        assert call_kwargs["author"] == "analyst"
+        assert call_kwargs["metadata"]["who"] == "analyst"
 
     def test_span_without_data_ignored(self, processor, mock_client):
         span = MagicMock()
