@@ -310,6 +310,38 @@ class TestTracingProcessor:
         assert call_kwargs["author"] == "analyst"
         assert call_kwargs["metadata"]["who"] == "analyst"
 
+    def test_function_span_missing_name_falls_back_to_agent_name(self, mock_client):
+        """When span_data.name is absent, WHO must fall back to self.agent_name."""
+        processor = XProofTracingProcessor(
+            client=mock_client, agent_name="my-agent"
+        )
+        span = MagicMock()
+        span.span_data = MagicMock(spec=["type", "output"])
+        span.span_data.type = "function"
+        span.span_data.output = "done"
+        span.span_id = "span-no-name"
+        processor.on_span_end(span)
+
+        call_kwargs = mock_client.certify_hash.call_args.kwargs
+        assert call_kwargs["author"] == "my-agent"
+        assert call_kwargs["metadata"]["who"] == "my-agent"
+
+    def test_function_span_output_via_result_field(self, mock_client):
+        """Output must be read from 'result' when 'output' is absent (SDK fallback)."""
+        processor = XProofTracingProcessor(client=mock_client, agent_name="agent")
+        span = MagicMock()
+        span.span_data = MagicMock(spec=["type", "name", "result"])
+        span.span_data.type = "function"
+        span.span_data.name = "my_tool"
+        span.span_data.result = "42"
+        span.span_id = "span-result"
+        processor.on_span_end(span)
+
+        mock_client.certify_hash.assert_called_once()
+        call_kwargs = mock_client.certify_hash.call_args.kwargs
+        assert call_kwargs["metadata"]["action_type"] == "tool_span_end"
+        assert "span-tool-my_tool" in call_kwargs["file_name"]
+
     def test_span_without_data_ignored(self, processor, mock_client):
         span = MagicMock()
         span.span_data = None

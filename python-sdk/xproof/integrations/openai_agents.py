@@ -256,8 +256,16 @@ class XProofTracingProcessor:
         kind = getattr(span_data, "type", None)
 
         if kind in ("tool", "function") and self.certify_tool_spans:
-            tool_name = getattr(span_data, "name", "unknown-tool")
-            output = getattr(span_data, "output", "")
+            # Fallback chain for name: span_data.name → self.agent_name
+            tool_name = getattr(span_data, "name", None) or self.agent_name
+            # Robust output fallback: FunctionSpanData may expose output under
+            # different attribute names across SDK versions.  Try "output" first,
+            # then "result" (used in some pre-release builds), then empty string.
+            output = (
+                getattr(span_data, "output", None)
+                or getattr(span_data, "result", None)
+                or ""
+            )
             data_hash = _hash_data({
                 "span_kind": kind,
                 "tool": tool_name,
