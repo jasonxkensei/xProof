@@ -55,7 +55,9 @@ setInterval(() => {
 
 const SKIP_VISIT_PATHS = /^\/api\/|^\/.well-known\/|^\/mcp|^\/health|^\/src\/|^\/@|^\/node_modules\//;
 const SKIP_VISIT_EXT = /\.(js|mjs|cjs|ts|tsx|jsx|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json|xml|txt|pdf|zip|webp|avif|mp4|webm|php|webmanifest)$/i;
-const AGENT_UA_PATTERNS = ["chatgpt", "gptbot", "googlebot", "bingbot", "bot", "crawler", "spider", "curl", "wget", "python-requests", "axios", "node-fetch", "httpx", "scrapy", "postmanruntime", "semrushbot", "ahrefsbot", "slurp", "duckduckbot", "baiduspider", "yandexbot"];
+// Known scanner/probe paths — security scanners that fake browser UAs
+const SCAN_PATHS = /^\/(\.git|\.aws|\.env|\.circleci|\.github|wp-|phpinfo|_profiler|_debugbar|debugbar|debug|vendor\/|cgi-bin|xmlrpc|actuator|docker-compose|serverless|secrets|\.htaccess|aws-|storage\/logs|https?%3A|%22\/|aws\/|root\/|s3\/|horizon\/|magento|administrator\/|rest\/|proc\/|getcmd|software\/|package-updates\/|app\/\.git|app\/\.terraform|app_dev|server-status|graphql$|application\.properties|web\.config|Dockerfile|\.terraform)/i;
+const AGENT_UA_PATTERNS = ["chatgpt", "gptbot", "googlebot", "bingbot", "bot", "crawler", "spider", "curl", "wget", "python-requests", "axios", "node-fetch", "httpx", "scrapy", "postmanruntime", "semrushbot", "ahrefsbot", "slurp", "duckduckbot", "baiduspider", "yandexbot", "download demon", "zgrab", "masscan", "nmap", "nikto", "sqlmap"];
 const EXCLUDED_IP_HASHES = new Set((process.env.EXCLUDE_IP_HASHES || "").split(",").map(h => h.trim()).filter(Boolean));
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -88,7 +90,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use((req, res, next) => {
     next();
     const path = req.path;
-    if (SKIP_VISIT_PATHS.test(path) || SKIP_VISIT_EXT.test(path)) return;
+    if (SKIP_VISIT_PATHS.test(path) || SKIP_VISIT_EXT.test(path) || SCAN_PATHS.test(path)) return;
 
     const ip = req.ip || req.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
     const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
