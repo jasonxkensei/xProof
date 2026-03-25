@@ -89,8 +89,6 @@ interface HealthData {
 
 interface UtmRow {
   utm_source: string | null;
-  utm_medium: string | null;
-  utm_content: string | null;
   visits: number;
   unique_ips: number;
   conversions: number;
@@ -574,8 +572,6 @@ export default function AdminDashboard() {
                           <thead>
                             <tr className="border-b text-muted-foreground">
                               <th className="text-left pb-2 pr-4 font-medium">Source</th>
-                              <th className="text-left pb-2 pr-4 font-medium">Medium</th>
-                              <th className="text-left pb-2 pr-4 font-medium">Content</th>
                               <th className="text-right pb-2 pr-4 font-medium">Visits</th>
                               <th className="text-right pb-2 pr-4 font-medium">Unique IPs</th>
                               <th className="text-right pb-2 font-medium">Conversions</th>
@@ -587,8 +583,6 @@ export default function AdminDashboard() {
                                 <td className="py-2 pr-4">
                                   <Badge variant="secondary" className="font-mono text-xs">{row.utm_source ?? "—"}</Badge>
                                 </td>
-                                <td className="py-2 pr-4 text-muted-foreground">{row.utm_medium ?? "—"}</td>
-                                <td className="py-2 pr-4 text-muted-foreground text-xs max-w-32 truncate">{row.utm_content ?? "—"}</td>
                                 <td className="py-2 pr-4 text-right font-medium">{row.visits}</td>
                                 <td className="py-2 pr-4 text-right text-muted-foreground">{row.unique_ips}</td>
                                 <td className="py-2 text-right font-medium text-foreground" data-testid={`utm-conversions-${i}`}>{row.conversions}</td>

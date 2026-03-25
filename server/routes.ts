@@ -8499,7 +8499,7 @@ export const xproofAuditPlugin: Plugin = {
 
   app.get("/api/admin/utm-stats", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
     try {
-      // First-touch attribution: earliest UTM visit per IP per source
+      // First-touch attribution per source: earliest UTM visit per IP per source
       // Conversion: user registered within 24h of that first touch from same IP
       const rows = await db.execute(sql`
         WITH first_touch AS (
@@ -8518,17 +8518,15 @@ export const xproofAuditPlugin: Plugin = {
         )
         SELECT
           v.utm_source,
-          v.utm_medium,
-          v.utm_content,
           COUNT(*) AS visits,
           COUNT(DISTINCT v.ip_hash) AS unique_ips,
-          COALESCE(c.conv_count, 0) AS conversions,
+          COALESCE(MAX(c.conv_count), 0) AS conversions,
           MIN(v.created_at) AS first_seen,
           MAX(v.created_at) AS last_seen
         FROM visits v
         LEFT JOIN conversions c ON c.utm_source = v.utm_source
         WHERE v.utm_source IS NOT NULL
-        GROUP BY v.utm_source, v.utm_medium, v.utm_content, c.conv_count
+        GROUP BY v.utm_source
         ORDER BY visits DESC
         LIMIT 100
       `);
@@ -8557,8 +8555,6 @@ export const xproofAuditPlugin: Plugin = {
       res.json({
         rows: (rows.rows as Array<Record<string, string | null>>).map(r => ({
           utm_source: r.utm_source,
-          utm_medium: r.utm_medium,
-          utm_content: r.utm_content,
           visits: parseInt(r.visits as string || "0"),
           unique_ips: parseInt(r.unique_ips as string || "0"),
           conversions: parseInt(r.conversions as string || "0"),
