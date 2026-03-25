@@ -22,6 +22,7 @@ import {
   Zap,
   Globe,
   Target,
+  Link2,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -84,6 +85,26 @@ interface HealthData {
   status: string;
   components: Record<string, { status: string; latency_ms?: number }>;
   uptime_seconds: number;
+}
+
+interface UtmRow {
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_content: string | null;
+  visits: number;
+  unique_ips: number;
+  first_seen: string | null;
+  last_seen: string | null;
+}
+
+interface UtmStats {
+  rows: UtmRow[];
+  summary: {
+    total_utm_visits: number;
+    total_utm_unique_ips: number;
+    total_sources: number;
+  };
+  generated_at: string;
 }
 
 function StatCard({ title, value, subtitle, icon: Icon }: { title: string; value: string | number; subtitle?: string; icon: any }) {
@@ -153,6 +174,12 @@ export default function AdminDashboard() {
   const { data: health, isLoading: healthLoading } = useQuery<HealthData>({
     queryKey: ["/api/health"],
     refetchInterval: 15000,
+  });
+
+  const { data: utmStats } = useQuery<UtmStats>({
+    queryKey: ["/api/admin/utm-stats"],
+    refetchInterval: 60000,
+    retry: false,
   });
 
   if (statsLoading || healthLoading) {
@@ -514,6 +541,60 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {utmStats && (
+              <Card className="mb-6" data-testid="card-utm-attribution">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                  <CardTitle className="text-sm font-medium">UTM Attribution</CardTitle>
+                  <Link2 className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  {utmStats.rows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No UTM visits recorded yet. Add <code className="text-xs bg-muted px-1 rounded">?utm_source=moltbook</code> to your CTA links.</p>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-4 mb-4 text-sm">
+                        <span className="text-muted-foreground">
+                          <span className="font-medium text-foreground">{utmStats.summary.total_utm_visits}</span> UTM visits
+                        </span>
+                        <span className="text-muted-foreground">
+                          <span className="font-medium text-foreground">{utmStats.summary.total_utm_unique_ips}</span> unique IPs
+                        </span>
+                        <span className="text-muted-foreground">
+                          <span className="font-medium text-foreground">{utmStats.summary.total_sources}</span> sources
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm" data-testid="table-utm-stats">
+                          <thead>
+                            <tr className="border-b text-muted-foreground">
+                              <th className="text-left pb-2 pr-4 font-medium">Source</th>
+                              <th className="text-left pb-2 pr-4 font-medium">Medium</th>
+                              <th className="text-left pb-2 pr-4 font-medium">Content</th>
+                              <th className="text-right pb-2 pr-4 font-medium">Visits</th>
+                              <th className="text-right pb-2 font-medium">Unique IPs</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {utmStats.rows.map((row, i) => (
+                              <tr key={i} className="border-b last:border-0" data-testid={`row-utm-${i}`}>
+                                <td className="py-2 pr-4">
+                                  <Badge variant="secondary" className="font-mono text-xs">{row.utm_source ?? "—"}</Badge>
+                                </td>
+                                <td className="py-2 pr-4 text-muted-foreground">{row.utm_medium ?? "—"}</td>
+                                <td className="py-2 pr-4 text-muted-foreground text-xs max-w-32 truncate">{row.utm_content ?? "—"}</td>
+                                <td className="py-2 pr-4 text-right font-medium">{row.visits}</td>
+                                <td className="py-2 text-right text-muted-foreground">{row.unique_ips}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <div className="flex flex-col items-center gap-2">
               <Button variant="outline" onClick={() => refetchStats()} data-testid="button-refresh-stats">

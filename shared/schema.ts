@@ -275,6 +275,9 @@ export const visits = pgTable("visits", {
   userAgent: text("user_agent"),
   isAgent: boolean("is_agent").default(false).notNull(),
   path: varchar("path", { length: 512 }).notNull(),
+  utmSource: varchar("utm_source", { length: 128 }),
+  utmMedium: varchar("utm_medium", { length: 128 }),
+  utmContent: varchar("utm_content", { length: 256 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

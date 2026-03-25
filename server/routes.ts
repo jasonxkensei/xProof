@@ -103,7 +103,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const ua = (req.get("user-agent") || "").toLowerCase();
     const isAgent = AGENT_UA_PATTERNS.some(p => ua.includes(p));
 
-    db.insert(visits).values({ ipHash, userAgent: req.get("user-agent") || null, isAgent, path }).catch(() => {});
+    const utmSource = (req.query.utm_source as string | undefined)?.slice(0, 128) || null;
+    const utmMedium = (req.query.utm_medium as string | undefined)?.slice(0, 128) || null;
+    const utmContent = (req.query.utm_content as string | undefined)?.slice(0, 256) || null;
+
+    db.insert(visits).values({ ipHash, userAgent: req.get("user-agent") || null, isAgent, path, utmSource, utmMedium, utmContent }).catch(() => {});
   });
   
   // DEPRECATED: Legacy endpoint - SECURITY VULNERABILITY
@@ -8481,6 +8485,56 @@ export const xproofAuditPlugin: Plugin = {
     const excluded = EXCLUDED_IP_HASHES.has(ipHash);
     const [visitCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(visits).where(eq(visits.ipHash, ipHash));
     res.json({ ip_hash: ipHash, excluded, visit_count: visitCount?.count || 0 });
+  });
+
+  app.get("/api/admin/utm-stats", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const rows = await db.execute(sql`
+        SELECT
+          utm_source,
+          utm_medium,
+          utm_content,
+          COUNT(*) as visits,
+          COUNT(DISTINCT ip_hash) as unique_ips,
+          MIN(created_at) as first_seen,
+          MAX(created_at) as last_seen
+        FROM visits
+        WHERE utm_source IS NOT NULL
+        GROUP BY utm_source, utm_medium, utm_content
+        ORDER BY visits DESC
+        LIMIT 100
+      `);
+
+      const summary = await db.execute(sql`
+        SELECT
+          COUNT(*) as total_utm_visits,
+          COUNT(DISTINCT ip_hash) as total_utm_unique_ips,
+          COUNT(DISTINCT utm_source) as total_sources
+        FROM visits
+        WHERE utm_source IS NOT NULL
+      `);
+
+      res.json({
+        rows: (rows.rows as Array<Record<string, string | null>>).map(r => ({
+          utm_source: r.utm_source,
+          utm_medium: r.utm_medium,
+          utm_content: r.utm_content,
+          visits: parseInt(r.visits as string || "0"),
+          unique_ips: parseInt(r.unique_ips as string || "0"),
+          first_seen: r.first_seen,
+          last_seen: r.last_seen,
+        })),
+        summary: {
+          total_utm_visits: parseInt((summary.rows[0] as Record<string, string>)?.total_utm_visits || "0"),
+          total_utm_unique_ips: parseInt((summary.rows[0] as Record<string, string>)?.total_utm_unique_ips || "0"),
+          total_sources: parseInt((summary.rows[0] as Record<string, string>)?.total_sources || "0"),
+        },
+        generated_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.withRequest(req).error("UTM stats error");
+      res.status(500).json({ error: "Failed to generate UTM stats" });
+    }
   });
 
   app.delete("/api/admin/visits/:ipHash", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
