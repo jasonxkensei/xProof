@@ -52,7 +52,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/xproof-io/xproof-js"
+    "url": "https://github.com/jasonxkensei/xproof"
   },
   "homepage": "https://xproof.app",
   "engines": {
