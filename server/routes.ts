@@ -156,6 +156,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!user) {
         // Create new user with free tier
+        const regIp = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
+        const regIpHash = crypto.createHash("sha256").update(regIp).digest("hex");
         [user] = await db
           .insert(users)
           .values({
@@ -164,6 +166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             subscriptionStatus: "active",
             monthlyUsage: 0,
             usageResetDate: new Date(),
+            registrationIpHash: regIpHash,
           })
           .returning();
       }
@@ -198,6 +201,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!user) {
         // Create new user with free tier
+        const regIp2 = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
+        const regIpHash2 = crypto.createHash("sha256").update(regIp2).digest("hex");
         [user] = await db
           .insert(users)
           .values({
@@ -206,6 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             subscriptionStatus: "active",
             monthlyUsage: 0,
             usageResetDate: new Date(),
+            registrationIpHash: regIpHash2,
           })
           .returning();
       }
@@ -2580,6 +2586,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const trialWallet = `erd1trial${crypto.randomBytes(24).toString("hex")}`;
 
+      const registrationIpFull = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
+      const registrationIpHash = crypto.createHash("sha256").update(registrationIpFull).digest("hex");
+
       const [trialUser] = await db.insert(users).values({
         walletAddress: trialWallet,
         subscriptionTier: "free",
@@ -2588,6 +2597,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         trialQuota: TRIAL_QUOTA,
         trialUsed: 0,
         companyName: data.agent_name,
+        registrationIpHash,
       }).returning();
 
       const rawKey = `pm_${crypto.randomBytes(32).toString("hex")}`;
@@ -8489,31 +8499,61 @@ export const xproofAuditPlugin: Plugin = {
 
   app.get("/api/admin/utm-stats", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
     try {
+      // First-touch attribution: earliest UTM visit per IP per source
+      // Conversion: user registered within 24h of that first touch from same IP
       const rows = await db.execute(sql`
+        WITH first_touch AS (
+          SELECT DISTINCT ON (ip_hash) ip_hash, utm_source, created_at AS touched_at
+          FROM visits
+          WHERE utm_source IS NOT NULL
+          ORDER BY ip_hash, created_at ASC
+        ),
+        conversions AS (
+          SELECT ft.utm_source, COUNT(DISTINCT u.id) AS conv_count
+          FROM first_touch ft
+          INNER JOIN users u ON u.registration_ip_hash = ft.ip_hash
+            AND u.created_at >= ft.touched_at
+            AND u.created_at <= ft.touched_at + INTERVAL '24 hours'
+          GROUP BY ft.utm_source
+        )
         SELECT
-          utm_source,
-          utm_medium,
-          utm_content,
-          COUNT(*) as visits,
-          COUNT(DISTINCT ip_hash) as unique_ips,
-          MIN(created_at) as first_seen,
-          MAX(created_at) as last_seen
-        FROM visits
-        WHERE utm_source IS NOT NULL
-        GROUP BY utm_source, utm_medium, utm_content
+          v.utm_source,
+          v.utm_medium,
+          v.utm_content,
+          COUNT(*) AS visits,
+          COUNT(DISTINCT v.ip_hash) AS unique_ips,
+          COALESCE(c.conv_count, 0) AS conversions,
+          MIN(v.created_at) AS first_seen,
+          MAX(v.created_at) AS last_seen
+        FROM visits v
+        LEFT JOIN conversions c ON c.utm_source = v.utm_source
+        WHERE v.utm_source IS NOT NULL
+        GROUP BY v.utm_source, v.utm_medium, v.utm_content, c.conv_count
         ORDER BY visits DESC
         LIMIT 100
       `);
 
       const summary = await db.execute(sql`
         SELECT
-          COUNT(*) as total_utm_visits,
-          COUNT(DISTINCT ip_hash) as total_utm_unique_ips,
-          COUNT(DISTINCT utm_source) as total_sources
+          COUNT(*) AS total_utm_visits,
+          COUNT(DISTINCT ip_hash) AS total_utm_unique_ips,
+          COUNT(DISTINCT utm_source) AS total_sources,
+          (
+            SELECT COUNT(DISTINCT u.id)
+            FROM (
+              SELECT DISTINCT ON (ip_hash) ip_hash, created_at AS touched_at
+              FROM visits WHERE utm_source IS NOT NULL
+              ORDER BY ip_hash, created_at ASC
+            ) ft
+            INNER JOIN users u ON u.registration_ip_hash = ft.ip_hash
+              AND u.created_at >= ft.touched_at
+              AND u.created_at <= ft.touched_at + INTERVAL '24 hours'
+          ) AS total_conversions
         FROM visits
         WHERE utm_source IS NOT NULL
       `);
 
+      const s = (summary.rows[0] as Record<string, string>) || {};
       res.json({
         rows: (rows.rows as Array<Record<string, string | null>>).map(r => ({
           utm_source: r.utm_source,
@@ -8521,13 +8561,15 @@ export const xproofAuditPlugin: Plugin = {
           utm_content: r.utm_content,
           visits: parseInt(r.visits as string || "0"),
           unique_ips: parseInt(r.unique_ips as string || "0"),
+          conversions: parseInt(r.conversions as string || "0"),
           first_seen: r.first_seen,
           last_seen: r.last_seen,
         })),
         summary: {
-          total_utm_visits: parseInt((summary.rows[0] as Record<string, string>)?.total_utm_visits || "0"),
-          total_utm_unique_ips: parseInt((summary.rows[0] as Record<string, string>)?.total_utm_unique_ips || "0"),
-          total_sources: parseInt((summary.rows[0] as Record<string, string>)?.total_sources || "0"),
+          total_utm_visits: parseInt(s.total_utm_visits || "0"),
+          total_utm_unique_ips: parseInt(s.total_utm_unique_ips || "0"),
+          total_sources: parseInt(s.total_sources || "0"),
+          total_conversions: parseInt(s.total_conversions || "0"),
         },
         generated_at: new Date().toISOString(),
       });

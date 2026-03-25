@@ -48,6 +48,7 @@ export const users = pgTable("users", {
   agentWebsite: varchar("agent_website"),
   agentCategory: varchar("agent_category"),
   isPublicProfile: boolean("is_public_profile").default(false),
+  registrationIpHash: varchar("registration_ip_hash", { length: 64 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

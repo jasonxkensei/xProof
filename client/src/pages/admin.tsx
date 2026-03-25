@@ -93,6 +93,7 @@ interface UtmRow {
   utm_content: string | null;
   visits: number;
   unique_ips: number;
+  conversions: number;
   first_seen: string | null;
   last_seen: string | null;
 }
@@ -103,6 +104,7 @@ interface UtmStats {
     total_utm_visits: number;
     total_utm_unique_ips: number;
     total_sources: number;
+    total_conversions: number;
   };
   generated_at: string;
 }
@@ -563,6 +565,9 @@ export default function AdminDashboard() {
                         <span className="text-muted-foreground">
                           <span className="font-medium text-foreground">{utmStats.summary.total_sources}</span> sources
                         </span>
+                        <span className="text-muted-foreground">
+                          <span className="font-medium text-foreground">{utmStats.summary.total_conversions}</span> conversions
+                        </span>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm" data-testid="table-utm-stats">
@@ -572,7 +577,8 @@ export default function AdminDashboard() {
                               <th className="text-left pb-2 pr-4 font-medium">Medium</th>
                               <th className="text-left pb-2 pr-4 font-medium">Content</th>
                               <th className="text-right pb-2 pr-4 font-medium">Visits</th>
-                              <th className="text-right pb-2 font-medium">Unique IPs</th>
+                              <th className="text-right pb-2 pr-4 font-medium">Unique IPs</th>
+                              <th className="text-right pb-2 font-medium">Conversions</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -584,7 +590,8 @@ export default function AdminDashboard() {
                                 <td className="py-2 pr-4 text-muted-foreground">{row.utm_medium ?? "—"}</td>
                                 <td className="py-2 pr-4 text-muted-foreground text-xs max-w-32 truncate">{row.utm_content ?? "—"}</td>
                                 <td className="py-2 pr-4 text-right font-medium">{row.visits}</td>
-                                <td className="py-2 text-right text-muted-foreground">{row.unique_ips}</td>
+                                <td className="py-2 pr-4 text-right text-muted-foreground">{row.unique_ips}</td>
+                                <td className="py-2 text-right font-medium text-foreground" data-testid={`utm-conversions-${i}`}>{row.conversions}</td>
                               </tr>
                             ))}
                           </tbody>
