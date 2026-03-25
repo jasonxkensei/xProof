@@ -1,6 +1,6 @@
 {
   "name": "@xproof/xproof",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Official SDK for the xProof blockchain certification API — proof and accountability layer for autonomous agents",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -52,7 +52,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jasonxkensei/xproof"
+    "url": "git+https://github.com/jasonxkensei/xproof.git"
   },
   "homepage": "https://xproof.app",
   "engines": {
