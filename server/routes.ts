@@ -8499,8 +8499,8 @@ export const xproofAuditPlugin: Plugin = {
 
   app.get("/api/admin/utm-stats", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
     try {
-      // First-touch attribution per source: earliest UTM visit per IP per source
-      // Conversion: user registered within 24h of that first touch from same IP
+      // First-touch attribution: earliest UTM visit per IP (not per source).
+      // Conversion = user who registered within 24h of their first UTM touch, matched by ip_hash.
       const rows = await db.execute(sql`
         WITH first_touch AS (
           SELECT DISTINCT ON (ip_hash) ip_hash, utm_source, created_at AS touched_at
