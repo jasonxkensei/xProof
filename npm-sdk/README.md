@@ -1,31 +1,97 @@
 # xproof
 
-Official TypeScript/JavaScript SDK for the [xProof](https://xproof.app) blockchain certification API — proof and accountability layer for autonomous agents.
-
-## Installation
+On-chain decision provenance for autonomous agents. **WHY before acting. WHAT after.** Timestamps written by the chain, not your agent.
 
 ```bash
 npm install @xproof/xproof
 ```
 
-Requires Node.js 18+ (uses native `fetch`).
+---
 
-## Quick Start
+## 3 steps. 30 seconds.
+
+### Step 1 — Register (no wallet, no payment)
+
+```bash
+curl -X POST https://xproof.app/api/agent/register \
+  -H "Content-Type: application/json" \
+  -d '{"agent_name": "my-agent"}'
+```
+
+```json
+{ "api_key": "pm_...", "trial": { "remaining": 10 } }
+```
+
+### Step 2 — Anchor WHY before acting
+
+Hash your reasoning and certify it *before* your agent executes.
+
+```bash
+curl -X POST https://xproof.app/api/proof \
+  -H "Authorization: Bearer pm_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_hash": "<sha256_of_reasoning>",
+    "file_name": "reasoning.json",
+    "author": "my-agent",
+    "metadata": { "action_type": "decision" }
+  }'
+```
+
+```json
+{ "id": "why-proof-uuid", "transaction_hash": "0x..." }
+```
+
+### Step 3 — Anchor WHAT after acting
+
+Hash your output and link it to the WHY proof.
+
+```bash
+curl -X POST https://xproof.app/api/proof \
+  -H "Authorization: Bearer pm_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_hash": "<sha256_of_output>",
+    "file_name": "output.json",
+    "author": "my-agent",
+    "metadata": { "action_type": "execution", "why_proof_id": "why-proof-uuid" }
+  }'
+```
+
+```json
+{ "id": "what-proof-uuid", "transaction_hash": "0x..." }
+```
+
+When something goes wrong, you don't guess. You verify.
+
+---
+
+## TypeScript SDK
 
 ```typescript
-import { XProofClient } from "@xproof/xproof";
+import { XProofClient, hashString } from "@xproof/xproof";
 
-// 1. Register (zero-friction, no wallet needed)
+// Register — zero-friction, no wallet, no payment
 const client = await XProofClient.register("my-agent");
-console.log(client.registration?.trial.remaining); // 10 free certs
+// 10 free certs, API key stored automatically
 
-// 2. Certify a file (hashes locally, sends hash to API)
-const cert = await client.certify("./report.pdf", "my-agent");
-console.log(cert.transactionHash);
+// Step 2: Anchor WHY before acting
+const why = await client.certifyHash(
+  hashString(JSON.stringify({ action: "summarize", model: "gpt-4" })),
+  "reasoning.json",
+  "my-agent",
+  { metadata: { action_type: "decision" } }
+);
 
-// 3. Verify
-const proof = await client.verifyHash(cert.fileHash);
-console.log(proof.id);
+// Step 3: Anchor WHAT after acting
+const what = await client.certifyHash(
+  hashString(executionOutput),
+  "output.json",
+  "my-agent",
+  { metadata: { action_type: "execution", why_proof_id: why.id } }
+);
+
+console.log(what.transactionHash); // MultiversX explorer link
 ```
 
 Or use an existing API key:
@@ -34,9 +100,11 @@ Or use an existing API key:
 const client = new XProofClient({ apiKey: "pm_your_key" });
 ```
 
+---
+
 ## 4W Framework (WHO / WHAT / WHEN / WHY)
 
-Certifications support the 4W accountability framework:
+Full accountability metadata on every certification:
 
 ```typescript
 import { XProofClient, hashString } from "@xproof/xproof";
@@ -76,16 +144,28 @@ console.log(result.summary.created); // 2
 ```typescript
 import { hashFile, hashBuffer, hashString } from "@xproof/xproof";
 
-const fileHash = await hashFile("./document.pdf");
+const fileHash   = await hashFile("./document.pdf");
 const bufferHash = hashBuffer(Buffer.from("hello"));
 const stringHash = hashString("hello world");
+```
+
+## Verify a Proof
+
+```typescript
+// By proof ID
+const proof = await client.verify("certification-uuid");
+
+// By file hash
+const proof = await client.verifyHash(fileHash);
+
+console.log(proof.blockchainStatus); // "confirmed" | "pending"
 ```
 
 ## Pricing
 
 ```typescript
 const pricing = await client.getPricing();
-console.log(pricing.priceUsd);
+console.log(pricing.priceUsd); // e.g. 0.05
 ```
 
 ## Error Handling
@@ -132,6 +212,12 @@ try {
 | `verify(proofId)` | Look up by proof ID |
 | `verifyHash(fileHash)` | Look up by file hash |
 | `getPricing()` | Get current pricing |
+
+## Links
+
+- [xproof.app](https://xproof.app) — dashboard & docs
+- [Python SDK](https://pypi.org/project/xproof/) — `pip install xproof`
+- [Examples](https://github.com/jasonxkensei/xproof-examples) — LangChain, CrewAI, AutoGen, LlamaIndex
 
 ## License
 

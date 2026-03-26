@@ -1,71 +1,150 @@
-# xProof Python SDK
+# xproof
 
-Python SDK for [xProof](https://xproof.app) — blockchain-anchored proof-of-existence for AI agents on MultiversX.
-
-Certify agent actions, verify proofs, and build accountability into any AI workflow.
-
-## Installation
+On-chain decision provenance for autonomous agents. **WHY before acting. WHAT after.** Timestamps written by the chain, not your agent.
 
 ```bash
 pip install xproof
 ```
 
-## Quick Start
+---
 
-### Zero-friction onboarding (no wallet, no payment)
+## 3 steps. 30 seconds.
 
-```python
-from xproof import XProofClient
+### Step 1 — Register (no wallet, no payment)
 
-# Register and get 10 free certifications instantly
-client = XProofClient.register("my-research-agent")
-print(client.registration.trial.remaining)  # 10
-
-# Certify an agent action
-cert = client.certify_hash(
-    file_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    file_name="analysis-output.json",
-    author="my-research-agent",
-)
-print(cert.id)               # proof UUID
-print(cert.transaction_url)  # MultiversX explorer link
+```bash
+curl -X POST https://xproof.app/api/agent/register \
+  -H "Content-Type: application/json" \
+  -d '{"agent_name": "my-agent"}'
 ```
 
-### With an existing API key
+```json
+{ "api_key": "pm_...", "trial": { "remaining": 10 } }
+```
+
+### Step 2 — Anchor WHY before acting
+
+Hash your reasoning and certify it *before* your agent executes.
+
+```bash
+curl -X POST https://xproof.app/api/proof \
+  -H "Authorization: Bearer pm_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_hash": "<sha256_of_reasoning>",
+    "file_name": "reasoning.json",
+    "author": "my-agent",
+    "metadata": { "action_type": "decision" }
+  }'
+```
+
+```json
+{ "id": "why-proof-uuid", "transaction_hash": "0x..." }
+```
+
+### Step 3 — Anchor WHAT after acting
+
+Hash your output and link it to the WHY proof.
+
+```bash
+curl -X POST https://xproof.app/api/proof \
+  -H "Authorization: Bearer pm_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_hash": "<sha256_of_output>",
+    "file_name": "output.json",
+    "author": "my-agent",
+    "metadata": { "action_type": "execution", "why_proof_id": "why-proof-uuid" }
+  }'
+```
+
+```json
+{ "id": "what-proof-uuid", "transaction_hash": "0x..." }
+```
+
+When something goes wrong, you don't guess. You verify.
+
+---
+
+## Python SDK
 
 ```python
-from xproof import XProofClient
+from xproof import XProofClient, hash_string
 
+# Register — zero-friction, no wallet, no payment
+client = XProofClient.register("my-agent")
+# 10 free certs, API key stored automatically
+
+# Step 2: Anchor WHY before acting
+why = client.certify_hash(
+    file_hash=hash_string('{"action": "summarize", "model": "gpt-4"}'),
+    file_name="reasoning.json",
+    author="my-agent",
+    metadata={"action_type": "decision"},
+)
+
+# Step 3: Anchor WHAT after acting
+what = client.certify_hash(
+    file_hash=hash_string(execution_output),
+    file_name="output.json",
+    author="my-agent",
+    metadata={"action_type": "execution", "why_proof_id": why.id},
+)
+
+print(what.transaction_url)  # MultiversX explorer link
+```
+
+Or use an existing API key:
+
+```python
 client = XProofClient(api_key="pm_your_api_key")
-
-# Certify a local file (auto-hashes with SHA-256)
-cert = client.certify("path/to/report.pdf", author="Alice")
-print(cert.id)
-print(cert.transaction_url)
-
-# Certify with a pre-computed hash
-cert = client.certify_hash(
-    file_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    file_name="report.pdf",
-    author="Alice",
-)
-
-# Verify a proof by ID (no auth required)
-proof = client.verify("certification-uuid")
-print(proof.file_name, proof.blockchain_status)
-
-# Verify by file hash (no auth required)
-proof = client.verify_hash("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
-
-# Get current pricing (no auth required)
-pricing = client.get_pricing()
-print(pricing.price_usd)
 ```
+
+---
+
+## Framework Integrations
+
+### LangChain
+
+```python
+from xproof.integrations.langchain import XProofCallbackHandler
+
+handler = XProofCallbackHandler(api_key="pm_...")
+llm = ChatOpenAI(callbacks=[handler])
+```
+
+### CrewAI
+
+```python
+from xproof.integrations.crewai import XProofListener
+
+listener = XProofListener(api_key="pm_...")
+```
+
+### AutoGen
+
+```python
+from xproof.integrations.autogen import XProofHook
+
+hook = XProofHook(api_key="pm_...")
+agent.register_hook("process_last_received_message", hook.on_message)
+```
+
+### LlamaIndex
+
+```python
+from xproof.integrations.llamaindex import XProofCallbackHandler
+from llama_index.core import Settings
+from llama_index.core.callbacks import CallbackManager
+
+Settings.callback_manager = CallbackManager([XProofCallbackHandler(api_key="pm_...")])
+```
+
+---
 
 ## 4W Framework (WHO / WHAT / WHEN / WHY)
 
-xProof certifications support the 4W accountability framework via optional
-keyword arguments:
+Full accountability metadata on every certification:
 
 ```python
 from xproof import XProofClient, hash_bytes
@@ -97,97 +176,64 @@ results = client.batch_certify([
     {"file_hash": "def456...", "file_name": "file2.pdf"},
 ])
 
-print(results.summary.total)      # 2
-print(results.summary.certified)  # 2
-print(results.summary.failed)     # 0
-
-for cert in results.results:
-    print(cert.file_name, cert.id)
+print(results.summary.total)    # 2
+print(results.summary.created)  # 2
 ```
 
-Or certify local files (auto-hashed):
+## Certify a Local File
 
 ```python
-results = client.batch_certify([
-    {"path": "file1.pdf", "author": "Alice"},
-    {"path": "file2.pdf", "author": "Bob"},
-])
+# Auto-hashes with SHA-256
+cert = client.certify("path/to/report.pdf", author="my-agent")
+print(cert.id)
+print(cert.transaction_url)
 ```
 
-## File Hashing Utilities
+## Verify a Proof
 
 ```python
-from xproof import hash_file, hash_bytes
+# By proof ID
+proof = client.verify("certification-uuid")
+print(proof.file_name, proof.blockchain_status)
 
-# Hash a file
-sha256_hex = hash_file("path/to/file.pdf")
-print(sha256_hex)  # 64-character hex string
-
-# Hash raw bytes
-sha256_hex = hash_bytes(b"hello world")
+# By file hash
+proof = client.verify_hash("e3b0c442...")
 ```
 
-## Error Handling
+## Pricing
 
 ```python
-from xproof import XProofClient, AuthenticationError, NotFoundError, ConflictError
-
-client = XProofClient(api_key="pm_your_api_key")
-
-try:
-    cert = client.certify("file.pdf", author="Alice")
-except AuthenticationError:
-    print("Invalid API key")
-except ConflictError as e:
-    print(f"Already certified: {e.certification_id}")
-except NotFoundError:
-    print("Resource not found")
+pricing = client.get_pricing()
+print(pricing.price_usd)  # e.g. 0.05
 ```
 
 ## API Reference
 
+### `XProofClient(api_key=None, base_url="https://xproof.app", timeout=30)`
+
+| Parameter  | Type  | Default                |
+|------------|-------|------------------------|
+| `api_key`  | `str` | `None`                 |
+| `base_url` | `str` | `"https://xproof.app"` |
+| `timeout`  | `int` | `30` (seconds)         |
+
+### Methods
+
 | Method | Description |
-|---|---|
-| `XProofClient.register(agent_name)` | Register a new agent, get 10 free certs |
-| `client.certify(path, author)` | Certify a file (auto-hashes locally) |
-| `client.certify_hash(file_hash, file_name, author)` | Certify with a pre-computed hash |
-| `client.batch_certify(files)` | Batch certify up to 50 files |
-| `client.verify(proof_id)` | Retrieve a proof by ID |
-| `client.verify_hash(file_hash)` | Look up a proof by SHA-256 hash |
-| `client.get_pricing()` | Get current pricing info |
-| `hash_file(path)` | Compute SHA-256 hex digest of a file |
-| `hash_bytes(data)` | Compute SHA-256 hex digest of bytes |
-
-## Models
-
-- **`Certification`** — `id`, `file_name`, `file_hash`, `transaction_hash`, `transaction_url`, `created_at`, `author_name`, `blockchain_status`
-- **`BatchResult`** — `results` (list of `Certification`), `summary` (`total`, `certified`, `failed`)
-- **`RegistrationResult`** — `api_key`, `agent_name`, `trial` (`quota`, `used`, `remaining`), `endpoints`
-- **`PricingInfo`** — `protocol`, `version`, `price_usd`, `tiers`, `payment_methods`
-
-## Exceptions
-
-| Exception | HTTP Status | Description |
-|---|---|---|
-| `XProofError` | any | Base exception |
-| `AuthenticationError` | 401/403 | Invalid or missing API key |
-| `ValidationError` | 400 | Invalid request data |
-| `NotFoundError` | 404 | Resource not found |
-| `ConflictError` | 409 | File already certified |
-| `RateLimitError` | 429 | Rate limit exceeded |
-| `ServerError` | 5xx | Server error |
-
-## Requirements
-
-- Python 3.8+
-- `requests >= 2.25.0`
+|--------|-------------|
+| `XProofClient.register(agent_name)` | Register agent, get trial key |
+| `certify(path, author, file_name?, **fourW)` | Certify file (hashes locally) |
+| `certify_hash(file_hash, file_name, author, **fourW)` | Certify by pre-computed hash |
+| `batch_certify(files)` | Batch certify (up to 50) |
+| `verify(proof_id)` | Look up by proof ID |
+| `verify_hash(file_hash)` | Look up by file hash |
+| `get_pricing()` | Get current pricing |
 
 ## Links
 
-- [xProof Web App](https://xproof.app)
-- [API Documentation](https://xproof.app/docs)
-- [GitHub](https://github.com/jasonxkensei/xproof)
-- [Agent Proof Standard](https://github.com/jasonxkensei/xproof/blob/main/AGENT_PROOF_STANDARD.md)
+- [xproof.app](https://xproof.app) — dashboard & docs
+- [npm SDK](https://www.npmjs.com/package/@xproof/xproof) — `npm install @xproof/xproof`
+- [Examples](https://github.com/jasonxkensei/xproof-examples) — LangChain, CrewAI, AutoGen, LlamaIndex
 
 ## License
 
