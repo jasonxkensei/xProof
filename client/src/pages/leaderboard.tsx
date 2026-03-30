@@ -386,10 +386,10 @@ export default function Leaderboard() {
                           {(entry.violationCount ?? 0) > 0 && (
                             <Badge
                               data-testid={`badge-violations-${entry.walletAddress}`}
-                              className="border border-red-500/30 bg-red-500/15 text-red-700 dark:text-red-400 text-[10px] px-1.5 py-0"
+                              className="border border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px] px-1.5 py-0"
                             >
                               <AlertTriangle className="mr-0.5 h-2.5 w-2.5" />
-                              {entry.violationCount} violation{(entry.violationCount ?? 0) > 1 ? "s" : ""}
+                              {entry.violationCount} audit flag{(entry.violationCount ?? 0) > 1 ? "s" : ""}
                             </Badge>
                           )}
                         </div>

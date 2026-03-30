@@ -887,7 +887,7 @@ export default function AgentProfilePage() {
               </Card>
             )}
 
-            {/* Violations */}
+            {/* Audit Flags */}
             {(() => {
               const violations = violationsData?.violations ?? [];
               const confirmed = violations.filter((v) => v.status === "confirmed");
@@ -897,12 +897,12 @@ export default function AgentProfilePage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
                       <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                      Violations
+                      Audit Flags
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground" data-testid="text-violations-empty">
-                      No violations recorded.
+                      No audit flags recorded.
                     </p>
                   </CardContent>
                 </Card>
@@ -911,17 +911,17 @@ export default function AgentProfilePage() {
                 <Card data-testid="card-violations">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
-                      <AlertTriangle className="h-4 w-4 text-red-500" />
-                      Violations
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      Audit Flags
                       <span className="ml-auto flex items-center gap-2">
                         {confirmed.length > 0 && (
-                          <span className="inline-flex items-center rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-400" data-testid="badge-confirmed-violations">
+                          <span className="inline-flex items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid="badge-confirmed-violations">
                             {confirmed.length} confirmed
                           </span>
                         )}
                         {proposed.length > 0 && (
-                          <span className="inline-flex items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid="badge-proposed-violations">
-                            {proposed.length} proposed
+                          <span className="inline-flex items-center rounded-md border border-muted-foreground/30 bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid="badge-proposed-violations">
+                            {proposed.length} under review
                           </span>
                         )}
                       </span>
@@ -941,23 +941,23 @@ export default function AgentProfilePage() {
                                 data-testid={`badge-violation-type-${v.id}`}
                                 className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${
                                   v.type === "breach"
-                                    ? "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400"
-                                    : "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-400"
+                                    ? "border-amber-600/40 bg-amber-600/10 text-amber-700 dark:text-amber-400"
+                                    : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
                                 }`}
                               >
-                                {v.type === "breach" ? "Breach" : "Fault"}
+                                {v.type === "breach" ? "Confirmed breach" : "Structural anomaly"}
                               </span>
                               <span
                                 data-testid={`badge-violation-status-${v.id}`}
                                 className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
                                   v.status === "confirmed"
-                                    ? "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400"
+                                    ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
                                     : v.status === "rejected"
                                     ? "border-border bg-muted text-muted-foreground"
-                                    : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                    : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
                                 }`}
                               >
-                                {v.status === "confirmed" && v.auto_confirmed ? "Auto-confirmed" : v.status.charAt(0).toUpperCase() + v.status.slice(1)}
+                                {v.status === "confirmed" && v.auto_confirmed ? "Auto-certified" : v.status === "confirmed" ? "Certified" : v.status === "rejected" ? "Cleared" : "Under review"}
                               </span>
                             </div>
                             <span className="text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-violation-time-${v.id}`}>

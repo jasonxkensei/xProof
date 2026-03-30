@@ -147,15 +147,15 @@ function TrustCard({ trust, agent }: { trust: any; agent: any }) {
             <span className="font-mono tabular-nums">{trust.streak_weeks}w</span>
           </div>
           {trust.violation_penalty < 0 && (
-            <div className="flex items-center justify-between gap-2 text-red-600 dark:text-red-400">
-              <span>Violation penalty</span>
+            <div className="flex items-center justify-between gap-2 text-amber-600 dark:text-amber-400">
+              <span>Audit impact</span>
               <span className="font-mono tabular-nums">{trust.violation_penalty}</span>
             </div>
           )}
           {(trust.violations.fault > 0 || trust.violations.breach > 0) && (
-            <div className="flex items-center justify-between gap-2 text-red-600 dark:text-red-400">
-              <span>Violations</span>
-              <span className="font-mono tabular-nums">{trust.violations.fault}f / {trust.violations.breach}b</span>
+            <div className="flex items-center justify-between gap-2 text-amber-600 dark:text-amber-400">
+              <span>Audit flags</span>
+              <span className="font-mono tabular-nums">{trust.violations.fault} structural / {trust.violations.breach} breach</span>
             </div>
           )}
         </div>
