@@ -20,6 +20,14 @@ value = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' htt
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 5050
+externalPort = 3000
+
+[[ports]]
+localPort = 5051
+externalPort = 3001
+
 [env]
 PORT = "5000"
 

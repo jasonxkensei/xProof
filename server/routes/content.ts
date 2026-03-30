@@ -9,6 +9,36 @@ import { isMX8004Configured, getContractAddresses } from "../mx8004";
 import { TRIAL_QUOTA, getNetworkLabel, buildCanonicalId } from "./helpers";
 
 export function registerContentRoutes(app: Express) {
+  const GENESIS_CERTIFICATION = {
+    canonical_id: "xproof:mvx:mainnet:tx:f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e",
+    id: "genesis",
+    type: "proof_of_existence",
+    version: "2.0",
+    confidence: "cryptographically-certified",
+    file_name: "XPROOF - Genesis.pdf",
+    file_hash: "173200d6fa0d1577b456bb85dc505193e31dd8be5fc69bd4e461612a588427de",
+    hash_algorithm: "SHA-256",
+    author: "Jason Petitfourg",
+    timestamp_utc: "2025-12-12T20:28:00Z",
+    blockchain: {
+      network: "MultiversX Mainnet",
+      chain_id: "1",
+      transaction_hash: "f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e",
+      explorer_url: "https://explorer.multiversx.com/transactions/f376c0809d5c8fd91f854d39cf6f9f83ac3d80231477538a1b423db0537aad7e",
+      gas_cost_egld: "0.0002935",
+    },
+    verification: {
+      method: "SHA-256 hash comparison",
+      instructions: [
+        "Compute SHA-256 hash of the original file",
+        "Compare with file_hash in this proof",
+        "Verify transaction on MultiversX explorer",
+        "Confirm transaction data contains the file hash"
+      ]
+    },
+    significance: "This is the first certification ever created on xproof, establishing the genesis of the platform."
+  };
+
   app.get("/.well-known/xproof.md", async (req, res) => {
     const baseUrl = `https://${req.get('host')}`;
     const priceUsd = await getCertificationPriceUsd();
