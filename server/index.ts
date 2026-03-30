@@ -12,10 +12,9 @@ import {
 import { startTxQueueWorker } from "./txQueue";
 import { computeTrustScoreByWallet } from "./trust";
 import { pool, db } from "./db";
-import { users, visits } from "@shared/schema";
+import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { requestIdMiddleware, logger } from "./logger";
-import crypto from "crypto";
 
 setupProcessErrorHandlers();
 
@@ -60,39 +59,6 @@ app.use("/api", globalRateLimiter);
 app.use("/api", requestTimeout(30000));
 
 app.use(requestIdMiddleware);
-
-// Visit tracking middleware
-app.use((req, res, next) => {
-  // Track visits for pages (not /api routes)
-  if (!req.path.startsWith("/api") && !req.path.startsWith("/health")) {
-    const ip = req.ip || req.headers['x-forwarded-for'] || "unknown";
-    const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
-    const userAgent = req.get("user-agent") || null;
-    
-    // Detect bots/crawlers by user-agent
-    const botPatterns = /bot|crawler|spider|scraper|curl|wget|axios|python|node|postman|insomnia/i;
-    const isAgent = botPatterns.test(userAgent || "");
-    
-    // Extract UTM params
-    const utmSource = req.query.utm_source as string || null;
-    const utmMedium = req.query.utm_medium as string || null;
-    const utmContent = req.query.utm_content as string || null;
-    
-    // Fire and forget — don't block the request
-    db.insert(visits).values({
-      ipHash,
-      userAgent,
-      isAgent,
-      path: req.path,
-      utmSource,
-      utmMedium,
-      utmContent,
-    }).catch((err) => {
-      logger.error("Failed to track visit", { error: err.message });
-    });
-  }
-  next();
-});
 
 app.use((req, res, next) => {
   const start = Date.now();
