@@ -34,6 +34,9 @@ npm-debug.log*
 
 # Build artifacts
 *.tsbuildinfo
+*.egg-info/
+python-sdk/dist/
+pr-ostack/
 
 # MCP Registry tokens
 .mcpregistry_github_token

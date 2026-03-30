@@ -2,7 +2,6 @@ import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
 import { db, pool } from "./db";
-import { storage } from "./storage";
 import { logger } from "./logger";
 import { computeTrustScore, computeTrustScoreByWallet, getLeaderboard, generateTrustBadgeSvg } from "./trust";
 import { getAlertConfig } from "./txAlerts";
