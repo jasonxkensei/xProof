@@ -170,7 +170,25 @@ export function registerStandardRoutes(app: Express) {
         ...(proof.metadata || {}),
       };
 
-      const userId = apiKeyUserId || "standard-anchor";
+      let userId = apiKeyUserId;
+      if (!userId) {
+        const [systemUser] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.walletAddress, "standard-anchor"))
+          .limit(1);
+        if (systemUser) {
+          userId = systemUser.id;
+        } else {
+          const [newUser] = await db.insert(users).values({
+            walletAddress: "standard-anchor",
+            agentName: "Standard Anchor",
+          }).returning({ id: users.id });
+          userId = newUser.id;
+        }
+      }
+
+      const blockchainStatus = result.transactionHash.startsWith("sim_") ? "pending" : "confirmed";
 
       const [cert] = await db.insert(certifications).values({
         userId,
@@ -179,8 +197,8 @@ export function registerStandardRoutes(app: Express) {
         fileType: "application/x-agent-proof-standard",
         authorName,
         transactionHash: result.transactionHash,
-        transactionUrl: result.explorerUrl,
-        blockchainStatus: result.status === "confirmed" ? "confirmed" : "pending",
+        transactionUrl: result.transactionUrl,
+        blockchainStatus,
         authMethod,
         metadata: standardMetadata,
         isPublic: true,
@@ -195,8 +213,8 @@ export function registerStandardRoutes(app: Express) {
           chain: "multiversx",
           network: "mainnet",
           tx_hash: result.transactionHash,
-          explorer_url: result.explorerUrl,
-          status: result.status,
+          explorer_url: result.transactionUrl,
+          status: blockchainStatus,
         },
         proof_url: `${baseUrl}/proof/${cert.id}`,
         standard_version: "1.0",
