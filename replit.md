@@ -15,6 +15,10 @@ The frontend is a React 18 application built with TypeScript and Vite. It uses W
 ### Backend
 The backend uses Express.js, TypeScript, and Node.js. It integrates MultiversX SDK-dApp for secure Native Auth, handling client-side signature verification for user sessions stored in PostgreSQL. RESTful APIs include middleware for logging, error handling, and wallet authentication for protected routes. File processing involves client-side SHA-256 hashing.
 
+**Route Architecture**: `server/routes.ts` is a thin orchestrator (~105 lines) that bootstraps metrics, applies session middleware, registers visit tracking, then delegates to 16 domain route modules in `server/routes/`:
+`auth`, `certifications`, `proof-read`, `pricing`, `keys`, `credits`, `agents`, `proof-write`, `acp`, `content`, `mx8004`, `mcp-routes`, `admin`, `trust`, `attestations`, `standard`.
+Shared helpers (rate limiting, API key validation, credit management, admin checks) live in `server/routes/helpers.ts`.
+
 ### Blockchain Integration
 xproof integrates with the MultiversX blockchain for immutable proof storage, supporting XPortal and server-side signing. It manages transaction broadcasting, explorer URL generation, and server-side verification of payments and certifications. A persistent `tx_queue` handles blockchain transactions with retry logic and nonce management.
 

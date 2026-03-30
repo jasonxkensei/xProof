@@ -1,0 +1,461 @@
+import { type Express } from "express";
+import { db, pool } from "../db";
+import { logger } from "../logger";
+import { certifications, users, attestations } from "@shared/schema";
+import { eq, desc, sql, and, gte, count } from "drizzle-orm";
+import { isWalletAuthenticated } from "../walletAuth";
+import { publicReadRateLimiter, publicSearchRateLimiter, publicCompareRateLimiter } from "../reliability";
+import { computeTrustScore, computeTrustScoreByWallet, getLeaderboard, generateTrustBadgeSvg } from "../trust";
+import { reconstructAuditTrail } from "../audit-trail";
+import { isAdminWallet } from "./helpers";
+
+export function registerTrustRoutes(app: Express) {
+  // ===== LEADERBOARD & AGENT PROFILE ENDPOINTS =====
+
+  // GET /api/leaderboard — public, paginated + server-side filters
+  app.get("/api/leaderboard", publicSearchRateLimiter, async (req, res) => {
+    try {
+      const filters = {
+        page: req.query.page ? parseInt(req.query.page as string, 10) : undefined,
+        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : undefined,
+        category: (req.query.category as string) || undefined,
+        search: (req.query.search as string) || undefined,
+        attestedOnly: req.query.attested === "true",
+        sortBy: (req.query.sort as "score" | "certs" | "streak" | "attestations") || undefined,
+      };
+      const result = await getLeaderboard(filters);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/trust/preview — auth required, preview trust score without public profile
+  app.get("/api/trust/preview", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const walletAddress = req.walletAddress;
+      const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const trust = await computeTrustScore(user.id);
+      const rankResult = await getLeaderboard({ limit: 100 });
+      const allEntries = rankResult.entries;
+      const hypotheticalRank = allEntries.filter((e: any) => e.trustScore > trust.score).length + 1;
+      res.json({
+        ...trust,
+        walletAddress,
+        isPublicProfile: user.isPublicProfile,
+        hypotheticalRank,
+        totalPublicAgents: rankResult.total,
+        agentName: user.agentName,
+        agentCategory: user.agentCategory,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/agents/compare — compare 2-5 agents side by side
+  app.get("/api/agents/compare", publicCompareRateLimiter, async (req, res) => {
+    try {
+      const walletsParam = req.query.wallets as string;
+      if (!walletsParam) return res.status(400).json({ message: "wallets query param required (comma-separated)" });
+      const wallets = walletsParam.split(",").map((w) => w.trim()).filter(Boolean).slice(0, 5);
+      if (wallets.length < 2) return res.status(400).json({ message: "At least 2 wallet addresses required" });
+
+      const agents = await Promise.all(
+        wallets.map(async (wallet) => {
+          const [user] = await db.select().from(users).where(eq(users.walletAddress, wallet));
+          if (!user || !user.isPublicProfile) return null;
+          const trust = await computeTrustScore(user.id);
+          return {
+            walletAddress: wallet,
+            agentName: user.agentName,
+            agentCategory: user.agentCategory,
+            agentDescription: user.agentDescription,
+            agentWebsite: user.agentWebsite,
+            ...trust,
+          };
+        }),
+      );
+
+      const valid = agents.filter(Boolean);
+      if (valid.length < 2) return res.status(404).json({ message: "Need at least 2 public agents to compare" });
+      res.json({ agents: valid });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/agents/search — search agents by attestation domain and/or standard (must be before :wallet)
+  app.get("/api/agents/search", publicSearchRateLimiter, async (req, res) => {
+    try {
+      const domain = req.query.domain as string | undefined;
+      const standard = req.query.standard as string | undefined;
+
+      if (!domain && !standard) {
+        return res.status(400).json({ message: "At least one of domain or standard query param is required" });
+      }
+
+      let whereClause = `a.status = 'active' AND (a.expires_at IS NULL OR a.expires_at > NOW()) AND u.is_public_profile = true`;
+      const params: any[] = [];
+
+      if (domain) {
+        params.push(domain);
+        whereClause += ` AND a.domain = $${params.length}`;
+      }
+      if (standard) {
+        params.push(`%${standard}%`);
+        whereClause += ` AND a.standard ILIKE $${params.length}`;
+      }
+
+      const { pool: pgPool } = await import("../db");
+      const result = await pgPool.query(
+        `SELECT DISTINCT u.wallet_address, u.agent_name, u.agent_category, u.agent_description, u.agent_website,
+          a.domain, a.standard, a.issuer_name, a.created_at AS attested_at
+         FROM users u
+         JOIN attestations a ON a.subject_wallet = u.wallet_address
+         WHERE ${whereClause}
+         ORDER BY u.agent_name ASC LIMIT 50`,
+        params
+      );
+      res.json(result.rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/agents/:wallet/timeline", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+      const offset = Math.max(0, Number(req.query.offset) || 0);
+
+      const [user] = await db
+        .select({ id: users.id, isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+
+      if (!user || !user.isPublicProfile) {
+        return res.status(404).json({ message: "Agent profile not found or not public" });
+      }
+
+      const [countResult, events] = await Promise.all([
+        db.execute(sql`
+          SELECT COUNT(*) AS total
+          FROM certifications
+          WHERE user_id = ${user.id} AND blockchain_status = 'confirmed'
+        `),
+        db.execute(sql`
+          SELECT
+            id,
+            file_name,
+            file_hash,
+            blockchain_status,
+            transaction_hash,
+            metadata,
+            created_at,
+            CASE
+              WHEN metadata IS NOT NULL AND metadata->>'agent_id' IS NOT NULL THEN 'audit'
+              WHEN metadata IS NOT NULL AND (metadata->>'model_hash' IS NOT NULL OR metadata->>'strategy_hash' IS NOT NULL OR metadata->>'version_number' IS NOT NULL) THEN 'metadata_cert'
+              ELSE 'cert'
+            END AS event_type,
+            CASE
+              WHEN metadata IS NOT NULL AND metadata->>'agent_id' IS NOT NULL THEN metadata->>'action_description'
+              ELSE NULL
+            END AS action_description,
+            CASE
+              WHEN metadata IS NOT NULL THEN metadata->>'model_hash'
+              ELSE NULL
+            END AS model_hash,
+            CASE
+              WHEN metadata IS NOT NULL THEN metadata->>'strategy_hash'
+              ELSE NULL
+            END AS strategy_hash,
+            CASE
+              WHEN metadata IS NOT NULL THEN metadata->>'version_number'
+              ELSE NULL
+            END AS version_number
+          FROM certifications
+          WHERE user_id = ${user.id} AND blockchain_status = 'confirmed'
+          ORDER BY created_at DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `),
+      ]);
+
+      const total = Number((countResult.rows[0] as any)?.total || 0);
+      res.json({
+        walletAddress: wallet,
+        events: events.rows,
+        total,
+        limit,
+        offset,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/agents/:wallet/incident-report?proof_id=<uuid> — reconstruct 4W audit trail for a contested action
+  app.get("/api/agents/:wallet/incident-report", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      const proofId = req.query.proof_id as string;
+
+      if (!proofId || typeof proofId !== "string") {
+        return res.status(400).json({ error: "proof_id query parameter is required" });
+      }
+
+      const result = await reconstructAuditTrail(wallet, proofId);
+      res.json(result);
+    } catch (err: any) {
+      if (err.status && err.error) {
+        return res.status(err.status).json({ error: err.error });
+      }
+      logger.error("Incident report error", { error: err.message });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/agents/:wallet/violations — public, returns all violations for an agent
+  app.get("/api/agents/:wallet/violations", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      const rows = await db.execute(sql`
+        SELECT id, wallet_address, proof_id, type, status, reason, auto_confirmed, detected_at, confirmed_at, notes
+        FROM agent_violations
+        WHERE wallet_address = ${wallet}
+        ORDER BY detected_at DESC
+      `);
+      res.json({ violations: rows.rows });
+    } catch (err: any) {
+      logger.error("Violations fetch error", { error: err.message });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/violations/:id/confirm — admin confirms a proposed violation
+  app.post("/api/admin/violations/:id/confirm", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const walletAddress = req.walletAddress;
+      if (!walletAddress || !isAdminWallet(walletAddress)) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { id } = req.params;
+      const notes = req.body?.notes || null;
+      const result = await db.execute(sql`
+        UPDATE agent_violations
+        SET status = 'confirmed', confirmed_at = NOW(), notes = ${notes}
+        WHERE id = ${id} AND status = 'proposed'
+        RETURNING *
+      `);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Violation not found or already confirmed" });
+      }
+      res.json({ success: true, violation: result.rows[0] });
+    } catch (err: any) {
+      logger.error("Violation confirm error", { error: err.message });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/violations/:id/reject — admin rejects a proposed violation
+  app.post("/api/admin/violations/:id/reject", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const walletAddress = req.walletAddress;
+      if (!walletAddress || !isAdminWallet(walletAddress)) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { id } = req.params;
+      const notes = req.body?.notes || null;
+      const result = await db.execute(sql`
+        UPDATE agent_violations
+        SET status = 'rejected', notes = ${notes}
+        WHERE id = ${id} AND status = 'proposed'
+        RETURNING *
+      `);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Violation not found or not in proposed state" });
+      }
+      res.json({ success: true, violation: result.rows[0] });
+    } catch (err: any) {
+      logger.error("Violation reject error", { error: err.message });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/agents/:wallet — public, returns a single agent profile
+  app.get("/api/agents/:wallet", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+
+      if (!user || !user.isPublicProfile) {
+        return res.status(404).json({ message: "Agent profile not found or not public" });
+      }
+
+      const trust = await computeTrustScore(user.id);
+
+      const now = new Date();
+      const [recentCerts, agentAttestations] = await Promise.all([
+        db
+          .select({
+            id: certifications.id,
+            fileName: certifications.fileName,
+            blockchainStatus: certifications.blockchainStatus,
+            createdAt: certifications.createdAt,
+          })
+          .from(certifications)
+          .where(eq(certifications.userId, user.id))
+          .orderBy(desc(certifications.createdAt))
+          .limit(20),
+        db.execute(sql`
+          SELECT
+            a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at,
+            COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') AS issuer_confirmed_certs,
+            CASE
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 30 THEN 'Verified'
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 10 THEN 'Trusted'
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 3 THEN 'Active'
+              ELSE 'Newcomer'
+            END AS issuer_level,
+            CASE
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 30 THEN 50
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 10 THEN 40
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 3 THEN 25
+              ELSE 10
+            END AS attestation_value
+          FROM attestations a
+          LEFT JOIN users u ON u.wallet_address = a.issuer_wallet
+          LEFT JOIN certifications c ON c.user_id = u.id
+          WHERE a.subject_wallet = ${user.walletAddress}
+            AND a.status = 'active'
+            AND (a.expires_at IS NULL OR a.expires_at > ${now})
+          GROUP BY a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at
+          ORDER BY a.created_at DESC
+        `),
+      ]);
+
+      res.json({
+        walletAddress: user.walletAddress,
+        agentName: user.agentName,
+        agentCategory: user.agentCategory,
+        agentDescription: user.agentDescription,
+        agentWebsite: user.agentWebsite,
+        ...trust,
+        recentCertifications: recentCerts,
+        attestations: agentAttestations.rows,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/user/agent-profile — auth required, update agent public profile
+  app.patch("/api/user/agent-profile", isWalletAuthenticated, async (req: any, res) => {
+    try {
+      const walletAddress = req.walletAddress;
+      const schema = z.object({
+        agentName: z.string().max(80).optional().nullable(),
+        agentDescription: z.string().max(300).optional().nullable(),
+        agentWebsite: z.string().url().optional().nullable().or(z.literal("")),
+        agentCategory: z.enum(["trading", "data", "content", "code", "research", "assistant", "healthcare", "finance", "legal", "security", "other"]).optional().nullable(),
+        isPublicProfile: z.boolean().optional(),
+      });
+
+      const data = schema.parse(req.body);
+
+      await db
+        .update(users)
+        .set({
+          ...(data.agentName !== undefined ? { agentName: data.agentName } : {}),
+          ...(data.agentDescription !== undefined ? { agentDescription: data.agentDescription } : {}),
+          ...(data.agentWebsite !== undefined ? { agentWebsite: data.agentWebsite || null } : {}),
+          ...(data.agentCategory !== undefined ? { agentCategory: data.agentCategory } : {}),
+          ...(data.isPublicProfile !== undefined ? { isPublicProfile: data.isPublicProfile } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.walletAddress, walletAddress));
+
+      const [updated] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+      res.json(updated);
+    } catch (err: any) {
+      if (err.name === "ZodError") {
+        return res.status(400).json({ message: "Validation error", errors: err.errors });
+      }
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/trust/:wallet — public trust lookup (score only, no profile data)
+  app.get("/api/trust/:wallet", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { wallet } = req.params;
+      const trust = await computeTrustScoreByWallet(wallet);
+      if (!trust) {
+        return res.status(404).json({ message: "Wallet not found" });
+      }
+      res.json({
+        walletAddress: wallet,
+        score: trust.score,
+        level: trust.level,
+        certTotal: trust.certTotal,
+        certLast30d: trust.certLast30d,
+        streakWeeks: trust.streakWeeks,
+        transparencyTier: trust.transparencyTier,
+        transparencyBonus: trust.transparencyBonus,
+        metadataCount: trust.metadataCount,
+        auditCount: trust.auditCount,
+        firstCertAt: trust.firstCertAt,
+        lastCertAt: trust.lastCertAt,
+        violationPenalty: trust.violationPenalty,
+        violations: trust.violations,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /badge/trust/:wallet.svg — dynamic trust badge for READMEs
+  app.get("/badge/trust/:wallet.svg", async (req, res) => {
+    try {
+      const wallet = req.params.wallet;
+      const trust = await computeTrustScoreByWallet(wallet);
+
+      if (!trust) {
+        const fallback = `<svg xmlns="http://www.w3.org/2000/svg" width="130" height="24" role="img"><rect width="130" height="24" rx="5" fill="#1E1E1E"/><rect width="130" height="24" rx="5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="65" y="16" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11">xproof: Unknown</text></svg>`;
+        res.setHeader("Content-Type", "image/svg+xml");
+        res.setHeader("Cache-Control", "max-age=300");
+        return res.send(fallback);
+      }
+
+      const vCount = (trust.violations?.fault || 0) + (trust.violations?.breach || 0);
+      const svg = generateTrustBadgeSvg(trust.level, trust.score, trust.activeAttestations ?? 0, vCount);
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.setHeader("Cache-Control", "max-age=300");
+      res.send(svg);
+    } catch (error) {
+      logger.withRequest(req).error("Failed to generate trust badge");
+      const fallback = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="24" role="img"><rect width="120" height="24" rx="5" fill="#1E1E1E"/><rect width="120" height="24" rx="5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="60" y="16" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11">xproof: Error</text></svg>`;
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.status(500).send(fallback);
+    }
+  });
+
+  // GET /badge/trust/:wallet/markdown — markdown snippet for trust badge
+  app.get("/badge/trust/:wallet/markdown", async (req, res) => {
+    try {
+      const wallet = req.params.wallet;
+      const baseUrl = `https://${req.get("host")}`;
+      const badgeUrl = `${baseUrl}/badge/trust/${wallet}.svg`;
+      const linkUrl = `${baseUrl}/agent/${wallet}`;
+      const markdown = `[![xproof Trust](${badgeUrl})](${linkUrl})`;
+      res.json({ markdown, badgeUrl, linkUrl });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate markdown" });
+    }
+  });
+
+}
