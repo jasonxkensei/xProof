@@ -1,4 +1,5 @@
 import { type Express } from "express";
+import { z } from "zod";
 import { db, pool } from "../db";
 import { logger } from "../logger";
 import { certifications, users, attestations } from "@shared/schema";

@@ -142,14 +142,6 @@ export function registerAdminRoutes(app: Express) {
   // ============================================
   // Admin Analytics Endpoint
   // ============================================
-  function requireAdmin(req: any, res: express.Response, next: express.NextFunction) {
-    const adminWallets = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim()).filter(Boolean);
-    const userWallet = req.session?.walletAddress;
-    if (adminWallets.length > 0 && !adminWallets.includes(userWallet)) {
-      return res.status(403).json({ error: "Forbidden: admin access required" });
-    }
-    next();
-  }
 
   app.get("/api/admin/stats", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
     try {

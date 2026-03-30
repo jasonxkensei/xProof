@@ -7,7 +7,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentRateLimiter, publicReadRateLimiter } from "../reliability";
 import { isX402Configured, verifyX402Payment, send402Response } from "../x402";
-import { recordOnBlockchain } from "../blockchain";
+import { recordOnBlockchain, isMultiversXConfigured } from "../blockchain";
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing";
 import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
 import { isAdminWallet, getApiKeyOwnerWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, buildCanonicalId } from "./helpers";

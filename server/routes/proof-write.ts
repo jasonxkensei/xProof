@@ -7,7 +7,7 @@ import { eq, desc, sql, and, count, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { paymentRateLimiter, publicSearchRateLimiter } from "../reliability";
 import { isX402Configured, verifyX402Payment, send402Response } from "../x402";
-import { recordOnBlockchain } from "../blockchain";
+import { recordOnBlockchain, isMultiversXConfigured } from "../blockchain";
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing";
 import { auditLogSchema, AUDIT_LOG_JSON_SCHEMA, type AgentAuditLog } from "../auditSchema";
 import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
@@ -162,7 +162,7 @@ export function registerProofWriteRoutes(app: Express) {
         apiKeyUserId = apiKey.userId || null;
 
         const rateLimit = checkRateLimit(apiKey.id);
-        res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
+        res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX_VALUE.toString());
         res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
         res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
 
@@ -417,7 +417,7 @@ export function registerProofWriteRoutes(app: Express) {
         if (!apiKey.isActive) return res.status(403).json({ error: "API_KEY_DISABLED", message: "This API key has been disabled" });
 
         const rateLimit = checkRateLimit(apiKey.id);
-        res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
+        res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX_VALUE.toString());
         res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
         res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
         if (!rateLimit.allowed) {
@@ -657,7 +657,7 @@ export function registerProofWriteRoutes(app: Express) {
         apiKeyUserId = apiKey.userId || null;
 
         const rateLimit = checkRateLimit(apiKey.id);
-        res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
+        res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX_VALUE.toString());
         res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
         res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
 
