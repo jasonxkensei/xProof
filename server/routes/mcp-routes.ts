@@ -61,8 +61,4 @@ export function registerMcpRoutesRoutes(app: Express) {
   app.delete("/mcp", (_req, res) => {
     res.status(204).end();
   });
-
-  // ============================================
-  // Public Stats Endpoint (no auth required) — uses auth_method column
-  // ============================================
 }

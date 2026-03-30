@@ -494,31 +494,4 @@ export function registerAttestationsRoutes(app: Express) {
     res.status(410).json({ message: "Use PATCH /api/user/agent-profile" });
   });
 
-  // ============================================
-  // Agent Proof Standard — Open composability endpoints
-  // ============================================
-
-  const SHA256_REGEX = /^sha256:[a-fA-F0-9]{64}$/;
-  const HEX_SIG_REGEX = /^hex:[a-fA-F0-9]{128,}$/;
-
-  const standardProofSchema = z.object({
-    version: z.literal("1.0"),
-    agent_id: z.string().min(1, "agent_id is required"),
-    instruction_hash: z.string().regex(SHA256_REGEX, "Must be sha256: followed by 64 hex chars"),
-    action_hash: z.string().regex(SHA256_REGEX, "Must be sha256: followed by 64 hex chars"),
-    timestamp: z.string().refine((ts) => !isNaN(Date.parse(ts)), "Must be a valid ISO 8601 timestamp"),
-    signature: z.string().regex(HEX_SIG_REGEX, "Must be hex: followed by at least 128 hex chars"),
-    action_type: z.string().optional(),
-    post_id: z.string().optional(),
-    target_author: z.string().optional(),
-    session_id: z.string().optional(),
-    chain_anchor: z.object({
-      chain: z.string(),
-      network: z.string().optional(),
-      tx_hash: z.string().min(1),
-      explorer_url: z.string().url().optional(),
-    }).optional(),
-    metadata: z.record(z.any()).optional(),
-  });
-
 }
