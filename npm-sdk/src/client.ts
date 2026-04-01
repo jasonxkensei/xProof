@@ -28,7 +28,7 @@ import type {
   ConfidenceTrailStage,
 } from "./types.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.3";
 const DEFAULT_BASE_URL = "https://xproof.app";
 const DEFAULT_TIMEOUT = 30_000;
 
