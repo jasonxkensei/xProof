@@ -8,6 +8,7 @@ xProof gives every agent action a tamper-proof audit trail anchored on-chain in 
 
 | Framework | Language | Description |
 |-----------|----------|-------------|
+| [Trading Confidence](./trading-confidence/) | Python | Anchor decisions at 60%, 80%, 100% — forensic trail for trading agents |
 | [LangChain](./langchain/) | Python | Certify every LLM call via a callback handler |
 | [CrewAI](./crewai/) | Python | Certify each agent's task output in a multi-agent crew |
 | [LlamaIndex](./llamaindex/) | Python | Certify LLM calls and query completions |
@@ -23,7 +24,7 @@ xProof gives every agent action a tamper-proof audit trail anchored on-chain in 
 pip install xproof
 
 # TypeScript / Vercel
-npm install xproof
+npm install @xproof/xproof
 ```
 
 Get a free API key or start with the trial tier at **[xproof.app](https://xproof.app)**.
@@ -31,6 +32,6 @@ Get a free API key or start with the trial tier at **[xproof.app](https://xproof
 ## Links
 
 - PyPI: [pypi.org/project/xproof](https://pypi.org/project/xproof)
-- npm: [npmjs.com/package/xproof](https://www.npmjs.com/package/xproof)
+- npm: [npmjs.com/package/@xproof/xproof](https://www.npmjs.com/package/@xproof/xproof)
 - Docs: [xproof.app/docs](https://xproof.app/docs)
 - GitHub (SDK): [github.com/jasonxkensei/xproof](https://github.com/jasonxkensei/xproof)
