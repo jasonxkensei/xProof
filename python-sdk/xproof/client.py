@@ -281,6 +281,103 @@ class XProofClient:
         data = self._request("POST", "/api/proof", json=payload)
         return Certification.from_dict(data)
 
+    VALID_THRESHOLD_STAGES = ("initial", "partial", "pre-commitment", "final")
+
+    def certify_with_confidence(
+        self,
+        file_hash: str,
+        file_name: str,
+        author: str,
+        confidence_level: float,
+        threshold_stage: str,
+        decision_id: str,
+        *,
+        who: Optional[str] = None,
+        what: Optional[str] = None,
+        when: Optional[str] = None,
+        why: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Certification:
+        """Certify a file hash with confidence-level anchoring.
+
+        Creates a forensic trail by anchoring proofs at different confidence
+        thresholds, linked by a shared ``decision_id``. An agent trading at
+        60%, 80%, then final creates an immutable trail that distinguishes
+        real reasoning from post-hoc reconstruction.
+
+        Args:
+            file_hash: 64-character lowercase hex SHA-256 digest.
+            file_name: Original file name.
+            author: Author / owner name.
+            confidence_level: Confidence between 0.0 and 1.0.
+            threshold_stage: One of ``initial``, ``partial``,
+                ``pre-commitment``, ``final``.
+            decision_id: Shared identifier linking all proofs in the
+                same decision chain.
+            who: 4W -- agent identity.
+            what: 4W -- action hash or description.
+            when: 4W -- ISO-8601 timestamp.
+            why: 4W -- instruction or reason.
+            metadata: Extra key-value metadata stored alongside the proof.
+
+        Returns:
+            A :class:`Certification` with the on-chain proof details.
+
+        Raises:
+            ValueError: If confidence_level or threshold_stage is invalid.
+        """
+        if not self.api_key:
+            raise ValueError("api_key is required — call register() or pass an api_key")
+        if not 0.0 <= confidence_level <= 1.0:
+            raise ValueError("confidence_level must be between 0.0 and 1.0")
+        if threshold_stage not in self.VALID_THRESHOLD_STAGES:
+            raise ValueError(
+                f"threshold_stage must be one of: {', '.join(self.VALID_THRESHOLD_STAGES)}"
+            )
+        if not decision_id or not decision_id.strip():
+            raise ValueError("decision_id is required")
+
+        proof_metadata: Dict[str, Any] = dict(metadata) if metadata else {}
+        proof_metadata["confidence_level"] = confidence_level
+        proof_metadata["threshold_stage"] = threshold_stage
+        proof_metadata["decision_id"] = decision_id
+        if who is not None:
+            proof_metadata["who"] = who
+        if what is not None:
+            proof_metadata["what"] = what
+        if when is not None:
+            proof_metadata["when"] = when
+        if why is not None:
+            proof_metadata["why"] = why
+
+        payload: Dict[str, Any] = {
+            "filename": file_name,
+            "file_hash": file_hash,
+            "author_name": author,
+            "metadata": proof_metadata,
+        }
+        data = self._request("POST", "/api/proof", json=payload)
+        return Certification.from_dict(data)
+
+    def get_confidence_trail(self, decision_id: str) -> Dict[str, Any]:
+        """Retrieve the full confidence trail for a decision chain.
+
+        Args:
+            decision_id: The shared identifier linking proofs in the chain.
+
+        Returns:
+            A dictionary with ``decision_id``, ``total_anchors``,
+            ``current_confidence``, ``current_stage``, ``is_finalized``,
+            and ``stages`` (list of anchor details sorted by confidence).
+        """
+        from urllib.parse import quote
+        data = self._request(
+            "GET",
+            f"/api/confidence-trail/{quote(decision_id, safe='')}",
+            auth_required=False,
+        )
+        return data
+
     def batch_certify(
         self,
         files: List[Dict[str, Any]],

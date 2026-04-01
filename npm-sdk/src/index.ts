@@ -20,5 +20,9 @@ export type {
   CertifyHashOptions,
   BatchFileEntry,
   XProofClientOptions,
+  ThresholdStage,
+  ConfidenceOptions,
+  ConfidenceTrail,
+  ConfidenceTrailStage,
 } from "./types.js";
 export { hashFile, hashBuffer, hashString } from "./hash.js";

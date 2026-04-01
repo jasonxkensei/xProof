@@ -69,6 +69,39 @@ export interface CertifyHashOptions extends FourWOptions {
   author: string;
 }
 
+export type ThresholdStage = "initial" | "partial" | "pre-commitment" | "final";
+
+export interface ConfidenceOptions {
+  confidenceLevel: number;
+  thresholdStage: ThresholdStage;
+  decisionId: string;
+}
+
+export interface ConfidenceTrailStage {
+  proofId: string;
+  fileName: string;
+  fileHash: string;
+  confidenceLevel: number | null;
+  thresholdStage: string | null;
+  author: string;
+  blockchain: {
+    transactionHash: string;
+    explorerUrl: string;
+    status: string;
+  };
+  anchoredAt: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ConfidenceTrail {
+  decisionId: string;
+  totalAnchors: number;
+  currentConfidence: number | null;
+  currentStage: string | null;
+  isFinalized: boolean;
+  stages: ConfidenceTrailStage[];
+}
+
 export interface BatchFileEntry {
   fileHash: string;
   fileName?: string;

@@ -47,6 +47,9 @@ A single API endpoint (`POST /api/proof`) handles individual certifications, acc
 ### Structured Metadata & Search
 Certifications support an optional `metadata` field (jsonb) that accepts any JSON object. Common fields include `model_hash`, `strategy_hash`, and `version_number` for AI/trading agent use cases. All metadata fields are queryable via `GET /api/proofs/search` with parameters: `?model_hash=`, `?strategy_hash=`, `?version_number=`, `?key=&value=`, `?wallet=`. Supports pagination (`?limit=&offset=`). Metadata is returned in all proof responses.
 
+### Confidence-Level Anchoring
+Agents can anchor proofs at different confidence thresholds to create forensic trails that distinguish real reasoning from post-hoc reconstruction. When `metadata.confidence_level` (0.0-1.0) is present, `decision_id` and `threshold_stage` (`initial`, `partial`, `pre-commitment`, `final`) are required. Multiple proofs sharing the same `decision_id` form a decision chain queryable via `GET /api/confidence-trail/:decisionId` (public, ordered by timestamp). The proof detail page displays a visual confidence bar, stage badge, and trail link. Both SDKs provide dedicated methods: `certifyWithConfidence()` / `getConfidenceTrail()` (npm) and `certify_with_confidence()` / `get_confidence_trail()` (Python).
+
 ### Verification Badges & Webhook Notifications
 Dynamic SVG badges display certification status. A Composite GitHub Action integrates xproof into CI/CD pipelines. Webhooks send POST notifications upon on-chain proof confirmation with HMAC-SHA256 signed headers and retry policies.
 

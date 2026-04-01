@@ -112,6 +112,74 @@ export function registerProofReadRoutes(app: Express) {
     }
   });
 
+  app.get("/api/confidence-trail/:decisionId", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { decisionId } = req.params;
+      if (!decisionId || decisionId.trim().length === 0) {
+        return res.status(400).json({ error: "decision_id is required" });
+      }
+
+      const results = await db
+        .select({
+          id: certifications.id,
+          fileName: certifications.fileName,
+          fileHash: certifications.fileHash,
+          metadata: certifications.metadata,
+          transactionHash: certifications.transactionHash,
+          transactionUrl: certifications.transactionUrl,
+          blockchainStatus: certifications.blockchainStatus,
+          authorName: certifications.authorName,
+          createdAt: certifications.createdAt,
+        })
+        .from(certifications)
+        .where(and(
+          sql`${certifications.metadata}->>'decision_id' = ${decisionId}`,
+          eq(certifications.isPublic, true)
+        ))
+        .orderBy(certifications.createdAt);
+
+      if (results.length === 0) {
+        return res.status(404).json({
+          error: "No proofs found for this decision chain",
+          decision_id: decisionId,
+        });
+      }
+
+      const stages = results.map((r) => {
+        const meta = (r.metadata || {}) as Record<string, any>;
+        return {
+          proof_id: r.id,
+          file_name: r.fileName,
+          file_hash: r.fileHash,
+          confidence_level: meta.confidence_level ?? null,
+          threshold_stage: meta.threshold_stage ?? null,
+          author: r.authorName,
+          blockchain: {
+            transaction_hash: r.transactionHash,
+            explorer_url: r.transactionUrl,
+            status: r.blockchainStatus,
+          },
+          anchored_at: r.createdAt,
+          metadata: meta,
+        };
+      });
+
+      const latest = stages[stages.length - 1];
+
+      return res.json({
+        decision_id: decisionId,
+        total_anchors: stages.length,
+        current_confidence: latest.confidence_level,
+        current_stage: latest.threshold_stage,
+        is_finalized: latest.threshold_stage === "final",
+        stages,
+      });
+    } catch (error: any) {
+      logger.error("Confidence trail error", { error: error.message });
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/artifact/trust/:hash", publicReadRateLimiter, async (req, res) => {
     try {
       const { hash } = req.params;

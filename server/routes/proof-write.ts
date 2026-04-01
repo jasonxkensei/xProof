@@ -111,13 +111,51 @@ export function registerProofWriteRoutes(app: Express) {
   // Simplified POST /api/proof endpoint for AI agents
   // Single-call certification: validate API key, record on blockchain, return proof
   // ============================================
+  const VALID_THRESHOLD_STAGES = ["initial", "partial", "pre-commitment", "final"] as const;
+
   const proofRequestSchema = z.object({
     file_hash: z.string().length(64, "SHA-256 hash must be exactly 64 hex characters").regex(/^[a-fA-F0-9]+$/, "Must be a valid hex string"),
     filename: z.string().min(1, "Filename is required"),
     author_name: z.string().optional(),
     webhook_url: z.string().url("Must be a valid URL").refine((url) => !url || url.startsWith("https://"), { message: "Webhook URL must use HTTPS" }).optional(),
     metadata: z.record(z.any()).optional(),
-  });
+  }).refine((data) => {
+    if (!data.metadata) return true;
+    const m = data.metadata;
+    if (m.confidence_level !== undefined) {
+      const cl = Number(m.confidence_level);
+      if (isNaN(cl) || cl < 0 || cl > 1) return false;
+    }
+    return true;
+  }, { message: "metadata.confidence_level must be a number between 0.0 and 1.0", path: ["metadata", "confidence_level"] })
+  .refine((data) => {
+    if (!data.metadata) return true;
+    const m = data.metadata;
+    if (m.threshold_stage !== undefined) {
+      if (typeof m.threshold_stage !== "string" || !VALID_THRESHOLD_STAGES.includes(m.threshold_stage as any)) return false;
+    }
+    return true;
+  }, { message: `metadata.threshold_stage must be one of: ${VALID_THRESHOLD_STAGES.join(", ")}`, path: ["metadata", "threshold_stage"] })
+  .refine((data) => {
+    if (!data.metadata) return true;
+    const m = data.metadata;
+    if (m.decision_id !== undefined) {
+      if (typeof m.decision_id !== "string" || m.decision_id.trim().length === 0) return false;
+    }
+    return true;
+  }, { message: "metadata.decision_id must be a non-empty string", path: ["metadata", "decision_id"] })
+  .refine((data) => {
+    if (!data.metadata) return true;
+    const m = data.metadata;
+    if (m.confidence_level !== undefined && m.decision_id === undefined) return false;
+    return true;
+  }, { message: "metadata.decision_id is required when using confidence_level anchoring", path: ["metadata", "decision_id"] })
+  .refine((data) => {
+    if (!data.metadata) return true;
+    const m = data.metadata;
+    if (m.confidence_level !== undefined && m.threshold_stage === undefined) return false;
+    return true;
+  }, { message: "metadata.threshold_stage is required when using confidence_level anchoring", path: ["metadata", "threshold_stage"] });
 
   app.post("/api/proof", paymentRateLimiter, async (req, res) => {
     try {

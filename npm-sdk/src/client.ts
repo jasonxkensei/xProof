@@ -23,6 +23,9 @@ import type {
   FourWOptions,
   BatchFileEntry,
   XProofClientOptions,
+  ConfidenceOptions,
+  ConfidenceTrail,
+  ConfidenceTrailStage,
 } from "./types.js";
 
 const VERSION = "0.1.0";
@@ -137,6 +140,82 @@ export class XProofClient {
       authRequired: false,
     });
     return parseCertification(data);
+  }
+
+  async certifyWithConfidence(
+    fileHash: string,
+    fileName: string,
+    author: string,
+    confidence: ConfidenceOptions,
+    fourW?: FourWOptions
+  ): Promise<Certification> {
+    this.requireAuth();
+
+    if (confidence.confidenceLevel < 0 || confidence.confidenceLevel > 1) {
+      throw new ValidationError(
+        "confidenceLevel must be between 0.0 and 1.0",
+        {}
+      );
+    }
+    if (!confidence.decisionId || confidence.decisionId.trim().length === 0) {
+      throw new ValidationError("decisionId is required", {});
+    }
+
+    const metadata: Record<string, unknown> = fourW?.metadata
+      ? { ...fourW.metadata }
+      : {};
+    if (fourW?.who !== undefined) metadata.who = fourW.who;
+    if (fourW?.what !== undefined) metadata.what = fourW.what;
+    if (fourW?.when !== undefined) metadata.when = fourW.when;
+    if (fourW?.why !== undefined) metadata.why = fourW.why;
+
+    metadata.confidence_level = confidence.confidenceLevel;
+    metadata.threshold_stage = confidence.thresholdStage;
+    metadata.decision_id = confidence.decisionId;
+
+    const payload: Record<string, unknown> = {
+      filename: fileName,
+      file_hash: fileHash,
+      author_name: author,
+      metadata,
+    };
+
+    const data = await this.request("POST", "/api/proof", { body: payload });
+    return parseCertification(data);
+  }
+
+  async getConfidenceTrail(decisionId: string): Promise<ConfidenceTrail> {
+    const data = await this.request(
+      "GET",
+      `/api/confidence-trail/${encodeURIComponent(decisionId)}`,
+      { authRequired: false }
+    );
+
+    const rawStages = (data.stages as any[]) || [];
+    const stages: ConfidenceTrailStage[] = rawStages.map((s: any) => ({
+      proofId: s.proof_id || "",
+      fileName: s.file_name || "",
+      fileHash: s.file_hash || "",
+      confidenceLevel: s.confidence_level ?? null,
+      thresholdStage: s.threshold_stage ?? null,
+      author: s.author || "",
+      blockchain: {
+        transactionHash: s.blockchain?.transaction_hash || "",
+        explorerUrl: s.blockchain?.explorer_url || "",
+        status: s.blockchain?.status || "",
+      },
+      anchoredAt: s.anchored_at || "",
+      metadata: s.metadata || {},
+    }));
+
+    return {
+      decisionId: (data.decision_id as string) || decisionId,
+      totalAnchors: (data.total_anchors as number) || stages.length,
+      currentConfidence: (data.current_confidence as number) ?? null,
+      currentStage: (data.current_stage as string) ?? null,
+      isFinalized: (data.is_finalized as boolean) || false,
+      stages,
+    };
   }
 
   async getPricing(): Promise<PricingInfo> {

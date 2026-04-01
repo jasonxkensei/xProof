@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, ExternalLink, Download, Copy, CheckCircle, Calendar, Hash, User, FileSearch } from "lucide-react";
+import { Shield, ExternalLink, Download, Copy, CheckCircle, Calendar, Hash, User, FileSearch, Gauge, GitBranch } from "lucide-react";
 import { format } from "date-fns";
 import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { useToast } from "@/hooks/use-toast";
@@ -64,6 +64,24 @@ export default function ProofPage() {
   const isAgentAction = !!actionType || meta.type === "heartbeat";
   const ownerWallet = (certification as any).ownerWallet as string | null;
   const canInvestigate = isAgentAction && ownerWallet;
+  const rawConfidence = meta.confidence_level !== undefined ? Number(meta.confidence_level) : null;
+  const hasConfidence = rawConfidence !== null && !isNaN(rawConfidence) && rawConfidence >= 0 && rawConfidence <= 1;
+  const confidenceLevel = hasConfidence ? rawConfidence : null;
+  const thresholdStage = meta.threshold_stage as string | undefined;
+  const decisionId = meta.decision_id as string | undefined;
+
+  const stageLabels: Record<string, string> = {
+    initial: "Initial signal",
+    partial: "Growing confidence",
+    "pre-commitment": "Pre-commitment",
+    final: "Final decision",
+  };
+  const stageColors: Record<string, string> = {
+    initial: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+    partial: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+    "pre-commitment": "bg-orange-500/15 text-orange-700 dark:text-orange-400",
+    final: "bg-chart-2/15 text-chart-2",
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -177,6 +195,63 @@ export default function ProofPage() {
               </div>
             </div>
 
+            {/* Confidence Level */}
+            {hasConfidence && confidenceLevel !== null && (
+              <div className="border-t pt-6">
+                <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="text-lg font-semibold">Confidence anchoring</h3>
+                  {thresholdStage && (
+                    <Badge className={stageColors[thresholdStage] || "bg-muted text-muted-foreground"} data-testid="badge-threshold-stage">
+                      {stageLabels[thresholdStage] || thresholdStage}
+                    </Badge>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
+                    <Gauge className="mt-0.5 h-5 w-5 text-primary" />
+                    <div className="flex-1">
+                      <p className="mb-2 text-sm font-medium text-muted-foreground">Confidence level</p>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-3 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary transition-all duration-500"
+                            style={{ width: `${Math.round(confidenceLevel * 100)}%` }}
+                            data-testid="bar-confidence-level"
+                          />
+                        </div>
+                        <span className="text-sm font-bold tabular-nums" data-testid="text-confidence-value">
+                          {Math.round(confidenceLevel * 100)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {decisionId && (
+                    <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4">
+                      <GitBranch className="mt-0.5 h-5 w-5 text-primary" />
+                      <div className="flex-1 min-w-0">
+                        <p className="mb-1 text-sm font-medium text-muted-foreground">Decision chain</p>
+                        <div className="flex items-center gap-2">
+                          <p className="flex-1 break-all font-mono text-sm" data-testid="text-decision-id">
+                            {decisionId}
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 shrink-0"
+                            onClick={() => handleCopy(decisionId)}
+                            data-testid="button-copy-decision-id"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Blockchain Information */}
             {certification.transactionHash && (
               <div className="border-t pt-6">
@@ -209,6 +284,14 @@ export default function ProofPage() {
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
+          {decisionId && (
+            <Button asChild variant="outline" size="lg" data-testid="button-view-trail">
+              <a href={`/api/confidence-trail/${encodeURIComponent(decisionId)}`} target="_blank" rel="noopener noreferrer">
+                <GitBranch className="mr-2 h-5 w-5" />
+                View full decision trail
+              </a>
+            </Button>
+          )}
           {canInvestigate && (
             <Button asChild variant="outline" size="lg" data-testid="button-investigate">
               <a href={`/incident/${ownerWallet}/${certification.id}`}>
