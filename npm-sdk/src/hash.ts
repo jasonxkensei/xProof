@@ -6,7 +6,7 @@ export async function hashFile(path: string): Promise<string> {
   return createHash("sha256").update(data).digest("hex");
 }
 
-export function hashBuffer(data: Buffer | Uint8Array): string {
+export function hashBuffer(data: Uint8Array): string {
   return createHash("sha256").update(data).digest("hex");
 }
 
