@@ -1,8 +1,8 @@
 declare module "crypto" {
   interface Hash {
-    update(data: string | Buffer | Uint8Array, encoding?: string): Hash;
+    update(data: string | Uint8Array, encoding?: string): Hash;
     digest(encoding: "hex"): string;
-    digest(): Buffer;
+    digest(): Uint8Array;
   }
   function createHash(algorithm: string): Hash;
 }
@@ -12,5 +12,5 @@ declare module "path" {
 }
 
 declare module "fs/promises" {
-  function readFile(path: string): Promise<Buffer>;
+  function readFile(path: string): Promise<Uint8Array>;
 }
