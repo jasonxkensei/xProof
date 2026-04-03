@@ -154,13 +154,13 @@ function TrustCard({ trust, agent }: { trust: any; agent: any }) {
           )}
           {(trust.violations.fault > 0 || trust.violations.breach > 0) && (
             <div className="flex items-center justify-between gap-2 text-amber-600 dark:text-amber-400">
-              <span>Audit flags</span>
-              <span className="font-mono tabular-nums">{trust.violations.fault} structural / {trust.violations.breach} breach</span>
+              <span className="whitespace-nowrap">Audit flags</span>
+              <span className="font-mono tabular-nums whitespace-nowrap">{trust.violations.fault} fault / {trust.violations.breach} breach</span>
             </div>
           )}
         </div>
         <a
-          href={`/agents/${agent.wallet || ""}`}
+          href={`/agent/${agent.wallet || ""}`}
           className="text-xs text-primary hover:underline mt-2 inline-block"
           data-testid="link-agent-profile"
         >
