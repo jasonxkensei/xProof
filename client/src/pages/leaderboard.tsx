@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -257,16 +258,23 @@ export default function Leaderboard() {
               <SelectItem value="attestations">Attestations</SelectItem>
             </SelectContent>
           </Select>
-          <Button
-            variant={attestedOnly ? "default" : "outline"}
-            size="sm"
-            data-testid="button-attested-filter"
-            onClick={() => setAttestedOnly((v) => !v)}
-            className="gap-1.5"
-          >
-            <Award className="h-3.5 w-3.5" />
-            Attested only
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={attestedOnly ? "default" : "outline"}
+                size="sm"
+                data-testid="button-attested-filter"
+                onClick={() => setAttestedOnly((v) => !v)}
+                className="gap-1.5"
+              >
+                <Award className="h-3.5 w-3.5" />
+                Attested only
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs text-center">
+              Show only agents verified by a credentialed issuer. Attestations are granted manually — separate from the trust score.
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         {isLoading ? (
@@ -306,10 +314,17 @@ export default function Leaderboard() {
                   <th className="hidden px-4 py-3 text-left font-medium text-muted-foreground sm:table-cell">Category</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Trust</th>
                   <th className="hidden px-4 py-3 text-center font-medium text-muted-foreground md:table-cell">
-                    <span className="inline-flex items-center gap-1">
-                      <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
-                      Attested
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1 cursor-help">
+                          <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" />
+                          Attested
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-center">
+                        Granted by a credentialed issuer who verified this agent in a specific domain or standard. Unlike the trust score (computed automatically from on-chain proofs), attestations are issued manually.
+                      </TooltipContent>
+                    </Tooltip>
                   </th>
                   <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground lg:table-cell">Proofs</th>
                   <th className="hidden px-4 py-3 text-center font-medium text-muted-foreground xl:table-cell">Streak</th>
