@@ -151,6 +151,10 @@ export const REGISTER_RATE_LIMIT_MAX = 3;
 export const REGISTER_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 
 export function requireAdmin(req: any, res: express.Response, next: express.NextFunction) {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (adminSecret && req.headers["x-admin-secret"] === adminSecret) {
+    return next();
+  }
   const adminWallets = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim()).filter(Boolean);
   const userWallet = req.session?.walletAddress;
   if (adminWallets.length > 0 && !adminWallets.includes(userWallet)) {
