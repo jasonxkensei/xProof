@@ -49,6 +49,8 @@ export const users = pgTable("users", {
   agentCategory: varchar("agent_category"),
   isPublicProfile: boolean("is_public_profile").default(false),
   registrationIpHash: varchar("registration_ip_hash", { length: 64 }),
+  webhookUrl: text("webhook_url"),
+  webhookSecret: varchar("webhook_secret", { length: 128 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

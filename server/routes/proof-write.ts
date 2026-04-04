@@ -363,21 +363,38 @@ export function registerProofWriteRoutes(app: Express) {
         result.transactionHash
       ).catch((err) => logger.error("Background job registration failed", { component: "mx8004", error: err.message }));
 
-      let webhookStatus: string = data.webhook_url ? "pending" : "not_requested";
-      
-      if (data.webhook_url) {
+      // Resolve the effective webhook URL:
+      // 1. Per-proof webhook_url (explicit in request body) — highest priority
+      // 2. Account-level webhook_url set at registration — fires for every proof automatically
+      let effectiveWebhookUrl = data.webhook_url || null;
+      let effectiveWebhookSecret: string | null = null;
+
+      if (!effectiveWebhookUrl && ownerUserId) {
+        const [ownerUser] = await db.select({ webhookUrl: users.webhookUrl, webhookSecret: users.webhookSecret })
+          .from(users)
+          .where(eq(users.id, ownerUserId));
+        if (ownerUser?.webhookUrl) {
+          effectiveWebhookUrl = ownerUser.webhookUrl;
+          effectiveWebhookSecret = ownerUser.webhookSecret || null;
+        }
+      }
+
+      let webhookStatus: string = effectiveWebhookUrl ? "pending" : "not_requested";
+
+      if (effectiveWebhookUrl) {
         const { scheduleWebhookDelivery, isValidWebhookUrl } = await import("../webhook");
-        if (isValidWebhookUrl(data.webhook_url)) {
+        if (isValidWebhookUrl(effectiveWebhookUrl)) {
           await db.update(certifications)
-            .set({ webhookUrl: data.webhook_url, webhookStatus: "pending" })
+            .set({ webhookUrl: effectiveWebhookUrl, webhookStatus: "pending" })
             .where(eq(certifications.id, certification.id));
-          
-          const webhookSecret = authMethod === "api_key" ? authHeader!.slice(7) : (process.env.SESSION_SECRET || "xproof-x402");
-          scheduleWebhookDelivery(certification.id, data.webhook_url, baseUrl, webhookSecret);
+
+          const webhookSecret = effectiveWebhookSecret
+            || (authMethod === "api_key" ? authHeader!.slice(7) : (process.env.SESSION_SECRET || "xproof-x402"));
+          scheduleWebhookDelivery(certification.id, effectiveWebhookUrl, baseUrl, webhookSecret);
         } else {
           webhookStatus = "failed";
           await db.update(certifications)
-            .set({ webhookUrl: data.webhook_url, webhookStatus: "failed" })
+            .set({ webhookUrl: effectiveWebhookUrl, webhookStatus: "failed" })
             .where(eq(certifications.id, certification.id));
         }
       }
@@ -868,14 +885,26 @@ export function registerProofWriteRoutes(app: Express) {
           result.transactionHash
         ).catch((err) => logger.error("Background job registration failed", { component: "mx8004", error: err.message }));
 
-        if (data.webhook_url) {
+        // Resolve effective webhook: per-batch URL takes priority, then account-level fallback
+        let batchEffectiveWebhookUrl = data.webhook_url || null;
+        let batchEffectiveWebhookSecret: string | null = null;
+        if (!batchEffectiveWebhookUrl && ownerUserId) {
+          const [batchOwner] = await db.select({ webhookUrl: users.webhookUrl, webhookSecret: users.webhookSecret })
+            .from(users).where(eq(users.id, ownerUserId));
+          if (batchOwner?.webhookUrl) {
+            batchEffectiveWebhookUrl = batchOwner.webhookUrl;
+            batchEffectiveWebhookSecret = batchOwner.webhookSecret || null;
+          }
+        }
+        if (batchEffectiveWebhookUrl) {
           const { scheduleWebhookDelivery, isValidWebhookUrl } = await import("../webhook");
-          if (isValidWebhookUrl(data.webhook_url)) {
+          if (isValidWebhookUrl(batchEffectiveWebhookUrl)) {
             await db.update(certifications)
-              .set({ webhookUrl: data.webhook_url, webhookStatus: "pending" })
+              .set({ webhookUrl: batchEffectiveWebhookUrl, webhookStatus: "pending" })
               .where(eq(certifications.id, certification.id));
-            const batchWebhookSecret = authMethod === "api_key" ? authHeader!.slice(7) : (process.env.SESSION_SECRET || "xproof-x402");
-            scheduleWebhookDelivery(certification.id, data.webhook_url, baseUrl, batchWebhookSecret);
+            const batchWebhookSecret = batchEffectiveWebhookSecret
+              || (authMethod === "api_key" ? authHeader!.slice(7) : (process.env.SESSION_SECRET || "xproof-x402"));
+            scheduleWebhookDelivery(certification.id, batchEffectiveWebhookUrl, baseUrl, batchWebhookSecret);
           }
         }
       }
