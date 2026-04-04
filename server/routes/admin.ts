@@ -484,4 +484,24 @@ export function registerAdminRoutes(app: Express) {
     }
   });
 
+  // ============================================
+  // DELETE /api/admin/cleanup/test-agents
+  // Removes test agents created during development
+  // ============================================
+  app.delete("/api/admin/cleanup/test-agents", requireAdmin, async (req, res) => {
+    try {
+      const deleted = await db.delete(users)
+        .where(eq(users.companyName, "test-onboard-agent"))
+        .returning({ id: users.id, companyName: users.companyName });
+      
+      res.json({
+        success: true,
+        message: `Deleted ${deleted.length} test agent(s)`,
+        deleted: deleted.map(u => ({ id: u.id, name: u.companyName })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
 }
