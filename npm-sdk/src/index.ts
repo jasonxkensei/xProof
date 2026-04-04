@@ -24,5 +24,8 @@ export type {
   ConfidenceOptions,
   ConfidenceTrail,
   ConfidenceTrailStage,
+  ExecutionContext,
+  ContextDriftStage,
+  ContextDrift,
 } from "./types.js";
 export { hashFile, hashBuffer, hashString } from "./hash.js";

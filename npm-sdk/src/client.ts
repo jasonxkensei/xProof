@@ -26,9 +26,12 @@ import type {
   ConfidenceOptions,
   ConfidenceTrail,
   ConfidenceTrailStage,
+  ContextDrift,
+  ContextDriftStage,
+  ExecutionContext,
 } from "./types.js";
 
-const VERSION = "0.1.3";
+const VERSION = "0.1.4";
 const DEFAULT_BASE_URL = "https://xproof.app";
 const DEFAULT_TIMEOUT = 30_000;
 
@@ -214,6 +217,36 @@ export class XProofClient {
       currentConfidence: (data.current_confidence as number) ?? null,
       currentStage: (data.current_stage as string) ?? null,
       isFinalized: (data.is_finalized as boolean) || false,
+      stages,
+    };
+  }
+
+  async getContextDrift(decisionId: string): Promise<ContextDrift> {
+    const data = await this.request(
+      "GET",
+      `/api/context-drift/${encodeURIComponent(decisionId)}`,
+      { authRequired: false }
+    );
+
+    const rawStages = (data.stages as any[]) || [];
+    const stages: ContextDriftStage[] = rawStages.map((s: any) => ({
+      proofId: s.proof_id || "",
+      stageIndex: s.stage_index ?? 0,
+      anchoredAt: s.anchored_at || "",
+      executionContext: (s.execution_context || {}) as ExecutionContext,
+      contextBreak: s.context_break || false,
+      driftedFields: s.drifted_fields || [],
+    }));
+
+    return {
+      decisionId: (data.decision_id as string) || decisionId,
+      contextCoherent: (data.context_coherent as boolean) ?? true,
+      driftScore: (data.drift_score as number) ?? 0,
+      fieldsMonitored: (data.fields_monitored as string[]) || [],
+      fieldsDrifted: (data.fields_drifted as string[]) || [],
+      fieldsStable: (data.fields_stable as string[]) || [],
+      fieldsAbsent: (data.fields_absent as string[]) || [],
+      totalAnchors: (data.total_anchors as number) || stages.length,
       stages,
     };
   }

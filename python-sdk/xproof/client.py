@@ -17,7 +17,7 @@ from .exceptions import (
 from .models import BatchResult, Certification, PricingInfo, RegistrationResult
 from .utils import hash_file
 
-__version__ = "0.1.0"
+__version__ = "0.2.3"
 
 DEFAULT_BASE_URL = "https://xproof.app"
 DEFAULT_TIMEOUT = 30
@@ -374,6 +374,35 @@ class XProofClient:
         data = self._request(
             "GET",
             f"/api/confidence-trail/{quote(decision_id, safe='')}",
+            auth_required=False,
+        )
+        return data
+
+    def get_context_drift(self, decision_id: str) -> Dict[str, Any]:
+        """Detect execution context drift across a decision chain.
+
+        Compares ``model_hash``, ``tools_version``, ``strategy_snapshot``, and
+        ``operator_scope`` between consecutive proofs in the chain. Returns a
+        coherence score and per-stage breakdown of which fields changed.
+
+        Args:
+            decision_id: The shared identifier linking proofs in the chain.
+
+        Returns:
+            A dictionary with:
+
+            - ``context_coherent`` (bool): True if no drift was detected.
+            - ``drift_score`` (float): 0.0 = fully coherent, 1.0 = total drift.
+            - ``fields_drifted`` (list[str]): Fields that changed at least once.
+            - ``fields_stable`` (list[str]): Fields present in all stages and unchanged.
+            - ``fields_absent`` (list[str]): Fields never populated in any stage.
+            - ``stages`` (list[dict]): Per-stage context with ``context_break``
+              and ``drifted_fields`` flags.
+        """
+        from urllib.parse import quote
+        data = self._request(
+            "GET",
+            f"/api/context-drift/{quote(decision_id, safe='')}",
             auth_required=False,
         )
         return data

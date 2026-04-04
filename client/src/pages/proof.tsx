@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, ExternalLink, Download, Copy, CheckCircle, Calendar, Hash, User, FileSearch, Gauge, GitBranch } from "lucide-react";
+import { Shield, ExternalLink, Download, Copy, CheckCircle, Calendar, Hash, User, FileSearch, Gauge, GitBranch, Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +16,13 @@ export default function ProofPage() {
   const { data: certification, isLoading, error } = useQuery<Certification>({
     queryKey: ["/api/proof", id],
     enabled: !!id,
+  });
+
+  const decisionIdForDrift = (certification?.metadata as any)?.decision_id as string | undefined;
+
+  const { data: contextDrift } = useQuery<any>({
+    queryKey: ["/api/context-drift", decisionIdForDrift],
+    enabled: !!decisionIdForDrift,
   });
 
   const handleCopy = async (text: string) => {
@@ -281,6 +288,129 @@ export default function ProofPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Context Drift Card */}
+        {contextDrift && contextDrift.total_anchors > 1 && (
+          <Card className="mb-8" data-testid="card-context-drift">
+            <CardContent className="pt-6">
+              <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-primary" />
+                  <h3 className="text-lg font-semibold">Execution context drift</h3>
+                </div>
+                {contextDrift.context_coherent ? (
+                  <Badge className="bg-chart-2/15 text-chart-2" data-testid="badge-drift-coherent">
+                    <CheckCircle2 className="mr-1 h-3 w-3" />
+                    Fully coherent
+                  </Badge>
+                ) : (
+                  <Badge className="bg-destructive/15 text-destructive" data-testid="badge-drift-detected">
+                    <AlertTriangle className="mr-1 h-3 w-3" />
+                    Drift detected
+                  </Badge>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                {/* Drift score bar */}
+                <div className="rounded-lg bg-muted/30 p-4">
+                  <p className="mb-2 text-sm font-medium text-muted-foreground">Drift score</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-3 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          contextDrift.drift_score === 0
+                            ? "bg-chart-2"
+                            : contextDrift.drift_score < 0.4
+                            ? "bg-amber-500"
+                            : "bg-destructive"
+                        }`}
+                        style={{ width: `${Math.round((contextDrift.drift_score ?? 0) * 100)}%` }}
+                        data-testid="bar-drift-score"
+                      />
+                    </div>
+                    <span className="text-sm font-bold tabular-nums" data-testid="text-drift-score">
+                      {Math.round((contextDrift.drift_score ?? 0) * 100)}%
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Across {contextDrift.total_anchors} anchors in this decision chain
+                  </p>
+                </div>
+
+                {/* Fields summary */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {contextDrift.fields_stable?.length > 0 && (
+                    <div className="rounded-lg bg-chart-2/10 p-3" data-testid="panel-fields-stable">
+                      <p className="text-xs font-medium text-chart-2 mb-1">Stable fields</p>
+                      <div className="flex flex-wrap gap-1">
+                        {(contextDrift.fields_stable as string[]).map((f: string) => (
+                          <Badge key={f} className="bg-chart-2/15 text-chart-2 text-xs">{f.replace(/_/g, " ")}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {contextDrift.fields_drifted?.length > 0 && (
+                    <div className="rounded-lg bg-destructive/10 p-3" data-testid="panel-fields-drifted">
+                      <p className="text-xs font-medium text-destructive mb-1">Drifted fields</p>
+                      <div className="flex flex-wrap gap-1">
+                        {(contextDrift.fields_drifted as string[]).map((f: string) => (
+                          <Badge key={f} className="bg-destructive/15 text-destructive text-xs">{f.replace(/_/g, " ")}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {contextDrift.fields_absent?.length > 0 && (
+                    <div className="rounded-lg bg-muted/40 p-3" data-testid="panel-fields-absent">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Absent fields</p>
+                      <div className="flex flex-wrap gap-1">
+                        {(contextDrift.fields_absent as string[]).map((f: string) => (
+                          <Badge key={f} className="text-xs">{f.replace(/_/g, " ")}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Per-stage breakdown */}
+                {contextDrift.stages?.length > 1 && (
+                  <div className="rounded-lg bg-muted/30 p-4">
+                    <p className="mb-3 text-sm font-medium text-muted-foreground">Stage breakdown</p>
+                    <div className="space-y-2">
+                      {(contextDrift.stages as any[]).map((stage: any, i: number) => (
+                        <div
+                          key={stage.proof_id || i}
+                          className="flex items-center justify-between gap-2"
+                          data-testid={`row-drift-stage-${i}`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="shrink-0 flex h-5 w-5 items-center justify-center rounded-full bg-muted text-xs font-bold">
+                              {(stage.stage_index ?? i) + 1}
+                            </span>
+                            <span className="font-mono text-xs text-muted-foreground truncate">
+                              {(stage.proof_id || "").slice(0, 8)}…
+                            </span>
+                          </div>
+                          {stage.context_break ? (
+                            <Badge className="bg-destructive/15 text-destructive shrink-0 text-xs">
+                              <AlertTriangle className="mr-1 h-2.5 w-2.5" />
+                              Break — {(stage.drifted_fields as string[]).join(", ").replace(/_/g, " ")}
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-chart-2/15 text-chart-2 shrink-0 text-xs">
+                              <CheckCircle2 className="mr-1 h-2.5 w-2.5" />
+                              Coherent
+                            </Badge>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">

@@ -180,6 +180,114 @@ export function registerProofReadRoutes(app: Express) {
     }
   });
 
+  // ── Context Drift Detection ──────────────────────────────────────────────
+  app.get("/api/context-drift/:decisionId", publicReadRateLimiter, async (req, res) => {
+    try {
+      const { decisionId } = req.params;
+      if (!decisionId || decisionId.trim().length === 0) {
+        return res.status(400).json({ error: "decision_id is required" });
+      }
+
+      const MONITORED_FIELDS = ["model_hash", "tools_version", "strategy_snapshot", "operator_scope"];
+
+      const results = await db
+        .select({
+          id: certifications.id,
+          metadata: certifications.metadata,
+          createdAt: certifications.createdAt,
+        })
+        .from(certifications)
+        .where(and(
+          sql`${certifications.metadata}->>'decision_id' = ${decisionId}`,
+          eq(certifications.isPublic, true)
+        ))
+        .orderBy(certifications.createdAt);
+
+      if (results.length === 0) {
+        return res.status(404).json({
+          error: "No proofs found for this decision chain",
+          decision_id: decisionId,
+        });
+      }
+
+      const stages = results.map((r, idx) => {
+        const meta = (r.metadata || {}) as Record<string, any>;
+        const executionContext: Record<string, string | null> = {};
+        for (const f of MONITORED_FIELDS) {
+          executionContext[f] = meta[f] ?? null;
+        }
+        return { proofId: r.id, stageIndex: idx, anchoredAt: r.createdAt, executionContext };
+      });
+
+      // Compare consecutive stages
+      const fieldsDriftedSet = new Set<string>();
+      const fieldsPresentInAll = new Set<string>();
+      let totalComparisons = 0;
+      let totalDrifts = 0;
+
+      const annotated = stages.map((stage, idx) => {
+        const driftedFields: string[] = [];
+        let contextBreak = false;
+
+        if (idx > 0) {
+          const prev = stages[idx - 1];
+          for (const f of MONITORED_FIELDS) {
+            const curr = stage.executionContext[f];
+            const prevVal = prev.executionContext[f];
+            if (curr !== null && prevVal !== null) {
+              totalComparisons++;
+              if (curr !== prevVal) {
+                totalDrifts++;
+                driftedFields.push(f);
+                fieldsDriftedSet.add(f);
+              }
+            }
+          }
+          contextBreak = driftedFields.length > 0;
+        }
+
+        return { ...stage, contextBreak, driftedFields };
+      });
+
+      // Fields that appear in every stage with a non-null value
+      for (const f of MONITORED_FIELDS) {
+        if (stages.every(s => s.executionContext[f] !== null)) {
+          fieldsPresentInAll.add(f);
+        }
+      }
+      const fieldsAbsent = MONITORED_FIELDS.filter(f => stages.every(s => s.executionContext[f] === null));
+      const fieldsDrifted = Array.from(fieldsDriftedSet);
+      const fieldsStable = MONITORED_FIELDS.filter(
+        f => !fieldsAbsent.includes(f) && !fieldsDrifted.includes(f)
+      );
+      const driftScore = totalComparisons > 0
+        ? Math.round((totalDrifts / totalComparisons) * 100) / 100
+        : 0;
+
+      return res.json({
+        decision_id: decisionId,
+        context_coherent: fieldsDrifted.length === 0,
+        drift_score: driftScore,
+        fields_monitored: MONITORED_FIELDS,
+        fields_drifted: fieldsDrifted,
+        fields_stable: fieldsStable,
+        fields_absent: fieldsAbsent,
+        total_anchors: stages.length,
+        stages: annotated.map(s => ({
+          proof_id: s.proofId,
+          stage_index: s.stageIndex,
+          anchored_at: s.anchoredAt,
+          execution_context: s.executionContext,
+          context_break: s.contextBreak,
+          drifted_fields: s.driftedFields,
+        })),
+      });
+    } catch (error: any) {
+      logger.error("Context drift error", { error: error.message });
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/artifact/trust/:hash", publicReadRateLimiter, async (req, res) => {
     try {
       const { hash } = req.params;

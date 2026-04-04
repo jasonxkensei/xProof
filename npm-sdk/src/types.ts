@@ -114,3 +114,32 @@ export interface XProofClientOptions {
   baseUrl?: string;
   timeout?: number;
 }
+
+export interface ExecutionContext {
+  model_hash: string | null;
+  tools_version: string | null;
+  strategy_snapshot: string | null;
+  operator_scope: string | null;
+  [key: string]: string | null;
+}
+
+export interface ContextDriftStage {
+  proofId: string;
+  stageIndex: number;
+  anchoredAt: string;
+  executionContext: ExecutionContext;
+  contextBreak: boolean;
+  driftedFields: string[];
+}
+
+export interface ContextDrift {
+  decisionId: string;
+  contextCoherent: boolean;
+  driftScore: number;
+  fieldsMonitored: string[];
+  fieldsDrifted: string[];
+  fieldsStable: string[];
+  fieldsAbsent: string[];
+  totalAnchors: number;
+  stages: ContextDriftStage[];
+}
