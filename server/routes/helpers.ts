@@ -178,3 +178,73 @@ export function buildCanonicalId(chainId: string, txHash: string | null): string
 }
 
 export const EXCLUDED_IP_HASHES = new Set((process.env.EXCLUDE_IP_HASHES || "").split(",").map(h => h.trim()).filter(Boolean));
+
+// ── Context Drift Computation ─────────────────────────────────────────────────
+// Reusable helper: takes an ordered array of metadata objects (earliest first)
+// and returns a drift summary. Used by the confidence-trail endpoint and the
+// agent profile endpoint so both surfaces expose coherence data to consumers.
+
+export const DRIFT_MONITORED_FIELDS = [
+  "model_hash",
+  "tools_version",
+  "strategy_snapshot",
+  "operator_scope",
+] as const;
+
+export interface DriftSummary {
+  context_coherent: boolean;
+  drift_score: number;
+  fields_monitored: string[];
+  fields_drifted: string[];
+  fields_stable: string[];
+  fields_absent: string[];
+}
+
+export function computeDrift(
+  metadataRows: Record<string, any>[]
+): DriftSummary {
+  const FIELDS = DRIFT_MONITORED_FIELDS as unknown as string[];
+
+  const contexts = metadataRows.map(meta => {
+    const ctx: Record<string, string | null> = {};
+    for (const f of FIELDS) ctx[f] = meta[f] ?? null;
+    return ctx;
+  });
+
+  const fieldsDriftedSet = new Set<string>();
+  let totalComparisons = 0;
+  let totalDrifts = 0;
+
+  for (let i = 1; i < contexts.length; i++) {
+    const prev = contexts[i - 1];
+    const curr = contexts[i];
+    for (const f of FIELDS) {
+      if (curr[f] !== null && prev[f] !== null) {
+        totalComparisons++;
+        if (curr[f] !== prev[f]) {
+          totalDrifts++;
+          fieldsDriftedSet.add(f);
+        }
+      }
+    }
+  }
+
+  const fieldsAbsent = FIELDS.filter(f => contexts.every(c => c[f] === null));
+  const fieldsDrifted = Array.from(fieldsDriftedSet);
+  const fieldsStable = FIELDS.filter(
+    f => !fieldsAbsent.includes(f) && !fieldsDrifted.includes(f)
+  );
+  const driftScore =
+    totalComparisons > 0
+      ? Math.round((totalDrifts / totalComparisons) * 100) / 100
+      : 0;
+
+  return {
+    context_coherent: fieldsDrifted.length === 0,
+    drift_score: driftScore,
+    fields_monitored: FIELDS,
+    fields_drifted: fieldsDrifted,
+    fields_stable: fieldsStable,
+    fields_absent: fieldsAbsent,
+  };
+}

@@ -24,6 +24,7 @@ export type {
   ConfidenceOptions,
   ConfidenceTrail,
   ConfidenceTrailStage,
+  ConfidenceTrailDrift,
   ExecutionContext,
   ContextDriftStage,
   ContextDrift,

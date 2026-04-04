@@ -93,12 +93,22 @@ export interface ConfidenceTrailStage {
   metadata: Record<string, unknown>;
 }
 
+export interface ConfidenceTrailDrift {
+  contextCoherent: boolean;
+  driftScore: number;
+  fieldsMonitored: string[];
+  fieldsDrifted: string[];
+  fieldsStable: string[];
+  fieldsAbsent: string[];
+}
+
 export interface ConfidenceTrail {
   decisionId: string;
   totalAnchors: number;
   currentConfidence: number | null;
   currentStage: string | null;
   isFinalized: boolean;
+  contextDrift: ConfidenceTrailDrift | null;
   stages: ConfidenceTrailStage[];
 }
 

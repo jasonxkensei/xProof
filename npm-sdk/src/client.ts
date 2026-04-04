@@ -26,12 +26,13 @@ import type {
   ConfidenceOptions,
   ConfidenceTrail,
   ConfidenceTrailStage,
+  ConfidenceTrailDrift,
   ContextDrift,
   ContextDriftStage,
   ExecutionContext,
 } from "./types.js";
 
-const VERSION = "0.1.4";
+const VERSION = "0.1.5";
 const DEFAULT_BASE_URL = "https://xproof.app";
 const DEFAULT_TIMEOUT = 30_000;
 
@@ -211,12 +212,25 @@ export class XProofClient {
       metadata: s.metadata || {},
     }));
 
+    const rawDrift = data.context_drift as any;
+    const contextDrift: ConfidenceTrailDrift | null = rawDrift
+      ? {
+          contextCoherent: rawDrift.context_coherent ?? true,
+          driftScore: rawDrift.drift_score ?? 0,
+          fieldsMonitored: rawDrift.fields_monitored || [],
+          fieldsDrifted: rawDrift.fields_drifted || [],
+          fieldsStable: rawDrift.fields_stable || [],
+          fieldsAbsent: rawDrift.fields_absent || [],
+        }
+      : null;
+
     return {
       decisionId: (data.decision_id as string) || decisionId,
       totalAnchors: (data.total_anchors as number) || stages.length,
       currentConfidence: (data.current_confidence as number) ?? null,
       currentStage: (data.current_stage as string) ?? null,
       isFinalized: (data.is_finalized as boolean) || false,
+      contextDrift,
       stages,
     };
   }

@@ -16,6 +16,7 @@ import {
   Calendar,
   BarChart2,
   AlertTriangle,
+  Activity,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +81,12 @@ interface AgentProfile {
     createdAt: string | null;
   }[];
   attestations: AttestationRecord[];
+  execution_context_summary?: {
+    decision_chains_30d: number;
+    chains_with_drift: number;
+    has_recent_drift: boolean;
+    last_drift_detected_at: string | null;
+  };
 }
 
 interface ViolationRecord {
@@ -793,6 +800,64 @@ export default function AgentProfilePage() {
 
             {/* Score Breakdown */}
             <ScoreBreakdown agent={agent} />
+
+            {/* Execution Context Coherence */}
+            {agent.execution_context_summary && agent.execution_context_summary.decision_chains_30d > 0 && (
+              <Card data-testid="card-execution-context">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Activity className="h-4 w-4" />
+                    Execution context coherence
+                    <span className="ml-auto">
+                      {agent.execution_context_summary.has_recent_drift ? (
+                        <Badge className="bg-destructive/15 text-destructive" data-testid="badge-profile-drift">
+                          <AlertTriangle className="mr-1 h-3 w-3" />
+                          Drift detected
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-chart-2/15 text-chart-2" data-testid="badge-profile-coherent">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          Fully coherent
+                        </Badge>
+                      )}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <div className="rounded-md bg-muted/30 p-3 text-center">
+                      <p className="text-2xl font-bold tabular-nums" data-testid="text-chains-30d">
+                        {agent.execution_context_summary.decision_chains_30d}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">Decision chains (30d)</p>
+                    </div>
+                    <div className="rounded-md bg-muted/30 p-3 text-center">
+                      <p className={`text-2xl font-bold tabular-nums ${
+                        agent.execution_context_summary.chains_with_drift > 0
+                          ? "text-destructive"
+                          : "text-chart-2"
+                      }`} data-testid="text-chains-drift">
+                        {agent.execution_context_summary.chains_with_drift}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">Chains with drift</p>
+                    </div>
+                    <div className="rounded-md bg-muted/30 p-3 text-center sm:col-span-1 col-span-2">
+                      <p className="text-sm font-medium tabular-nums" data-testid="text-last-drift">
+                        {agent.execution_context_summary.last_drift_detected_at
+                          ? formatDistanceToNow(new Date(agent.execution_context_summary.last_drift_detected_at), { addSuffix: true })
+                          : "—"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">Last drift detected</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Context coherence tracks whether this agent&apos;s model, tool set, policy, and
+                    operator boundary stay consistent across chained decisions. Drift indicates the
+                    execution substrate changed mid-chain.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Trust Score History */}
             <Card data-testid="card-trust-history">

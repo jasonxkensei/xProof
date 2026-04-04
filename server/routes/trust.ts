@@ -8,7 +8,7 @@ import { isWalletAuthenticated } from "../walletAuth";
 import { publicReadRateLimiter, publicSearchRateLimiter, publicCompareRateLimiter } from "../reliability";
 import { computeTrustScore, computeTrustScoreByWallet, getLeaderboard, generateTrustBadgeSvg } from "../trust";
 import { reconstructAuditTrail } from "../audit-trail";
-import { isAdminWallet } from "./helpers";
+import { isAdminWallet, computeDrift } from "./helpers";
 
 export function registerTrustRoutes(app: Express) {
   // ===== LEADERBOARD & AGENT PROFILE ENDPOINTS =====
@@ -300,7 +300,9 @@ export function registerTrustRoutes(app: Express) {
       const trust = await computeTrustScore(user.id);
 
       const now = new Date();
-      const [recentCerts, agentAttestations] = await Promise.all([
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const [recentCerts, agentAttestations, recentDecisionCerts] = await Promise.all([
         db
           .select({
             id: certifications.id,
@@ -337,7 +339,51 @@ export function registerTrustRoutes(app: Express) {
           GROUP BY a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at
           ORDER BY a.created_at DESC
         `),
+        db
+          .select({
+            id: certifications.id,
+            metadata: certifications.metadata,
+            createdAt: certifications.createdAt,
+          })
+          .from(certifications)
+          .where(and(
+            eq(certifications.userId, user.id),
+            gte(certifications.createdAt, thirtyDaysAgo),
+            sql`${certifications.metadata}->>'decision_id' IS NOT NULL`
+          ))
+          .orderBy(certifications.createdAt),
       ]);
+
+      // Group decision certs by decision_id, keep chains with ≥2 anchors
+      const chainMap = new Map<string, { meta: Record<string, any>; createdAt: Date }[]>();
+      for (const cert of recentDecisionCerts) {
+        const meta = (cert.metadata || {}) as Record<string, any>;
+        const did = meta.decision_id as string | undefined;
+        if (!did) continue;
+        if (!chainMap.has(did)) chainMap.set(did, []);
+        chainMap.get(did)!.push({ meta, createdAt: cert.createdAt as Date });
+      }
+
+      let chainsWithDrift = 0;
+      let lastDriftAt: Date | null = null;
+      const multiAnchorChains = [...chainMap.values()].filter(v => v.length >= 2);
+
+      for (const chain of multiAnchorChains) {
+        const sorted = chain.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        const drift = computeDrift(sorted.map(c => c.meta));
+        if (!drift.context_coherent) {
+          chainsWithDrift++;
+          const latestInChain = sorted[sorted.length - 1].createdAt;
+          if (!lastDriftAt || latestInChain > lastDriftAt) lastDriftAt = latestInChain;
+        }
+      }
+
+      const executionContextSummary = {
+        decision_chains_30d: multiAnchorChains.length,
+        chains_with_drift: chainsWithDrift,
+        has_recent_drift: chainsWithDrift > 0,
+        last_drift_detected_at: lastDriftAt ?? null,
+      };
 
       res.json({
         walletAddress: user.walletAddress,
@@ -346,6 +392,7 @@ export function registerTrustRoutes(app: Express) {
         agentDescription: user.agentDescription,
         agentWebsite: user.agentWebsite,
         ...trust,
+        execution_context_summary: executionContextSummary,
         recentCertifications: recentCerts,
         attestations: agentAttestations.rows,
       });
