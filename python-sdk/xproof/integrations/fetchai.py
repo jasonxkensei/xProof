@@ -1,0 +1,398 @@
+"""Fetch.ai uAgents integration for automatic xProof certification.
+
+Wraps uAgent message handlers and interval tasks to anchor the 4W audit
+trail (Who, What, When, Why) on MultiversX mainnet before and after every
+agent action — without modifying application logic.
+
+Quickstart::
+
+    from uagents import Agent, Context
+    from xproof.integrations.fetchai import xproof_handler, XProofuAgentMiddleware
+
+    agent = Agent(name="research-agent", seed="my-seed")
+    middleware = XProofuAgentMiddleware(api_key="pm_...", agent_name="research-agent")
+
+    @agent.on_message(model=QueryMessage)
+    @xproof_handler(middleware)
+    async def handle_query(ctx: Context, sender: str, msg: QueryMessage):
+        response = await do_research(msg.query)
+        await ctx.send(sender, ResponseMessage(result=response))
+
+Compatible with uAgents >= 0.9.x.
+"""
+
+import functools
+import hashlib
+import json
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional
+
+from ..client import XProofClient
+
+
+def _hash_data(data: Any) -> str:
+    """Stable SHA-256 of any JSON-serialisable value."""
+    serialized = json.dumps(data, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode()).hexdigest()
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class XProofuAgentMiddleware:
+    """Central xProof certification middleware for a uAgent.
+
+    Instantiate once per agent, then pass it to :func:`xproof_handler`
+    or call :meth:`certify_incoming` / :meth:`certify_outgoing` directly.
+
+    Args:
+        api_key: xProof API key (``pm_...``). Ignored when *client* is given.
+        client: Pre-configured :class:`~xproof.client.XProofClient`.
+        agent_name: Used as WHO in the 4W metadata. Defaults to ``"uagent"``.
+        certify_incoming: Certify the incoming message (the WHY). Default ``True``.
+        certify_outgoing: Certify the outgoing response (the WHAT). Default ``True``.
+        batch_mode: Buffer certifications and flush with :meth:`flush`. Default ``False``.
+
+    Example::
+
+        from xproof.integrations.fetchai import XProofuAgentMiddleware
+
+        middleware = XProofuAgentMiddleware(
+            api_key="pm_...",
+            agent_name="trading-agent",
+        )
+        proof = middleware.certify_incoming(
+            message={"query": "What is the BTC price?"},
+            sender="agent1abcd",
+            context="Market data query",
+        )
+        print(proof["proof_id"])
+    """
+
+    def __init__(
+        self,
+        api_key: str = "",
+        client: Optional[XProofClient] = None,
+        agent_name: str = "uagent",
+        certify_incoming: bool = True,
+        certify_outgoing: bool = True,
+        batch_mode: bool = False,
+    ) -> None:
+        self.client = client or XProofClient(api_key=api_key)
+        self.agent_name = agent_name
+        self.certify_incoming = certify_incoming
+        self.certify_outgoing = certify_outgoing
+        self.batch_mode = batch_mode
+        self._pending: List[Dict[str, Any]] = []
+
+    def _certify(
+        self,
+        file_hash: str,
+        file_name: str,
+        action_type: str,
+        context: str,
+        extra_metadata: Optional[Dict[str, Any]] = None,
+        decision_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        metadata: Dict[str, Any] = {
+            "who": self.agent_name,
+            "what": file_hash,
+            "when": _now_iso(),
+            "why": context,
+            "action_type": action_type,
+            "framework": "fetchai-uagents",
+        }
+        if decision_id:
+            metadata["decision_id"] = decision_id
+        if extra_metadata:
+            metadata.update(extra_metadata)
+
+        entry = {
+            "file_hash": file_hash,
+            "file_name": file_name,
+            "author": self.agent_name,
+            "metadata": metadata,
+        }
+
+        if self.batch_mode:
+            self._pending.append(entry)
+            return {"queued": True, "file_hash": file_hash}
+
+        cert = self.client.certify_hash(
+            file_hash=file_hash,
+            file_name=file_name,
+            author=self.agent_name,
+            metadata=metadata,
+        )
+        return {
+            "proof_id": cert.id,
+            "file_hash": cert.file_hash,
+            "transaction_hash": cert.transaction_hash,
+            "verify_url": f"https://xproof.app/proof/{cert.id}",
+        }
+
+    def certify_incoming(
+        self,
+        message: Any,
+        sender: str = "unknown",
+        context: str = "Incoming uAgent message",
+        decision_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Certify an incoming message as WHY (trigger / justification).
+
+        Args:
+            message: The incoming message object or dict.
+            sender: Sender address for traceability metadata.
+            context: Human-readable description of the trigger.
+            decision_id: Shared ID linking this WHY to its WHAT pair.
+
+        Returns:
+            Dict with ``proof_id``, ``file_hash``, ``transaction_hash``,
+            ``verify_url``; or ``None`` if *certify_incoming* is disabled.
+        """
+        if not self.certify_incoming:
+            return None
+
+        msg_dict = (
+            message.__dict__ if hasattr(message, "__dict__") else
+            {"content": str(message)}
+        )
+        msg_hash = _hash_data({"sender": sender, "message": msg_dict})
+
+        return self._certify(
+            file_hash=msg_hash,
+            file_name=f"incoming-{self.agent_name}-{msg_hash[:8]}.json",
+            action_type="message_received",
+            context=context,
+            extra_metadata={"sender": sender},
+            decision_id=decision_id,
+        )
+
+    def certify_outgoing(
+        self,
+        response: Any,
+        recipient: str = "unknown",
+        context: str = "uAgent response",
+        decision_id: Optional[str] = None,
+        confidence_level: Optional[float] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Certify an outgoing response as WHAT (the output to prove).
+
+        Args:
+            response: The response object or dict to hash and certify.
+            recipient: Destination address for traceability metadata.
+            context: Human-readable description of the output.
+            decision_id: Shared ID linking this WHAT to its WHY pair.
+            confidence_level: Optional float 0.0-1.0 (agent self-reported confidence).
+
+        Returns:
+            Dict with ``proof_id``, ``file_hash``, ``transaction_hash``,
+            ``verify_url``; or ``None`` if *certify_outgoing* is disabled.
+        """
+        if not self.certify_outgoing:
+            return None
+
+        resp_dict = (
+            response.__dict__ if hasattr(response, "__dict__") else
+            {"content": str(response)}
+        )
+        resp_hash = _hash_data({"recipient": recipient, "response": resp_dict})
+
+        extra: Dict[str, Any] = {"recipient": recipient}
+        if confidence_level is not None:
+            extra["confidence_level"] = float(confidence_level)
+
+        return self._certify(
+            file_hash=resp_hash,
+            file_name=f"outgoing-{self.agent_name}-{resp_hash[:8]}.json",
+            action_type="message_sent",
+            context=context,
+            extra_metadata=extra,
+            decision_id=decision_id,
+        )
+
+    def certify_action(
+        self,
+        action_name: str,
+        inputs: Any,
+        outputs: Any,
+        why: str = "",
+        confidence_level: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Certify a complete agent action as a WHY+WHAT pair.
+
+        Creates two linked proofs sharing a ``decision_id`` — the canonical
+        xProof dual-certification pattern for verifiable agent accountability.
+
+        Args:
+            action_name: Descriptive name of the action (used in file names).
+            inputs: Input data / trigger (hashed as WHY).
+            outputs: Output data / result (hashed as WHAT).
+            why: Human-readable mandate or justification.
+            confidence_level: Optional float 0.0-1.0.
+
+        Returns:
+            Dict with ``decision_id``, ``why_proof`` and ``what_proof`` dicts.
+
+        Example::
+
+            result = middleware.certify_action(
+                action_name="price-lookup",
+                inputs={"query": "BTC/USDT"},
+                outputs={"price": 67800.0},
+                why="Market price requested by trading strategy",
+                confidence_level=0.95,
+            )
+            print(result["why_proof"]["proof_id"])
+            print(result["what_proof"]["proof_id"])
+        """
+        decision_id = str(uuid.uuid4())
+        inputs_hash = _hash_data(inputs)
+        outputs_hash = _hash_data(outputs)
+
+        why_extra: Dict[str, Any] = {"action_name": action_name}
+        if confidence_level is not None:
+            why_extra["confidence_level"] = float(confidence_level)
+
+        why_proof = self._certify(
+            file_hash=inputs_hash,
+            file_name=f"why-{action_name}-{inputs_hash[:8]}.json",
+            action_type="decision",
+            context=why or f"Reasoning before {action_name}",
+            extra_metadata=why_extra,
+            decision_id=decision_id,
+        )
+
+        what_proof = self._certify(
+            file_hash=outputs_hash,
+            file_name=f"what-{action_name}-{outputs_hash[:8]}.json",
+            action_type="output",
+            context=f"Output of {action_name}",
+            extra_metadata={"action_name": action_name},
+            decision_id=decision_id,
+        )
+
+        return {
+            "decision_id": decision_id,
+            "why_proof": why_proof,
+            "what_proof": what_proof,
+        }
+
+    def flush(self) -> Optional[Dict[str, Any]]:
+        """Send all pending certifications in a single batch.
+
+        Only relevant when *batch_mode* is ``True``.
+
+        Returns:
+            The batch API response dict, or ``None`` if the queue was empty.
+        """
+        if not self._pending:
+            return None
+        result = self.client.batch_certify(self._pending)
+        self._pending.clear()
+        return result
+
+
+def xproof_handler(
+    middleware: XProofuAgentMiddleware,
+    incoming_context: str = "Incoming uAgent message",
+    outgoing_context: str = "uAgent response",
+) -> Callable:
+    """Decorator that wraps a uAgent ``on_message`` handler with xProof certification.
+
+    Certifies the incoming message (WHY) before the handler runs, then
+    certifies the response (WHAT) if the handler returns a value.
+
+    Both proofs share a ``decision_id`` so the full reasoning chain is
+    verifiable on-chain.
+
+    Args:
+        middleware: A configured :class:`XProofuAgentMiddleware` instance.
+        incoming_context: Description attached to the WHY proof.
+        outgoing_context: Description attached to the WHAT proof.
+
+    Example::
+
+        from uagents import Agent, Context
+        from xproof.integrations.fetchai import XProofuAgentMiddleware, xproof_handler
+
+        agent = Agent(name="research-agent", seed="test-seed")
+        xp = XProofuAgentMiddleware(api_key="pm_...", agent_name="research-agent")
+
+        @agent.on_message(model=Query)
+        @xproof_handler(xp, incoming_context="Research query received")
+        async def handle_query(ctx: Context, sender: str, msg: Query):
+            result = await run_research(msg.topic)
+            return result  # returned value is certified as WHAT
+    """
+    def decorator(fn: Callable) -> Callable:
+        @functools.wraps(fn)
+        async def wrapper(ctx: Any, sender: str, msg: Any) -> Any:
+            decision_id = str(uuid.uuid4())
+
+            middleware.certify_incoming(
+                message=msg,
+                sender=sender,
+                context=incoming_context,
+                decision_id=decision_id,
+            )
+
+            result = await fn(ctx, sender, msg)
+
+            if result is not None:
+                middleware.certify_outgoing(
+                    response=result,
+                    recipient=sender,
+                    context=outgoing_context,
+                    decision_id=decision_id,
+                )
+
+            return result
+        return wrapper
+    return decorator
+
+
+def wrap_agent(
+    agent: Any,
+    api_key: str = "",
+    client: Optional[XProofClient] = None,
+    agent_name: Optional[str] = None,
+    certify_incoming: bool = True,
+    certify_outgoing: bool = True,
+    batch_mode: bool = False,
+) -> "XProofuAgentMiddleware":
+    """Convenience function — creates middleware bound to a uAgent instance.
+
+    Reads ``agent.name`` automatically so you don't have to specify it.
+
+    Args:
+        agent: A uAgents ``Agent`` instance.
+        api_key: xProof API key. Ignored when *client* is provided.
+        client: Pre-configured :class:`~xproof.client.XProofClient`.
+        agent_name: Override the name used in 4W metadata.
+        certify_incoming: Certify incoming messages. Default ``True``.
+        certify_outgoing: Certify outgoing responses. Default ``True``.
+        batch_mode: Buffer certifications for batch sending. Default ``False``.
+
+    Returns:
+        A ready-to-use :class:`XProofuAgentMiddleware` instance.
+
+    Example::
+
+        from uagents import Agent
+        from xproof.integrations.fetchai import wrap_agent
+
+        agent = Agent(name="price-oracle", seed="secret")
+        xp = wrap_agent(agent, api_key="pm_...")
+    """
+    name = agent_name or getattr(agent, "name", "uagent")
+    return XProofuAgentMiddleware(
+        api_key=api_key,
+        client=client,
+        agent_name=name,
+        certify_incoming=certify_incoming,
+        certify_outgoing=certify_outgoing,
+        batch_mode=batch_mode,
+    )

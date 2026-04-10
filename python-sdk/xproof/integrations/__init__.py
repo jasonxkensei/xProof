@@ -35,3 +35,8 @@ try:
     from .deerflow import XProofDeerFlowSkill
 except ImportError:
     pass
+
+try:
+    from .fetchai import XProofuAgentMiddleware, xproof_handler, wrap_agent
+except ImportError:
+    pass

@@ -17,7 +17,7 @@ from .exceptions import (
 from .models import BatchResult, Certification, PricingInfo, RegistrationResult
 from .utils import hash_file
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 
 DEFAULT_BASE_URL = "https://xproof.app"
 DEFAULT_TIMEOUT = 30
