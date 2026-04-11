@@ -147,7 +147,7 @@ export async function addCredits(userId: string, amount: number): Promise<void> 
 }
 
 export const registerRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-export const REGISTER_RATE_LIMIT_MAX = 3;
+export const REGISTER_RATE_LIMIT_MAX = 10;
 export const REGISTER_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 
 export function requireAdmin(req: any, res: express.Response, next: express.NextFunction) {

@@ -73,8 +73,8 @@ function buildQuickStart(apiKey: string, agentName: string, baseUrl: string) {
         usage: `from xproof import XProofClient\nimport hashlib\nclient = XProofClient("${apiKey}")\ncontent = b"my decision"\nproof = client.certify(hashlib.sha256(content).hexdigest(), "decision.json")\nprint(proof["proof_id"])`,
       },
       npm: {
-        install: "npm install @xproof/sdk",
-        usage: `import { XProofClient } from "@xproof/sdk";\nimport { createHash } from "crypto";\nconst client = new XProofClient({ apiKey: "${apiKey}" });\nconst hash = createHash("sha256").update("my decision").digest("hex");\nconst proof = await client.certify({ fileHash: hash, filename: "decision.json" });\nconsole.log(proof.proof_id);`,
+        install: "npm install @xproof/xproof",
+        usage: `import { XProofClient } from "@xproof/xproof";\nimport { createHash } from "crypto";\nconst client = new XProofClient({ apiKey: "${apiKey}" });\nconst hash = createHash("sha256").update("my decision").digest("hex");\nconst proof = await client.certify({ fileHash: hash, filename: "decision.json" });\nconsole.log(proof.proof_id);`,
       },
     },
     status_endpoint: `${baseUrl}/api/agent/status`,
@@ -252,7 +252,7 @@ export function registerAgentsRoutes(app: Express) {
           claim: `POST ${baseUrl}/api/trial/claim`,
         },
         message: `Trial account created with ${TRIAL_QUOTA} free certifications. No wallet or payment needed. Call GET /api/agent/status to verify your key is active.`,
-        warning: `Trial certifications are NOT linked to a MultiversX wallet. To link to your real identity, authenticate at ${baseUrl} and call POST ${baseUrl}/api/trial/claim.`,
+        note: `Your proofs are fully on-chain and verifiable immediately. They are not yet linked to a named MultiversX wallet — to attach them to your real identity, connect your wallet at ${baseUrl} and call POST ${baseUrl}/api/trial/claim.`,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
