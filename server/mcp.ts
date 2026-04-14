@@ -23,7 +23,7 @@ export async function createMcpServer(ctx: McpContext) {
   
   const server = new McpServer({
     name: "xproof",
-    version: "1.2.0",
+    version: "1.3.0",
   });
 
   const { baseUrl, auth, xPaymentHeader, host } = ctx;
@@ -121,6 +121,85 @@ export async function createMcpServer(ctx: McpContext) {
         };
       } catch (error: any) {
         return { content: [{ type: "text" as const, text: JSON.stringify({ error: "CERTIFICATION_FAILED", message: error.message || "Failed to create certification" }) }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "certify_with_confidence",
+    `Create a staged blockchain certification with a confidence score. Use this when your decision builds progressively — certify at 60% (initial assessment), 80% (pre-commitment), and 100% (final decision). Each stage shares the same decision_id, creating an on-chain audit trail of the decision process. Cost: $${currentPriceUsd} per certification.`,
+    {
+      file_hash: z.string().length(64).regex(/^[a-fA-F0-9]+$/).describe("SHA-256 hash of the decision or output file (64 hex characters)"),
+      filename: z.string().min(1).describe("Original filename with extension (e.g. decision.json)"),
+      decision_id: z.string().min(1).describe("Shared UUID linking all confidence stages for the same decision. Generate once and reuse across all stages."),
+      confidence_level: z.number().min(0).max(1).describe("Confidence score from 0.0 to 1.0. Typical values: 0.6 (initial), 0.8 (pre-commitment), 1.0 (final)."),
+      threshold_stage: z.enum(["initial", "partial", "pre-commitment", "final"]).describe("Named stage of the decision: initial (first assessment), partial (gathering info), pre-commitment (almost certain), final (committed)."),
+      author_name: z.string().optional().describe("Name of the certifying agent (default: AI Agent)"),
+      why: z.string().optional().describe("Reason or instruction hash driving this decision"),
+      who: z.string().optional().describe("Agent identity (wallet address, name, or agent ID)"),
+    },
+    async ({ file_hash, filename, decision_id, confidence_level, threshold_stage, author_name, why, who }) => {
+      try {
+        if (!auth.valid || !auth.keyHash) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "Valid API key required. Include Authorization: Bearer pm_xxx header." }) }], isError: true };
+        }
+
+        const result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
+
+        let [systemUser] = await db.select().from(users)
+          .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+
+        if (!systemUser) {
+          [systemUser] = await db.insert(users).values({
+            walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+            subscriptionTier: "business",
+            subscriptionStatus: "active",
+          }).returning();
+        }
+
+        const metadata: Record<string, unknown> = {
+          confidence_level,
+          threshold_stage,
+          decision_id,
+        };
+        if (why) metadata.why = why;
+        if (who) metadata.who = who;
+
+        const [certification] = await db.insert(certifications).values({
+          userId: systemUser.id!,
+          fileName: filename,
+          fileHash: file_hash,
+          fileType: filename.split(".").pop() || "unknown",
+          authorName: author_name || "AI Agent",
+          transactionHash: result.transactionHash,
+          transactionUrl: result.transactionUrl,
+          blockchainStatus: "confirmed",
+          isPublic: true,
+          authMethod: "api_key",
+          metadata,
+        }).returning();
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              proof_id: certification.id,
+              decision_id,
+              confidence_level,
+              threshold_stage,
+              status: "certified",
+              file_hash: certification.fileHash,
+              filename: certification.fileName,
+              verify_url: `${baseUrl}/proof/${certification.id}`,
+              certificate_url: `${baseUrl}/api/certificates/${certification.id}.pdf`,
+              blockchain: { network: "MultiversX", transaction_hash: result.transactionHash, explorer_url: result.transactionUrl },
+              timestamp: certification.createdAt?.toISOString(),
+              message: `Confidence stage '${threshold_stage}' certified at ${Math.round(confidence_level * 100)}%. Use decision_id '${decision_id}' for subsequent stages.`,
+            }),
+          }],
+        };
+      } catch (error: any) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: "CERTIFICATION_FAILED", message: error.message || "Failed to create confidence certification" }) }], isError: true };
       }
     }
   );
@@ -235,6 +314,7 @@ export async function createMcpServer(ctx: McpContext) {
             pricing: { amount: priceUsd.toString(), currency: "USD", payment_method: "EGLD", note: "Paid in EGLD at current exchange rate" },
             capabilities: [
               `certify_file - Create blockchain proof ($${currentPriceUsd}/cert)`,
+              `certify_with_confidence - Staged proof with confidence score (initial/partial/pre-commitment/final) — $${currentPriceUsd}/stage`,
               "verify_proof - Verify existing proof",
               "get_proof - Retrieve proof in JSON or Markdown",
             ],

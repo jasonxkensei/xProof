@@ -1894,7 +1894,7 @@ curl -X POST https://xproof.app/api/batch \\\\
 \\\`\\\`\\\`
 
 ### MCP (Model Context Protocol)
-Connect via JSON-RPC 2.0 over Streamable HTTP at POST /mcp. Tools: certify_file, verify_proof, get_proof, discover_services. Auth: Bearer pm_YOUR_API_KEY.
+Connect via JSON-RPC 2.0 over Streamable HTTP at POST /mcp. Tools: certify_file, certify_with_confidence, verify_proof, get_proof, discover_services, audit_agent_session, check_attestations, investigate_proof. Auth: Bearer pm_YOUR_API_KEY.
 
 ### Verification Badge
 Embed a dynamic badge in README: \\\`[![xProof](https://xproof.app/badge/{proof_id})](https://explorer.multiversx.com/transactions/{tx_hash})\\\`
@@ -2246,9 +2246,13 @@ xproof exposes a native MCP server at \`POST ${baseUrl}/mcp\` using JSON-RPC 2.0
 
 ### Available Tools
 - \`certify_file\` - Create a blockchain certification for a file
+- \`certify_with_confidence\` - Staged certification with confidence score (initial/partial/pre-commitment/final), shared decision_id
 - \`verify_proof\` - Verify an existing certification
 - \`get_proof\` - Retrieve a proof in JSON or Markdown format
 - \`discover_services\` - Discover available services and pricing
+- \`audit_agent_session\` - Certify a full agent decision session (WHY + WHAT dual-proof pattern)
+- \`check_attestations\` - Check third-party trust attestations for an agent wallet
+- \`investigate_proof\` - Deep investigation of a proof (x402 paid)
 
 ### Available Resources
 - \`xproof://specification\` - Full xproof specification

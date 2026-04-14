@@ -70,11 +70,11 @@ function buildQuickStart(apiKey: string, agentName: string, baseUrl: string) {
     sdk: {
       python: {
         install: "pip install xproof",
-        usage: `from xproof import XProofClient\nimport hashlib\nclient = XProofClient("${apiKey}")\ncontent = b"my decision"\nproof = client.certify(hashlib.sha256(content).hexdigest(), "decision.json")\nprint(proof["proof_id"])`,
+        usage: `from xproof import XProofClient\nimport hashlib\nclient = XProofClient("${apiKey}")\ncontent = b"my decision"\nfile_hash = hashlib.sha256(content).hexdigest()\nproof = client.certify_hash(file_hash, "decision.json", "${agentName}")\nprint(proof.id)`,
       },
       npm: {
         install: "npm install @xproof/xproof",
-        usage: `import { XProofClient } from "@xproof/xproof";\nimport { createHash } from "crypto";\nconst client = new XProofClient({ apiKey: "${apiKey}" });\nconst hash = createHash("sha256").update("my decision").digest("hex");\nconst proof = await client.certify({ fileHash: hash, filename: "decision.json" });\nconsole.log(proof.proof_id);`,
+        usage: `import { XProofClient } from "@xproof/xproof";\nimport { createHash } from "crypto";\nconst client = new XProofClient({ apiKey: "${apiKey}" });\nconst hash = createHash("sha256").update("my decision").digest("hex");\nconst proof = await client.certifyHash(hash, "decision.json", "${agentName}");\nconsole.log(proof.id);`,
       },
     },
     status_endpoint: `${baseUrl}/api/agent/status`,
