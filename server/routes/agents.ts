@@ -31,7 +31,7 @@ function buildQuickStart(apiKey: string, agentName: string, baseUrl: string) {
       {
         step: 2,
         name: "anchor_proof",
-        description: "Certify a file or AI decision on-chain. Replace file_hash with SHA-256(your_content).",
+        description: "Certify a file or AI decision on-chain. Replace file_hash with SHA-256(your_content). Add 4W metadata fields (who/what/when/why) for richer provenance.",
         request: {
           method: "POST",
           url: `${baseUrl}/api/proof`,
@@ -45,36 +45,89 @@ function buildQuickStart(apiKey: string, agentName: string, baseUrl: string) {
             author_name: agentName,
             metadata: {
               action_type: "decision",
-              agent: agentName,
+              who: agentName,
+              what: "<hash or description of the action>",
+              when: "<ISO-8601 timestamp>",
+              why: "<instruction hash or goal>",
             },
           },
         },
         curl: `curl -X POST "${baseUrl}/api/proof" \\
   -H "Authorization: Bearer ${apiKey}" \\
   -H "Content-Type: application/json" \\
-  -d '{"file_hash":"<sha256-hex>","filename":"decision.json","author_name":"${agentName}","metadata":{"action_type":"decision"}}'`,
-        note: "The response contains proof_id and verify_url. Save proof_id for step 3.",
+  -d '{"file_hash":"<sha256-hex>","filename":"decision.json","author_name":"${agentName}","metadata":{"action_type":"decision","who":"${agentName}","why":"<instruction>"}}'`,
+        note: "Response contains proof_id, verify_url, and blockchain transaction hash. Save proof_id for step 3.",
       },
       {
         step: 3,
-        name: "view_proof",
-        description: "Retrieve the immutable on-chain proof record",
+        name: "retrieve_proof",
+        description: "Retrieve the full on-chain proof record as JSON",
         request: {
           method: "GET",
-          url: `${baseUrl}/proof/{proof_id}`,
-          note: "Replace {proof_id} with the id returned in step 2",
+          url: `${baseUrl}/api/proof/{proof_id}`,
+          note: "Replace {proof_id} with the UUID returned in step 2. Returns full certification record.",
         },
-        curl: `curl "${baseUrl}/proof/{proof_id}"`,
+        curl: `curl "${baseUrl}/api/proof/{proof_id}"`,
+        also_available: {
+          json_canonical: `${baseUrl}/proof/{proof_id}.json`,
+          markdown: `${baseUrl}/proof/{proof_id}.md`,
+          browser: `${baseUrl}/proof/{proof_id}`,
+        },
+      },
+      {
+        step: 4,
+        name: "mcp_config",
+        description: "If you are an MCP-capable agent (Claude, Cursor, etc.), add xproof as an MCP server for native tool calls",
+        claude_desktop_config: {
+          mcpServers: {
+            xproof: {
+              url: `${baseUrl}/mcp`,
+              headers: { Authorization: `Bearer ${apiKey}` },
+            },
+          },
+        },
+        available_tools: ["certify_file", "certify_with_confidence", "verify_proof", "get_proof", "discover_services", "audit_agent_session", "check_attestations", "investigate_proof"],
+        note: "MCP tools accept the same parameters as the REST API. certify_with_confidence is the recommended tool for multi-stage decisions.",
       },
     ],
+    advanced: {
+      confidence_staging: {
+        description: "Multi-stage certification for decisions that build progressively (e.g. 60% → 80% → 100%). All stages share the same decision_id.",
+        example_body: {
+          file_hash: "<sha256-hex>",
+          filename: "decision.json",
+          author_name: agentName,
+          metadata: {
+            decision_id: "<shared-uuid-across-all-stages>",
+            confidence_level: 0.8,
+            threshold_stage: "pre-commitment",
+            who: agentName,
+            why: "<instruction hash>",
+          },
+        },
+        stages: ["initial (0.6)", "partial (0.7)", "pre-commitment (0.8)", "final (1.0)"],
+        mcp_tool: "certify_with_confidence",
+      },
+      audit_log: {
+        description: "Certify a complete agent decision session — creates a WHY proof before action and a WHAT proof after. Standard compliance pattern.",
+        endpoint: `POST ${baseUrl}/api/audit`,
+        mcp_tool: "audit_agent_session",
+        schema: `${baseUrl}/.well-known/agent-audit-schema.json`,
+      },
+      batch: {
+        description: "Certify up to 50 files in a single API call",
+        endpoint: `POST ${baseUrl}/api/batch`,
+        max_files: 50,
+      },
+    },
     sdk: {
       python: {
         install: "pip install xproof",
-        usage: `from xproof import XProofClient\nimport hashlib\nclient = XProofClient("${apiKey}")\ncontent = b"my decision"\nfile_hash = hashlib.sha256(content).hexdigest()\nproof = client.certify_hash(file_hash, "decision.json", "${agentName}")\nprint(proof.id)`,
+        usage: `from xproof import XProofClient\nimport hashlib\nclient = XProofClient("${apiKey}")\ncontent = b"my decision"\nfile_hash = hashlib.sha256(content).hexdigest()\nproof = client.certify_hash(file_hash, "decision.json", "${agentName}",\n    who="${agentName}", why="task instruction")\nprint(proof.id, proof.transaction_url)`,
       },
       npm: {
         install: "npm install @xproof/xproof",
-        usage: `import { XProofClient } from "@xproof/xproof";\nimport { createHash } from "crypto";\nconst client = new XProofClient({ apiKey: "${apiKey}" });\nconst hash = createHash("sha256").update("my decision").digest("hex");\nconst proof = await client.certifyHash(hash, "decision.json", "${agentName}");\nconsole.log(proof.id);`,
+        usage: `import { XProofClient } from "@xproof/xproof";\nimport { createHash } from "crypto";\nconst client = new XProofClient({ apiKey: "${apiKey}" });\nconst hash = createHash("sha256").update("my decision").digest("hex");\nconst proof = await client.certifyHash(hash, "decision.json", "${agentName}",\n  { why: "task instruction", who: "${agentName}" });\nconsole.log(proof.id, proof.transactionUrl);`,
       },
     },
     status_endpoint: `${baseUrl}/api/agent/status`,
@@ -87,25 +140,147 @@ export function registerAgentsRoutes(app: Express) {
   const trialInfoHandler = (_req: any, res: any) => {
     const baseUrl = `https://${_req.get('host')}`;
     res.json({
-      name: "xproof Agent Trial",
-      description: `Get ${TRIAL_QUOTA} free certifications instantly. No wallet, no payment, no browser needed.`,
-      register: {
-        method: "POST",
-        url: `${baseUrl}/api/agent/register`,
-        body: { agent_name: "your-agent-name" },
-        content_type: "application/json",
-        optional_fields: {
-          webhook_url: "https://your-server.com/webhook — called when each proof is confirmed on-chain",
-          description: "Short description of your agent (max 500 chars)",
+      protocol: "xproof-agent-discovery/1.0",
+      service: "xproof",
+      tagline: "The canonical proof layer for AI agents — anchor immutable on-chain proofs of your decisions.",
+      description: `Register in 1 API call, get ${TRIAL_QUOTA} free blockchain certifications immediately. No wallet, no payment, no browser needed. Your proofs are live on MultiversX instantly.`,
+      time_to_first_proof: "< 60 seconds",
+
+      // ── STEP 1: REGISTER ──────────────────────────────────────────────
+      step_1_register: {
+        description: `POST one JSON body → receive api_key + ${TRIAL_QUOTA} free certifications + pre-filled quick_start guide`,
+        endpoint: `POST ${baseUrl}/api/agent/register`,
+        body_required: { agent_name: "your-agent-name" },
+        body_optional: {
+          webhook_url: "https://your-server.com/webhook — fires on every on-chain confirmation",
+          description: "What your agent does (max 500 chars)",
+        },
+        curl: `curl -X POST ${baseUrl}/api/agent/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent_name": "my-agent"}'`,
+        response_contains: ["api_key", "trial.remaining", "quick_start (pre-filled with your key)", "webhook config"],
+      },
+
+      // ── STEP 2: CERTIFY ───────────────────────────────────────────────
+      step_2_certify: {
+        description: "POST the SHA-256 hash of any content → immutable on-chain proof of existence",
+        endpoint: `POST ${baseUrl}/api/proof`,
+        auth: "Authorization: Bearer YOUR_API_KEY",
+        body_minimal: {
+          file_hash: "<sha256-hex-64-chars>",
+          filename: "decision.json",
+        },
+        body_with_4w: {
+          file_hash: "<sha256-hex-64-chars>",
+          filename: "decision.json",
+          author_name: "my-agent",
+          metadata: {
+            action_type: "decision",
+            who: "agent-identity-or-wallet",
+            what: "hash-or-description-of-action",
+            when: "2025-01-14T17:00:00Z",
+            why: "instruction-hash-or-goal",
+          },
+        },
+        curl: `curl -X POST ${baseUrl}/api/proof \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"file_hash":"<sha256-hex>","filename":"decision.json","author_name":"my-agent","metadata":{"action_type":"decision","who":"my-agent","why":"task-instruction"}}'`,
+        response_contains: ["proof_id", "verify_url", "blockchain.transaction_hash", "blockchain.explorer_url"],
+      },
+
+      // ── STEP 3: VERIFY ────────────────────────────────────────────────
+      step_3_verify: {
+        description: "Retrieve the full immutable proof record as JSON",
+        endpoint: `GET ${baseUrl}/api/proof/{proof_id}`,
+        also_available: {
+          json_canonical: `${baseUrl}/proof/{proof_id}.json`,
+          markdown: `${baseUrl}/proof/{proof_id}.md`,
+          badge_svg: `${baseUrl}/badge/{proof_id}`,
         },
       },
-      free_certifications: TRIAL_QUOTA,
-      example: `curl -X POST ${baseUrl}/api/agent/register -H "Content-Type: application/json" -d '{"agent_name": "my-agent"}'`,
-      after_registration: `Use returned api_key as Bearer token. Call GET ${baseUrl}/api/agent/status to verify.`,
-      certify_endpoint: `POST ${baseUrl}/api/proof`,
+
+      // ── CAPABILITIES ──────────────────────────────────────────────────
+      capabilities: {
+        single_proof: {
+          description: "Hash + filename → immutable on-chain proof",
+          endpoint: `POST ${baseUrl}/api/proof`,
+          cost: `${TRIAL_QUOTA} free, then prepaid credits or x402`,
+        },
+        confidence_staging: {
+          description: "Multi-stage decisions (60% → 80% → 100%). Each stage shares a decision_id. Full audit trail on-chain.",
+          endpoint: `POST ${baseUrl}/api/proof`,
+          extra_metadata: {
+            "metadata.decision_id": "shared UUID across all stages (generate once)",
+            "metadata.confidence_level": "0.0 to 1.0",
+            "metadata.threshold_stage": "initial | partial | pre-commitment | final",
+          },
+          mcp_tool: "certify_with_confidence",
+        },
+        batch: {
+          description: "Certify up to 50 files in a single API call",
+          endpoint: `POST ${baseUrl}/api/batch`,
+          max_files: 50,
+        },
+        audit_log: {
+          description: "Certify a complete agent decision session. WHY proof before action + WHAT proof after. Standard compliance gate.",
+          endpoint: `POST ${baseUrl}/api/audit`,
+          mcp_tool: "audit_agent_session",
+          schema: `${baseUrl}/.well-known/agent-audit-schema.json`,
+          blocking_templates: `${baseUrl}/llms.txt#audit-guard`,
+        },
+        four_w_framework: {
+          description: "Add provenance to any proof: who (agent identity), what (action hash), when (ISO timestamp), why (instruction/goal hash)",
+          fields: ["metadata.who", "metadata.what", "metadata.when", "metadata.why"],
+          all_optional: true,
+          recommended: true,
+        },
+        verify_public: {
+          description: "Verify any proof without authentication",
+          endpoint: `GET ${baseUrl}/api/proof/{proof_id}`,
+        },
+      },
+
+      // ── MCP ───────────────────────────────────────────────────────────
+      mcp: {
+        description: "If you support MCP (Claude Desktop, Cursor, etc.), add xproof as a native tool server",
+        endpoint: `${baseUrl}/mcp`,
+        protocol: "JSON-RPC 2.0 over Streamable HTTP (MCP spec 2025-03-26)",
+        auth: "Authorization: Bearer YOUR_API_KEY",
+        tools: ["certify_file", "certify_with_confidence", "verify_proof", "get_proof", "discover_services", "audit_agent_session", "check_attestations", "investigate_proof"],
+        claude_desktop_config: {
+          mcpServers: {
+            xproof: {
+              url: `${baseUrl}/mcp`,
+              headers: { Authorization: "Bearer YOUR_API_KEY" },
+            },
+          },
+        },
+      },
+
+      // ── PAYMENT ───────────────────────────────────────────────────────
+      payment: {
+        trial: `${TRIAL_QUOTA} free certifications — start immediately after registration`,
+        prepaid_credits: {
+          endpoint: `POST ${baseUrl}/api/credits/purchase`,
+          price: "100 proofs for $5 USDC on Base",
+        },
+        x402_pay_per_use: {
+          description: "Pay per request with USDC on Base — no account needed",
+          endpoint: `POST ${baseUrl}/api/proof`,
+          note: "Send X-PAYMENT header instead of Authorization",
+        },
+        egld: {
+          description: "Pay with EGLD on MultiversX via ACP",
+          endpoint: `POST ${baseUrl}/api/acp/checkout`,
+        },
+      },
+
+      // ── STATUS ────────────────────────────────────────────────────────
       status_endpoint: `GET ${baseUrl}/api/agent/status`,
-      batch_endpoint: `POST ${baseUrl}/api/batch`,
       docs: `${baseUrl}/llms.txt`,
+      openapi: `${baseUrl}/api/acp/openapi.json`,
+      examples: "https://github.com/jasonxkensei/xproof-examples",
     });
   };
   app.get("/api/trial", trialInfoHandler);
@@ -175,7 +350,7 @@ export function registerAgentsRoutes(app: Express) {
         return res.status(409).json({
           error: "DUPLICATE_AGENT_NAME",
           message: `An agent named "${data.agent_name}" already exists on a real wallet. Registration blocked to prevent duplicates.`,
-          resolution: `If this is your agent, connect your wallet at ${baseUrl} and use your existing API key. If you need a new trial key for a different agent, choose a unique name.`,
+          resolution: `If this is your agent: connect your wallet at ${baseUrl} and use your existing API key. If you need a trial key for a different agent: choose a unique name (e.g. "${data.agent_name}-v2" or "${data.agent_name}-${crypto.randomBytes(3).toString("hex")}").`,
           claim_endpoint: `POST ${baseUrl}/api/trial/claim`,
         });
       }
@@ -243,16 +418,16 @@ export function registerAgentsRoutes(app: Express) {
               status: "not_configured",
               note: `To receive callbacks, include webhook_url in your registration body or add it per-proof in POST ${baseUrl}/api/proof.`,
             },
-        // Legacy fields kept for backward compatibility
         endpoints: {
           status: `GET ${baseUrl}/api/agent/status`,
           certify: `POST ${baseUrl}/api/proof`,
           batch: `POST ${baseUrl}/api/batch`,
-          verify: `GET ${baseUrl}/proof/{proof_id}`,
+          verify: `GET ${baseUrl}/api/proof/{proof_id}`,
           claim: `POST ${baseUrl}/api/trial/claim`,
+          mcp: `${baseUrl}/mcp`,
         },
-        message: `Trial account created with ${TRIAL_QUOTA} free certifications. No wallet or payment needed. Call GET /api/agent/status to verify your key is active.`,
-        note: `Your proofs are fully on-chain and verifiable immediately. They are not yet linked to a named MultiversX wallet — to attach them to your real identity, connect your wallet at ${baseUrl} and call POST ${baseUrl}/api/trial/claim.`,
+        message: `api_key ready. You have ${TRIAL_QUOTA} free on-chain certifications — use the quick_start guide below, your first proof is 1 curl call away. No wallet or payment needed.`,
+        note: `Your proofs are fully on-chain and publicly verifiable immediately. They are anchored to a trial wallet — to link them to your real MultiversX identity, connect your wallet at ${baseUrl} and call POST ${baseUrl}/api/trial/claim.`,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -356,9 +531,11 @@ export function registerAgentsRoutes(app: Express) {
           },
         };
       } else if (!lastProof) {
+        const agentName = user.companyName || user.agentName || "agent";
         next_action = {
           action: "anchor_first_proof",
           description: `You have ${totalRemaining} certification${totalRemaining !== 1 ? "s" : ""} available. Anchor your first proof now.`,
+          tip: "Add 4W metadata (who/what/when/why) to every proof for richer provenance. Use confidence_staging for multi-step decisions.",
           request: {
             method: "POST",
             url: `${baseUrl}/api/proof`,
@@ -366,16 +543,26 @@ export function registerAgentsRoutes(app: Express) {
             body: {
               file_hash: "<sha256-hex-64-chars>",
               filename: "decision.json",
-              author_name: user.companyName || "agent",
-              metadata: { action_type: "decision" },
+              author_name: agentName,
+              metadata: {
+                action_type: "decision",
+                who: agentName,
+                what: "<hash or description of action>",
+                when: new Date().toISOString(),
+                why: "<instruction hash or goal>",
+              },
             },
           },
-          curl: `curl -X POST "${baseUrl}/api/proof" -H "Authorization: Bearer ${rawKey}" -H "Content-Type: application/json" -d '{"file_hash":"<sha256-hex>","filename":"decision.json","metadata":{"action_type":"decision"}}'`,
+          curl: `curl -X POST "${baseUrl}/api/proof" \\
+  -H "Authorization: Bearer ${rawKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"file_hash":"<sha256-hex>","filename":"decision.json","author_name":"${agentName}","metadata":{"action_type":"decision","who":"${agentName}","why":"<instruction>"}}'`,
         };
       } else {
         next_action = {
           action: "anchor_proof",
           description: `${totalRemaining} certification${totalRemaining !== 1 ? "s" : ""} remaining. Continue anchoring proofs.`,
+          tip: "Use metadata.confidence_level + metadata.decision_id for multi-stage decisions. Use POST /api/audit for full decision session certification.",
           request: {
             method: "POST",
             url: `${baseUrl}/api/proof`,
@@ -383,16 +570,23 @@ export function registerAgentsRoutes(app: Express) {
             body: {
               file_hash: "<sha256-hex-64-chars>",
               filename: "decision.json",
-              metadata: { action_type: "decision" },
+              author_name: user.companyName || user.agentName || "agent",
+              metadata: {
+                action_type: "decision",
+                who: user.companyName || user.agentName || "agent",
+                why: "<instruction hash or goal>",
+              },
             },
           },
         };
       }
 
+      const agentNameForCapabilities = user.companyName || user.agentName || "agent";
+
       return res.json({
         status: "active",
         agent: {
-          name: user.companyName || user.agentName || apiKey.name || "unknown",
+          name: agentNameForCapabilities,
           api_key_prefix: apiKey.keyPrefix,
           account_type: user.isTrial ? "trial" : "full",
           wallet: user.isTrial ? null : user.walletAddress,
@@ -421,6 +615,7 @@ export function registerAgentsRoutes(app: Express) {
                 transaction_hash: lastProof.transactionHash,
                 anchored_at: lastProof.createdAt?.toISOString(),
                 verify_url: `${baseUrl}/proof/${lastProof.id}`,
+                retrieve_json: `${baseUrl}/api/proof/${lastProof.id}`,
               }
             : null,
         },
@@ -435,12 +630,34 @@ export function registerAgentsRoutes(app: Express) {
               note: `Add webhook_url to POST ${baseUrl}/api/proof body to receive per-proof callbacks.`,
             },
         next_action,
+        capabilities: {
+          certify: `POST ${baseUrl}/api/proof`,
+          certify_with_confidence: `POST ${baseUrl}/api/proof with metadata.confidence_level + metadata.decision_id + metadata.threshold_stage`,
+          batch: `POST ${baseUrl}/api/batch (up to 50 files)`,
+          audit_session: `POST ${baseUrl}/api/audit`,
+          verify: `GET ${baseUrl}/api/proof/{proof_id}`,
+          mcp: `${baseUrl}/mcp — tools: certify_file, certify_with_confidence, audit_agent_session, verify_proof, get_proof`,
+          four_w: "Add metadata.who / metadata.what / metadata.when / metadata.why to any proof",
+        },
+        mcp_config: {
+          description: "If you support MCP (Claude Desktop, Cursor, etc.), add this to your config",
+          claude_desktop_config: {
+            mcpServers: {
+              xproof: {
+                url: `${baseUrl}/mcp`,
+                headers: { Authorization: `Bearer ${rawKey}` },
+              },
+            },
+          },
+        },
         links: {
           anchor: `POST ${baseUrl}/api/proof`,
           batch: `POST ${baseUrl}/api/batch`,
+          audit: `POST ${baseUrl}/api/audit`,
           docs: `${baseUrl}/llms.txt`,
           openapi: `${baseUrl}/api/acp/openapi.json`,
           claim_trial: user.isTrial ? `POST ${baseUrl}/api/trial/claim` : null,
+          examples: "https://github.com/jasonxkensei/xproof-examples",
         },
       });
     } catch (error) {

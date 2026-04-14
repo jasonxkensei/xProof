@@ -235,13 +235,25 @@ export function registerProofWriteRoutes(app: Express) {
               const baseUrl = `https://${req.get("host")}`;
               return res.status(402).json({
                 error: "TRIAL_EXHAUSTED",
-                message: `Trial quota exhausted (${TRIAL_QUOTA}/${TRIAL_QUOTA} used). Purchase prepaid credits or pay per request via x402.`,
+                message: `Trial quota exhausted (${TRIAL_QUOTA}/${TRIAL_QUOTA} used). Purchase prepaid credits or pay per request via x402 — no account needed for x402.`,
                 trial: { quota: TRIAL_QUOTA, used: TRIAL_QUOTA, remaining: 0 },
                 upgrade: {
-                  credits: `POST ${baseUrl}/api/credits/purchase — prepaid packs (100/$5, 1000/$40, 10k/$300 USDC on Base)`,
-                  x402: "Send POST /api/proof without auth header to pay per request via x402 (USDC on Base)",
-                  acp: "Use POST /api/acp/checkout for EGLD payment on MultiversX",
+                  prepaid_credits: {
+                    endpoint: `POST ${baseUrl}/api/credits/purchase`,
+                    packs: { "100_proofs": "$5 USDC", "1000_proofs": "$40 USDC", "10000_proofs": "$300 USDC" },
+                    network: "Base (USDC)",
+                  },
+                  x402_pay_per_use: {
+                    description: "Pay per request — no account needed",
+                    endpoint: `POST ${baseUrl}/api/proof`,
+                    note: "Omit Authorization header. Send X-PAYMENT header with USDC payment on Base.",
+                  },
+                  egld: {
+                    description: "Pay with EGLD on MultiversX",
+                    endpoint: `POST ${baseUrl}/api/acp/checkout`,
+                  },
                 },
+                check_balance: `GET ${baseUrl}/api/agent/status`,
               });
             }
           }
@@ -492,12 +504,25 @@ export function registerProofWriteRoutes(app: Express) {
             } else {
               return res.status(402).json({
                 error: "TRIAL_EXHAUSTED",
-                message: `Trial quota exhausted (${TRIAL_QUOTA}/${TRIAL_QUOTA} used). Purchase prepaid credits or pay per request via x402.`,
+                message: `Trial quota exhausted (${TRIAL_QUOTA}/${TRIAL_QUOTA} used). Purchase prepaid credits or pay per request via x402 — no account needed for x402.`,
                 trial: { quota: TRIAL_QUOTA, used: TRIAL_QUOTA, remaining: 0 },
                 upgrade: {
-                  credits: `POST ${baseUrl}/api/credits/purchase — prepaid packs (100/$5, 1000/$40, 10k/$300 USDC on Base)`,
-                  x402: "Send POST /api/audit without auth header to pay per request via x402 (USDC on Base)",
+                  prepaid_credits: {
+                    endpoint: `POST ${baseUrl}/api/credits/purchase`,
+                    packs: { "100_proofs": "$5 USDC", "1000_proofs": "$40 USDC", "10000_proofs": "$300 USDC" },
+                    network: "Base (USDC)",
+                  },
+                  x402_pay_per_use: {
+                    description: "Pay per request — no account needed",
+                    endpoint: `POST ${baseUrl}/api/proof`,
+                    note: "Omit Authorization header. Send X-PAYMENT header with USDC payment on Base.",
+                  },
+                  egld: {
+                    description: "Pay with EGLD on MultiversX",
+                    endpoint: `POST ${baseUrl}/api/acp/checkout`,
+                  },
                 },
+                check_balance: `GET ${baseUrl}/api/agent/status`,
               });
             }
           }
