@@ -258,6 +258,34 @@ export function registerAgentsRoutes(app: Express) {
         },
       },
 
+      // ── DISCOVERY CHANNELS ────────────────────────────────────────────
+      discovery_channels: {
+        llms_txt: {
+          description: "Machine-readable documentation for LLM-based agents. Full API reference, SDK examples, integration guides.",
+          url: `${baseUrl}/llms.txt`,
+        },
+        x402_bazaar: {
+          description: "xproof is registered in the x402 Bazaar — the canonical discovery layer for x402-compatible API endpoints. AI agents with Bazaar MCP access can search for 'proof of existence', 'audit trail', or 'blockchain certification' and find xproof automatically with pricing, schemas, and ready-to-execute examples.",
+          bazaar_mcp_endpoint: "GET https://api.cdp.coinbase.com/platform/v2/x402/discovery/mcp",
+          search_terms: ["proof of existence", "blockchain certification", "audit trail", "decision provenance", "agent accountability"],
+          how_it_works: "Bazaar metadata (input/output schemas, pricing) is embedded in every x402 402 response from xproof. The CDP facilitator catalogs xproof automatically on first payment.",
+          discoverable_endpoints: [
+            `POST ${baseUrl}/api/proof — single file/decision certification`,
+            `POST ${baseUrl}/api/batch — batch certification (up to 100 files)`,
+          ],
+        },
+        mcp_direct: {
+          description: "Connect directly to xproof's MCP server for native tool calls (no HTTP required)",
+          url: `${baseUrl}/mcp`,
+          auth: "Authorization: Bearer YOUR_API_KEY",
+          tools: 8,
+        },
+        well_known: {
+          ai_plugin: `${baseUrl}/.well-known/ai-plugin.json`,
+          xproof_spec: `${baseUrl}/.well-known/xproof.md`,
+        },
+      },
+
       // ── PAYMENT ───────────────────────────────────────────────────────
       payment: {
         trial: `${TRIAL_QUOTA} free certifications — start immediately after registration`,

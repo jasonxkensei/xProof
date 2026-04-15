@@ -380,6 +380,17 @@ export async function createMcpServer(ctx: McpContext) {
               langchain: `${baseUrl}/tools/langchain.json`,
               crewai: `${baseUrl}/tools/crewai.json`
             },
+            bazaar_discovery: {
+              description: "xproof endpoints are registered in the x402 Bazaar — the canonical discovery layer for x402-compatible services. AI agents with Bazaar MCP access can find, evaluate, and call xproof without reading any documentation.",
+              bazaar_mcp: "GET https://api.cdp.coinbase.com/platform/v2/x402/discovery/mcp",
+              search_terms: ["proof of existence", "blockchain certification", "audit trail", "decision provenance", "agent accountability", "file hash", "SHA-256 anchor"],
+              discoverable_endpoints: [
+                { path: "POST /api/proof", description: "Certify any content — anchor SHA-256 hash on MultiversX with 4W provenance" },
+                { path: "POST /api/batch", description: "Batch certify up to 100 files in one transaction" },
+                { path: "POST /api/proof (investigate)", description: "4W incident investigation — reconstruct agent decision audit trail" },
+              ],
+              note: "Bazaar metadata (input/output schemas, examples) is included in every 402 response from xproof. The facilitator catalogs xproof the first time it processes a payment for each endpoint.",
+            },
             compatible_agents: ["Conway Terminal", "OpenClaw", "Claude Code", "Codex", "LangChain", "CrewAI", "Any MCP/x402 agent"],
           }),
         }],

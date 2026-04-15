@@ -257,6 +257,42 @@ curl -X POST ${baseUrl}/api/proof \\
 - When x402 is configured, requests without any auth return 402 (instead of 401)
 - No account or API key registration required — just sign and pay
 
+## x402 Bazaar Discovery
+
+xproof is indexed in the **x402 Bazaar** — the canonical discoverability layer for x402-compatible API services.
+
+### What this means for AI agents
+
+Agents that use the Bazaar MCP server (GET https://api.cdp.coinbase.com/platform/v2/x402/discovery/mcp) can **find xproof automatically** by searching for terms like:
+- "proof of existence", "blockchain certification", "audit trail", "decision provenance", "agent accountability"
+
+The Bazaar returns xproof with:
+- Full input/output schemas
+- Pricing in USDC
+- Ready-to-execute request examples
+- Link to this llms.txt for deeper context
+
+### How xproof appears in the Bazaar
+
+xproof's Bazaar metadata is embedded in the \`extensions.bazaar\` field of every x402 402 response. The CDP facilitator (https://api.cdp.coinbase.com/platform/v2/x402) catalogs xproof automatically when it processes the first payment.
+
+Discoverable endpoints:
+- \`POST ${baseUrl}/api/proof\` — single certification with 4W provenance
+- \`POST ${baseUrl}/api/batch\` — batch certification (up to 100 files)
+
+### For agents already using the Bazaar MCP server
+
+Add the Bazaar MCP to your config and search for xproof:
+
+\`\`\`json
+{
+  "mcpServers": {
+    "bazaar": { "url": "https://api.cdp.coinbase.com/platform/v2/x402/discovery/mcp" },
+    "xproof": { "url": "${baseUrl}/mcp", "headers": { "Authorization": "Bearer YOUR_API_KEY" } }
+  }
+}
+\`\`\`
+
 ## MX-8004 Integration (Trustless Agents Standard)
 
 xproof is natively integrated with MX-8004, the MultiversX Trustless Agents Standard, with full ERC-8004 compliance.
@@ -1923,6 +1959,30 @@ Starting at $${priceUsd} per certification — price decreases as the network gr
 
 ## x402 Payment Protocol
 xproof supports x402 (HTTP 402 Payment Required) as an alternative to API key auth. Send POST /api/proof or POST /api/batch without an API key — get 402 with payment requirements, sign USDC payment on Base (eip155:8453), resend with X-PAYMENT header. Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Current pricing: https://xproof.app/api/pricing. No account needed.
+
+## x402 Bazaar Discovery
+xproof is indexed in the x402 Bazaar — the canonical discovery layer for x402-compatible services (built by Coinbase). AI agents that use the Bazaar MCP server can find xproof automatically without reading any documentation.
+
+Bazaar MCP endpoint: GET https://api.cdp.coinbase.com/platform/v2/x402/discovery/mcp
+
+Search terms that surface xproof in the Bazaar:
+- "proof of existence", "blockchain certification", "audit trail", "decision provenance", "agent accountability", "file hash", "SHA-256 anchor"
+
+How it works: Bazaar discovery metadata (input schema, output schema, examples, pricing) is embedded in the \\\`extensions.bazaar\\\` field of every x402 402 response from xproof. The CDP facilitator catalogs xproof automatically on first payment.
+
+Discoverable endpoints:
+- POST /api/proof — certify any SHA-256 hash on MultiversX with optional 4W provenance
+- POST /api/batch — certify up to 100 files in one transaction
+
+For agents with Bazaar MCP configured, add xproof MCP alongside it:
+\\\`\\\`\\\`json
+{
+  "mcpServers": {
+    "bazaar": { "url": "https://api.cdp.coinbase.com/platform/v2/x402/discovery/mcp" },
+    "xproof": { "url": "https://xproof.app/mcp", "headers": { "Authorization": "Bearer YOUR_API_KEY" } }
+  }
+}
+\\\`\\\`\\\`
 
 ## Agent Integrations
 xproof works with any MCP-compatible agent (Claude Code, Codex, OpenClaw, Conway Terminal) and any x402-enabled agent.
