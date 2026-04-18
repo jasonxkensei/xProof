@@ -323,7 +323,7 @@ export default function AdminDashboard() {
                 <StatCard
                   title="Active Agents"
                   value={stats.agents?.unique_active || 0}
-                  subtitle={`${stats.agents?.total_api_keys || 0} agent${(stats.agents?.total_api_keys || 0) === 1 ? "" : "s"} API`}
+                  subtitle={`${stats.agents?.total_api_keys || 0} API keys`}
                   icon={Bot}
                 />
                 <StatCard
