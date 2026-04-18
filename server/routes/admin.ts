@@ -84,7 +84,7 @@ export function registerAdminRoutes(app: Express) {
       const [agentVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, true));
 
       const [uniqueAgentsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ${users.id})` }).from(apiKeys).innerJoin(users, eq(apiKeys.userId, users.id)).where(and(eq(apiKeys.isActive, true), gt(apiKeys.requestCount, 0), sql`${users.isTrial} IS NOT TRUE`));
-      const [totalApiKeysRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ${users.id})` }).from(apiKeys).innerJoin(users, eq(apiKeys.userId, users.id)).where(and(eq(apiKeys.isActive, true), sql`${users.isTrial} IS NOT TRUE`, sql`${users.walletAddress} != 'erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9'`));
+      const [totalApiKeysRow] = await db.select({ count: count() }).from(apiKeys).innerJoin(users, eq(apiKeys.userId, users.id)).where(and(eq(apiKeys.isActive, true), sql`${users.isTrial} IS NOT TRUE`, sql`${apiKeys.name} != 'xproof_agent_verify'`));
       const [trialAgentsRow] = await db.select({ count: count() }).from(users).where(eq(users.isTrial, true));
       const [trialUsedRow] = await db.select({ total: sql<number>`COALESCE(SUM(trial_used), 0)` }).from(users).where(eq(users.isTrial, true));
 
