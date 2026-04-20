@@ -1,4 +1,4 @@
-.PHONY: lint test check
+.PHONY: lint test typecheck check
 
 lint:
 	ruff check xproof/ tests/
@@ -6,4 +6,7 @@ lint:
 test:
 	pytest tests/ -m "not integration"
 
-check: lint test
+typecheck:
+	mypy xproof/
+
+check: lint typecheck test
