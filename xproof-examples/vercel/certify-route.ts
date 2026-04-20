@@ -4,7 +4,7 @@
  * Copy this to your Next.js app at: app/api/chat/route.ts
  *
  * Install:
- *   npm install xproof ai @ai-sdk/openai
+ *   npm install @xproof/xproof ai @ai-sdk/openai
  *
  * Environment variables:
  *   XPROOF_API_KEY=pm_...
@@ -16,7 +16,7 @@
 
 import { openai } from "@ai-sdk/openai";
 import { generateText, wrapLanguageModel } from "ai";
-import { xproofMiddleware } from "xproof/vercel";
+import { xproofMiddleware } from "@xproof/xproof/vercel";
 
 const xproof = xproofMiddleware({
   apiKey: process.env.XPROOF_API_KEY!,

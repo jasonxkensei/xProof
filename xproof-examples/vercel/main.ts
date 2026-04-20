@@ -7,7 +7,7 @@
  * For the automatic Next.js middleware usage see: certify-route.ts
  *
  * Install:
- *   npm install xproof
+ *   npm install @xproof/xproof
  *
  * Run:
  *   npx tsx main.ts
@@ -15,8 +15,8 @@
  * Set XPROOF_API_KEY (or the demo registers a free trial automatically).
  */
 
-import { XProofClient } from "xproof";
-import { xproofMiddleware } from "xproof/vercel";
+import { XProofClient } from "@xproof/xproof";
+import { xproofMiddleware } from "@xproof/xproof/vercel";
 
 async function main() {
   const client = await XProofClient.register("vercel-ai-demo");

@@ -13,7 +13,7 @@ Each `generateText` or `streamText` call produces one certification with:
 ## Install
 
 ```bash
-npm install xproof ai @ai-sdk/openai
+npm install @xproof/xproof ai @ai-sdk/openai
 ```
 
 Set environment variables:
@@ -32,8 +32,8 @@ Copy `certify-route.ts` to your app at `app/api/chat/route.ts`:
 ```typescript
 import { openai } from "@ai-sdk/openai";
 import { generateText, wrapLanguageModel } from "ai";
-import { XProofClient } from "xproof";
-import { xproofMiddleware } from "xproof/vercel";
+import { XProofClient } from "@xproof/xproof";
+import { xproofMiddleware } from "@xproof/xproof/vercel";
 
 const xproof = xproofMiddleware({
   apiKey: process.env.XPROOF_API_KEY!,
@@ -61,8 +61,8 @@ export async function POST(req: Request) {
 ## Usage — manual certification (any runtime)
 
 ```typescript
-import { XProofClient } from "xproof";
-import { xproofMiddleware } from "xproof/vercel";
+import { XProofClient } from "@xproof/xproof";
+import { xproofMiddleware } from "@xproof/xproof/vercel";
 
 const client = new XProofClient({ apiKey: process.env.XPROOF_API_KEY! });
 const mw = xproofMiddleware({ client, agentName: "my-agent", why: "qa" });
@@ -78,5 +78,5 @@ console.log(`Proof: https://xproof.app/verify/${proof.proofId}`);
 ## Links
 
 - [xproof.app](https://xproof.app)
-- [npm: xproof](https://www.npmjs.com/package/xproof)
+- [npm: @xproof/xproof](https://www.npmjs.com/package/@xproof/xproof)
 - [Vercel AI SDK](https://sdk.vercel.ai)
