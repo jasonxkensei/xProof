@@ -161,6 +161,32 @@ const proof = await client.verifyHash(fileHash);
 console.log(proof.blockchainStatus); // "confirmed" | "pending"
 ```
 
+## Policy Compliance
+
+Check whether a decision meets governance requirements — without fetching the full confidence trail:
+
+```typescript
+import { XProofClient } from "@xproof/xproof";
+import type { PolicyCheckResult } from "@xproof/xproof";
+
+const client = new XProofClient({ apiKey: "pm_your_key" });
+
+const result: PolicyCheckResult = await client.getPolicyCheck("trade-xyz-2026");
+
+if (result.policyCompliant) {
+  console.log("Decision is compliant.");
+} else {
+  for (const v of result.policyViolations) {
+    console.log(`VIOLATION — ${v.rule}`);
+    console.log(`  proof:      ${v.proofId}`);
+    console.log(`  confidence: ${v.confidenceLevel} (required: ${v.threshold})`);
+    console.log(`  class:      ${v.reversibilityClass}`);
+  }
+}
+```
+
+`getPolicyCheck()` is a lightweight yes/no compliance check. It returns `result.policyCompliant` (boolean) and `result.policyViolations` (array). For the full audit trail including timestamps and intermediate confidence checkpoints, use `getConfidenceTrail()` instead.
+
 ---
 
 ## Governance & Policy Enforcement
