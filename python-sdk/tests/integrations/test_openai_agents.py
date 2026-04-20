@@ -13,7 +13,7 @@ from xproof.integrations.openai_agents import (
 
 def _run(coro):
     """Helper to run an async coroutine synchronously."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 @pytest.fixture

@@ -3560,7 +3560,7 @@ wheels = [
 
 [[package]]
 name = "xproof"
-version = "0.2.6"
+version = "0.2.7"
 source = { editable = "python-sdk" }
 dependencies = [
     { name = "requests" },

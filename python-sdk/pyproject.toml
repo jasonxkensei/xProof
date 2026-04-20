@@ -71,6 +71,7 @@ include = ["xproof*"]
 xproof = ["py.typed"]
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 markers = [
     "integration: marks tests that hit the live xProof API (deselect with '-m \"not integration\"')",
 ]
