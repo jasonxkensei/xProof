@@ -398,6 +398,23 @@ describe("XProofClient", () => {
       const client = new XProofClient();
       await expect(client.getPolicyCheck("dec-missing")).rejects.toThrow(NotFoundError);
     });
+
+    it("URL-encodes special characters in decisionId", async () => {
+      const fetchMock = mockFetch(200, {
+        decision_id: "dec/with spaces&special=chars",
+        total_anchors: 1,
+        policy_compliant: true,
+        policy_violations: [],
+        checked_at: "2026-04-20T10:00:00Z",
+      });
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient();
+      await client.getPolicyCheck("dec/with spaces&special=chars");
+
+      const [url] = fetchMock.mock.calls[0];
+      expect(url).toContain("dec%2Fwith%20spaces%26special%3Dchars");
+    });
   });
 
   describe("certify (file-path)", () => {

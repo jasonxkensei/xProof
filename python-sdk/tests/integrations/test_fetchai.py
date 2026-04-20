@@ -372,6 +372,65 @@ class TestXproofHandler:
 
 
 # ---------------------------------------------------------------------------
+# set_certify_incoming / set_certify_outgoing — runtime flag toggle (#75)
+# ---------------------------------------------------------------------------
+
+
+class TestRuntimeToggle:
+    def test_disable_incoming_at_runtime(self, middleware, mock_client):
+        middleware.set_certify_incoming(False)
+        result = middleware.certify_incoming(message="hi", sender="a1")
+        assert result is None
+        mock_client.certify_hash.assert_not_called()
+
+    def test_reenable_incoming_at_runtime(self, mock_client):
+        mw = XProofuAgentMiddleware(client=mock_client, certify_incoming=False)
+        mw.set_certify_incoming(True)
+        result = mw.certify_incoming(message="hello", sender="a1")
+        assert result is not None
+        mock_client.certify_hash.assert_called_once()
+
+    def test_disable_outgoing_at_runtime(self, middleware, mock_client):
+        middleware.set_certify_outgoing(False)
+        result = middleware.certify_outgoing(response="resp", recipient="a1")
+        assert result is None
+        mock_client.certify_hash.assert_not_called()
+
+    def test_reenable_outgoing_at_runtime(self, mock_client):
+        mw = XProofuAgentMiddleware(client=mock_client, certify_outgoing=False)
+        mw.set_certify_outgoing(True)
+        result = mw.certify_outgoing(response="result", recipient="a1")
+        assert result is not None
+        mock_client.certify_hash.assert_called_once()
+
+    def test_incoming_bool_flag_updated_after_disable(self, middleware):
+        assert bool(middleware.certify_incoming) is True
+        middleware.set_certify_incoming(False)
+        assert bool(middleware.certify_incoming) is False
+
+    def test_outgoing_bool_flag_updated_after_disable(self, middleware):
+        assert bool(middleware.certify_outgoing) is True
+        middleware.set_certify_outgoing(False)
+        assert bool(middleware.certify_outgoing) is False
+
+    def test_toggle_incoming_back_and_forth(self, middleware, mock_client):
+        middleware.set_certify_incoming(False)
+        assert not middleware.certify_incoming
+        middleware.set_certify_incoming(True)
+        assert middleware.certify_incoming
+        middleware.certify_incoming(message="ping", sender="a1")
+        mock_client.certify_hash.assert_called_once()
+
+    def test_toggle_outgoing_back_and_forth(self, middleware, mock_client):
+        middleware.set_certify_outgoing(False)
+        assert not middleware.certify_outgoing
+        middleware.set_certify_outgoing(True)
+        assert middleware.certify_outgoing
+        middleware.certify_outgoing(response="pong", recipient="a1")
+        mock_client.certify_hash.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # wrap_agent — reads agent.name
 # ---------------------------------------------------------------------------
 

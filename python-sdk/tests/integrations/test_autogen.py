@@ -1,15 +1,20 @@
 """Tests for the AutoGen xProof integration."""
 
+import hashlib
+import re
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from xproof.exceptions import PolicyViolationError
 from xproof.integrations.autogen import (
     XProofAutoGenHooks,
     _extract_text,
     _hash_data,
     register_xproof_hooks,
+    xproof_certify_decision,
 )
+from xproof.models import PolicyViolation
 
 
 @pytest.fixture
@@ -231,3 +236,154 @@ def test_file_name_format(hooks, mock_client):
     hooks.on_send("test")
     call_kwargs = mock_client.certify_hash.call_args.kwargs
     assert call_kwargs["file_name"].startswith("msg-sent-test-agent-")
+
+
+# ---------------------------------------------------------------------------
+# xproof_certify_decision — confidence + policy gate (#60)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_client_cwc():
+    client = MagicMock()
+    client.certify_with_confidence.return_value = MagicMock(
+        id="proof-ag-cwc",
+        file_hash="h-ag",
+        transaction_hash="tx-ag-cwc",
+    )
+    client.get_policy_check.return_value = MagicMock(
+        policy_compliant=True,
+        policy_violations=[],
+    )
+    return client
+
+
+def test_xproof_certify_decision_returns_tx_hash(mock_client_cwc):
+    result = xproof_certify_decision(
+        decision_text="Execute trade at market price",
+        confidence_level=0.97,
+        threshold_stage="pre-commitment",
+        decision_id="trade-ag-001",
+        reversibility_class="irreversible",
+        why="Risk threshold met",
+        author="trading-agent",
+        client=mock_client_cwc,
+    )
+    assert result == "tx-ag-cwc"
+
+
+def test_xproof_certify_decision_hashes_decision_text(mock_client_cwc):
+    decision_text = "My AutoGen decision"
+    xproof_certify_decision(
+        decision_text=decision_text,
+        confidence_level=0.9,
+        decision_id="ag-hash-001",
+        client=mock_client_cwc,
+    )
+    expected_hash = hashlib.sha256(decision_text.encode()).hexdigest()
+    call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["file_hash"] == expected_hash
+
+
+def test_xproof_certify_decision_accepts_file_hash(mock_client_cwc):
+    xproof_certify_decision(
+        file_hash="b" * 64,
+        confidence_level=0.9,
+        decision_id="ag-fh-001",
+        client=mock_client_cwc,
+    )
+    call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["file_hash"] == "b" * 64
+
+
+def test_xproof_certify_decision_raises_without_decision_id(mock_client_cwc):
+    with pytest.raises(ValueError, match="decision_id"):
+        xproof_certify_decision(
+            decision_text="something",
+            confidence_level=0.9,
+            decision_id="",
+            client=mock_client_cwc,
+        )
+
+
+def test_xproof_certify_decision_raises_without_content(mock_client_cwc):
+    with pytest.raises(ValueError):
+        xproof_certify_decision(
+            confidence_level=0.9,
+            decision_id="ag-nocontent",
+            client=mock_client_cwc,
+        )
+
+
+def test_xproof_certify_decision_raises_policy_violation_error(mock_client_cwc):
+    mock_client_cwc.get_policy_check.return_value = MagicMock(
+        policy_compliant=False,
+        policy_violations=[
+            PolicyViolation(rule="confidence_below_threshold", message="Too low", severity="error")
+        ],
+    )
+    with pytest.raises(PolicyViolationError):
+        xproof_certify_decision(
+            decision_text="risky action",
+            confidence_level=0.5,
+            decision_id="ag-viol-001",
+            client=mock_client_cwc,
+        )
+
+
+def test_xproof_certify_decision_policy_check_called_with_decision_id(mock_client_cwc):
+    xproof_certify_decision(
+        decision_text="action",
+        confidence_level=0.9,
+        decision_id="ag-check-001",
+        client=mock_client_cwc,
+    )
+    mock_client_cwc.get_policy_check.assert_called_once_with("ag-check-001")
+
+
+def test_xproof_certify_decision_who_defaults_to_author(mock_client_cwc):
+    xproof_certify_decision(
+        decision_text="action",
+        confidence_level=0.9,
+        decision_id="ag-who-001",
+        author="my-autogen-agent",
+        client=mock_client_cwc,
+    )
+    call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["who"] == "my-autogen-agent"
+
+
+def test_xproof_certify_decision_what_defaults_to_hash(mock_client_cwc):
+    decision_text = "specific autogen decision"
+    xproof_certify_decision(
+        decision_text=decision_text,
+        confidence_level=0.9,
+        decision_id="ag-what-001",
+        client=mock_client_cwc,
+    )
+    expected_hash = hashlib.sha256(decision_text.encode()).hexdigest()
+    call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["what"] == expected_hash
+
+
+def test_xproof_certify_decision_when_defaults_to_iso_timestamp(mock_client_cwc):
+    xproof_certify_decision(
+        decision_text="action",
+        confidence_level=0.9,
+        decision_id="ag-when-001",
+        client=mock_client_cwc,
+    )
+    call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+    assert re.search(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", call_kwargs["when"])
+
+
+def test_xproof_certify_decision_reversibility_class_passed_through(mock_client_cwc):
+    xproof_certify_decision(
+        decision_text="action",
+        confidence_level=0.9,
+        decision_id="ag-rev-001",
+        reversibility_class="costly",
+        client=mock_client_cwc,
+    )
+    call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["reversibility_class"] == "costly"

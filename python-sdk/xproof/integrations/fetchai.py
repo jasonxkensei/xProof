@@ -347,6 +347,36 @@ class XProofuAgentMiddleware:
             "what_proof": what_proof,
         }
 
+    def set_certify_incoming(self, enabled: bool) -> None:
+        """Enable or disable incoming message certification at runtime.
+
+        This is useful for temporarily suppressing certification on known
+        internal health-check or warm-up messages without reinstantiating
+        the middleware.
+
+        Args:
+            enabled: ``True`` to enable, ``False`` to disable.
+
+        Example::
+
+            middleware.set_certify_incoming(False)   # suppress during warm-up
+            middleware.set_certify_incoming(True)    # restore for production traffic
+        """
+        self._cert_incoming = enabled
+
+    def set_certify_outgoing(self, enabled: bool) -> None:
+        """Enable or disable outgoing response certification at runtime.
+
+        Args:
+            enabled: ``True`` to enable, ``False`` to disable.
+
+        Example::
+
+            middleware.set_certify_outgoing(False)   # disable before graceful shutdown
+            middleware.set_certify_outgoing(True)    # re-enable
+        """
+        self._cert_outgoing = enabled
+
     def flush(self) -> Optional[BatchResult]:
         """Send all pending certifications in a single batch.
 

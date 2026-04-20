@@ -635,3 +635,307 @@ def test_certify_with_confidence_no_api_key():
             threshold_stage="partial",
             decision_id="dec-nokey",
         )
+
+
+# ---------------------------------------------------------------------------
+# certify_with_confidence() — reversibility_class for all 3 values (#57)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("rev_class", ["reversible", "costly", "irreversible"])
+@responses.activate
+def test_certify_with_confidence_reversibility_class(rev_class):
+    """reversibility_class appears in request metadata for all valid values."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="f.json",
+        author="Agent",
+        confidence_level=0.9,
+        threshold_stage="pre-commitment",
+        decision_id="dec-rev",
+        reversibility_class=rev_class,
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta["reversibility_class"] == rev_class
+
+
+@responses.activate
+def test_certify_with_confidence_reversibility_class_omitted_when_none():
+    """When reversibility_class is None it must not appear in metadata."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="f.json",
+        author="Agent",
+        confidence_level=0.8,
+        threshold_stage="partial",
+        decision_id="dec-rev-none",
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert "reversibility_class" not in meta
+
+
+# ---------------------------------------------------------------------------
+# certify_with_confidence() — all 4 threshold_stage values (#58)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("stage", ["initial", "partial", "pre-commitment", "final"])
+@responses.activate
+def test_certify_with_confidence_all_threshold_stages(stage):
+    """Each of the 4 valid threshold_stage values is accepted and sent correctly."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="f.json",
+        author="Agent",
+        confidence_level=0.8,
+        threshold_stage=stage,
+        decision_id="dec-stage",
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta["threshold_stage"] == stage
+
+
+# ---------------------------------------------------------------------------
+# certify_with_confidence() — 4W metadata defaults (#59)
+# ---------------------------------------------------------------------------
+
+
+@responses.activate
+def test_certify_with_confidence_who_omitted_when_not_provided():
+    """who is absent from metadata when not passed."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="f.json",
+        author="MyAgent",
+        confidence_level=0.8,
+        threshold_stage="partial",
+        decision_id="dec-4w-who",
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert "who" not in meta
+
+
+@responses.activate
+def test_certify_with_confidence_who_present_when_provided():
+    """who is included in metadata when explicitly passed."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="f.json",
+        author="MyAgent",
+        confidence_level=0.8,
+        threshold_stage="partial",
+        decision_id="dec-4w-who2",
+        who="erd1agent...",
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta["who"] == "erd1agent..."
+
+
+@responses.activate
+def test_certify_with_confidence_what_present_when_provided():
+    """what is included in metadata when explicitly passed."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="b" * 64,
+        file_name="f.json",
+        author="Agent",
+        confidence_level=0.8,
+        threshold_stage="partial",
+        decision_id="dec-4w-what",
+        what="sha256-of-action",
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta["what"] == "sha256-of-action"
+
+
+@responses.activate
+def test_certify_with_confidence_when_present_when_provided():
+    """when is included in metadata when explicitly passed."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="c" * 64,
+        file_name="f.json",
+        author="Agent",
+        confidence_level=0.8,
+        threshold_stage="partial",
+        decision_id="dec-4w-when",
+        when="2026-04-20T10:00:00+00:00",
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta["when"] == "2026-04-20T10:00:00+00:00"
+
+
+@responses.activate
+def test_certify_with_confidence_why_present_when_provided():
+    """why is included in metadata when explicitly passed."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="d" * 64,
+        file_name="f.json",
+        author="Agent",
+        confidence_level=0.8,
+        threshold_stage="partial",
+        decision_id="dec-4w-why",
+        why="GDPR cleanup scheduled",
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta["why"] == "GDPR cleanup scheduled"
+
+
+@responses.activate
+def test_certify_with_confidence_why_omitted_when_not_provided():
+    """why is absent from metadata when not passed."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="e" * 64,
+        file_name="f.json",
+        author="Agent",
+        confidence_level=0.8,
+        threshold_stage="partial",
+        decision_id="dec-4w-why-none",
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert "why" not in meta
+
+
+# ---------------------------------------------------------------------------
+# batch_certify() — CertifyEntry TypedDict compatibility (#76)
+# ---------------------------------------------------------------------------
+
+
+@responses.activate
+def test_batch_certify_accepts_certify_entry_typed_dicts():
+    """batch_certify must accept CertifyEntry TypedDicts without type errors."""
+    from xproof.models import CertifyEntry
+
+    responses.add(
+        responses.POST,
+        f"{BASE}/api/batch",
+        json={
+            "batch_id": "batch-ce-001",
+            "total": 2,
+            "created": 2,
+            "existing": 0,
+            "results": [
+                {
+                    "file_hash": "h1",
+                    "filename": "a.json",
+                    "proof_id": "proof-ce1",
+                    "verify_url": "https://example.com/proof/proof-ce1",
+                    "badge_url": "https://example.com/badge/proof-ce1",
+                    "status": "created",
+                },
+                {
+                    "file_hash": "h2",
+                    "filename": "b.json",
+                    "proof_id": "proof-ce2",
+                    "verify_url": "https://example.com/proof/proof-ce2",
+                    "badge_url": "https://example.com/badge/proof-ce2",
+                    "status": "created",
+                },
+            ],
+        },
+        status=201,
+    )
+    client = XProofClient(api_key="pm_test")
+
+    entries: list[CertifyEntry] = [
+        {"file_hash": "h1", "file_name": "a.json", "author": "AgentA"},
+        {"file_hash": "h2", "file_name": "b.json", "author": "AgentB"},
+    ]
+    result = client.batch_certify(entries)
+    assert result.batch_id == "batch-ce-001"
+    assert result.summary.total == 2
+
+
+@responses.activate
+def test_batch_certify_certify_entry_keys_match_api_contract():
+    """file_name (not filename) is the CertifyEntry key; client maps it to API 'filename'."""
+    from xproof.models import CertifyEntry
+
+    responses.add(
+        responses.POST,
+        f"{BASE}/api/batch",
+        json={
+            "batch_id": "batch-keys",
+            "total": 1,
+            "created": 1,
+            "existing": 0,
+            "results": [
+                {
+                    "file_hash": "hk",
+                    "filename": "contract.json",
+                    "proof_id": "proof-k1",
+                    "verify_url": "https://example.com/proof/proof-k1",
+                    "badge_url": "https://example.com/badge/proof-k1",
+                    "status": "created",
+                }
+            ],
+        },
+        status=201,
+    )
+    client = XProofClient(api_key="pm_test")
+
+    entry: CertifyEntry = {
+        "file_hash": "hk",
+        "file_name": "contract.json",
+        "author": "AgentC",
+        "metadata": {"who": "AgentC", "why": "Compliance check"},
+    }
+    result = client.batch_certify([entry])
+    assert result.summary.created == 1
+
+    req_body = json.loads(responses.calls[0].request.body)
+    assert req_body["files"][0]["file_hash"] == "hk"
+
+
+@responses.activate
+def test_batch_certify_with_metadata_in_certify_entry():
+    """metadata in CertifyEntry is forwarded to the API payload."""
+    from xproof.models import CertifyEntry
+
+    responses.add(
+        responses.POST,
+        f"{BASE}/api/batch",
+        json={
+            "batch_id": "batch-meta",
+            "total": 1,
+            "created": 1,
+            "existing": 0,
+            "results": [
+                {
+                    "file_hash": "hm",
+                    "filename": "report.json",
+                    "proof_id": "proof-m1",
+                    "verify_url": "",
+                    "badge_url": "",
+                    "status": "created",
+                }
+            ],
+        },
+        status=201,
+    )
+    client = XProofClient(api_key="pm_test")
+
+    entry: CertifyEntry = {
+        "file_hash": "hm",
+        "file_name": "report.json",
+        "author": "AgentD",
+        "metadata": {"who": "AgentD", "what": "hm", "why": "audit"},
+    }
+    result = client.batch_certify([entry])
+    assert result.summary.created == 1

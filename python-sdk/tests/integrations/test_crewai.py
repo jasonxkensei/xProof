@@ -1,10 +1,13 @@
 """Tests for the CrewAI xProof integration."""
 
+import hashlib
 import json
 from unittest.mock import MagicMock
 
 import pytest
-from xproof.integrations.crewai import XProofCrewCallback, XProofTool
+from xproof.exceptions import PolicyViolationError
+from xproof.integrations.crewai import XProofCrewCallback, XProofCrewCertifyTool, XProofTool
+from xproof.models import PolicyViolation
 
 
 @pytest.fixture
@@ -14,6 +17,21 @@ def mock_client():
         id="proof-crew",
         file_hash="h",
         transaction_hash="tx-crew",
+    )
+    return client
+
+
+@pytest.fixture
+def mock_client_cwc():
+    client = MagicMock()
+    client.certify_with_confidence.return_value = MagicMock(
+        id="proof-cwc",
+        file_hash="h-cwc",
+        transaction_hash="tx-cwc",
+    )
+    client.get_policy_check.return_value = MagicMock(
+        policy_compliant=True,
+        policy_violations=[],
     )
     return client
 
@@ -123,3 +141,101 @@ class TestXProofCrewCallback:
         assert last_call["metadata"]["task_proof_ids"] == ["proof-crew", "proof-crew"]
         assert last_call["metadata"]["task_count"] == 2
         assert result["tasks_certified"] == 2
+
+
+# ---------------------------------------------------------------------------
+# XProofCrewCertifyTool — confidence + policy gate (#60)
+# ---------------------------------------------------------------------------
+
+
+class TestXProofCrewCertifyTool:
+    def test_run_returns_transaction_hash(self, mock_client_cwc):
+        tool = XProofCrewCertifyTool(client=mock_client_cwc, author="data-agent")
+        result = tool.run(
+            decision_text="Delete inactive records",
+            confidence_level=0.97,
+            threshold_stage="pre-commitment",
+            decision_id="del-run-001",
+            reversibility_class="irreversible",
+        )
+        assert result == "tx-cwc"
+
+    def test_run_hashes_decision_text(self, mock_client_cwc):
+        tool = XProofCrewCertifyTool(client=mock_client_cwc)
+        decision_text = "My agent decision"
+        tool.run(
+            decision_text=decision_text,
+            confidence_level=0.9,
+            decision_id="d-hash-001",
+        )
+        expected_hash = hashlib.sha256(decision_text.encode()).hexdigest()
+        call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+        assert call_kwargs["file_hash"] == expected_hash
+
+    def test_run_accepts_precomputed_file_hash(self, mock_client_cwc):
+        tool = XProofCrewCertifyTool(client=mock_client_cwc)
+        tool.run(
+            file_hash="a" * 64,
+            confidence_level=0.9,
+            decision_id="d-fh-001",
+        )
+        call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+        assert call_kwargs["file_hash"] == "a" * 64
+
+    def test_raises_value_error_without_decision_id(self, mock_client_cwc):
+        tool = XProofCrewCertifyTool(client=mock_client_cwc)
+        with pytest.raises(ValueError, match="decision_id"):
+            tool.run(decision_text="something", confidence_level=0.9, decision_id="")
+
+    def test_raises_value_error_without_content(self, mock_client_cwc):
+        tool = XProofCrewCertifyTool(client=mock_client_cwc)
+        with pytest.raises(ValueError):
+            tool.run(confidence_level=0.9, decision_id="d-nocontent")
+
+    def test_policy_violation_raises_policy_violation_error(self, mock_client_cwc):
+        mock_client_cwc.get_policy_check.return_value = MagicMock(
+            policy_compliant=False,
+            policy_violations=[
+                PolicyViolation(rule="confidence_below_threshold", message="Too low", severity="error")
+            ],
+        )
+        tool = XProofCrewCertifyTool(client=mock_client_cwc)
+        with pytest.raises(PolicyViolationError):
+            tool.run(decision_text="risky", confidence_level=0.5, decision_id="d-viol-001")
+
+    def test_policy_check_called_with_decision_id(self, mock_client_cwc):
+        tool = XProofCrewCertifyTool(client=mock_client_cwc)
+        tool.run(decision_text="action", confidence_level=0.9, decision_id="d-check-001")
+        mock_client_cwc.get_policy_check.assert_called_once_with("d-check-001")
+
+    def test_reversibility_class_passed_through(self, mock_client_cwc):
+        tool = XProofCrewCertifyTool(client=mock_client_cwc)
+        tool.run(
+            decision_text="action",
+            confidence_level=0.9,
+            decision_id="d-rev-001",
+            reversibility_class="reversible",
+        )
+        call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+        assert call_kwargs["reversibility_class"] == "reversible"
+
+    def test_who_defaults_to_author(self, mock_client_cwc):
+        tool = XProofCrewCertifyTool(client=mock_client_cwc, author="my-crew-agent")
+        tool.run(decision_text="action", confidence_level=0.9, decision_id="d-who-001")
+        call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+        assert call_kwargs["who"] == "my-crew-agent"
+
+    def test_what_defaults_to_hash(self, mock_client_cwc):
+        tool = XProofCrewCertifyTool(client=mock_client_cwc)
+        decision_text = "specific decision"
+        tool.run(decision_text=decision_text, confidence_level=0.9, decision_id="d-what-001")
+        expected_hash = hashlib.sha256(decision_text.encode()).hexdigest()
+        call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+        assert call_kwargs["what"] == expected_hash
+
+    def test_when_defaults_to_iso_timestamp(self, mock_client_cwc):
+        import re
+        tool = XProofCrewCertifyTool(client=mock_client_cwc)
+        tool.run(decision_text="action", confidence_level=0.9, decision_id="d-when-001")
+        call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs
+        assert re.search(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", call_kwargs["when"])
