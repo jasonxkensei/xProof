@@ -1,7 +1,7 @@
 """Main client for the xProof API."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
 import requests
 
@@ -15,9 +15,12 @@ from .exceptions import (
     XProofError,
 )
 from .models import (
+    BatchFileEntry,
     BatchResult,
+    CertifyEntry,
     Certification,
     ConfidenceTrail,
+    PathCertifyEntry,
     PolicyCheckResult,
     PricingInfo,
     RegistrationResult,
@@ -463,7 +466,7 @@ class XProofClient:
 
     def batch_certify(
         self,
-        files: List[Dict[str, Any]],
+        files: Sequence[BatchFileEntry],
     ) -> BatchResult:
         """Certify multiple files in a single API call (up to 50).
 
@@ -492,12 +495,14 @@ class XProofClient:
         entries: List[Dict[str, Any]] = []
         for f in files:
             if "path" in f:
-                p = Path(f["path"])
+                f_path = cast(PathCertifyEntry, f)
+                p = Path(f_path["path"])
                 fhash = hash_file(p)
-                fname = f.get("file_name", p.name)
+                fname = f_path.get("file_name", p.name)
             elif "file_hash" in f:
-                fhash = f["file_hash"]
-                fname = f.get("file_name", "unknown")
+                f_hash = cast(CertifyEntry, f)
+                fhash = f_hash["file_hash"]
+                fname = f_hash.get("file_name", "unknown")
             else:
                 raise ValueError("Each file entry must contain either 'path' or 'file_hash'")
 
@@ -506,14 +511,14 @@ class XProofClient:
                 "file_hash": fhash,
             }
             if f.get("metadata"):
-                entry["metadata"] = f["metadata"]
+                entry["metadata"] = f.get("metadata")
             entries.append(entry)
 
         payload: Dict[str, Any] = {"files": entries}
         author = None
         for f in files:
             if f.get("author"):
-                author = f["author"]
+                author = f.get("author")
                 break
         if author:
             payload["author_name"] = author

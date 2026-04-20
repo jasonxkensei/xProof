@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, cast
 
 from ..client import XProofClient
 from ..exceptions import PolicyViolationError
-from ..models import ReversibilityClass
+from ..models import CertifyEntry, ReversibilityClass
 
 
 def _hash_data(data: Any) -> str:
@@ -65,7 +65,7 @@ class XProofAutoGenHooks:
         self.certify_received = certify_received
         self.certify_sent = certify_sent
         self.batch_mode = batch_mode
-        self._pending: List[Dict[str, Any]] = []
+        self._pending: List[CertifyEntry] = []
 
     def _certify(
         self,
@@ -74,7 +74,7 @@ class XProofAutoGenHooks:
         file_name: str,
         context: str = "",
     ) -> None:
-        entry: Dict[str, Any] = {
+        entry: CertifyEntry = {
             "file_hash": data_hash,
             "file_name": file_name,
             "author": self.agent_name,

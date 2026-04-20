@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ..client import XProofClient
-from ..models import BatchResult
+from ..models import BatchResult, CertifyEntry
 
 
 def _hash_data(data: Any) -> str:
@@ -118,7 +118,7 @@ class XProofuAgentMiddleware:
         self._cert_incoming: bool = certify_incoming
         self._cert_outgoing: bool = certify_outgoing
         self.batch_mode = batch_mode
-        self._pending: List[Dict[str, Any]] = []
+        self._pending: List[CertifyEntry] = []
 
     @property
     def certify_incoming(self) -> "_CertFlag":
@@ -176,7 +176,7 @@ class XProofuAgentMiddleware:
         if extra_metadata:
             metadata.update(extra_metadata)
 
-        entry = {
+        entry: CertifyEntry = {
             "file_hash": file_hash,
             "file_name": file_name,
             "author": self.agent_name,

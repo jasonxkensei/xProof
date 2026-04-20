@@ -1,9 +1,39 @@
 """Data models for the xProof SDK."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Sequence, TypedDict, Union
 
 ReversibilityClass = Literal["reversible", "costly", "irreversible"]
+
+
+class CertifyEntry(TypedDict):
+    """Typed shape for a hash-based entry passed to certify_hash or batch_certify.
+
+    All integration modules produce this shape.  ``file_hash`` must be a
+    64-character hex-encoded SHA-256 digest.
+    """
+
+    file_hash: str
+    file_name: str
+    author: str
+    metadata: Dict[str, Any]
+
+
+class PathCertifyEntry(TypedDict, total=False):
+    """Typed shape for a path-based batch entry (legacy / advanced use).
+
+    Pass ``path`` to let the SDK hash the file itself.  ``file_name`` defaults
+    to the file's base name; ``author`` and ``metadata`` are optional extras.
+    """
+
+    path: str
+    file_name: str
+    author: str
+    metadata: Dict[str, Any]
+
+
+BatchFileEntry = Union[CertifyEntry, PathCertifyEntry]
+"""Union of all entry shapes accepted by :meth:`XProofClient.batch_certify`."""
 
 
 @dataclass

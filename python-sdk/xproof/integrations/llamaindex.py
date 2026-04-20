@@ -19,6 +19,7 @@ except ImportError:
         ) from err
 
 from ..client import XProofClient
+from ..models import CertifyEntry
 
 
 def _hash_data(data: Any) -> str:
@@ -66,7 +67,7 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
         self.certify_query = certify_query
         self.certify_function_call = certify_function_call
         self.batch_mode = batch_mode
-        self._pending: List[Dict[str, Any]] = []
+        self._pending: List[CertifyEntry] = []
         self._event_context: Dict[str, Dict[str, Any]] = {}
 
     def _should_trace(self, event_type: CBEventType) -> bool:
@@ -86,7 +87,7 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
         context: str = "",
         event_id: Optional[str] = None,
     ) -> None:
-        entry: Dict[str, Any] = {
+        entry: CertifyEntry = {
             "file_hash": data_hash,
             "file_name": file_name,
             "author": self.agent_name,

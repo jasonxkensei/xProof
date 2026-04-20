@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ..client import XProofClient
+from ..models import CertifyEntry
 
 
 def _hash_data(data: Any) -> str:
@@ -53,7 +54,7 @@ class XProofRunHooks:
         self.certify_tools = certify_tools
         self.certify_agent = certify_agent
         self.batch_mode = batch_mode
-        self._pending: List[Dict[str, Any]] = []
+        self._pending: List[CertifyEntry] = []
 
     def _certify(
         self,
@@ -64,7 +65,7 @@ class XProofRunHooks:
         who_override: Optional[str] = None,
     ) -> None:
         who = who_override or self.agent_name
-        entry: Dict[str, Any] = {
+        entry: CertifyEntry = {
             "file_hash": data_hash,
             "file_name": file_name,
             "author": who,
@@ -208,7 +209,7 @@ class XProofTracingProcessor:
         self.agent_name = agent_name
         self.certify_tool_spans = certify_tool_spans
         self.certify_agent_spans = certify_agent_spans
-        self._pending: List[Dict[str, Any]] = []
+        self._pending: List[CertifyEntry] = []
 
     def _certify(
         self,
@@ -219,7 +220,7 @@ class XProofTracingProcessor:
         who_override: Optional[str] = None,
     ) -> None:
         who = who_override or self.agent_name
-        entry: Dict[str, Any] = {
+        entry: CertifyEntry = {
             "file_hash": data_hash,
             "file_name": file_name,
             "author": who,
