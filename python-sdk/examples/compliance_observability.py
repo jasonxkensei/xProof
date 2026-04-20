@@ -21,8 +21,9 @@ import json
 import logging
 import sys
 import urllib.request
-from typing import Any, Dict, List
-from unittest.mock import MagicMock
+from contextlib import contextmanager
+from typing import Any, Dict, Generator, List
+from unittest.mock import MagicMock, patch
 
 from xproof.models import ConfidenceTrail, PolicyCheckResult, PolicyViolation
 
@@ -169,11 +170,118 @@ def run(decision_id: str) -> None:
     }))
 
 
+@contextmanager
+def _capture_logs(level: int = logging.WARNING) -> Generator[List[str], None, None]:
+    """Context manager that captures log records as JSON strings."""
+    captured: List[str] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(self.format(record))
+
+    handler = _Capture()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    root = logging.getLogger()
+    root.addHandler(handler)
+    try:
+        yield captured
+    finally:
+        root.removeHandler(handler)
+
+
+def _emit_violation_with_url(
+    decision_id: str,
+    violation: PolicyViolation,
+    webhook_url: str | None,
+) -> None:
+    """Variant of _emit_violation with an explicit webhook_url parameter (for tests)."""
+    payload = {
+        "event":       "policy_violation",
+        "decision_id": decision_id,
+        "rule":        violation.rule,
+        "severity":    violation.severity,
+        "message":     violation.message,
+    }
+    logger.error(json.dumps(payload))
+
+    if webhook_url:
+        try:
+            body = json.dumps(payload).encode()
+            req  = urllib.request.Request(
+                webhook_url,
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5):
+                pass
+        except Exception as exc:
+            logger.warning(json.dumps({"event": "webhook_error", "detail": str(exc)}))
+
+
+def run_with_webhook_success(decision_id: str) -> None:
+    """Exercise the webhook delivery path with a successful mock response."""
+    webhook_url = "https://hooks.example.com/compliance"
+
+    mock_response = MagicMock()
+    mock_response.__enter__ = lambda s: s
+    mock_response.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_response) as mock_open:
+        client = build_mock_client(decision_id)
+        check  = client.get_policy_check(decision_id)
+        if not check.policy_compliant:
+            for v in check.policy_violations:
+                _emit_violation_with_url(decision_id, v, webhook_url)
+
+        mock_open.assert_called_once()
+        call_args = mock_open.call_args[0][0]
+        assert isinstance(call_args, urllib.request.Request), \
+            "urlopen must receive a Request object"
+        body = json.loads(call_args.data.decode())
+        assert body["event"] == "policy_violation", "Webhook payload must include event"
+        assert body["decision_id"] == decision_id, "Webhook payload must include decision_id"
+
+    print(json.dumps({"result": "ok", "webhook": "delivery_success"}))
+
+
+def run_with_webhook_failure(decision_id: str) -> None:
+    """Verify that a failed webhook call logs a warning but does not re-raise."""
+    webhook_url = "https://hooks.example.com/compliance"
+
+    with _capture_logs() as logs:
+        with patch("urllib.request.urlopen", side_effect=OSError("connection refused")):
+            client = build_mock_client(decision_id)
+            check  = client.get_policy_check(decision_id)
+            if not check.policy_compliant:
+                for v in check.policy_violations:
+                    _emit_violation_with_url(decision_id, v, webhook_url)  # must NOT raise
+
+    warning_events = [
+        json.loads(l) for l in logs
+        if "webhook_error" in l
+    ]
+    assert warning_events, "A webhook_error warning must be logged on delivery failure"
+    assert "connection refused" in warning_events[0]["detail"], \
+        "webhook_error detail must include the original exception message"
+
+    print(json.dumps({"result": "ok", "webhook": "failure_logged_not_raised"}))
+
+
 def main() -> None:
     decision_id = "demo-decision-42"
 
     print(f"Running compliance observability example for decision '{decision_id}' ...\n")
+
+    print("1/3 — Core observability pattern (no webhook)")
     run(decision_id)
+
+    print("2/3 — Webhook delivery: success path")
+    run_with_webhook_success(decision_id)
+
+    print("3/3 — Webhook delivery: failure path (must log warning, not raise)")
+    run_with_webhook_failure(decision_id)
+
     print("\nAll assertions passed — example exited cleanly.")
 
 

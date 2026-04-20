@@ -474,15 +474,29 @@ class XProofClient:
     ) -> BatchResult:
         """Certify multiple files in a single API call (up to 50).
 
-        Each entry in *files* must contain:
+        Use the typed helpers for IDE autocompletion and early error detection:
 
-        - ``path`` (str): Path to the file **or**
-        - ``file_hash`` (str): Pre-computed SHA-256 hex hash
-        - ``file_name`` (str): File name (required when using ``file_hash``)
-        - ``author`` (str): Author name (applied to the entire batch)
+        - :class:`CertifyEntry` — supply a pre-computed ``file_hash`` and
+          ``file_name`` (required), plus optional ``metadata``.
+        - :class:`PathCertifyEntry` — supply a ``path`` to a local file;
+          the hash is computed automatically.
+
+        Both types accept an optional ``author`` key.
+
+        Example::
+
+            from xproof import XProofClient, CertifyEntry, PathCertifyEntry
+
+            client = XProofClient(api_key="pm_...")
+            result = client.batch_certify([
+                CertifyEntry(file_hash="abc123...", file_name="report.json"),
+                PathCertifyEntry(path="/tmp/output.csv"),
+            ])
+            print(result.summary)
 
         Args:
-            files: List of file descriptors.
+            files: Sequence of :class:`CertifyEntry` or :class:`PathCertifyEntry`
+                dicts (up to 50).
 
         Returns:
             A :class:`BatchResult` with individual results and a summary.

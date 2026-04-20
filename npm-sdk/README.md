@@ -1,5 +1,7 @@
 # xproof
 
+[![npm SDK CI](https://github.com/jasonxkensei/xproof/actions/workflows/npm-sdk.yml/badge.svg?branch=main)](https://github.com/jasonxkensei/xproof/actions/workflows/npm-sdk.yml) [![npm version](https://img.shields.io/npm/v/@xproof/xproof)](https://www.npmjs.com/package/@xproof/xproof) [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
+
 On-chain decision provenance for autonomous agents. **WHY before acting. WHAT after.** Timestamps written by the chain, not your agent.
 
 ```bash
@@ -340,6 +342,40 @@ Each `console.error(JSON.stringify(...))` call writes a single-line JSON object
 that log shippers (Fluentd, the Datadog Agent, the CloudWatch agent) forward
 verbatim.  Create a log-based metric or alert on `event = "policy_violation"` to
 get dashboard counts and threshold alerts with no extra instrumentation.
+
+#### Drop-in: pino
+
+Replace `console.error(JSON.stringify(payload))` with a single `pino` call — no extra config needed, pino emits NDJSON by default:
+
+```typescript
+import pino from "pino";
+
+const logger = pino();
+
+// inside emitViolation():
+logger.error(payload); // emits: {"level":50,"time":...,"rule":"...","event":"policy_violation",...}
+```
+
+#### Drop-in: winston
+
+Configure a JSON transport once, then call `logger.error(payload)` to get the same single-line JSON output:
+
+```typescript
+import winston from "winston";
+
+const logger = winston.createLogger({
+  level: "error",
+  format: winston.format.json(),
+  transports: [new winston.transports.Console({ stderrLevels: ["error"] })],
+});
+
+// inside emitViolation():
+logger.error("policy_violation", payload);
+```
+
+Both emit a single JSON line per violation — identical in structure to the `console.error` version above.
+
+> **Runnable example** — `examples/observability.ts` in this repo demonstrates the full pattern (violation detection, structured logging, webhook delivery, audit trail) with a mock client. Run it with `npx tsx examples/observability.ts`.
 
 ### Three classes, one parameter
 

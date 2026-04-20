@@ -225,6 +225,43 @@ else:
 
 ---
 
+## Context Drift Detection
+
+Detect when the execution context of an agent changed between proof stages — different model version, tool set, strategy, or operator scope:
+
+```python
+from xproof import XProofClient
+
+client = XProofClient(api_key="pm_your_key")
+
+drift = client.get_context_drift("trade-xyz-2026")
+
+if drift.context_coherent:
+    print(f"No drift detected (score={drift.drift_score:.2f})")
+else:
+    print(f"Drift detected! score={drift.drift_score:.2f}")
+    print(f"  Drifted fields : {drift.fields_drifted}")
+    print(f"  Stable fields  : {drift.fields_stable}")
+    print(f"  Absent fields  : {drift.fields_absent}")
+
+    for i, stage in enumerate(drift.stages):
+        print(f"  Stage {i}: model={stage.model_hash}, tools={stage.tools_version}")
+```
+
+`get_context_drift()` returns a `ContextDrift` object with these fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `context_coherent` | `bool` | `True` if no drift detected across the chain |
+| `drift_score` | `float` | `0.0` = fully coherent · `1.0` = total drift |
+| `fields_drifted` | `list[str]` | Fields that changed at least once |
+| `fields_stable` | `list[str]` | Fields present in all stages and unchanged |
+| `fields_absent` | `list[str]` | Fields never populated in any stage |
+| `stages` | `list[ContextDriftStage]` | Per-stage snapshots (`model_hash`, `tools_version`, `strategy_snapshot`, `operator_scope`) |
+| `raw` | `dict` | Unmodified API response |
+
+---
+
 ## Governance & Policy Enforcement
 
 xProof detects automatically when an agent acted with insufficient confidence on an irreversible action — and writes the evidence on-chain before you ever open an incident report.
@@ -639,6 +676,56 @@ Each `logger.error(...)` call writes a single-line JSON object that log
 shippers (Fluentd, the Datadog Agent, the CloudWatch agent) forward verbatim.
 Create a log-based metric or alert on `event = "policy_violation"` to get
 dashboard counts and threshold alerts with no extra instrumentation.
+
+> **Runnable example** — `python-sdk/examples/compliance_observability.py` runs the full pattern with a mock client and verifies structured output. No API key needed.
+
+#### Drop-in: CrewAI one-liner
+
+`XProofCrewCertifyTool` wraps `certify_with_confidence` + `get_policy_check` into a single `run()` call. Replace the manual four-step loop with:
+
+```python
+from xproof.integrations.crewai import XProofCrewCertifyTool
+from xproof.exceptions import PolicyViolationError
+
+certify = XProofCrewCertifyTool(api_key="pm_...", author="compliance-agent")
+
+try:
+    result = certify.run(
+        decision_text=json.dumps(decision),
+        confidence_level=0.91,
+        reversibility_class="irreversible",
+        decision_id="trade-xyz-2026",
+    )
+except PolicyViolationError as exc:
+    for v in exc.violations:
+        _emit_violation("trade-xyz-2026", v)   # reuse _emit_violation from above
+    raise RuntimeError("Action aborted: policy compliance check failed.") from exc
+```
+
+#### Drop-in: AutoGen one-liner
+
+`xproof_certify_decision` is a plain callable — register it as a function tool on any `ConversableAgent` or call it directly:
+
+```python
+from xproof.integrations.autogen import xproof_certify_decision
+from xproof.exceptions import PolicyViolationError
+
+try:
+    result = xproof_certify_decision(
+        api_key="pm_...",
+        decision_text=json.dumps(decision),
+        confidence_level=0.91,
+        reversibility_class="irreversible",
+        decision_id="trade-xyz-2026",
+        author="autogen-agent",
+    )
+except PolicyViolationError as exc:
+    for v in exc.violations:
+        _emit_violation("trade-xyz-2026", v)
+    raise RuntimeError("Action aborted: policy compliance check failed.") from exc
+```
+
+Both tools write the violation evidence on-chain before raising — so the structured log and the chain anchor are always in sync.
 
 ### Three classes, one parameter
 
