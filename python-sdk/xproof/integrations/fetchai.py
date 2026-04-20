@@ -42,6 +42,37 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class _CertFlag:
+    """Dual-purpose object: boolean flag AND callable certification method.
+
+    Returned by :attr:`XProofuAgentMiddleware.certify_incoming` and
+    :attr:`XProofuAgentMiddleware.certify_outgoing`.  Behaves like a ``bool``
+    when used in a conditional (``if middleware.certify_incoming: ...``) and
+    like the original certification method when called
+    (``middleware.certify_incoming(message=...)``).
+
+    This preserves full backward-compatibility: callers that previously relied
+    on the attribute being a boolean flag (before the mypy rename to
+    ``_cert_incoming`` / ``_cert_outgoing``) can now inspect it correctly, and
+    callers that invoke it as a method continue to work without changes.
+    """
+
+    __slots__ = ("_enabled", "_fn")
+
+    def __init__(self, enabled: bool, fn: Callable[..., Any]) -> None:
+        self._enabled = enabled
+        self._fn = fn
+
+    def __bool__(self) -> bool:
+        return self._enabled
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self._fn(*args, **kwargs)
+
+    def __repr__(self) -> str:
+        return repr(self._enabled)
+
+
 class XProofuAgentMiddleware:
     """Central xProof certification middleware for a uAgent.
 
@@ -56,14 +87,15 @@ class XProofuAgentMiddleware:
         certify_outgoing: Certify the outgoing response (the WHAT). Default ``True``.
         batch_mode: Buffer certifications and flush with :meth:`flush`. Default ``False``.
 
-    Example::
+    :attr:`certify_incoming` and :attr:`certify_outgoing` are properties that
+    return a :class:`_CertFlag` object.  That object is both bool-like and
+    callable, so the following patterns all work::
 
-        from xproof.integrations.fetchai import XProofuAgentMiddleware
+        # Inspect the runtime flag (previously broken after the mypy rename)
+        if middleware.certify_incoming:
+            print("incoming cert is enabled")
 
-        middleware = XProofuAgentMiddleware(
-            api_key="pm_...",
-            agent_name="trading-agent",
-        )
+        # Call the method as before — unchanged API
         proof = middleware.certify_incoming(
             message={"query": "What is the BTC price?"},
             sender="agent1abcd",
@@ -87,6 +119,40 @@ class XProofuAgentMiddleware:
         self._cert_outgoing: bool = certify_outgoing
         self.batch_mode = batch_mode
         self._pending: List[Dict[str, Any]] = []
+
+    @property
+    def certify_incoming(self) -> "_CertFlag":
+        """Bool-like flag AND callable: certify an incoming message as WHY.
+
+        Read as a boolean to check whether incoming certification is enabled::
+
+            if middleware.certify_incoming:
+                ...
+
+        Call to certify a message directly::
+
+            proof = middleware.certify_incoming(
+                message=msg, sender="agent1abc", context="query received"
+            )
+        """
+        return _CertFlag(self._cert_incoming, self._certify_incoming_impl)
+
+    @property
+    def certify_outgoing(self) -> "_CertFlag":
+        """Bool-like flag AND callable: certify an outgoing response as WHAT.
+
+        Read as a boolean to check whether outgoing certification is enabled::
+
+            if middleware.certify_outgoing:
+                ...
+
+        Call to certify a response directly::
+
+            proof = middleware.certify_outgoing(
+                response=result, recipient="agent1abc", context="response sent"
+            )
+        """
+        return _CertFlag(self._cert_outgoing, self._certify_outgoing_impl)
 
     def _certify(
         self,
@@ -134,14 +200,14 @@ class XProofuAgentMiddleware:
             "verify_url": f"https://xproof.app/proof/{cert.id}",
         }
 
-    def certify_incoming(
+    def _certify_incoming_impl(
         self,
         message: Any,
         sender: str = "unknown",
         context: str = "Incoming uAgent message",
         decision_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Certify an incoming message as WHY (trigger / justification).
+        """Implementation: certify an incoming message as WHY (trigger / justification).
 
         Args:
             message: The incoming message object or dict.
@@ -171,7 +237,7 @@ class XProofuAgentMiddleware:
             decision_id=decision_id,
         )
 
-    def certify_outgoing(
+    def _certify_outgoing_impl(
         self,
         response: Any,
         recipient: str = "unknown",
@@ -179,7 +245,7 @@ class XProofuAgentMiddleware:
         decision_id: Optional[str] = None,
         confidence_level: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Certify an outgoing response as WHAT (the output to prove).
+        """Implementation: certify an outgoing response as WHAT (the output to prove).
 
         Args:
             response: The response object or dict to hash and certify.

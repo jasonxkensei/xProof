@@ -293,7 +293,7 @@ if CrewAIBaseTool is not None:
                     f"Received non-JSON input: {input_text!r}"
                 ) from exc
 
-            return self._certify_tool.run(**params)
+            return cast(str, self._certify_tool.run(**params))
 
 
 if CrewAIBaseTool is not None:
