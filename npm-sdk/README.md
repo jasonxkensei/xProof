@@ -408,6 +408,10 @@ try {
 | `getPolicyCheck(decisionId)` | Lightweight compliance check — no full trail |
 | `getPricing()` | Get current pricing |
 
+## Contributing
+
+If you use VS Code, install the [ESLint extension](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) (`dbaeumer.vscode-eslint`). The repo includes `.vscode/settings.json` that configures ESLint as the default formatter and runs `eslint --fix`, organise-imports, and remove-unused-imports automatically on every save. VS Code will prompt you to install the recommended extension when you open the folder.
+
 ## Links
 
 - [xproof.app](https://xproof.app) — dashboard & docs
