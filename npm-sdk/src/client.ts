@@ -30,9 +30,11 @@ import type {
   ContextDrift,
   ContextDriftStage,
   ExecutionContext,
+  PolicyViolation,
+  ReversibilityClass,
 } from "./types.js";
 
-const VERSION = "0.1.5";
+const VERSION = "0.1.6";
 const DEFAULT_BASE_URL = "https://xproof.app";
 const DEFAULT_TIMEOUT = 30_000;
 
@@ -94,6 +96,8 @@ export class XProofClient {
     if (fourW?.what !== undefined) metadata.what = fourW.what;
     if (fourW?.when !== undefined) metadata.when = fourW.when;
     if (fourW?.why !== undefined) metadata.why = fourW.why;
+    if (fourW?.reversibilityClass !== undefined)
+      metadata.reversibility_class = fourW.reversibilityClass;
 
     const payload: Record<string, unknown> = {
       filename: fileName,
@@ -176,6 +180,8 @@ export class XProofClient {
     metadata.confidence_level = confidence.confidenceLevel;
     metadata.threshold_stage = confidence.thresholdStage;
     metadata.decision_id = confidence.decisionId;
+    if (confidence.reversibilityClass !== undefined)
+      metadata.reversibility_class = confidence.reversibilityClass;
 
     const payload: Record<string, unknown> = {
       filename: fileName,
@@ -202,6 +208,7 @@ export class XProofClient {
       fileHash: s.file_hash || "",
       confidenceLevel: s.confidence_level ?? null,
       thresholdStage: s.threshold_stage ?? null,
+      reversibilityClass: (s.metadata?.reversibility_class ?? null) as ReversibilityClass | null,
       author: s.author || "",
       blockchain: {
         transactionHash: s.blockchain?.transaction_hash || "",
@@ -224,12 +231,24 @@ export class XProofClient {
         }
       : null;
 
+    const rawViolations = (data.policy_violations as any[]) || [];
+    const policyViolations: PolicyViolation[] = rawViolations.map((v: any) => ({
+      proofId: v.proof_id || "",
+      confidenceLevel: v.confidence_level ?? null,
+      reversibilityClass: v.reversibility_class as ReversibilityClass,
+      thresholdStage: v.threshold_stage ?? null,
+      threshold: v.threshold ?? 0.95,
+      rule: v.rule || "",
+    }));
+
     return {
       decisionId: (data.decision_id as string) || decisionId,
       totalAnchors: (data.total_anchors as number) || stages.length,
       currentConfidence: (data.current_confidence as number) ?? null,
       currentStage: (data.current_stage as string) ?? null,
       isFinalized: (data.is_finalized as boolean) || false,
+      policyCompliant: (data.policy_compliant as boolean) ?? true,
+      policyViolations,
       contextDrift,
       stages,
     };

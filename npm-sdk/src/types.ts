@@ -60,6 +60,7 @@ export interface FourWOptions {
   what?: string;
   when?: string;
   why?: string;
+  reversibilityClass?: ReversibilityClass;
   metadata?: Record<string, unknown>;
 }
 
@@ -71,10 +72,13 @@ export interface CertifyHashOptions extends FourWOptions {
 
 export type ThresholdStage = "initial" | "partial" | "pre-commitment" | "final";
 
+export type ReversibilityClass = "reversible" | "costly" | "irreversible";
+
 export interface ConfidenceOptions {
   confidenceLevel: number;
   thresholdStage: ThresholdStage;
   decisionId: string;
+  reversibilityClass?: ReversibilityClass;
 }
 
 export interface ConfidenceTrailStage {
@@ -83,6 +87,7 @@ export interface ConfidenceTrailStage {
   fileHash: string;
   confidenceLevel: number | null;
   thresholdStage: string | null;
+  reversibilityClass: ReversibilityClass | null;
   author: string;
   blockchain: {
     transactionHash: string;
@@ -102,12 +107,23 @@ export interface ConfidenceTrailDrift {
   fieldsAbsent: string[];
 }
 
+export interface PolicyViolation {
+  proofId: string;
+  confidenceLevel: number | null;
+  reversibilityClass: ReversibilityClass;
+  thresholdStage: string | null;
+  threshold: number;
+  rule: string;
+}
+
 export interface ConfidenceTrail {
   decisionId: string;
   totalAnchors: number;
   currentConfidence: number | null;
   currentStage: string | null;
   isFinalized: boolean;
+  policyCompliant: boolean;
+  policyViolations: PolicyViolation[];
   contextDrift: ConfidenceTrailDrift | null;
   stages: ConfidenceTrailStage[];
 }
