@@ -577,6 +577,19 @@ make check
 The linter is configured in `pyproject.toml` under `[tool.ruff]`. Rule `F811` will flag
 duplicate top-level class definitions — the kind of silent overwrite that prompted this setup.
 
+### VS Code setup
+
+A `.vscode/settings.json` is included in this directory. It configures the
+[Ruff extension](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff)
+as the default Python formatter and enables **format on save**, so unused imports are
+removed and imports are sorted automatically every time you save a file.
+
+Install the extension once and the settings take effect immediately:
+
+```bash
+code --install-extension charliermarsh.ruff
+```
+
 ## Links
 
 - [xproof.app](https://xproof.app) — dashboard & docs
