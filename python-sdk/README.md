@@ -1,5 +1,7 @@
 # xproof
 
+[![Python SDK CI](https://github.com/jasonxkensei/xproof/actions/workflows/python-sdk.yml/badge.svg?branch=main)](https://github.com/jasonxkensei/xproof/actions/workflows/python-sdk.yml)
+
 On-chain decision provenance for autonomous agents. **WHY before acting. WHAT after.** Timestamps written by the chain, not your agent.
 
 ```bash
