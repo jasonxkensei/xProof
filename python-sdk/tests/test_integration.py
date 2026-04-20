@@ -11,8 +11,7 @@ import time
 import uuid
 
 import pytest
-
-from xproof import XProofClient, ConflictError, RateLimitError
+from xproof import ConflictError, RateLimitError, XProofClient
 
 
 @pytest.mark.integration

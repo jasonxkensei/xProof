@@ -1,11 +1,9 @@
 """Tests for the DeerFlow xProof skill integration."""
 
-import hashlib
 import json
 from unittest.mock import MagicMock
 
 import pytest
-
 from xproof.integrations.deerflow import XProofDeerFlowSkill, _hash_data
 
 

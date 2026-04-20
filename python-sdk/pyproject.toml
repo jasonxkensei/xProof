@@ -39,6 +39,7 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "responses>=0.20.0",
+    "ruff>=0.1.0",
 ]
 llamaindex = [
     "llama-index-core>=0.13.0",
@@ -71,3 +72,24 @@ xproof = ["py.typed"]
 markers = [
     "integration: marks tests that hit the live xProof API (deselect with '-m \"not integration\"')",
 ]
+
+[tool.ruff]
+src = ["xproof"]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes (includes F811: redefinition of unused name — catches duplicate classes)
+    "B",    # flake8-bugbear (opinionated bug/design-smell detection)
+    "I",    # isort (import ordering)
+    "UP",   # pyupgrade (modern Python idioms)
+]
+ignore = [
+    "E501", # line too long — already handled by line-length setting
+]
+
+[tool.ruff.lint.per-file-ignores]
+"xproof/integrations/__init__.py" = ["F401", "I001"]  # intentional re-exports; mixed try/except blocks force non-standard import order
+"tests/integrations/test_llamaindex.py" = ["E402", "I001"]  # sys.modules must be patched before importing the module under test

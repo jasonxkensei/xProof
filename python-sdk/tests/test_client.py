@@ -7,7 +7,6 @@ import tempfile
 
 import pytest
 import responses
-
 from xproof import (
     AuthenticationError,
     ConflictError,

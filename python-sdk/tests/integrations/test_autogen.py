@@ -1,17 +1,14 @@
 """Tests for the AutoGen xProof integration."""
 
-import json
-import hashlib
-from unittest.mock import MagicMock, call
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
-
 from xproof.integrations.autogen import (
     XProofAutoGenHooks,
-    register_xproof_hooks,
     _extract_text,
     _hash_data,
+    register_xproof_hooks,
 )
 
 
@@ -187,7 +184,7 @@ def test_register_xproof_hooks_custom_name(mock_client):
 
 def test_register_xproof_hooks_sends_hook(mock_client):
     agent = FakeAgent(name="sender")
-    hooks = register_xproof_hooks(agent, client=mock_client)
+    register_xproof_hooks(agent, client=mock_client)
 
     assert "process_message_before_send" in agent._hooks
     send_hook = agent._hooks["process_message_before_send"][0]

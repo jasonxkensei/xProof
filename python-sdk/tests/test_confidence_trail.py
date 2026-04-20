@@ -2,7 +2,6 @@
 
 import pytest
 import responses
-
 from xproof import NotFoundError, XProofClient
 from xproof.models import ConfidenceTrail, ConfidenceTrailStage, PolicyViolation
 

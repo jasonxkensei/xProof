@@ -1,11 +1,10 @@
 """Tests for the LangChain xProof callback handler."""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-
 
 pytest.importorskip("langchain_core", reason="langchain-core not installed")
 

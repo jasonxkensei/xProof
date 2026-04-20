@@ -3,7 +3,7 @@
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 try:
@@ -11,11 +11,11 @@ try:
 except ImportError:
     try:
         from langchain.callbacks.base import BaseCallbackHandler
-    except ImportError:
+    except ImportError as err:
         raise ImportError(
             "langchain is required for this integration. "
             "Install it with: pip install langchain-core"
-        )
+        ) from err
 
 from ..client import XProofClient
 

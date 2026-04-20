@@ -410,6 +410,26 @@ print(pricing.price_usd)  # e.g. 0.05
 | `get_policy_check(decision_id)` | Lightweight compliance check — no full trail |
 | `get_pricing()` | Get current pricing |
 
+## Development
+
+Install dev dependencies and run the checks locally:
+
+```bash
+pip install -e ".[dev]"
+
+# Lint (ruff — catches unused imports, duplicate class definitions, and more)
+make lint
+
+# Unit tests (excludes live-API integration tests)
+make test
+
+# Lint + test together
+make check
+```
+
+The linter is configured in `pyproject.toml` under `[tool.ruff]`. Rule `F811` will flag
+duplicate top-level class definitions — the kind of silent overwrite that prompted this setup.
+
 ## Links
 
 - [xproof.app](https://xproof.app) — dashboard & docs

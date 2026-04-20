@@ -2,7 +2,6 @@
 
 import pytest
 import responses
-
 from xproof import NotFoundError, ValidationError, XProofClient
 from xproof.models import PolicyCheckResult, PolicyViolation
 

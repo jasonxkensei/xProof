@@ -1,12 +1,9 @@
 """Tests for the OpenAI Agents SDK xProof integration."""
 
 import asyncio
-import hashlib
-import json
 from unittest.mock import MagicMock
 
 import pytest
-
 from xproof.integrations.openai_agents import (
     XProofRunHooks,
     XProofTracingProcessor,

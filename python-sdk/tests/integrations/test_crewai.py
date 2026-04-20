@@ -4,8 +4,7 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
-
-from xproof.integrations.crewai import XProofTool, XProofCrewCallback
+from xproof.integrations.crewai import XProofCrewCallback, XProofTool
 
 
 @pytest.fixture

@@ -12,11 +12,11 @@ except ImportError:
     try:
         from llama_index.callbacks.base import BaseCallbackHandler
         from llama_index.callbacks.schema import CBEventType
-    except ImportError:
+    except ImportError as err:
         raise ImportError(
             "llama-index-core is required for this integration. "
             "Install it with: pip install llama-index-core"
-        )
+        ) from err
 
 from ..client import XProofClient
 
