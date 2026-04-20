@@ -1,6 +1,6 @@
 # xproof
 
-[![Python SDK CI](https://github.com/jasonxkensei/xproof/actions/workflows/python-sdk.yml/badge.svg?branch=main)](https://github.com/jasonxkensei/xproof/actions/workflows/python-sdk.yml)
+[![Python SDK CI](https://github.com/jasonxkensei/xproof/actions/workflows/python-sdk.yml/badge.svg?branch=main)](https://github.com/jasonxkensei/xproof/actions/workflows/python-sdk.yml) [![PyPI version](https://img.shields.io/pypi/v/xproof)](https://pypi.org/project/xproof/) [![Python versions](https://img.shields.io/pypi/pyversions/xproof)](https://pypi.org/project/xproof/)
 
 On-chain decision provenance for autonomous agents. **WHY before acting. WHAT after.** Timestamps written by the chain, not your agent.
 
