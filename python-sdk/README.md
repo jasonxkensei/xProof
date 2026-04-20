@@ -274,6 +274,98 @@ print(trail.current_confidence)      # 0.72
 print(trail.is_finalized)            # False — decision still open
 ```
 
+### End-to-end agent example: document deletion with compliance gate
+
+This example shows a realistic governance loop for an autonomous agent that is
+about to permanently delete customer records — an irreversible action that
+requires a confidence level of at least 0.95 before proceeding.
+
+```python
+import hashlib, json
+from xproof import XProofClient
+
+client = XProofClient(api_key="pm_...")
+
+def hash_string(s: str) -> str:
+    return hashlib.sha256(s.encode()).hexdigest()
+
+# ── Step 1: Agent produces its reasoning ─────────────────────────────────────
+# (In a real LangChain / CrewAI / AutoGen agent, this would be the structured
+# chain-of-thought or tool-call output produced just before execution.)
+
+decision = {
+    "action": "delete_customer_records",
+    "scope": "inactive_accounts",
+    "records_affected": 4821,
+    "retention_policy_checked": True,
+    "legal_hold_clear": True,
+    "agent": "data-hygiene-agent",
+    "run_id": "del-run-2026-04-20",
+}
+decision_id = "del-run-2026-04-20"
+reasoning_hash = hash_string(json.dumps(decision, sort_keys=True))
+
+# ── Step 2: Certify BEFORE executing ─────────────────────────────────────────
+# The agent self-assesses its confidence. Because the action is irreversible,
+# the policy requires confidence_level >= 0.95.
+
+cert = client.certify_with_confidence(
+    file_hash=reasoning_hash,
+    file_name="delete-decision.json",
+    author="data-hygiene-agent",
+    confidence_level=0.97,               # Agent is highly confident
+    threshold_stage="pre-commitment",    # valid: "initial", "partial", "pre-commitment", "final"
+    decision_id=decision_id,
+    reversibility_class="irreversible",  # Deletion cannot be undone
+)
+
+# cert.transaction_hash is the on-chain anchor — written before any records move
+
+# ── Step 3: Compliance gate ───────────────────────────────────────────────────
+# Immediately check policy compliance. This is a lightweight call — it does NOT
+# re-fetch the full trail. Gate the destructive action on the result.
+
+check = client.get_policy_check(decision_id)
+
+if not check.policy_compliant:
+    # Policy violated — log every violation and abort.
+    for v in check.policy_violations:
+        print(f"BLOCKED [{v.severity.upper()}] {v.rule}")
+        print(f"  {v.message}")
+    raise RuntimeError("Deletion aborted: policy compliance check failed.")
+
+# ── Step 4: Execute only when compliant ──────────────────────────────────────
+print(f"Policy compliant — proceeding with deletion (cert: {cert.transaction_hash})")
+# delete_customer_records(decision["scope"])   # your actual execution here
+```
+
+**What happens if the agent's confidence is too low?**
+
+Drop `confidence_level` to `0.82` and the same gate blocks execution:
+
+```python
+cert = client.certify_with_confidence(
+    ...
+    confidence_level=0.82,           # Below the 0.95 irreversible threshold
+    reversibility_class="irreversible",
+)
+
+check = client.get_policy_check(decision_id)
+
+if not check.policy_compliant:
+    for v in check.policy_violations:
+        print(f"BLOCKED [{v.severity.upper()}] {v.rule}")
+        # → BLOCKED [ERROR] irreversible actions require confidence_level >= 0.95
+        print(f"  {v.message}")
+        # →   confidence 0.82 is below the required threshold of 0.95
+
+    raise RuntimeError("Deletion aborted: policy compliance check failed.")
+```
+
+The violation is written on-chain at certification time — before your code
+ever reaches the gate — so the audit trail exists even if your agent crashes
+between `certify_with_confidence` and `get_policy_check`.
+
 ### Three classes, one parameter
 
 | `reversibility_class` | What it means | Policy threshold |
