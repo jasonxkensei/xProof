@@ -176,10 +176,13 @@ export class XProofClient {
     if (fourW?.what !== undefined) metadata.what = fourW.what;
     if (fourW?.when !== undefined) metadata.when = fourW.when;
     if (fourW?.why !== undefined) metadata.why = fourW.why;
+    if (fourW?.reversibilityClass !== undefined)
+      metadata.reversibility_class = fourW.reversibilityClass;
 
     metadata.confidence_level = confidence.confidenceLevel;
     metadata.threshold_stage = confidence.thresholdStage;
     metadata.decision_id = confidence.decisionId;
+    // confidence.reversibilityClass takes priority over fourW.reversibilityClass
     if (confidence.reversibilityClass !== undefined)
       metadata.reversibility_class = confidence.reversibilityClass;
 
