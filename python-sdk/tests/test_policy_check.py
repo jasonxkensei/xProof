@@ -2,7 +2,7 @@
 
 import pytest
 import responses
-from xproof import NotFoundError, ValidationError, XProofClient
+from xproof import NotFoundError, XProofClient
 from xproof.models import PolicyCheckResult, PolicyViolation
 
 BASE = "https://xproof.app"
@@ -172,15 +172,15 @@ def test_get_policy_check_raw_preserved():
     assert result.raw.get("extra_field") == "should be preserved"
 
 
-@responses.activate
-def test_get_policy_check_missing_decision_id_raises_validation_error():
-    """A 400 response for a missing decision_id query parameter raises ValidationError."""
-    responses.add(
-        responses.GET,
-        POLICY_CHECK_URL,
-        json={"message": "decision_id query parameter is required"},
-        status=400,
-    )
+def test_get_policy_check_empty_decision_id_raises_value_error():
+    """An empty or blank decision_id raises ValueError locally before any HTTP call."""
     client = XProofClient()
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError, match="decision_id is required"):
         client.get_policy_check("")
+
+
+def test_get_policy_check_blank_decision_id_raises_value_error():
+    """A whitespace-only decision_id also raises ValueError locally."""
+    client = XProofClient()
+    with pytest.raises(ValueError, match="decision_id is required"):
+        client.get_policy_check("   ")

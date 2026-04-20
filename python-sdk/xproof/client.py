@@ -426,8 +426,11 @@ class XProofClient:
             ``checked_at``, and the raw API response via ``.raw``.
 
         Raises:
+            ValueError: If ``decision_id`` is empty or blank.
             NotFoundError: If no proofs exist for the given ``decision_id``.
         """
+        if not decision_id or not decision_id.strip():
+            raise ValueError("decision_id is required")
         data = self._request(
             "GET",
             "/api/proofs/policy-check",
