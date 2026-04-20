@@ -1,4 +1,4 @@
-.PHONY: lint test typecheck check
+.PHONY: lint test typecheck check install-hooks
 
 lint:
 	ruff check xproof/ tests/
@@ -10,3 +10,6 @@ typecheck:
 	mypy xproof/
 
 check: lint typecheck test
+
+install-hooks:
+	cd .. && pre-commit install --config python-sdk/.pre-commit-config.yaml

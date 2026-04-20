@@ -694,11 +694,37 @@ pip install -e ".[dev]"
 # Lint (ruff — catches unused imports, duplicate class definitions, and more)
 make lint
 
+# Type-check with mypy
+make typecheck
+
 # Unit tests (excludes live-API integration tests)
 make test
 
-# Lint + test together
+# Lint + typecheck + test together
 make check
+```
+
+### Pre-commit hooks
+
+A pre-commit hook runs `mypy` automatically before every commit so type errors
+are caught locally rather than in CI.
+
+Run the one-time setup from the `python-sdk/` directory:
+
+```bash
+make install-hooks
+# Equivalent (run from the repo root):
+# pre-commit install --config python-sdk/.pre-commit-config.yaml
+```
+
+After that, every `git commit` will run `make typecheck`, which checks the
+entire `xproof/` package with mypy. If mypy reports any errors the commit is
+blocked until they are fixed.
+
+To run the hooks manually against all files without committing (from the repo root):
+
+```bash
+pre-commit run --all-files --config python-sdk/.pre-commit-config.yaml
 ```
 
 The linter is configured in `pyproject.toml` under `[tool.ruff]`. Rule `F811` will flag
