@@ -161,6 +161,83 @@ const proof = await client.verifyHash(fileHash);
 console.log(proof.blockchainStatus); // "confirmed" | "pending"
 ```
 
+---
+
+## Governance & Policy Enforcement
+
+xProof detects automatically when an agent acted with insufficient confidence on an irreversible action — and writes the evidence on-chain before you ever open an incident report.
+
+### Mark decisions as reversible, costly, or irreversible
+
+Add `reversibilityClass` to any certified action. The server enforces a policy: **irreversible actions require `confidenceLevel >= 0.95`**. Anything below that threshold generates a policy violation anchored to the chain.
+
+```typescript
+import { XProofClient, hashString } from "@xproof/xproof";
+
+const client = new XProofClient({ apiKey: "pm_..." });
+
+// An agent is about to execute a trade it cannot undo.
+// It certifies its reasoning at 0.72 confidence — below the 0.95 threshold.
+const cert = await client.certifyWithConfidence(
+  hashString(JSON.stringify({ action: "sell", ticker: "AAPL", qty: 500 })),
+  "trade-decision.json",
+  "trading-agent",
+  {
+    confidenceLevel: 0.72,              // Agent's self-assessed confidence
+    thresholdStage: "pre-commitment",
+    decisionId: "trade-xyz-2026",
+    reversibilityClass: "irreversible", // This action cannot be undone
+  }
+);
+
+// cert.reversibilityClass === "irreversible"
+// The server has recorded a policy violation: 0.72 < 0.95 required
+```
+
+### Check compliance — without fetching the full trail
+
+```typescript
+import type { PolicyCheckResult } from "@xproof/xproof";
+
+const check: PolicyCheckResult = await client.getPolicyCheck("trade-xyz-2026");
+
+if (!check.policyCompliant) {
+  for (const v of check.policyViolations) {
+    console.log(`VIOLATION — ${v.rule}`);
+    console.log(`  proof:      ${v.proofId}`);
+    console.log(`  confidence: ${v.confidenceLevel} (required: ${v.threshold})`);
+    console.log(`  class:      ${v.reversibilityClass}`);
+    // → VIOLATION — irreversible actions require confidence_level >= 0.95
+    // →   proof:      abc-uuid
+    // →   confidence: 0.72 (required: 0.95)
+    // →   class:      irreversible
+  }
+}
+```
+
+### Full confidence trail with policy result
+
+```typescript
+const trail = await client.getConfidenceTrail("trade-xyz-2026");
+
+console.log(trail.policyCompliant);        // false
+console.log(trail.policyViolations.length); // 1
+console.log(trail.currentConfidence);       // 0.72
+console.log(trail.isFinalized);             // false — decision still open
+```
+
+### Three classes, one parameter
+
+| `reversibilityClass` | What it means | Policy threshold |
+|---|---|---|
+| `"reversible"` | Action can be undone (e.g. draft, preview) | None — any confidence accepted |
+| `"costly"` | Undoable but expensive (e.g. API call, DB write) | None — any confidence accepted |
+| `"irreversible"` | Cannot be undone (e.g. trade, deletion, send) | `confidenceLevel >= 0.95` required |
+
+> The threshold is configured server-side (`IRREVERSIBLE_CONFIDENCE_THRESHOLD=0.95`). All violations are written on-chain and cannot be amended.
+
+---
+
 ## Pricing
 
 ```typescript
@@ -208,9 +285,12 @@ try {
 | `XProofClient.register(agentName)` | Register agent, get trial key |
 | `certify(path, author, fileName?, fourW?)` | Certify file (hashes locally) |
 | `certifyHash(hash, name, author, fourW?)` | Certify by pre-computed hash |
+| `certifyWithConfidence(hash, name, author, opts)` | Certify with confidence + governance class |
 | `batchCertify(files)` | Batch certify (up to 50) |
 | `verify(proofId)` | Look up by proof ID |
 | `verifyHash(fileHash)` | Look up by file hash |
+| `getConfidenceTrail(decisionId)` | Full trail with `policyCompliant` + violations |
+| `getPolicyCheck(decisionId)` | Lightweight compliance check — no full trail |
 | `getPricing()` | Get current pricing |
 
 ## Links

@@ -200,6 +200,75 @@ print(proof.file_name, proof.blockchain_status)
 proof = client.verify_hash("e3b0c442...")
 ```
 
+---
+
+## Governance & Policy Enforcement
+
+xProof detects automatically when an agent acted with insufficient confidence on an irreversible action — and writes the evidence on-chain before you ever open an incident report.
+
+### Mark decisions as reversible, costly, or irreversible
+
+Add `reversibility_class` to any certified action. The server enforces a policy: **irreversible actions require `confidence_level >= 0.95`**. Anything below that threshold generates a policy violation anchored to the chain.
+
+```python
+# An agent is about to execute a trade it cannot undo.
+# It certifies its reasoning at 0.72 confidence — below the 0.95 threshold.
+cert = client.certify_with_confidence(
+    file_hash=hash_string('{"action": "sell", "ticker": "AAPL", "qty": 500}'),
+    file_name="trade-decision.json",
+    author="trading-agent",
+    confidence_level=0.72,           # Agent's self-assessed confidence
+    threshold_stage="pre-commitment",
+    decision_id="trade-xyz-2026",
+    reversibility_class="irreversible",  # This action cannot be undone
+)
+
+# cert.reversibility_class == "irreversible"
+# The server has recorded a policy violation: 0.72 < 0.95 required
+```
+
+### Check compliance — without fetching the full trail
+
+```python
+from xproof import XProofClient, PolicyCheckResult
+
+check: PolicyCheckResult = client.get_policy_check("trade-xyz-2026")
+
+if not check.policy_compliant:
+    for v in check.policy_violations:
+        print(f"VIOLATION — {v.rule}")
+        print(f"  proof:      {v.proof_id}")
+        print(f"  confidence: {v.confidence_level} (required: {v.threshold})")
+        print(f"  class:      {v.reversibility_class}")
+        # → VIOLATION — irreversible actions require confidence_level >= 0.95
+        # →   proof:      abc-uuid
+        # →   confidence: 0.72 (required: 0.95)
+        # →   class:      irreversible
+```
+
+### Full confidence trail with policy result
+
+```python
+trail = client.get_confidence_trail("trade-xyz-2026")
+
+print(trail.policy_compliant)        # False
+print(len(trail.policy_violations))  # 1
+print(trail.current_confidence)      # 0.72
+print(trail.is_finalized)            # False — decision still open
+```
+
+### Three classes, one parameter
+
+| `reversibility_class` | What it means | Policy threshold |
+|---|---|---|
+| `"reversible"` | Action can be undone (e.g. draft, preview) | None — any confidence accepted |
+| `"costly"` | Undoable but expensive (e.g. API call, DB write) | None — any confidence accepted |
+| `"irreversible"` | Cannot be undone (e.g. trade, deletion, send) | `confidence_level >= 0.95` required |
+
+> The threshold is configured server-side (`IRREVERSIBLE_CONFIDENCE_THRESHOLD=0.95`). All violations are written on-chain and cannot be amended.
+
+---
+
 ## Pricing
 
 ```python
@@ -222,11 +291,14 @@ print(pricing.price_usd)  # e.g. 0.05
 | Method | Description |
 |--------|-------------|
 | `XProofClient.register(agent_name)` | Register agent, get trial key |
-| `certify(path, author, file_name?, **fourW)` | Certify file (hashes locally) |
-| `certify_hash(file_hash, file_name, author, **fourW)` | Certify by pre-computed hash |
+| `certify(path, author, *, reversibility_class?, **fourW)` | Certify file (hashes locally) |
+| `certify_hash(file_hash, file_name, author, *, reversibility_class?, **fourW)` | Certify by pre-computed hash |
+| `certify_with_confidence(hash, name, author, confidence_level, threshold_stage, decision_id, *, reversibility_class?, **fourW)` | Certify with confidence + governance class |
 | `batch_certify(files)` | Batch certify (up to 50) |
 | `verify(proof_id)` | Look up by proof ID |
 | `verify_hash(file_hash)` | Look up by file hash |
+| `get_confidence_trail(decision_id)` | Full trail with `policy_compliant` + violations |
+| `get_policy_check(decision_id)` | Lightweight compliance check — no full trail |
 | `get_pricing()` | Get current pricing |
 
 ## Links
