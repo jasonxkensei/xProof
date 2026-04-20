@@ -24,6 +24,31 @@ class PolicyViolation:
 
 
 @dataclass
+class PolicyCheckResult:
+    """Result of a policy compliance check for a decision chain."""
+
+    decision_id: str
+    policy_compliant: bool
+    policy_violations: List[PolicyViolation]
+    total_anchors: int = 0
+    checked_at: str = ""
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PolicyCheckResult":
+        """Create a PolicyCheckResult from an API response dictionary."""
+        violations_raw = data.get("policy_violations", [])
+        return cls(
+            decision_id=data.get("decision_id", ""),
+            policy_compliant=data.get("policy_compliant", True),
+            policy_violations=[PolicyViolation.from_dict(v) for v in violations_raw],
+            total_anchors=data.get("total_anchors", 0),
+            checked_at=data.get("checked_at", ""),
+            raw=data,
+        )
+
+
+@dataclass
 class ConfidenceTrailStage:
     """One stage anchor in a confidence trail."""
 

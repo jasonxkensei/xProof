@@ -406,23 +406,28 @@ class XProofClient:
 
         A lightweight alternative to :meth:`get_confidence_trail` for agents that
         only need to know whether a decision chain is compliant and which proofs
-        violated the reversibility policy.
+        violated the reversibility policy. Queries the
+        ``GET /api/proofs/policy-check`` endpoint and returns a structured report
+        indicating whether all anchored proofs satisfy the governance policy
+        (e.g. irreversible actions must meet the minimum confidence threshold).
+
+        This is a public endpoint and does not require authentication.
 
         Args:
             decision_id: The shared identifier linking proofs in the chain.
 
         Returns:
-            A :class:`PolicyCheckResult` with ``policy_compliant``,
-            ``policy_violations``, ``total_anchors``, and ``checked_at``.
-            Access the raw API dict via ``.raw``.
+            A :class:`PolicyCheckResult` with ``decision_id``,
+            ``policy_compliant``, ``policy_violations``, ``total_anchors``,
+            ``checked_at``, and the raw API response via ``.raw``.
 
         Raises:
-            NotFoundError: If no proofs exist for this decision_id.
+            NotFoundError: If no proofs exist for the given ``decision_id``.
         """
-        from urllib.parse import quote
         data = self._request(
             "GET",
-            f"/api/proofs/policy-check?decision_id={quote(decision_id, safe='')}",
+            "/api/proofs/policy-check",
+            params={"decision_id": decision_id},
             auth_required=False,
         )
         return PolicyCheckResult.from_dict(data)
