@@ -455,3 +455,183 @@ def test_verify_hash_uses_correct_endpoint():
     cert = client.verify_hash("abc123def")
     assert cert.id == "proof-ep"
     assert responses.calls[0].request.url == f"{BASE}/api/proof/hash/abc123def"
+
+
+# ---------------------------------------------------------------------------
+# certify_with_confidence() tests
+# ---------------------------------------------------------------------------
+
+CERT_RESPONSE = {
+    "id": "proof-cwc",
+    "fileName": "analysis.json",
+    "fileHash": "a" * 64,
+    "transactionHash": "tx-cwc",
+    "transactionUrl": "https://explorer.multiversx.com/tx/cwc",
+    "createdAt": "2026-04-20T10:00:00Z",
+    "authorName": "AgentX",
+    "blockchainStatus": "confirmed",
+}
+
+
+@responses.activate
+def test_certify_with_confidence_happy_path():
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    cert = client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="analysis.json",
+        author="AgentX",
+        confidence_level=0.8,
+        threshold_stage="partial",
+        decision_id="decision-42",
+    )
+    assert cert.id == "proof-cwc"
+    assert cert.author_name == "AgentX"
+
+    req_body = json.loads(responses.calls[0].request.body)
+    assert req_body["filename"] == "analysis.json"
+    assert req_body["file_hash"] == "a" * 64
+    assert req_body["author_name"] == "AgentX"
+    meta = req_body["metadata"]
+    assert meta["confidence_level"] == 0.8
+    assert meta["threshold_stage"] == "partial"
+    assert meta["decision_id"] == "decision-42"
+
+
+@responses.activate
+def test_certify_with_confidence_includes_4w_fields():
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="b" * 64,
+        file_name="plan.json",
+        author="AgentY",
+        confidence_level=0.6,
+        threshold_stage="initial",
+        decision_id="decision-99",
+        who="erd1agent...",
+        what="sha256-of-plan",
+        when="2026-04-20T09:00:00Z",
+        why="sha256-of-goal",
+        metadata={"extra_key": "extra_value"},
+    )
+    req_body = json.loads(responses.calls[0].request.body)
+    meta = req_body["metadata"]
+    assert meta["confidence_level"] == 0.6
+    assert meta["threshold_stage"] == "initial"
+    assert meta["decision_id"] == "decision-99"
+    assert meta["who"] == "erd1agent..."
+    assert meta["what"] == "sha256-of-plan"
+    assert meta["when"] == "2026-04-20T09:00:00Z"
+    assert meta["why"] == "sha256-of-goal"
+    assert meta["extra_key"] == "extra_value"
+
+
+@responses.activate
+def test_certify_with_confidence_boundary_values():
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+
+    cert_min = client.certify_with_confidence(
+        file_hash="c" * 64,
+        file_name="min.json",
+        author="Agent",
+        confidence_level=0.0,
+        threshold_stage="initial",
+        decision_id="dec-min",
+    )
+    assert cert_min.id == "proof-cwc"
+    meta_min = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta_min["confidence_level"] == 0.0
+
+    cert_max = client.certify_with_confidence(
+        file_hash="d" * 64,
+        file_name="max.json",
+        author="Agent",
+        confidence_level=1.0,
+        threshold_stage="final",
+        decision_id="dec-max",
+    )
+    assert cert_max.id == "proof-cwc"
+    meta_max = json.loads(responses.calls[1].request.body)["metadata"]
+    assert meta_max["confidence_level"] == 1.0
+    assert meta_max["threshold_stage"] == "final"
+
+
+def test_certify_with_confidence_invalid_confidence_too_low():
+    client = XProofClient(api_key="pm_test")
+    with pytest.raises(ValueError, match="confidence_level must be between 0.0 and 1.0"):
+        client.certify_with_confidence(
+            file_hash="e" * 64,
+            file_name="f.json",
+            author="Agent",
+            confidence_level=-0.1,
+            threshold_stage="initial",
+            decision_id="dec-low",
+        )
+
+
+def test_certify_with_confidence_invalid_confidence_too_high():
+    client = XProofClient(api_key="pm_test")
+    with pytest.raises(ValueError, match="confidence_level must be between 0.0 and 1.0"):
+        client.certify_with_confidence(
+            file_hash="f" * 64,
+            file_name="f.json",
+            author="Agent",
+            confidence_level=1.01,
+            threshold_stage="final",
+            decision_id="dec-high",
+        )
+
+
+def test_certify_with_confidence_invalid_threshold_stage():
+    client = XProofClient(api_key="pm_test")
+    with pytest.raises(ValueError, match="threshold_stage must be one of"):
+        client.certify_with_confidence(
+            file_hash="a" * 64,
+            file_name="f.json",
+            author="Agent",
+            confidence_level=0.5,
+            threshold_stage="invalid-stage",
+            decision_id="dec-stage",
+        )
+
+
+def test_certify_with_confidence_blank_decision_id():
+    client = XProofClient(api_key="pm_test")
+    with pytest.raises(ValueError, match="decision_id is required"):
+        client.certify_with_confidence(
+            file_hash="a" * 64,
+            file_name="f.json",
+            author="Agent",
+            confidence_level=0.5,
+            threshold_stage="partial",
+            decision_id="",
+        )
+
+
+def test_certify_with_confidence_whitespace_decision_id():
+    client = XProofClient(api_key="pm_test")
+    with pytest.raises(ValueError, match="decision_id is required"):
+        client.certify_with_confidence(
+            file_hash="a" * 64,
+            file_name="f.json",
+            author="Agent",
+            confidence_level=0.5,
+            threshold_stage="partial",
+            decision_id="   ",
+        )
+
+
+def test_certify_with_confidence_no_api_key():
+    client = XProofClient()
+    with pytest.raises(ValueError, match="api_key is required"):
+        client.certify_with_confidence(
+            file_hash="a" * 64,
+            file_name="f.json",
+            author="Agent",
+            confidence_level=0.5,
+            threshold_stage="partial",
+            decision_id="dec-nokey",
+        )
