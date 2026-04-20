@@ -434,6 +434,85 @@ The violation is written on-chain at certification time — before your code
 ever reaches the gate — so the audit trail exists even if your agent crashes
 between `certify_with_confidence` and `get_policy_check`.
 
+### Observability — surfacing violations in dashboards
+
+Raising a `RuntimeError` is enough to halt execution, but it gives your
+observability stack nothing structured to alert on.  The pattern below emits a
+machine-readable JSON log line for each violation and optionally fires a
+webhook, so Datadog / Grafana / CloudWatch log-based alerts can pick up
+violations without grepping free-form text.
+
+```python
+import json, logging, urllib.request
+from xproof import XProofClient
+
+logger = logging.getLogger("xproof.compliance")
+logging.basicConfig(level=logging.INFO)
+
+client = XProofClient(api_key="pm_...")
+
+# Optional: set a webhook URL to receive violation payloads
+VIOLATION_WEBHOOK_URL = None  # e.g. "https://hooks.example.com/compliance"
+
+def _emit_violation(decision_id: str, violation) -> None:
+    """Emit one structured log line and, optionally, a webhook call."""
+    payload = {
+        "event":       "policy_violation",
+        "decision_id": decision_id,
+        "rule":        violation.rule,
+        "severity":    violation.severity,
+        "message":     violation.message,
+    }
+    # ── Structured JSON log (ingested by Datadog / CloudWatch / Loki) ─────────
+    logger.error(json.dumps(payload))
+
+    # ── Optional webhook / alerting callback (best-effort) ───────────────────
+    if VIOLATION_WEBHOOK_URL:
+        try:
+            body = json.dumps(payload).encode()
+            req  = urllib.request.Request(
+                VIOLATION_WEBHOOK_URL,
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5):
+                pass  # fire-and-forget; add retry logic as needed
+        except Exception as exc:
+            # Best-effort delivery — a webhook failure must NOT swallow the
+            # compliance violation itself.  Log and continue to the raise below.
+            logger.warning(json.dumps({"event": "webhook_error", "detail": str(exc)}))
+
+check = client.get_policy_check(decision_id)
+
+if not check.policy_compliant:
+    for v in check.policy_violations:
+        _emit_violation(decision_id, v)
+
+    # ── Full audit trail for post-mortem / SIEM export ────────────────────────
+    # get_confidence_trail() returns a ConfidenceTrail object containing every
+    # certification event — confidence levels, timestamps, transaction hashes —
+    # so you can attach the complete chain-of-evidence to an incident ticket or
+    # ship it to your SIEM without a separate lookup.
+    # trail.raw is the unmodified API response dict; use trail.stages for
+    # programmatic access to individual ConfidenceTrailStage entries.
+    # Note: redact sensitive fields from trail.raw before logging or exporting
+    # to centralised logs / SIEM in production environments.
+    trail = client.get_confidence_trail(decision_id)
+    logger.error(json.dumps({
+        "event":       "audit_trail",
+        "decision_id": decision_id,
+        "trail":       trail.raw,
+    }))
+
+    raise RuntimeError("Deletion aborted: policy compliance check failed.")
+```
+
+Each `logger.error(...)` call writes a single-line JSON object that log
+shippers (Fluentd, the Datadog Agent, the CloudWatch agent) forward verbatim.
+Create a log-based metric or alert on `event = "policy_violation"` to get
+dashboard counts and threshold alerts with no extra instrumentation.
+
 ### Three classes, one parameter
 
 | `reversibility_class` | What it means | Policy threshold |
