@@ -252,6 +252,95 @@ console.log(trail.currentConfidence);       // 0.72
 console.log(trail.isFinalized);             // false — decision still open
 ```
 
+### Observability — surfacing violations in dashboards
+
+Throwing an error is enough to halt execution, but it gives your observability
+stack nothing structured to alert on.  The pattern below emits a
+machine-readable JSON log line for each violation and optionally fires a
+webhook, so Datadog / Grafana / CloudWatch log-based alerts can pick up
+violations without grepping free-form text.
+
+```typescript
+import { XProofClient } from "@xproof/xproof";
+import type { PolicyViolation } from "@xproof/xproof";
+
+const client = new XProofClient({ apiKey: "pm_..." });
+const decisionId = "trade-xyz-2026"; // the decision ID passed to certifyWithConfidence()
+
+// Optional: set a webhook URL to receive violation payloads
+const VIOLATION_WEBHOOK_URL: string | null = null; // e.g. "https://hooks.example.com/compliance"
+
+async function emitViolation(decisionId: string, violation: PolicyViolation): Promise<void> {
+  const payload = {
+    event:               "policy_violation",
+    decision_id:         decisionId,
+    rule:                violation.rule,
+    proof_id:            violation.proofId,
+    confidence_level:    violation.confidenceLevel,
+    threshold:           violation.threshold,
+    reversibility_class: violation.reversibilityClass,
+    threshold_stage:     violation.thresholdStage,
+  };
+
+  // ── Structured JSON log (ingested by Datadog / CloudWatch / Loki) ─────────
+  // console.error writes to stderr, which log shippers (Fluentd, the Datadog
+  // Agent, the CloudWatch agent) forward verbatim.
+  // Drop-in replacements: pino.error(payload) emits NDJSON with no extra
+  // config; for winston, configure a JSON transport first (e.g.
+  // `winston.createLogger({ format: winston.format.json(), ... })`), then
+  // call logger.error(payload) to get the same single-line JSON output.
+  console.error(JSON.stringify(payload));
+
+  // ── Optional webhook / alerting callback (best-effort) ───────────────────
+  if (VIOLATION_WEBHOOK_URL) {
+    try {
+      await fetch(VIOLATION_WEBHOOK_URL, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(payload),
+        signal:  AbortSignal.timeout(5000), // fire-and-forget; add retry logic as needed
+      });
+    } catch (exc) {
+      // Best-effort delivery — a webhook failure must NOT swallow the
+      // compliance violation itself.  Log and continue to the throw below.
+      console.warn(JSON.stringify({ event: "webhook_error", detail: String(exc) }));
+    }
+  }
+}
+
+const check = await client.getPolicyCheck(decisionId);
+
+if (!check.policyCompliant) {
+  for (const v of check.policyViolations) {
+    await emitViolation(decisionId, v);
+  }
+
+  // ── Full audit trail for post-mortem / SIEM export ────────────────────────
+  // getConfidenceTrail() returns a ConfidenceTrail object containing every
+  // certification event — confidence levels, timestamps, transaction hashes —
+  // so you can attach the complete chain-of-evidence to an incident ticket or
+  // ship it to your SIEM without a separate lookup.
+  // Note: redact sensitive fields from trail.stages before logging or
+  // exporting to centralised logs / SIEM in production environments.
+  const trail = await client.getConfidenceTrail(decisionId);
+  console.error(JSON.stringify({
+    event:              "audit_trail",
+    decision_id:        decisionId,
+    current_confidence: trail.currentConfidence,
+    is_finalized:       trail.isFinalized,
+    total_anchors:      trail.totalAnchors,
+    stages:             trail.stages,
+  }));
+
+  throw new Error("Action aborted: policy compliance check failed.");
+}
+```
+
+Each `console.error(JSON.stringify(...))` call writes a single-line JSON object
+that log shippers (Fluentd, the Datadog Agent, the CloudWatch agent) forward
+verbatim.  Create a log-based metric or alert on `event = "policy_violation"` to
+get dashboard counts and threshold alerts with no extra instrumentation.
+
 ### Three classes, one parameter
 
 | `reversibilityClass` | What it means | Policy threshold |
