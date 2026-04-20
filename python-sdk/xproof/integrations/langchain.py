@@ -139,7 +139,9 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
                 for gen in gen_list:
                     output_text += getattr(gen, "text", "")
 
-        data_hash = _hash_data({"model": model_name, "prompt_hash": prompt_hash, "output": output_text})
+        data_hash = _hash_data(
+            {"model": model_name, "prompt_hash": prompt_hash, "output": output_text}
+        )
         self._certify(
             action_type="llm_call",
             data_hash=data_hash,
@@ -161,9 +163,7 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
             return
         tool_name = serialized.get("name", "unknown-tool")
         input_hash = _hash_data(input_str)
-        self._run_context[str(run_id)] = json.dumps(
-            {"tool": tool_name, "input_hash": input_hash}
-        )
+        self._run_context[str(run_id)] = json.dumps({"tool": tool_name, "input_hash": input_hash})
 
     def on_tool_end(
         self,

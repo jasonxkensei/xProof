@@ -53,6 +53,7 @@ def test_llm_end_certifies(handler, mock_client):
 
 def test_llm_includes_prompt_hash(handler, mock_client):
     import hashlib
+
     run_id = uuid4()
     prompts = ["What is 2+2?"]
     handler.on_llm_start({"name": "gpt-4"}, prompts, run_id=run_id)
@@ -71,7 +72,8 @@ def test_llm_includes_prompt_hash(handler, mock_client):
     expected_data_hash = hashlib.sha256(
         json.dumps(
             {"model": "gpt-4", "prompt_hash": expected_prompt_hash, "output": "4"},
-            sort_keys=True, default=str,
+            sort_keys=True,
+            default=str,
         ).encode()
     ).hexdigest()
     assert file_hash == expected_data_hash
@@ -94,6 +96,7 @@ def test_tool_end_certifies(handler, mock_client):
 
 def test_tool_includes_input_hash(handler, mock_client):
     import hashlib
+
     run_id = uuid4()
     tool_input = "search query"
     handler.on_tool_start({"name": "web_search"}, tool_input, run_id=run_id)
@@ -107,7 +110,8 @@ def test_tool_includes_input_hash(handler, mock_client):
     expected_data_hash = hashlib.sha256(
         json.dumps(
             {"tool": "web_search", "input_hash": expected_input_hash, "output": "result data"},
-            sort_keys=True, default=str,
+            sort_keys=True,
+            default=str,
         ).encode()
     ).hexdigest()
     assert file_hash == expected_data_hash
@@ -133,9 +137,7 @@ def test_chain_events_when_enabled(mock_client):
 
 
 def test_llm_disabled(mock_client):
-    handler = XProofCallbackHandler(
-        client=mock_client, agent_name="test-agent", certify_llm=False
-    )
+    handler = XProofCallbackHandler(client=mock_client, agent_name="test-agent", certify_llm=False)
     run_id = uuid4()
     handler.on_llm_start({"name": "gpt-4"}, ["Hello"], run_id=run_id)
 
@@ -156,9 +158,7 @@ def test_tools_disabled(mock_client):
 
 
 def test_batch_mode_manual_flush(mock_client):
-    handler = XProofCallbackHandler(
-        client=mock_client, agent_name="test-agent", batch_mode=True
-    )
+    handler = XProofCallbackHandler(client=mock_client, agent_name="test-agent", batch_mode=True)
 
     run_id1 = uuid4()
     handler.on_tool_start({"name": "search"}, "q", run_id=run_id1)
@@ -177,9 +177,7 @@ def test_batch_mode_manual_flush(mock_client):
 
 
 def test_batch_mode_auto_flush_on_root_chain_end(mock_client):
-    handler = XProofCallbackHandler(
-        client=mock_client, agent_name="test-agent", batch_mode=True
-    )
+    handler = XProofCallbackHandler(client=mock_client, agent_name="test-agent", batch_mode=True)
 
     run_id1 = uuid4()
     handler.on_tool_start({"name": "search"}, "q", run_id=run_id1)
@@ -197,9 +195,7 @@ def test_batch_mode_auto_flush_on_root_chain_end(mock_client):
 
 
 def test_batch_mode_no_flush_on_nested_chain_end(mock_client):
-    handler = XProofCallbackHandler(
-        client=mock_client, agent_name="test-agent", batch_mode=True
-    )
+    handler = XProofCallbackHandler(client=mock_client, agent_name="test-agent", batch_mode=True)
 
     run_id1 = uuid4()
     handler.on_tool_start({"name": "search"}, "q", run_id=run_id1)

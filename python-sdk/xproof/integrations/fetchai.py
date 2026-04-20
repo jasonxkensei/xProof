@@ -222,10 +222,7 @@ class XProofuAgentMiddleware:
         if not self._cert_incoming:
             return None
 
-        msg_dict = (
-            message.__dict__ if hasattr(message, "__dict__") else
-            {"content": str(message)}
-        )
+        msg_dict = message.__dict__ if hasattr(message, "__dict__") else {"content": str(message)}
         msg_hash = _hash_data({"sender": sender, "message": msg_dict})
 
         return self._certify(
@@ -262,8 +259,7 @@ class XProofuAgentMiddleware:
             return None
 
         resp_dict = (
-            response.__dict__ if hasattr(response, "__dict__") else
-            {"content": str(response)}
+            response.__dict__ if hasattr(response, "__dict__") else {"content": str(response)}
         )
         resp_hash = _hash_data({"recipient": recipient, "response": resp_dict})
 
@@ -424,6 +420,7 @@ def xproof_handler(
             result = await run_research(msg.topic)
             return result  # returned value is certified as WHAT
     """
+
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
         async def wrapper(ctx: Any, sender: str, msg: Any) -> Any:
@@ -447,7 +444,9 @@ def xproof_handler(
                 )
 
             return result
+
         return wrapper
+
     return decorator
 
 

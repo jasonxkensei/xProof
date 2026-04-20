@@ -72,30 +72,24 @@ class _CertifyInput(BaseModel):  # type: ignore[misc]  # BaseModel is Any when l
     )
     file_name: Optional[str] = Field(
         default=None,
-        description=(
-            "Label for the proof artifact. "
-            "Defaults to '<decision_id>-<stage>.json'."
-        ),
+        description=("Label for the proof artifact. Defaults to '<decision_id>-<stage>.json'."),
     )
     who: Optional[str] = Field(
         default=None,
         description=(
-            "4W metadata — agent identity. "
-            "Defaults to the tool's author value when omitted."
+            "4W metadata — agent identity. Defaults to the tool's author value when omitted."
         ),
     )
     what: Optional[str] = Field(
         default=None,
         description=(
-            "4W metadata — action hash or description. "
-            "Defaults to the SHA-256 hash when omitted."
+            "4W metadata — action hash or description. Defaults to the SHA-256 hash when omitted."
         ),
     )
     when: Optional[str] = Field(
         default=None,
         description=(
-            "4W metadata — ISO-8601 timestamp. "
-            "Defaults to the current UTC time when omitted."
+            "4W metadata — ISO-8601 timestamp. Defaults to the current UTC time when omitted."
         ),
     )
     why: Optional[str] = Field(
@@ -253,8 +247,7 @@ class XProofCertifyTool(BaseTool):  # type: ignore[misc]  # BaseTool is Any when
 
         if not check.policy_compliant:
             violation_lines = [
-                f"[{v.severity.upper()}] {v.rule}: {v.message}"
-                for v in check.policy_violations
+                f"[{v.severity.upper()}] {v.rule}: {v.message}" for v in check.policy_violations
             ]
             summary = "; ".join(violation_lines)
             raise PolicyViolationError(

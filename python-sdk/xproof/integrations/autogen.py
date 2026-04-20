@@ -321,8 +321,7 @@ def xproof_certify_decision(
 
     if not check.policy_compliant:
         violation_lines = [
-            f"[{v.severity.upper()}] {v.rule}: {v.message}"
-            for v in check.policy_violations
+            f"[{v.severity.upper()}] {v.rule}: {v.message}" for v in check.policy_violations
         ]
         summary = "; ".join(violation_lines)
         raise PolicyViolationError(

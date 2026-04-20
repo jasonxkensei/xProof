@@ -52,10 +52,12 @@ class TestXProofTool:
 
     def test_certifies_json_input(self, mock_client):
         tool = XProofTool(client=mock_client, agent_name="writer")
-        input_data = json.dumps({
-            "content": "Article draft",
-            "file_name": "article.md",
-        })
+        input_data = json.dumps(
+            {
+                "content": "Article draft",
+                "file_name": "article.md",
+            }
+        )
         tool._run(input_data)
 
         call_kwargs = mock_client.certify_hash.call_args.kwargs
@@ -120,6 +122,7 @@ class TestXProofCrewCallback:
 
     def test_task_output_hash_matches_what(self, mock_client):
         import hashlib
+
         cb = XProofCrewCallback(client=mock_client, crew_name="test-crew")
         output = "My research findings"
         cb.on_task_complete("researcher", "Research task", output)
@@ -196,7 +199,9 @@ class TestXProofCrewCertifyTool:
         mock_client_cwc.get_policy_check.return_value = MagicMock(
             policy_compliant=False,
             policy_violations=[
-                PolicyViolation(rule="confidence_below_threshold", message="Too low", severity="error")
+                PolicyViolation(
+                    rule="confidence_below_threshold", message="Too low", severity="error"
+                )
             ],
         )
         tool = XProofCrewCertifyTool(client=mock_client_cwc)
@@ -235,6 +240,7 @@ class TestXProofCrewCertifyTool:
 
     def test_when_defaults_to_iso_timestamp(self, mock_client_cwc):
         import re
+
         tool = XProofCrewCertifyTool(client=mock_client_cwc)
         tool.run(decision_text="action", confidence_level=0.9, decision_id="d-when-001")
         call_kwargs = mock_client_cwc.certify_with_confidence.call_args.kwargs

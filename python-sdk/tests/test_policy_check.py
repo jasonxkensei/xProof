@@ -78,7 +78,9 @@ def test_get_policy_check_non_compliant():
     first = result.policy_violations[0]
     assert isinstance(first, PolicyViolation)
     assert first.rule == "irreversible_confidence_threshold"
-    assert first.message == "Irreversible action certified below required confidence threshold (0.9)"
+    assert (
+        first.message == "Irreversible action certified below required confidence threshold (0.9)"
+    )
     assert first.severity == "error"
 
     second = result.policy_violations[1]

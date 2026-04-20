@@ -105,9 +105,11 @@ class XProofDeerFlowSkill:
             },
         )
 
-        return json.dumps({
-            "proof_id": cert.id,
-            "file_hash": cert.file_hash,
-            "transaction_hash": cert.transaction_hash,
-            "status": "certified",
-        })
+        return json.dumps(
+            {
+                "proof_id": cert.id,
+                "file_hash": cert.file_hash,
+                "transaction_hash": cert.transaction_hash,
+                "status": "certified",
+            }
+        )

@@ -113,11 +113,13 @@ def test_llm_includes_start_hash(handler, mock_client):
     call_kwargs = mock_client.certify_hash.call_args.kwargs
     file_hash = call_kwargs["file_hash"]
     expected_start_hash = _hash_data(start_payload)
-    expected_data_hash = _hash_data({
-        "event_type": "llm",
-        "start_hash": expected_start_hash,
-        "output": "4",
-    })
+    expected_data_hash = _hash_data(
+        {
+            "event_type": "llm",
+            "start_hash": expected_start_hash,
+            "output": "4",
+        }
+    )
     assert file_hash == expected_data_hash
 
 
@@ -185,19 +187,19 @@ def test_function_call_includes_tool_name_in_hash(handler, mock_client):
     call_kwargs = mock_client.certify_hash.call_args.kwargs
     file_hash = call_kwargs["file_hash"]
     expected_start_hash = _hash_data(start_payload)
-    expected_data_hash = _hash_data({
-        "event_type": "function_call",
-        "tool": "web_search",
-        "start_hash": expected_start_hash,
-        "output": "search results",
-    })
+    expected_data_hash = _hash_data(
+        {
+            "event_type": "function_call",
+            "tool": "web_search",
+            "start_hash": expected_start_hash,
+            "output": "search results",
+        }
+    )
     assert file_hash == expected_data_hash
 
 
 def test_llm_disabled(mock_client):
-    handler = XProofCallbackHandler(
-        client=mock_client, agent_name="test-agent", certify_llm=False
-    )
+    handler = XProofCallbackHandler(client=mock_client, agent_name="test-agent", certify_llm=False)
     event_id = "evt-llm-off"
     handler.on_event_start(
         FakeCBEventType.LLM,
@@ -264,9 +266,7 @@ def test_untracked_event_ignored(handler, mock_client):
 
 
 def test_batch_mode_manual_flush(mock_client):
-    handler = XProofCallbackHandler(
-        client=mock_client, agent_name="test-agent", batch_mode=True
-    )
+    handler = XProofCallbackHandler(client=mock_client, agent_name="test-agent", batch_mode=True)
 
     event_id1 = "evt-batch-1"
     handler.on_event_start(
@@ -301,9 +301,7 @@ def test_batch_mode_manual_flush(mock_client):
 
 
 def test_batch_mode_auto_flush_on_end_trace(mock_client):
-    handler = XProofCallbackHandler(
-        client=mock_client, agent_name="test-agent", batch_mode=True
-    )
+    handler = XProofCallbackHandler(client=mock_client, agent_name="test-agent", batch_mode=True)
 
     event_id = "evt-auto-flush"
     handler.on_event_start(

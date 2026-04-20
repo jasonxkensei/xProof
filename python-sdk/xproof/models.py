@@ -217,13 +217,9 @@ class Certification:
             file_name=data.get("fileName", data.get("filename", data.get("file_name", ""))),
             file_hash=data.get("fileHash", data.get("file_hash", "")),
             transaction_hash=(
-                data.get("transactionHash", "")
-                or blockchain.get("transaction_hash", "")
+                data.get("transactionHash", "") or blockchain.get("transaction_hash", "")
             ),
-            transaction_url=(
-                data.get("transactionUrl", "")
-                or blockchain.get("explorer_url", "")
-            ),
+            transaction_url=(data.get("transactionUrl", "") or blockchain.get("explorer_url", "")),
             created_at=data.get("createdAt", data.get("created_at", data.get("timestamp", ""))),
             author_name=data.get("authorName", data.get("author_name", "")),
             file_type=data.get("fileType", data.get("file_type", "")),

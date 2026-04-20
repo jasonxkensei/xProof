@@ -69,11 +69,13 @@ def test_tool_end_hash_includes_output(hooks, mock_client):
     _run(hooks.on_tool_end(ctx, agent, tool, "42"))
     call_kwargs = mock_client.certify_hash.call_args.kwargs
 
-    expected_hash = _hash_data({
-        "tool": "calculator",
-        "agent": "analyst",
-        "output": "42",
-    })
+    expected_hash = _hash_data(
+        {
+            "tool": "calculator",
+            "agent": "analyst",
+            "output": "42",
+        }
+    )
     assert call_kwargs["file_hash"] == expected_hash
 
 
@@ -97,25 +99,23 @@ def test_agent_end_hash_includes_output(hooks, mock_client):
     _run(hooks.on_agent_end(ctx, agent, "Draft complete"))
     call_kwargs = mock_client.certify_hash.call_args.kwargs
 
-    expected_hash = _hash_data({
-        "agent": "writer",
-        "output": "Draft complete",
-    })
+    expected_hash = _hash_data(
+        {
+            "agent": "writer",
+            "output": "Draft complete",
+        }
+    )
     assert call_kwargs["file_hash"] == expected_hash
 
 
 def test_tool_disabled(mock_client):
-    hooks = XProofRunHooks(
-        client=mock_client, agent_name="test-agent", certify_tools=False
-    )
+    hooks = XProofRunHooks(client=mock_client, agent_name="test-agent", certify_tools=False)
     _run(hooks.on_tool_end(FakeContext(), FakeAgent(), FakeTool(), "result"))
     mock_client.certify_hash.assert_not_called()
 
 
 def test_agent_disabled(mock_client):
-    hooks = XProofRunHooks(
-        client=mock_client, agent_name="test-agent", certify_agent=False
-    )
+    hooks = XProofRunHooks(client=mock_client, agent_name="test-agent", certify_agent=False)
     _run(hooks.on_agent_end(FakeContext(), FakeAgent(), "output"))
     mock_client.certify_hash.assert_not_called()
 
@@ -133,9 +133,7 @@ def test_4w_metadata_present(hooks, mock_client):
 
 
 def test_batch_mode_manual_flush(mock_client):
-    hooks = XProofRunHooks(
-        client=mock_client, agent_name="test-agent", batch_mode=True
-    )
+    hooks = XProofRunHooks(client=mock_client, agent_name="test-agent", batch_mode=True)
 
     _run(hooks.on_tool_end(FakeContext(), FakeAgent(), FakeTool("t1"), "r1"))
     _run(hooks.on_tool_end(FakeContext(), FakeAgent(), FakeTool("t2"), "r2"))
@@ -149,9 +147,7 @@ def test_batch_mode_manual_flush(mock_client):
 
 
 def test_batch_mode_auto_flush_on_agent_end(mock_client):
-    hooks = XProofRunHooks(
-        client=mock_client, agent_name="test-agent", batch_mode=True
-    )
+    hooks = XProofRunHooks(client=mock_client, agent_name="test-agent", batch_mode=True)
 
     _run(hooks.on_tool_end(FakeContext(), FakeAgent(), FakeTool(), "r1"))
     mock_client.certify_hash.assert_not_called()
@@ -163,9 +159,7 @@ def test_batch_mode_auto_flush_on_agent_end(mock_client):
 
 
 def test_batch_flush_empty(mock_client):
-    hooks = XProofRunHooks(
-        client=mock_client, agent_name="test-agent", batch_mode=True
-    )
+    hooks = XProofRunHooks(client=mock_client, agent_name="test-agent", batch_mode=True)
     hooks.flush()
     mock_client.batch_certify.assert_not_called()
 
@@ -246,17 +240,13 @@ class TestTracingProcessor:
         mock_client.certify_hash.assert_not_called()
 
     def test_tool_span_disabled(self, mock_client):
-        processor = XProofTracingProcessor(
-            client=mock_client, certify_tool_spans=False
-        )
+        processor = XProofTracingProcessor(client=mock_client, certify_tool_spans=False)
         span = self._make_span("tool", name="calc")
         processor.on_span_end(span)
         mock_client.certify_hash.assert_not_called()
 
     def test_agent_span_disabled(self, mock_client):
-        processor = XProofTracingProcessor(
-            client=mock_client, certify_agent_spans=False
-        )
+        processor = XProofTracingProcessor(client=mock_client, certify_agent_spans=False)
         span = self._make_span("agent", name="writer")
         processor.on_span_end(span)
         mock_client.certify_hash.assert_not_called()
@@ -285,9 +275,7 @@ class TestTracingProcessor:
 
     def test_who_uses_span_name_not_constructor_default(self, mock_client):
         """WHO must reflect the runtime span name, not the static agent_name."""
-        processor = XProofTracingProcessor(
-            client=mock_client, agent_name="static-default"
-        )
+        processor = XProofTracingProcessor(client=mock_client, agent_name="static-default")
         span = self._make_span("function", name="runtime-tool", output="done")
         processor.on_span_end(span)
 
@@ -297,9 +285,7 @@ class TestTracingProcessor:
 
     def test_agent_span_who_uses_runtime_name(self, mock_client):
         """WHO for agent spans must use span_data.name, not static agent_name."""
-        processor = XProofTracingProcessor(
-            client=mock_client, agent_name="static-default"
-        )
+        processor = XProofTracingProcessor(client=mock_client, agent_name="static-default")
         span = self._make_span("agent", name="analyst", output="report")
         processor.on_span_end(span)
 
@@ -309,9 +295,7 @@ class TestTracingProcessor:
 
     def test_function_span_missing_name_falls_back_to_agent_name(self, mock_client):
         """When span_data.name is absent, WHO must fall back to self.agent_name."""
-        processor = XProofTracingProcessor(
-            client=mock_client, agent_name="my-agent"
-        )
+        processor = XProofTracingProcessor(client=mock_client, agent_name="my-agent")
         span = MagicMock()
         span.span_data = MagicMock(spec=["type", "output"])
         span.span_data.type = "function"

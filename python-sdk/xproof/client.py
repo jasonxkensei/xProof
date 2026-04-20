@@ -112,8 +112,7 @@ class XProofClient:
                 return resp.json()  # type: ignore[no-any-return]
             except ValueError as exc:
                 raise XProofError(
-                    f"Unexpected non-JSON response from {method} {url}: "
-                    f"{resp.text[:200]}"
+                    f"Unexpected non-JSON response from {method} {url}: {resp.text[:200]}"
                 ) from exc
 
         self._handle_error(resp)
@@ -404,6 +403,7 @@ class XProofClient:
             Access the raw API dict via ``.raw``.
         """
         from urllib.parse import quote
+
         data = self._request(
             "GET",
             f"/api/confidence-trail/{quote(decision_id, safe='')}",
@@ -467,6 +467,7 @@ class XProofClient:
             - ``raw`` (dict): The unmodified API response.
         """
         from urllib.parse import quote
+
         data = self._request(
             "GET",
             f"/api/context-drift/{quote(decision_id, safe='')}",

@@ -72,12 +72,14 @@ class XProofCertifyTool:
             why="CrewAI agent certification",
         )
 
-        return json.dumps({
-            "proof_id": cert.id,
-            "file_hash": cert.file_hash,
-            "transaction_hash": cert.transaction_hash,
-            "status": "certified",
-        })
+        return json.dumps(
+            {
+                "proof_id": cert.id,
+                "file_hash": cert.file_hash,
+                "transaction_hash": cert.transaction_hash,
+                "status": "certified",
+            }
+        )
 
 
 XProofTool = XProofCertifyTool
@@ -222,8 +224,7 @@ class XProofCrewCertifyTool:
 
         if not check.policy_compliant:
             violation_lines = [
-                f"[{v.severity.upper()}] {v.rule}: {v.message}"
-                for v in check.policy_violations
+                f"[{v.severity.upper()}] {v.rule}: {v.message}" for v in check.policy_violations
             ]
             summary = "; ".join(violation_lines)
             raise PolicyViolationError(
@@ -320,7 +321,9 @@ if CrewAIBaseTool is not None:
 
         _xproof_tool: Any = None
 
-        def __init__(self, api_key: str = "", agent_name: str = "crewai-agent", **kwargs: Any) -> None:
+        def __init__(
+            self, api_key: str = "", agent_name: str = "crewai-agent", **kwargs: Any
+        ) -> None:
             super().__init__(**kwargs)
             self._xproof_tool = XProofCertifyTool(api_key=api_key, agent_name=agent_name)
 
@@ -407,12 +410,14 @@ class XProofCrewCallback:
         results: Any,
     ) -> dict[str, Any]:
         """Certify the complete crew execution."""
-        results_hash = _hash_data({
-            "crew_name": crew_name,
-            "goal": goal,
-            "results": results,
-            "task_certifications": [c["proof_id"] for c in self.certifications],
-        })
+        results_hash = _hash_data(
+            {
+                "crew_name": crew_name,
+                "goal": goal,
+                "results": results,
+                "task_certifications": [c["proof_id"] for c in self.certifications],
+            }
+        )
 
         cert = self.client.certify_hash(
             file_hash=results_hash,

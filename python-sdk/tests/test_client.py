@@ -143,10 +143,12 @@ def test_batch_certify():
         status=201,
     )
     client = XProofClient(api_key="pm_test")
-    result = client.batch_certify([
-        {"file_hash": "h1", "file_name": "a.pdf", "author": "A"},
-        {"file_hash": "h2", "file_name": "b.pdf", "author": "B"},
-    ])
+    result = client.batch_certify(
+        [
+            {"file_hash": "h1", "file_name": "a.pdf", "author": "A"},
+            {"file_hash": "h2", "file_name": "b.pdf", "author": "B"},
+        ]
+    )
     assert result.batch_id == "batch-001"
     assert result.summary.total == 2
     assert result.summary.created == 2
@@ -159,7 +161,9 @@ def test_batch_certify():
 def test_batch_certify_max_50():
     client = XProofClient(api_key="pm_test")
     with pytest.raises(ValueError, match="maximum of 50"):
-        client.batch_certify([{"file_hash": f"h{i}", "file_name": f"f{i}", "author": ""} for i in range(51)])
+        client.batch_certify(
+            [{"file_hash": f"h{i}", "file_name": f"f{i}", "author": ""} for i in range(51)]
+        )
 
 
 @responses.activate
@@ -311,7 +315,14 @@ def test_auth_header_uses_bearer():
     responses.add(
         responses.POST,
         f"{BASE}/api/proof",
-        json={"id": "p1", "fileName": "f", "fileHash": "h", "transactionHash": "t", "transactionUrl": "", "createdAt": ""},
+        json={
+            "id": "p1",
+            "fileName": "f",
+            "fileHash": "h",
+            "transactionHash": "t",
+            "transactionUrl": "",
+            "createdAt": "",
+        },
         status=201,
     )
     client = XProofClient(api_key="pm_mykey123")
@@ -327,7 +338,14 @@ def test_certify_hash_sends_snake_case_fields():
     responses.add(
         responses.POST,
         f"{BASE}/api/proof",
-        json={"id": "p1", "fileName": "f", "fileHash": "h", "transactionHash": "t", "transactionUrl": "", "createdAt": ""},
+        json={
+            "id": "p1",
+            "fileName": "f",
+            "fileHash": "h",
+            "transactionHash": "t",
+            "transactionUrl": "",
+            "createdAt": "",
+        },
         status=201,
     )
     client = XProofClient(api_key="pm_test")
@@ -353,9 +371,11 @@ def test_batch_sends_snake_case_fields():
         status=200,
     )
     client = XProofClient(api_key="pm_test")
-    client.batch_certify([
-        {"file_hash": "a" * 64, "file_name": "a.pdf", "author": "Alice"},
-    ])
+    client.batch_certify(
+        [
+            {"file_hash": "a" * 64, "file_name": "a.pdf", "author": "Alice"},
+        ]
+    )
     req_body = json.loads(responses.calls[0].request.body)
     assert "files" in req_body
     assert req_body["files"][0]["file_hash"] == "a" * 64
@@ -370,7 +390,14 @@ def test_certify_hash_with_4w_metadata():
     responses.add(
         responses.POST,
         f"{BASE}/api/proof",
-        json={"id": "p-4w", "fileName": "f", "fileHash": "h", "transactionHash": "t", "transactionUrl": "", "createdAt": ""},
+        json={
+            "id": "p-4w",
+            "fileName": "f",
+            "fileHash": "h",
+            "transactionHash": "t",
+            "transactionUrl": "",
+            "createdAt": "",
+        },
         status=201,
     )
     client = XProofClient(api_key="pm_test")
@@ -399,7 +426,14 @@ def test_certify_hash_without_4w():
     responses.add(
         responses.POST,
         f"{BASE}/api/proof",
-        json={"id": "p-no4w", "fileName": "f", "fileHash": "h", "transactionHash": "t", "transactionUrl": "", "createdAt": ""},
+        json={
+            "id": "p-no4w",
+            "fileName": "f",
+            "fileHash": "h",
+            "transactionHash": "t",
+            "transactionUrl": "",
+            "createdAt": "",
+        },
         status=201,
     )
     client = XProofClient(api_key="pm_test")

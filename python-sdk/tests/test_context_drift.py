@@ -9,6 +9,7 @@ BASE = "https://xproof.app"
 
 def _drift_url(decision_id: str) -> str:
     from urllib.parse import quote
+
     return f"{BASE}/api/context-drift/{quote(decision_id, safe='')}"
 
 

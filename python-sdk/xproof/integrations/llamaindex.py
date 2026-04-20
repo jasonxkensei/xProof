@@ -54,7 +54,8 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
         batch_mode: bool = False,
     ) -> None:
         ignored = [
-            et for et in CBEventType
+            et
+            for et in CBEventType
             if et not in (CBEventType.LLM, CBEventType.QUERY, CBEventType.FUNCTION_CALL)
         ]
         super().__init__(
@@ -169,11 +170,13 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
                     messages = payload.get("messages", [])
                     if messages:
                         response_text = str(messages)
-            data_hash = _hash_data({
-                "event_type": "llm",
-                "start_hash": start_hash,
-                "output": response_text,
-            })
+            data_hash = _hash_data(
+                {
+                    "event_type": "llm",
+                    "start_hash": start_hash,
+                    "output": response_text,
+                }
+            )
             self._certify(
                 action_type="llm_call",
                 data_hash=data_hash,
@@ -187,11 +190,13 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
             if payload:
                 result_obj = payload.get("response", "")
                 query_result = str(result_obj) if result_obj else ""
-            data_hash = _hash_data({
-                "event_type": "query",
-                "start_hash": start_hash,
-                "output": query_result,
-            })
+            data_hash = _hash_data(
+                {
+                    "event_type": "query",
+                    "start_hash": start_hash,
+                    "output": query_result,
+                }
+            )
             self._certify(
                 action_type="query",
                 data_hash=data_hash,
@@ -206,12 +211,14 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
             if payload:
                 tool_output = str(payload.get("function_call_response", ""))
                 tool_name = str(payload.get("tool", payload.get("function_call", "unknown-tool")))
-            data_hash = _hash_data({
-                "event_type": "function_call",
-                "tool": tool_name,
-                "start_hash": start_hash,
-                "output": tool_output,
-            })
+            data_hash = _hash_data(
+                {
+                    "event_type": "function_call",
+                    "tool": tool_name,
+                    "start_hash": start_hash,
+                    "output": tool_output,
+                }
+            )
             self._certify(
                 action_type="function_call",
                 data_hash=data_hash,

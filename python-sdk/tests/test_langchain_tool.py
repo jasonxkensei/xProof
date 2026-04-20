@@ -228,9 +228,7 @@ def test_raises_value_error_when_no_hash_source(tool, mock_client):
 
 def test_policy_violation_error_message_contains_decision_id(tool, mock_client):
     """The PolicyViolationError message includes the decision_id for traceability."""
-    violations = [
-        PolicyViolation(rule="some_rule", message="Some violation", severity="error")
-    ]
+    violations = [PolicyViolation(rule="some_rule", message="Some violation", severity="error")]
     mock_client.get_policy_check.return_value = _make_violation_check(violations)
 
     with pytest.raises(PolicyViolationError) as exc_info:
@@ -271,6 +269,7 @@ def test_violation_error_message_contains_severity_and_rule(tool, mock_client):
 # ---------------------------------------------------------------------------
 # Async (_arun) tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_arun_successful_certification_returns_transaction_hash(tool, mock_client):

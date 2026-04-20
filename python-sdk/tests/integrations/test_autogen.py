@@ -93,17 +93,13 @@ def test_on_sent_returns_message_unchanged(hooks, mock_client):
 
 
 def test_received_disabled(mock_client):
-    hooks = XProofAutoGenHooks(
-        client=mock_client, agent_name="test-agent", certify_received=False
-    )
+    hooks = XProofAutoGenHooks(client=mock_client, agent_name="test-agent", certify_received=False)
     hooks.on_received("Hello")
     mock_client.certify_hash.assert_not_called()
 
 
 def test_sent_disabled(mock_client):
-    hooks = XProofAutoGenHooks(
-        client=mock_client, agent_name="test-agent", certify_sent=False
-    )
+    hooks = XProofAutoGenHooks(client=mock_client, agent_name="test-agent", certify_sent=False)
     hooks.on_send("Reply")
     mock_client.certify_hash.assert_not_called()
 
@@ -132,9 +128,7 @@ def test_hash_includes_direction(hooks, mock_client):
 
 
 def test_batch_mode_manual_flush(mock_client):
-    hooks = XProofAutoGenHooks(
-        client=mock_client, agent_name="test-agent", batch_mode=True
-    )
+    hooks = XProofAutoGenHooks(client=mock_client, agent_name="test-agent", batch_mode=True)
 
     hooks.on_received("msg 1")
     hooks.on_send("msg 2")
@@ -148,9 +142,7 @@ def test_batch_mode_manual_flush(mock_client):
 
 
 def test_batch_mode_flush_empty(mock_client):
-    hooks = XProofAutoGenHooks(
-        client=mock_client, agent_name="test-agent", batch_mode=True
-    )
+    hooks = XProofAutoGenHooks(client=mock_client, agent_name="test-agent", batch_mode=True)
     hooks.flush()
     mock_client.batch_certify.assert_not_called()
 
@@ -181,9 +173,7 @@ def test_register_xproof_hooks(mock_client):
 
 def test_register_xproof_hooks_custom_name(mock_client):
     agent = FakeAgent(name="default-name")
-    hooks = register_xproof_hooks(
-        agent, client=mock_client, agent_name="custom-name"
-    )
+    hooks = register_xproof_hooks(agent, client=mock_client, agent_name="custom-name")
     assert hooks.agent_name == "custom-name"
 
 

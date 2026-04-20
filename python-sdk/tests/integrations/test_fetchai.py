@@ -242,9 +242,7 @@ class TestCertifyAction:
         assert second_call["file_hash"] == _hash_data(outputs)
 
     def test_certify_action_batch_mode_queues_both(self, mock_client):
-        mw = XProofuAgentMiddleware(
-            client=mock_client, agent_name="batcher", batch_mode=True
-        )
+        mw = XProofuAgentMiddleware(client=mock_client, agent_name="batcher", batch_mode=True)
         result = mw.certify_action(
             action_name="batch-action",
             inputs={"i": 1},
@@ -264,18 +262,14 @@ class TestCertifyAction:
 
 class TestFlush:
     def test_batch_mode_queues_not_calls(self, mock_client):
-        mw = XProofuAgentMiddleware(
-            client=mock_client, agent_name="batcher", batch_mode=True
-        )
+        mw = XProofuAgentMiddleware(client=mock_client, agent_name="batcher", batch_mode=True)
         mw.certify_incoming(message="msg1", sender="a1")
         mw.certify_outgoing(response="resp1", recipient="a1")
         mock_client.certify_hash.assert_not_called()
         assert len(mw._pending) == 2
 
     def test_flush_sends_batch(self, mock_client):
-        mw = XProofuAgentMiddleware(
-            client=mock_client, agent_name="batcher", batch_mode=True
-        )
+        mw = XProofuAgentMiddleware(client=mock_client, agent_name="batcher", batch_mode=True)
         mw.certify_incoming(message="m", sender="a1")
         mw.certify_outgoing(response="r", recipient="a1")
         result = mw.flush()
@@ -283,25 +277,19 @@ class TestFlush:
         assert result is not None
 
     def test_flush_clears_pending(self, mock_client):
-        mw = XProofuAgentMiddleware(
-            client=mock_client, agent_name="batcher", batch_mode=True
-        )
+        mw = XProofuAgentMiddleware(client=mock_client, agent_name="batcher", batch_mode=True)
         mw.certify_incoming(message="m", sender="a1")
         mw.flush()
         assert len(mw._pending) == 0
 
     def test_flush_empty_returns_none(self, mock_client):
-        mw = XProofuAgentMiddleware(
-            client=mock_client, agent_name="batcher", batch_mode=True
-        )
+        mw = XProofuAgentMiddleware(client=mock_client, agent_name="batcher", batch_mode=True)
         result = mw.flush()
         mock_client.batch_certify.assert_not_called()
         assert result is None
 
     def test_batch_queued_result(self, mock_client):
-        mw = XProofuAgentMiddleware(
-            client=mock_client, agent_name="batcher", batch_mode=True
-        )
+        mw = XProofuAgentMiddleware(client=mock_client, agent_name="batcher", batch_mode=True)
         result = mw.certify_incoming(message="msg", sender="a1")
         assert result is not None
         assert result["queued"] is True

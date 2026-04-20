@@ -35,12 +35,14 @@ def test_certifies_plain_text(skill, mock_client):
 
 
 def test_certifies_json_input(skill, mock_client):
-    input_data = json.dumps({
-        "content": "Analysis report",
-        "file_name": "report.md",
-        "author": "analyst",
-        "why": "Quarterly review",
-    })
+    input_data = json.dumps(
+        {
+            "content": "Analysis report",
+            "file_name": "report.md",
+            "author": "analyst",
+            "why": "Quarterly review",
+        }
+    )
     skill._run(input_data)
 
     call_kwargs = mock_client.certify_hash.call_args.kwargs
@@ -104,10 +106,12 @@ def test_skill_name_and_description(skill):
 
 
 def test_author_override_in_json(skill, mock_client):
-    input_data = json.dumps({
-        "content": "output text",
-        "author": "custom-agent",
-    })
+    input_data = json.dumps(
+        {
+            "content": "output text",
+            "author": "custom-agent",
+        }
+    )
     skill._run(input_data)
     call_kwargs = mock_client.certify_hash.call_args.kwargs
     assert call_kwargs["author"] == "custom-agent"
@@ -121,12 +125,14 @@ def test_content_fallback_for_missing_key(skill, mock_client):
 
 
 def test_dict_input(skill, mock_client):
-    result = skill._run({
-        "content": "Dict-based input",
-        "file_name": "dict-test.json",
-        "author": "dict-agent",
-        "why": "Testing dict input",
-    })
+    result = skill._run(
+        {
+            "content": "Dict-based input",
+            "file_name": "dict-test.json",
+            "author": "dict-agent",
+            "why": "Testing dict input",
+        }
+    )
     mock_client.certify_hash.assert_called_once()
 
     call_kwargs = mock_client.certify_hash.call_args.kwargs

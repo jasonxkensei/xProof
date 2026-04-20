@@ -96,9 +96,7 @@ class XProofRunHooks:
         self.client.batch_certify(self._pending)
         self._pending.clear()
 
-    async def on_tool_end(
-        self, context: Any, agent: Any, tool: Any, result: Any
-    ) -> None:
+    async def on_tool_end(self, context: Any, agent: Any, tool: Any, result: Any) -> None:
         """Certify a completed tool invocation.
 
         Args:
@@ -113,11 +111,13 @@ class XProofRunHooks:
         tool_name = getattr(tool, "name", str(tool))
         agent_label = getattr(agent, "name", self.agent_name)
 
-        data_hash = _hash_data({
-            "tool": tool_name,
-            "agent": agent_label,
-            "output": str(result),
-        })
+        data_hash = _hash_data(
+            {
+                "tool": tool_name,
+                "agent": agent_label,
+                "output": str(result),
+            }
+        )
         self._certify(
             action_type="tool_end",
             data_hash=data_hash,
@@ -126,9 +126,7 @@ class XProofRunHooks:
             who_override=agent_label,
         )
 
-    async def on_agent_end(
-        self, context: Any, agent: Any, output: Any
-    ) -> None:
+    async def on_agent_end(self, context: Any, agent: Any, output: Any) -> None:
         """Certify a completed agent run.
 
         Args:
@@ -141,10 +139,12 @@ class XProofRunHooks:
 
         agent_label = getattr(agent, "name", self.agent_name)
 
-        data_hash = _hash_data({
-            "agent": agent_label,
-            "output": str(output),
-        })
+        data_hash = _hash_data(
+            {
+                "agent": agent_label,
+                "output": str(output),
+            }
+        )
         self._certify(
             action_type="agent_end",
             data_hash=data_hash,
@@ -156,19 +156,13 @@ class XProofRunHooks:
         if self.batch_mode:
             self.flush()
 
-    async def on_agent_start(
-        self, context: Any, agent: Any
-    ) -> None:
+    async def on_agent_start(self, context: Any, agent: Any) -> None:
         """Called when an agent starts. No-op by default."""
 
-    async def on_tool_start(
-        self, context: Any, agent: Any, tool: Any
-    ) -> None:
+    async def on_tool_start(self, context: Any, agent: Any, tool: Any) -> None:
         """Called when a tool starts. No-op by default."""
 
-    async def on_handoff(
-        self, context: Any, from_agent: Any, to_agent: Any
-    ) -> None:
+    async def on_handoff(self, context: Any, from_agent: Any, to_agent: Any) -> None:
         """Called on agent handoff. No-op by default."""
 
 
@@ -268,11 +262,13 @@ class XProofTracingProcessor:
                 output = getattr(span_data, "result", None)
             if output is None:
                 output = ""
-            data_hash = _hash_data({
-                "span_kind": kind,
-                "tool": tool_name,
-                "output": str(output),
-            })
+            data_hash = _hash_data(
+                {
+                    "span_kind": kind,
+                    "tool": tool_name,
+                    "output": str(output),
+                }
+            )
             self._certify(
                 action_type="tool_span_end",
                 data_hash=data_hash,
@@ -283,11 +279,13 @@ class XProofTracingProcessor:
         elif kind == "agent" and self.certify_agent_spans:
             agent_label = getattr(span_data, "name", self.agent_name)
             output = getattr(span_data, "output", "")
-            data_hash = _hash_data({
-                "span_kind": "agent",
-                "agent": agent_label,
-                "output": str(output),
-            })
+            data_hash = _hash_data(
+                {
+                    "span_kind": "agent",
+                    "agent": agent_label,
+                    "output": str(output),
+                }
+            )
             self._certify(
                 action_type="agent_span_end",
                 data_hash=data_hash,
