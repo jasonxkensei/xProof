@@ -9,7 +9,7 @@ import { paymentRateLimiter, publicSearchRateLimiter } from "../reliability";
 import { isX402Configured, verifyX402Payment, send402Response } from "../x402";
 import { recordOnBlockchain, isMultiversXConfigured } from "../blockchain";
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing";
-import { auditLogSchema, AUDIT_LOG_JSON_SCHEMA, type AgentAuditLog } from "../auditSchema";
+import { auditLogSchema, AUDIT_LOG_JSON_SCHEMA, type AgentAuditLog, REVERSIBILITY_CLASSES } from "../auditSchema";
 import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
 import { checkRateLimit, isAdminWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, getApiKeyOwnerWallet, TRIAL_QUOTA, RATE_LIMIT_MAX_VALUE, buildCanonicalId } from "./helpers";
 
@@ -155,7 +155,15 @@ export function registerProofWriteRoutes(app: Express) {
     const m = data.metadata;
     if (m.confidence_level !== undefined && m.threshold_stage === undefined) return false;
     return true;
-  }, { message: "metadata.threshold_stage is required when using confidence_level anchoring", path: ["metadata", "threshold_stage"] });
+  }, { message: "metadata.threshold_stage is required when using confidence_level anchoring", path: ["metadata", "threshold_stage"] })
+  .refine((data) => {
+    if (!data.metadata) return true;
+    const m = data.metadata;
+    if (m.reversibility_class !== undefined) {
+      if (!REVERSIBILITY_CLASSES.includes(m.reversibility_class as any)) return false;
+    }
+    return true;
+  }, { message: `metadata.reversibility_class must be one of: ${REVERSIBILITY_CLASSES.join(", ")}`, path: ["metadata", "reversibility_class"] });
 
   app.post("/api/proof", paymentRateLimiter, async (req, res) => {
     try {
@@ -654,6 +662,7 @@ export function registerProofWriteRoutes(app: Express) {
         session_id: data.session_id,
         inputs_hash: data.inputs_hash,
         ...(data.inputs_manifest ? { inputs_manifest: data.inputs_manifest } : {}),
+        ...(data.reversibility_class ? { reversibility_class: data.reversibility_class } : {}),
         file_hash: fileHash,
         blockchain: {
           network: "MultiversX",

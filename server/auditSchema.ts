@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export const REVERSIBILITY_CLASSES = ["reversible", "costly", "irreversible"] as const;
+
+export const IRREVERSIBLE_CONFIDENCE_THRESHOLD = 0.95;
+
 export const ACTION_TYPES = [
   "trade_execution",
   "code_deploy",
@@ -39,6 +43,9 @@ export const auditLogSchema = z.object({
     errorMap: () => ({ message: `decision must be one of: ${DECISIONS.join(", ")}` }),
   }),
   context: z.record(z.any()).optional(),
+  reversibility_class: z.enum(REVERSIBILITY_CLASSES, {
+    errorMap: () => ({ message: `reversibility_class must be one of: ${REVERSIBILITY_CLASSES.join(", ")}` }),
+  }).optional(),
   timestamp: z
     .string()
     .refine((v) => !isNaN(Date.parse(v)), { message: "timestamp must be a valid ISO8601 date string" }),
@@ -157,6 +164,17 @@ export const AUDIT_LOG_JSON_SCHEMA = {
       type: "object",
       description: "Optional additional metadata (strategy name, version, environment, etc.)",
       examples: [{ strategy: "momentum-v2", environment: "production", version: "1.4.2" }],
+    },
+    reversibility_class: {
+      type: "string",
+      enum: REVERSIBILITY_CLASSES,
+      description:
+        "Governance field: how reversible is this action? " +
+        "'reversible' = can be undone at low cost, 'costly' = reversible but expensive (fees, slippage, delay), " +
+        "'irreversible' = cannot be undone (on-chain settlement, data deletion, email sent). " +
+        "When reversibility_class='irreversible', confidence_level MUST be >= 0.95 — otherwise xproof flags a policy violation. " +
+        "This transforms xproof from a pure audit tool into a governance checkpoint for autonomous agents.",
+      examples: ["irreversible"],
     },
     timestamp: {
       type: "string",

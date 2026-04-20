@@ -7,6 +7,7 @@ import { computeTrustScoreByWallet } from "../trust";
 import { publicReadRateLimiter } from "../reliability";
 import { generateCertificatePDF } from "../certificateGenerator";
 import { computeDrift, DRIFT_MONITORED_FIELDS } from "./helpers";
+import { REVERSIBILITY_CLASSES, IRREVERSIBLE_CONFIDENCE_THRESHOLD } from "../auditSchema";
 
 export function registerProofReadRoutes(app: Express) {
   app.get("/api/proof/check", async (req, res) => {
@@ -170,17 +171,102 @@ export function registerProofReadRoutes(app: Express) {
       const metadataForDrift = results.map(r => (r.metadata || {}) as Record<string, any>);
       const contextDrift = computeDrift(metadataForDrift);
 
+      const policyViolations = stages
+        .filter((s) => {
+          const meta = s.metadata as Record<string, any>;
+          const rc = meta.reversibility_class as string | undefined;
+          const cl = s.confidence_level as number | null;
+          return rc === "irreversible" && cl !== null && cl < IRREVERSIBLE_CONFIDENCE_THRESHOLD;
+        })
+        .map((s) => {
+          const meta = s.metadata as Record<string, any>;
+          return {
+            proof_id: s.proof_id,
+            confidence_level: s.confidence_level,
+            reversibility_class: meta.reversibility_class,
+            threshold: IRREVERSIBLE_CONFIDENCE_THRESHOLD,
+            stage: s.threshold_stage,
+            rule: `irreversible actions require confidence_level >= ${IRREVERSIBLE_CONFIDENCE_THRESHOLD}`,
+          };
+        });
+
       return res.json({
         decision_id: decisionId,
         total_anchors: stages.length,
         current_confidence: latest.confidence_level,
         current_stage: latest.threshold_stage,
         is_finalized: latest.threshold_stage === "final",
+        policy_compliant: policyViolations.length === 0,
+        policy_violations: policyViolations,
         context_drift: contextDrift,
         stages,
       });
     } catch (error: any) {
       logger.error("Confidence trail error", { error: error.message });
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ── Governance Policy Check ──────────────────────────────────────────────
+  // Standalone endpoint: same logic as confidence-trail policy_violations,
+  // useful for agents that only care about compliance without fetching full trail.
+  app.get("/api/proofs/policy-check", publicReadRateLimiter, async (req, res) => {
+    try {
+      const decisionId = req.query.decision_id as string | undefined;
+      if (!decisionId || decisionId.trim().length === 0) {
+        return res.status(400).json({ error: "decision_id query parameter is required" });
+      }
+
+      const results = await db
+        .select({
+          id: certifications.id,
+          metadata: certifications.metadata,
+          createdAt: certifications.createdAt,
+        })
+        .from(certifications)
+        .where(and(
+          sql`${certifications.metadata}->>'decision_id' = ${decisionId}`,
+          eq(certifications.isPublic, true)
+        ))
+        .orderBy(certifications.createdAt);
+
+      if (results.length === 0) {
+        return res.status(404).json({
+          error: "No proofs found for this decision chain",
+          decision_id: decisionId,
+        });
+      }
+
+      const violations = results
+        .map((r) => {
+          const meta = (r.metadata || {}) as Record<string, any>;
+          return {
+            proof_id: r.id,
+            confidence_level: meta.confidence_level ?? null,
+            reversibility_class: meta.reversibility_class ?? null,
+            threshold_stage: meta.threshold_stage ?? null,
+          };
+        })
+        .filter((s) =>
+          s.reversibility_class === "irreversible" &&
+          s.confidence_level !== null &&
+          (s.confidence_level as number) < IRREVERSIBLE_CONFIDENCE_THRESHOLD
+        )
+        .map((s) => ({
+          ...s,
+          threshold: IRREVERSIBLE_CONFIDENCE_THRESHOLD,
+          rule: `irreversible actions require confidence_level >= ${IRREVERSIBLE_CONFIDENCE_THRESHOLD}`,
+        }));
+
+      return res.json({
+        decision_id: decisionId,
+        total_anchors: results.length,
+        policy_compliant: violations.length === 0,
+        policy_violations: violations,
+        checked_at: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      logger.error("Policy check error", { error: error.message });
       return res.status(500).json({ error: "Internal server error" });
     }
   });

@@ -127,7 +127,7 @@ export async function createMcpServer(ctx: McpContext) {
 
   server.tool(
     "certify_with_confidence",
-    `Create a staged blockchain certification with a confidence score. Use this when your decision builds progressively — certify at 60% (initial assessment), 80% (pre-commitment), and 100% (final decision). Each stage shares the same decision_id, creating an on-chain audit trail of the decision process. Cost: $${currentPriceUsd} per certification.`,
+    `Create a staged blockchain certification with a confidence score. Use this when your decision builds progressively — certify at 60% (initial assessment), 80% (pre-commitment), and 100% (final decision). Each stage shares the same decision_id, creating an on-chain audit trail of the decision process. Governance: set reversibility_class='irreversible' for actions that cannot be undone — xproof will flag a policy violation if confidence_level < 0.95. Cost: $${currentPriceUsd} per certification.`,
     {
       file_hash: z.string().length(64).regex(/^[a-fA-F0-9]+$/).describe("SHA-256 hash of the decision or output file (64 hex characters)"),
       filename: z.string().min(1).describe("Original filename with extension (e.g. decision.json)"),
@@ -137,8 +137,9 @@ export async function createMcpServer(ctx: McpContext) {
       author_name: z.string().optional().describe("Name of the certifying agent (default: AI Agent)"),
       why: z.string().optional().describe("Reason or instruction hash driving this decision"),
       who: z.string().optional().describe("Agent identity (wallet address, name, or agent ID)"),
+      reversibility_class: z.enum(["reversible", "costly", "irreversible"]).optional().describe("Governance: how reversible is this action? 'reversible' = can be undone, 'costly' = reversible but expensive, 'irreversible' = cannot be undone (on-chain settlement, data deletion, sent email). When 'irreversible', confidence_level must be >= 0.95 or xproof flags a policy violation."),
     },
-    async ({ file_hash, filename, decision_id, confidence_level, threshold_stage, author_name, why, who }) => {
+    async ({ file_hash, filename, decision_id, confidence_level, threshold_stage, author_name, why, who, reversibility_class }) => {
       try {
         if (!auth.valid || !auth.keyHash) {
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "Valid API key required. Include Authorization: Bearer pm_xxx header." }) }], isError: true };
@@ -164,6 +165,7 @@ export async function createMcpServer(ctx: McpContext) {
         };
         if (why) metadata.why = why;
         if (who) metadata.who = who;
+        if (reversibility_class) metadata.reversibility_class = reversibility_class;
 
         const [certification] = await db.insert(certifications).values({
           userId: systemUser.id!,
@@ -187,6 +189,7 @@ export async function createMcpServer(ctx: McpContext) {
               decision_id,
               confidence_level,
               threshold_stage,
+              ...(reversibility_class ? { reversibility_class } : {}),
               status: "certified",
               file_hash: certification.fileHash,
               filename: certification.fileName,
@@ -194,7 +197,7 @@ export async function createMcpServer(ctx: McpContext) {
               certificate_url: `${baseUrl}/api/certificates/${certification.id}.pdf`,
               blockchain: { network: "MultiversX", transaction_hash: result.transactionHash, explorer_url: result.transactionUrl },
               timestamp: certification.createdAt?.toISOString(),
-              message: `Confidence stage '${threshold_stage}' certified at ${Math.round(confidence_level * 100)}%. Use decision_id '${decision_id}' for subsequent stages.`,
+              message: `Confidence stage '${threshold_stage}' certified at ${Math.round(confidence_level * 100)}%.${reversibility_class === "irreversible" && confidence_level < 0.95 ? " WARNING: policy_violation — irreversible action certified below 0.95 confidence threshold." : ""} Use decision_id '${decision_id}' for subsequent stages.`,
             }),
           }],
         };
@@ -400,7 +403,7 @@ export async function createMcpServer(ctx: McpContext) {
 
   server.tool(
     "audit_agent_session",
-    `Certify an AI agent's work session on the MultiversX blockchain BEFORE executing any critical action (trade, deploy, data access). Returns a proof_id compliance certificate. The agent MUST call this tool before acting — certification failure blocks execution. Schema: ${baseUrl}/.well-known/agent-audit-schema.json`,
+    `Certify an AI agent's work session on the MultiversX blockchain BEFORE executing any critical action (trade, deploy, data access). Returns a proof_id compliance certificate. The agent MUST call this tool before acting — certification failure blocks execution. Governance: set reversibility_class='irreversible' for actions that cannot be undone — a policy violation is flagged if confidence_level < 0.95 on irreversible decisions. Schema: ${baseUrl}/.well-known/agent-audit-schema.json`,
     {
       agent_id: z.string().min(1).describe("Identifier of the agent making the decision"),
       session_id: z.string().min(1).describe("Unique session identifier (UUID or timestamp-based)"),
@@ -412,6 +415,7 @@ export async function createMcpServer(ctx: McpContext) {
       timestamp: z.string().describe("ISO 8601 timestamp of when the decision was made"),
       risk_summary: z.string().optional().describe("Optional brief risk analysis justifying the decision"),
       context: z.record(z.unknown()).optional().describe("Optional additional context (model version, environment, tool chain, etc.)"),
+      reversibility_class: z.enum(["reversible", "costly", "irreversible"]).optional().describe("Governance: how reversible is this action? 'reversible' = can be undone at low cost, 'costly' = reversible but expensive (fees, slippage, delay), 'irreversible' = cannot be undone (on-chain settlement, data deletion, email sent). When 'irreversible', a confidence_level >= 0.95 is required to be policy-compliant."),
     },
     async (params) => {
       try {
