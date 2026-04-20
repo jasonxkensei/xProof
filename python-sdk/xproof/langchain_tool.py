@@ -2,7 +2,7 @@
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Optional, Type, cast
 
 try:
     from langchain_core.tools import BaseTool
@@ -19,10 +19,10 @@ except ImportError:
 
 from .client import XProofClient
 from .exceptions import PolicyViolationError
-from .models import Certification
+from .models import Certification, ReversibilityClass
 
 
-class _CertifyInput(BaseModel):
+class _CertifyInput(BaseModel):  # type: ignore[misc]  # BaseModel is Any when langchain is not installed
     """Input schema for XProofCertifyTool.
 
     Mirrors the full parameter surface of
@@ -117,7 +117,7 @@ class _CertifyInput(BaseModel):
     )
 
 
-class XProofCertifyTool(BaseTool):
+class XProofCertifyTool(BaseTool):  # type: ignore[misc]  # BaseTool is Any when langchain is not installed
     """LangChain tool that certifies an agent decision in one line.
 
     Wraps :meth:`~xproof.XProofClient.certify_with_confidence` and the
@@ -218,6 +218,8 @@ class XProofCertifyTool(BaseTool):
             PolicyViolationError: If ``get_policy_check`` reports one or
                 more violations.
         """
+        assert self._client is not None  # always set in __init__
+
         if decision_text:
             resolved_hash = hashlib.sha256(decision_text.encode()).hexdigest()
         elif file_hash:
@@ -242,7 +244,7 @@ class XProofCertifyTool(BaseTool):
             what=resolved_what,
             when=resolved_when,
             why=why,
-            reversibility_class=reversibility_class,
+            reversibility_class=cast(Optional[ReversibilityClass], reversibility_class),
             metadata=metadata,
         )
 

@@ -26,7 +26,7 @@ def _hash_data(data: Any) -> str:
     return hashlib.sha256(serialized.encode()).hexdigest()
 
 
-class XProofCallbackHandler(BaseCallbackHandler):
+class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseCallbackHandler is Any when llama-index is not installed
     """LlamaIndex callback handler that certifies agent actions on-chain.
 
     Automatically creates blockchain-anchored proofs for LLM calls,
@@ -86,7 +86,7 @@ class XProofCallbackHandler(BaseCallbackHandler):
         context: str = "",
         event_id: Optional[str] = None,
     ) -> None:
-        entry = {
+        entry: Dict[str, Any] = {
             "file_hash": data_hash,
             "file_name": file_name,
             "author": self.agent_name,

@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ..client import XProofClient
+from ..models import BatchResult
 
 
 def _hash_data(data: Any) -> str:
@@ -82,8 +83,8 @@ class XProofuAgentMiddleware:
     ) -> None:
         self.client = client or XProofClient(api_key=api_key)
         self.agent_name = agent_name
-        self.certify_incoming = certify_incoming
-        self.certify_outgoing = certify_outgoing
+        self._cert_incoming: bool = certify_incoming
+        self._cert_outgoing: bool = certify_outgoing
         self.batch_mode = batch_mode
         self._pending: List[Dict[str, Any]] = []
 
@@ -152,7 +153,7 @@ class XProofuAgentMiddleware:
             Dict with ``proof_id``, ``file_hash``, ``transaction_hash``,
             ``verify_url``; or ``None`` if *certify_incoming* is disabled.
         """
-        if not self.certify_incoming:
+        if not self._cert_incoming:
             return None
 
         msg_dict = (
@@ -191,7 +192,7 @@ class XProofuAgentMiddleware:
             Dict with ``proof_id``, ``file_hash``, ``transaction_hash``,
             ``verify_url``; or ``None`` if *certify_outgoing* is disabled.
         """
-        if not self.certify_outgoing:
+        if not self._cert_outgoing:
             return None
 
         resp_dict = (
@@ -280,13 +281,13 @@ class XProofuAgentMiddleware:
             "what_proof": what_proof,
         }
 
-    def flush(self) -> Optional[Dict[str, Any]]:
+    def flush(self) -> Optional[BatchResult]:
         """Send all pending certifications in a single batch.
 
         Only relevant when *batch_mode* is ``True``.
 
         Returns:
-            The batch API response dict, or ``None`` if the queue was empty.
+            The :class:`~xproof.models.BatchResult`, or ``None`` if the queue was empty.
         """
         if not self._pending:
             return None
@@ -299,7 +300,7 @@ def xproof_handler(
     middleware: XProofuAgentMiddleware,
     incoming_context: str = "Incoming uAgent message",
     outgoing_context: str = "uAgent response",
-) -> Callable:
+) -> Callable[..., Any]:
     """Decorator that wraps a uAgent ``on_message`` handler with xProof certification.
 
     Certifies the incoming message (WHY) before the handler runs, then
@@ -327,7 +328,7 @@ def xproof_handler(
             result = await run_research(msg.topic)
             return result  # returned value is certified as WHAT
     """
-    def decorator(fn: Callable) -> Callable:
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
         async def wrapper(ctx: Any, sender: str, msg: Any) -> Any:
             decision_id = str(uuid.uuid4())
@@ -387,7 +388,7 @@ def wrap_agent(
         agent = Agent(name="price-oracle", seed="secret")
         xp = wrap_agent(agent, api_key="pm_...")
     """
-    name = agent_name or getattr(agent, "name", "uagent")
+    name: str = str(agent_name or getattr(agent, "name", "uagent"))
     return XProofuAgentMiddleware(
         api_key=api_key,
         client=client,

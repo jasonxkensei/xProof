@@ -77,7 +77,11 @@ markers = [
 
 [tool.mypy]
 files = ["xproof"]
-python_version = "3.8"
+# mypy 1.0+ dropped Python 3.8 support; we type-check against 3.9 as the
+# lowest supported version that mypy can target.  Runtime support still
+# starts at 3.8 (see requires-python above) — no 3.8-exclusive syntax is
+# used in the SDK source, so no runtime compatibility gap exists.
+python_version = "3.9"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -87,6 +91,26 @@ check_untyped_defs = true
 no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
+exclude = ["\\.pythonlibs/", "^build/", "^dist/"]
+
+# Optional integration dependencies — each module is gated behind
+# try/except ImportError in the source.  follow_imports = "skip" prevents
+# mypy from traversing transitive imports in installed packages (e.g.
+# langchain_core → pytest code that uses Python 3.10+ match syntax).
+[[tool.mypy.overrides]]
+module = [
+    "autogen",         # from autogen import ConversableAgent (autogen.py)
+    "crewai.*",        # from crewai.tools import BaseTool   (crewai.py)
+    "langchain.*",     # from langchain.callbacks.base       (langchain.py fallback)
+    "langchain_core.*", # from langchain_core.callbacks      (langchain.py, langchain_tool.py)
+    "llama_index.*",   # from llama_index.core.callbacks.*   (llamaindex.py)
+    "agents",          # from agents import RunHooks          (openai_agents.py)
+    "agents.*",        # from agents.tracing import …        (openai_agents.py)
+    "pydantic",        # from pydantic import BaseModel       (langchain_tool.py fallback)
+    "pydantic.*",      # from pydantic.v1 import BaseModel   (langchain_tool.py)
+]
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.ruff]
 src = ["xproof"]

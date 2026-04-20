@@ -83,7 +83,7 @@ XProofTool = XProofCertifyTool
 
 if CrewAIBaseTool is not None:
 
-    class XProofCrewTool(CrewAIBaseTool):
+    class XProofCrewTool(CrewAIBaseTool):  # type: ignore[misc]  # CrewAIBaseTool is Any when crewai is not installed
         """Native CrewAI ``BaseTool`` for xProof certification.
 
         Requires the ``crewai`` package. Wraps :class:`XProofCertifyTool`
@@ -110,7 +110,7 @@ if CrewAIBaseTool is not None:
             self._xproof_tool = XProofCertifyTool(api_key=api_key, agent_name=agent_name)
 
         def _run(self, input_text: str) -> str:
-            return self._xproof_tool._run(input_text)
+            return str(self._xproof_tool._run(input_text))
 
 
 class XProofCrewCallback:

@@ -72,7 +72,7 @@ class XProofAutoGenHooks:
         file_name: str,
         context: str = "",
     ) -> None:
-        entry = {
+        entry: Dict[str, Any] = {
             "file_hash": data_hash,
             "file_name": file_name,
             "author": self.agent_name,
@@ -175,7 +175,7 @@ def register_xproof_hooks(
         assistant = AssistantAgent("analyst", llm_config={...})
         hooks = register_xproof_hooks(assistant, api_key="pm_...")
     """
-    name = agent_name or getattr(agent, "name", "autogen-agent")
+    name: str = str(agent_name or getattr(agent, "name", "autogen-agent"))
     hooks = XProofAutoGenHooks(
         api_key=api_key,
         client=client,
@@ -205,7 +205,7 @@ except ImportError:
 
 if _ConversableAgent is not None:
 
-    class XProofConversableAgent(_ConversableAgent):
+    class XProofConversableAgent(_ConversableAgent):  # type: ignore[misc]  # _ConversableAgent is Any when pyautogen is not installed
         """AutoGen ``ConversableAgent`` with built-in xProof certification.
 
         Requires the ``pyautogen`` package. On init, automatically registers

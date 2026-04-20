@@ -64,7 +64,7 @@ class XProofRunHooks:
         who_override: Optional[str] = None,
     ) -> None:
         who = who_override or self.agent_name
-        entry = {
+        entry: Dict[str, Any] = {
             "file_hash": data_hash,
             "file_name": file_name,
             "author": who,
@@ -174,7 +174,7 @@ class XProofRunHooks:
 try:
     from agents import RunHooks as _RunHooks
 
-    class XProofRunHooks(XProofRunHooks, _RunHooks):  # type: ignore[no-redef]
+    class XProofRunHooks(XProofRunHooks, _RunHooks):  # type: ignore[no-redef, misc]  # _RunHooks is Any when openai-agents is not installed; no-redef for conditional redefinition
         pass
 except ImportError:
     pass
@@ -219,7 +219,7 @@ class XProofTracingProcessor:
         who_override: Optional[str] = None,
     ) -> None:
         who = who_override or self.agent_name
-        entry = {
+        entry: Dict[str, Any] = {
             "file_hash": data_hash,
             "file_name": file_name,
             "author": who,
@@ -305,7 +305,7 @@ class XProofTracingProcessor:
 try:
     from agents.tracing import TracingProcessor as _TracingProcessor
 
-    class XProofTracingProcessor(XProofTracingProcessor, _TracingProcessor):  # type: ignore[no-redef]
+    class XProofTracingProcessor(XProofTracingProcessor, _TracingProcessor):  # type: ignore[no-redef, misc]  # _TracingProcessor is Any when openai-agents is not installed; no-redef for conditional redefinition
         pass
 except ImportError:
     pass
