@@ -324,6 +324,82 @@ describe("XProofClient", () => {
     expect(cert.createdAt).toBe("2026-03-20T12:00:00Z");
   });
 
+  describe("getPolicyCheck()", () => {
+    it("returns compliant result with no violations", async () => {
+      const fetchMock = mockFetch(200, {
+        decision_id: "dec-001",
+        total_anchors: 3,
+        policy_compliant: true,
+        policy_violations: [],
+        checked_at: "2026-04-20T10:00:00Z",
+      });
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient();
+      const result = await client.getPolicyCheck("dec-001");
+
+      expect(result.decisionId).toBe("dec-001");
+      expect(result.totalAnchors).toBe(3);
+      expect(result.policyCompliant).toBe(true);
+      expect(result.policyViolations).toHaveLength(0);
+      expect(result.checkedAt).toBe("2026-04-20T10:00:00Z");
+
+      const [url] = fetchMock.mock.calls[0];
+      expect(url).toContain("/api/proofs/policy-check?decision_id=dec-001");
+    });
+
+    it("returns non-compliant result with mapped violations", async () => {
+      const fetchMock = mockFetch(200, {
+        decision_id: "dec-002",
+        total_anchors: 2,
+        policy_compliant: false,
+        policy_violations: [
+          {
+            proof_id: "p-v1",
+            confidence_level: 0.7,
+            reversibility_class: "irreversible",
+            threshold_stage: "final",
+            threshold: 0.95,
+            rule: "confidence_below_threshold",
+          },
+        ],
+        checked_at: "2026-04-20T11:00:00Z",
+      });
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient();
+      const result = await client.getPolicyCheck("dec-002");
+
+      expect(result.policyCompliant).toBe(false);
+      expect(result.policyViolations).toHaveLength(1);
+      const v = result.policyViolations[0];
+      expect(v.proofId).toBe("p-v1");
+      expect(v.confidenceLevel).toBe(0.7);
+      expect(v.reversibilityClass).toBe("irreversible");
+      expect(v.thresholdStage).toBe("final");
+      expect(v.threshold).toBe(0.95);
+      expect(v.rule).toBe("confidence_below_threshold");
+    });
+
+    it("throws ValidationError for empty decisionId without hitting the network", async () => {
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient();
+
+      await expect(client.getPolicyCheck("")).rejects.toThrow(ValidationError);
+      await expect(client.getPolicyCheck("   ")).rejects.toThrow(ValidationError);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("propagates NotFoundError on 404 response", async () => {
+      globalThis.fetch = mockFetch(404, { message: "Decision not found" });
+
+      const client = new XProofClient();
+      await expect(client.getPolicyCheck("dec-missing")).rejects.toThrow(NotFoundError);
+    });
+  });
+
   describe("certify (file-path)", () => {
     it("hashes file and delegates to certifyHash", async () => {
       const fetchMock = mockFetch(201, {
