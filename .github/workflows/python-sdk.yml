@@ -39,6 +39,10 @@ jobs:
         working-directory: python-sdk
         run: make lint
 
+      - name: Run type checker (mypy)
+        working-directory: python-sdk
+        run: make typecheck
+
       - name: Run tests
         working-directory: python-sdk
         run: make test
