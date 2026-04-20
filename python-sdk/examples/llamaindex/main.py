@@ -23,7 +23,6 @@ Production usage::
 """
 
 from llama_index.core.callbacks.schema import CBEventType
-
 from xproof import XProofClient
 from xproof.integrations.llamaindex import XProofCallbackHandler
 
@@ -79,7 +78,7 @@ def main():
 
     print("--- Ending trace (triggers batch flush) ---")
     handler.end_trace(trace_id="demo-trace")
-    print(f"  Flushed pending certifications (all sent)")
+    print("  Flushed pending certifications (all sent)")
     print()
     print("All LlamaIndex interactions are independently verifiable on-chain.")
 

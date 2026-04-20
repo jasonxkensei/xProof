@@ -35,9 +35,7 @@ class XProofRunHooks:
         result = await Runner.run(agent, input="...", hooks=hooks)
     """
 
-    def __init__(
-        self, client=None, api_key: str = "", agent_name: str = "openai-agent"
-    ):
+    def __init__(self, client=None, api_key: str = "", agent_name: str = "openai-agent"):
         self.client = client or XProofClient(api_key=api_key)
         self.agent_name = agent_name
 
@@ -91,9 +89,7 @@ class XProofTracingProcessor:
         add_trace_processor(XProofTracingProcessor(api_key="pm_..."))
     """
 
-    def __init__(
-        self, client=None, api_key: str = "", agent_name: str = "openai-agent"
-    ):
+    def __init__(self, client=None, api_key: str = "", agent_name: str = "openai-agent"):
         self.client = client or XProofClient(api_key=api_key)
         self.agent_name = agent_name
 
@@ -167,9 +163,7 @@ async def demo_run_hooks():
 
     search_tool = FakeTool("web_search")
     await hooks.on_tool_start(ctx, agent, search_tool)
-    await hooks.on_tool_end(
-        ctx, agent, search_tool, "Found 10 relevant papers on AI safety"
-    )
+    await hooks.on_tool_end(ctx, agent, search_tool, "Found 10 relevant papers on AI safety")
     print(f"Tool '{search_tool.name}' completed -> certified")
 
     calc_tool = FakeTool("calculator")

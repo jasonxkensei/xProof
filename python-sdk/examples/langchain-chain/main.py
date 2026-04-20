@@ -11,6 +11,7 @@ chain's callbacks parameter.
 """
 
 import uuid
+
 from xproof import XProofClient
 from xproof.integrations.langchain import XProofCallbackHandler
 
@@ -40,10 +41,14 @@ def main():
     print("  LLM call 1 started: 'What is the capital of France?'")
 
     handler.on_llm_end(
-        response=type("Response", (), {
-            "generations": [[type("Gen", (), {"text": "Paris is the capital of France."})()]],
-            "llm_output": {"model_name": "gpt-4"},
-        })(),
+        response=type(
+            "Response",
+            (),
+            {
+                "generations": [[type("Gen", (), {"text": "Paris is the capital of France."})()]],
+                "llm_output": {"model_name": "gpt-4"},
+            },
+        )(),
         run_id=run_id_1,
     )
     print("  LLM call 1 completed: 'Paris is the capital of France.'")
@@ -59,10 +64,14 @@ def main():
     print("  LLM call 2 started: 'Translate hello to Spanish'")
 
     handler.on_llm_end(
-        response=type("Response", (), {
-            "generations": [[type("Gen", (), {"text": "Hola"})()]],
-            "llm_output": {"model_name": "gpt-4"},
-        })(),
+        response=type(
+            "Response",
+            (),
+            {
+                "generations": [[type("Gen", (), {"text": "Hola"})()]],
+                "llm_output": {"model_name": "gpt-4"},
+            },
+        )(),
         run_id=run_id_2,
     )
     print("  LLM call 2 completed: 'Hola'")

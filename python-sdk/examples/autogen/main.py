@@ -52,8 +52,8 @@ def main():
     alice = FakeAgent("alice")
     bob = FakeAgent("bob")
 
-    alice_hooks = register_xproof_hooks(alice, client=mock_client, agent_name="alice")
-    bob_hooks = register_xproof_hooks(bob, client=mock_client, agent_name="bob")
+    register_xproof_hooks(alice, client=mock_client, agent_name="alice")
+    register_xproof_hooks(bob, client=mock_client, agent_name="bob")
 
     print("=== Two-Agent Conversation with xProof Certification ===\n")
 

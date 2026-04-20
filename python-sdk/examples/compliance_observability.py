@@ -21,12 +21,12 @@ import json
 import logging
 import sys
 import urllib.request
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Dict, Generator, List
+from typing import Any, Optional
 from unittest.mock import MagicMock, patch
 
 from xproof.models import ConfidenceTrail, PolicyCheckResult, PolicyViolation
-
 
 logger = logging.getLogger("xproof.compliance")
 logging.basicConfig(
@@ -41,18 +41,18 @@ VIOLATION_WEBHOOK_URL = None
 def _emit_violation(decision_id: str, violation: PolicyViolation) -> None:
     """Emit one structured log line and, optionally, a webhook call."""
     payload = {
-        "event":       "policy_violation",
+        "event": "policy_violation",
         "decision_id": decision_id,
-        "rule":        violation.rule,
-        "severity":    violation.severity,
-        "message":     violation.message,
+        "rule": violation.rule,
+        "severity": violation.severity,
+        "message": violation.message,
     }
     logger.error(json.dumps(payload))
 
     if VIOLATION_WEBHOOK_URL:
         try:
             body = json.dumps(payload).encode()
-            req  = urllib.request.Request(
+            req = urllib.request.Request(
                 VIOLATION_WEBHOOK_URL,
                 data=body,
                 headers={"Content-Type": "application/json"},
@@ -70,46 +70,48 @@ def build_mock_client(decision_id: str) -> MagicMock:
     calls."""
 
     violation_data = {
-        "rule":     "data-retention-90d",
+        "rule": "data-retention-90d",
         "severity": "error",
-        "message":  "Document retention period exceeds the 90-day policy limit.",
+        "message": "Document retention period exceeds the 90-day policy limit.",
     }
 
-    policy_check = PolicyCheckResult.from_dict({
-        "decision_id":      decision_id,
-        "total_anchors":    2,
-        "policy_compliant": False,
-        "policy_violations": [violation_data],
-        "checked_at":       "2026-04-20T12:00:00Z",
-    })
+    policy_check = PolicyCheckResult.from_dict(
+        {
+            "decision_id": decision_id,
+            "total_anchors": 2,
+            "policy_compliant": False,
+            "policy_violations": [violation_data],
+            "checked_at": "2026-04-20T12:00:00Z",
+        }
+    )
 
     trail_raw = {
-        "decision_id":       decision_id,
-        "total_anchors":     2,
+        "decision_id": decision_id,
+        "total_anchors": 2,
         "current_confidence": 0.72,
-        "current_stage":     "review",
-        "is_finalized":      False,
-        "policy_compliant":  False,
+        "current_stage": "review",
+        "is_finalized": False,
+        "policy_compliant": False,
         "policy_violations": [violation_data],
         "stages": [
             {
-                "proof_id":         "proof-stage-1",
+                "proof_id": "proof-stage-1",
                 "confidence_level": 0.50,
-                "threshold_stage":  "draft",
+                "threshold_stage": "draft",
                 "reversibility_class": "reversible",
-                "anchored_at":      "2026-04-20T11:00:00Z",
+                "anchored_at": "2026-04-20T11:00:00Z",
                 "transaction_hash": "0xabc123",
-                "transaction_url":  "https://explorer.multiversx.com/transactions/0xabc123",
+                "transaction_url": "https://explorer.multiversx.com/transactions/0xabc123",
                 "policy_violations": [],
             },
             {
-                "proof_id":         "proof-stage-2",
+                "proof_id": "proof-stage-2",
                 "confidence_level": 0.72,
-                "threshold_stage":  "review",
+                "threshold_stage": "review",
                 "reversibility_class": "costly",
-                "anchored_at":      "2026-04-20T12:00:00Z",
+                "anchored_at": "2026-04-20T12:00:00Z",
                 "transaction_hash": "0xdef456",
-                "transaction_url":  "https://explorer.multiversx.com/transactions/0xdef456",
+                "transaction_url": "https://explorer.multiversx.com/transactions/0xdef456",
                 "policy_violations": [violation_data],
             },
         ],
@@ -130,50 +132,62 @@ def run(decision_id: str) -> None:
     check = client.get_policy_check(decision_id)
     assert check.decision_id == decision_id, "get_policy_check must echo back the decision_id"
 
-    emitted: List[Dict[str, Any]] = []
+    emitted: list[dict[str, Any]] = []
     trail_stages = 0
 
     if not check.policy_compliant:
         for v in check.policy_violations:
             _emit_violation(decision_id, v)
-            emitted.append({
-                "rule":     v.rule,
-                "severity": v.severity,
-                "message":  v.message,
-            })
+            emitted.append(
+                {
+                    "rule": v.rule,
+                    "severity": v.severity,
+                    "message": v.message,
+                }
+            )
 
         trail = client.get_confidence_trail(decision_id)
         trail_stages = len(trail.stages)
-        logger.error(json.dumps({
-            "event":       "audit_trail",
-            "decision_id": decision_id,
-            "trail":       trail.raw,
-        }))
+        logger.error(
+            json.dumps(
+                {
+                    "event": "audit_trail",
+                    "decision_id": decision_id,
+                    "trail": trail.raw,
+                }
+            )
+        )
 
         assert trail.decision_id == decision_id, "Trail decision_id must match"
         assert trail_stages == 2, "Trail must contain two stage anchors"
-        assert trail.stages[1].transaction_hash == "0xdef456", \
+        assert trail.stages[1].transaction_hash == "0xdef456", (
             "Second stage transaction hash must be 0xdef456"
+        )
 
     assert len(emitted) == 1, "Exactly one violation must have been emitted"
-    assert emitted[0]["rule"] == "data-retention-90d", \
+    assert emitted[0]["rule"] == "data-retention-90d", (
         "Emitted violation rule must match the stubbed rule"
+    )
 
     client.get_policy_check.assert_called_once_with(decision_id)
     client.get_confidence_trail.assert_called_once_with(decision_id)
 
-    print(json.dumps({
-        "result":       "ok",
-        "decision_id":  decision_id,
-        "violations":   len(emitted),
-        "trail_stages": trail_stages,
-    }))
+    print(
+        json.dumps(
+            {
+                "result": "ok",
+                "decision_id": decision_id,
+                "violations": len(emitted),
+                "trail_stages": trail_stages,
+            }
+        )
+    )
 
 
 @contextmanager
-def _capture_logs(level: int = logging.WARNING) -> Generator[List[str], None, None]:
+def _capture_logs(level: int = logging.WARNING) -> Generator[list[str], None, None]:
     """Context manager that captures log records as JSON strings."""
-    captured: List[str] = []
+    captured: list[str] = []
 
     class _Capture(logging.Handler):
         def emit(self, record: logging.LogRecord) -> None:
@@ -192,22 +206,22 @@ def _capture_logs(level: int = logging.WARNING) -> Generator[List[str], None, No
 def _emit_violation_with_url(
     decision_id: str,
     violation: PolicyViolation,
-    webhook_url: str | None,
+    webhook_url: Optional[str],
 ) -> None:
     """Variant of _emit_violation with an explicit webhook_url parameter (for tests)."""
     payload = {
-        "event":       "policy_violation",
+        "event": "policy_violation",
         "decision_id": decision_id,
-        "rule":        violation.rule,
-        "severity":    violation.severity,
-        "message":     violation.message,
+        "rule": violation.rule,
+        "severity": violation.severity,
+        "message": violation.message,
     }
     logger.error(json.dumps(payload))
 
     if webhook_url:
         try:
             body = json.dumps(payload).encode()
-            req  = urllib.request.Request(
+            req = urllib.request.Request(
                 webhook_url,
                 data=body,
                 headers={"Content-Type": "application/json"},
@@ -229,15 +243,16 @@ def run_with_webhook_success(decision_id: str) -> None:
 
     with patch("urllib.request.urlopen", return_value=mock_response) as mock_open:
         client = build_mock_client(decision_id)
-        check  = client.get_policy_check(decision_id)
+        check = client.get_policy_check(decision_id)
         if not check.policy_compliant:
             for v in check.policy_violations:
                 _emit_violation_with_url(decision_id, v, webhook_url)
 
         mock_open.assert_called_once()
         call_args = mock_open.call_args[0][0]
-        assert isinstance(call_args, urllib.request.Request), \
+        assert isinstance(call_args, urllib.request.Request), (
             "urlopen must receive a Request object"
+        )
         body = json.loads(call_args.data.decode())
         assert body["event"] == "policy_violation", "Webhook payload must include event"
         assert body["decision_id"] == decision_id, "Webhook payload must include decision_id"
@@ -252,18 +267,16 @@ def run_with_webhook_failure(decision_id: str) -> None:
     with _capture_logs() as logs:
         with patch("urllib.request.urlopen", side_effect=OSError("connection refused")):
             client = build_mock_client(decision_id)
-            check  = client.get_policy_check(decision_id)
+            check = client.get_policy_check(decision_id)
             if not check.policy_compliant:
                 for v in check.policy_violations:
                     _emit_violation_with_url(decision_id, v, webhook_url)  # must NOT raise
 
-    warning_events = [
-        json.loads(l) for l in logs
-        if "webhook_error" in l
-    ]
+    warning_events = [json.loads(line) for line in logs if "webhook_error" in line]
     assert warning_events, "A webhook_error warning must be logged on delivery failure"
-    assert "connection refused" in warning_events[0]["detail"], \
+    assert "connection refused" in warning_events[0]["detail"], (
         "webhook_error detail must include the original exception message"
+    )
 
     print(json.dumps({"result": "ok", "webhook": "failure_logged_not_raised"}))
 

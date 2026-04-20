@@ -37,14 +37,13 @@ try:
     from langchain_core.runnables import RunnableLambda
 except ImportError as exc:
     raise SystemExit(
-        "langchain-core is required for this example.\n"
-        "Install it with:  pip install langchain-core"
+        "langchain-core is required for this example.\nInstall it with:  pip install langchain-core"
     ) from exc
 
 from xproof.integrations.crewai import XProofCertifyTool
 
-
 # ── Mock helpers ──────────────────────────────────────────────────────────────
+
 
 def build_mock_tool() -> XProofCertifyTool:
     """Return an XProofCertifyTool backed by a mock client."""
@@ -66,11 +65,12 @@ def build_mock_tool() -> XProofCertifyTool:
 
 async def mock_llm_call(prompt: str) -> str:
     """Simulate an async LLM response."""
-    await asyncio.sleep(0)          # yield to the event loop (real LLM would await I/O)
+    await asyncio.sleep(0)  # yield to the event loop (real LLM would await I/O)
     return f"[LLM answer to: {prompt!r}]"
 
 
 # ── Async LCEL chain ──────────────────────────────────────────────────────────
+
 
 def build_chain(tool: XProofCertifyTool) -> Any:
     """Build a two-step async LCEL chain:
@@ -95,9 +95,9 @@ def build_chain(tool: XProofCertifyTool) -> Any:
         result = json.loads(result_json)
         return {
             **data,
-            "proof_id":   result.get("proof_id"),
-            "file_hash":  result.get("file_hash"),
-            "tx_hash":    result.get("transaction_hash"),
+            "proof_id": result.get("proof_id"),
+            "file_hash": result.get("file_hash"),
+            "tx_hash": result.get("transaction_hash"),
         }
 
     return RunnableLambda(llm_step) | RunnableLambda(certify_step)
@@ -105,8 +105,9 @@ def build_chain(tool: XProofCertifyTool) -> Any:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+
 async def main() -> None:
-    tool  = build_mock_tool()
+    tool = build_mock_tool()
     chain = build_chain(tool)
 
     prompts = [
