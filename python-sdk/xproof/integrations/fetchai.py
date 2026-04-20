@@ -26,7 +26,7 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Optional
 
 from ..client import XProofClient
 from ..models import BatchResult, CertifyEntry
@@ -118,7 +118,7 @@ class XProofuAgentMiddleware:
         self._cert_incoming: bool = certify_incoming
         self._cert_outgoing: bool = certify_outgoing
         self.batch_mode = batch_mode
-        self._pending: List[CertifyEntry] = []
+        self._pending: list[CertifyEntry] = []
 
     @property
     def certify_incoming(self) -> "_CertFlag":
@@ -160,10 +160,10 @@ class XProofuAgentMiddleware:
         file_name: str,
         action_type: str,
         context: str,
-        extra_metadata: Optional[Dict[str, Any]] = None,
+        extra_metadata: Optional[dict[str, Any]] = None,
         decision_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
-        metadata: Dict[str, Any] = {
+    ) -> Optional[dict[str, Any]]:
+        metadata: dict[str, Any] = {
             "who": self.agent_name,
             "what": file_hash,
             "when": _now_iso(),
@@ -206,7 +206,7 @@ class XProofuAgentMiddleware:
         sender: str = "unknown",
         context: str = "Incoming uAgent message",
         decision_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Implementation: certify an incoming message as WHY (trigger / justification).
 
         Args:
@@ -244,7 +244,7 @@ class XProofuAgentMiddleware:
         context: str = "uAgent response",
         decision_id: Optional[str] = None,
         confidence_level: Optional[float] = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Implementation: certify an outgoing response as WHAT (the output to prove).
 
         Args:
@@ -267,7 +267,7 @@ class XProofuAgentMiddleware:
         )
         resp_hash = _hash_data({"recipient": recipient, "response": resp_dict})
 
-        extra: Dict[str, Any] = {"recipient": recipient}
+        extra: dict[str, Any] = {"recipient": recipient}
         if confidence_level is not None:
             extra["confidence_level"] = float(confidence_level)
 
@@ -287,7 +287,7 @@ class XProofuAgentMiddleware:
         outputs: Any,
         why: str = "",
         confidence_level: Optional[float] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Certify a complete agent action as a WHY+WHAT pair.
 
         Creates two linked proofs sharing a ``decision_id`` — the canonical
@@ -319,7 +319,7 @@ class XProofuAgentMiddleware:
         inputs_hash = _hash_data(inputs)
         outputs_hash = _hash_data(outputs)
 
-        why_extra: Dict[str, Any] = {"action_name": action_name}
+        why_extra: dict[str, Any] = {"action_name": action_name}
         if confidence_level is not None:
             why_extra["confidence_level"] = float(confidence_level)
 

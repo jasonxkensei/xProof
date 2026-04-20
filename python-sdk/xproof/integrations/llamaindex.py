@@ -3,7 +3,7 @@
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 try:
     from llama_index.core.callbacks.base import BaseCallbackHandler
@@ -67,8 +67,8 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
         self.certify_query = certify_query
         self.certify_function_call = certify_function_call
         self.batch_mode = batch_mode
-        self._pending: List[CertifyEntry] = []
-        self._event_context: Dict[str, Dict[str, Any]] = {}
+        self._pending: list[CertifyEntry] = []
+        self._event_context: dict[str, dict[str, Any]] = {}
 
     def _should_trace(self, event_type: CBEventType) -> bool:
         if event_type == CBEventType.LLM:
@@ -126,7 +126,7 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
     def end_trace(
         self,
         trace_id: Optional[str] = None,
-        trace_map: Optional[Dict[str, List[str]]] = None,
+        trace_map: Optional[dict[str, list[str]]] = None,
     ) -> None:
         if self.batch_mode:
             self.flush()
@@ -134,7 +134,7 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
     def on_event_start(
         self,
         event_type: CBEventType,
-        payload: Optional[Dict[str, Any]] = None,
+        payload: Optional[dict[str, Any]] = None,
         event_id: str = "",
         parent_id: str = "",
         **kwargs: Any,
@@ -150,7 +150,7 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
     def on_event_end(
         self,
         event_type: CBEventType,
-        payload: Optional[Dict[str, Any]] = None,
+        payload: Optional[dict[str, Any]] = None,
         event_id: str = "",
         **kwargs: Any,
     ) -> None:

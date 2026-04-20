@@ -15,8 +15,8 @@ from .models import (
     BatchFileEntry,
     BatchResult,
     BatchResultSummary,
-    CertifyEntry,
     Certification,
+    CertifyEntry,
     ConfidenceTrail,
     ConfidenceTrailStage,
     ContextDrift,
@@ -33,7 +33,7 @@ from .models import (
 from .utils import hash_bytes, hash_file
 
 try:
-    from importlib.metadata import version as _pkg_version, PackageNotFoundError as _PNF
+    from importlib.metadata import version as _pkg_version
 
     __version__ = _pkg_version("xproof")
 except Exception:

@@ -3,7 +3,7 @@
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Optional, cast
 
 try:
     from crewai.tools import BaseTool as CrewAIBaseTool
@@ -151,7 +151,7 @@ class XProofCrewCertifyTool:
         what: Optional[str] = None,
         when: Optional[str] = None,
         why: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> str:
         """Certify a decision and gate on the compliance check.
 
@@ -285,7 +285,7 @@ if CrewAIBaseTool is not None:
 
         def _run(self, input_text: str) -> str:
             try:
-                params: Dict[str, Any] = json.loads(input_text)
+                params: dict[str, Any] = json.loads(input_text)
             except json.JSONDecodeError as exc:
                 raise ValueError(
                     "XProofNativeCrewCertifyTool expects a JSON string with at least "
@@ -364,14 +364,14 @@ class XProofCrewCallback:
     ) -> None:
         self.client = client or XProofClient(api_key=api_key)
         self.crew_name = crew_name
-        self.certifications: List[Dict[str, Any]] = []
+        self.certifications: list[dict[str, Any]] = []
 
     def on_task_complete(
         self,
         agent_role: str,
         task_description: str,
         output: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Certify a completed task's output."""
         output_hash = _hash_data(output)
         cert = self.client.certify_hash(
@@ -405,7 +405,7 @@ class XProofCrewCallback:
         crew_name: str,
         goal: str,
         results: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Certify the complete crew execution."""
         results_hash = _hash_data({
             "crew_name": crew_name,

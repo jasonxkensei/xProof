@@ -20,7 +20,6 @@ import time
 import uuid
 
 import pytest
-
 from xproof import (
     PolicyViolationError,
     RateLimitError,

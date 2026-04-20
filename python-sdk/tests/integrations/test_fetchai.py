@@ -4,7 +4,6 @@ import asyncio
 from unittest.mock import MagicMock
 
 import pytest
-
 from xproof.integrations.fetchai import (
     XProofuAgentMiddleware,
     _hash_data,

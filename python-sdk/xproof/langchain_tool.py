@@ -3,7 +3,7 @@
 import asyncio
 import hashlib
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Type, cast
+from typing import Any, Optional, cast
 
 try:
     from langchain_core.tools import BaseTool
@@ -102,7 +102,7 @@ class _CertifyInput(BaseModel):  # type: ignore[misc]  # BaseModel is Any when l
         default=None,
         description="4W metadata — reason or instruction that triggered the decision.",
     )
-    metadata: Optional[Dict[str, Any]] = Field(
+    metadata: Optional[dict[str, Any]] = Field(
         default=None,
         description=(
             "Extra key-value pairs stored alongside the proof. "
@@ -153,7 +153,7 @@ class XProofCertifyTool(BaseTool):  # type: ignore[misc]  # BaseTool is Any when
         "Returns the transaction hash when the policy check passes. "
         "Raises PolicyViolationError if the decision violates the governance policy."
     )
-    args_schema: Type[BaseModel] = _CertifyInput
+    args_schema: type[BaseModel] = _CertifyInput
 
     api_key: str = ""
     author: str = "langchain-agent"
@@ -183,7 +183,7 @@ class XProofCertifyTool(BaseTool):  # type: ignore[misc]  # BaseTool is Any when
         what: Optional[str] = None,
         when: Optional[str] = None,
         why: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> str:
         """Certify a decision and gate on the compliance check.
 
@@ -279,7 +279,7 @@ class XProofCertifyTool(BaseTool):  # type: ignore[misc]  # BaseTool is Any when
         what: Optional[str] = None,
         when: Optional[str] = None,
         why: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> str:
         """Async variant of :meth:`_run`.
 

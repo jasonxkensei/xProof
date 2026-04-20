@@ -5,8 +5,8 @@ functions so the full observability pattern (structured logging, webhook
 success, webhook failure fallback) is exercised on every CI run.
 """
 
-import sys
 import os
+import sys
 
 
 def _ensure_examples_importable() -> None:

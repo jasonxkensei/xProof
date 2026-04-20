@@ -11,7 +11,7 @@ Targets the official ``openai-agents`` package.
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from ..client import XProofClient
 from ..models import CertifyEntry
@@ -54,7 +54,7 @@ class XProofRunHooks:
         self.certify_tools = certify_tools
         self.certify_agent = certify_agent
         self.batch_mode = batch_mode
-        self._pending: List[CertifyEntry] = []
+        self._pending: list[CertifyEntry] = []
 
     def _certify(
         self,
@@ -209,7 +209,7 @@ class XProofTracingProcessor:
         self.agent_name = agent_name
         self.certify_tool_spans = certify_tool_spans
         self.certify_agent_spans = certify_agent_spans
-        self._pending: List[CertifyEntry] = []
+        self._pending: list[CertifyEntry] = []
 
     def _certify(
         self,

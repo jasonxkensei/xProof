@@ -11,7 +11,6 @@ from xproof.exceptions import PolicyViolationError
 from xproof.langchain_tool import XProofCertifyTool
 from xproof.models import Certification, PolicyCheckResult, PolicyViolation
 
-
 DECISION_ID = "test-decision-001"
 TRANSACTION_HASH = "0xdeadbeefcafe1234"
 

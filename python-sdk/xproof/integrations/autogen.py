@@ -11,7 +11,7 @@ architecture is out of scope.
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Optional, cast
 
 from ..client import XProofClient
 from ..exceptions import PolicyViolationError
@@ -65,7 +65,7 @@ class XProofAutoGenHooks:
         self.certify_received = certify_received
         self.certify_sent = certify_sent
         self.batch_mode = batch_mode
-        self._pending: List[CertifyEntry] = []
+        self._pending: list[CertifyEntry] = []
 
     def _certify(
         self,
@@ -213,7 +213,7 @@ def xproof_certify_decision(
     what: Optional[str] = None,
     when: Optional[str] = None,
     why: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: Optional[dict[str, Any]] = None,
     api_key: str = "",
     client: Optional[XProofClient] = None,
 ) -> str:

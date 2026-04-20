@@ -1,7 +1,8 @@
 """Main client for the xProof API."""
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union, cast
+from typing import Any, Optional, Union, cast
 
 import requests
 
@@ -17,8 +18,8 @@ from .exceptions import (
 from .models import (
     BatchFileEntry,
     BatchResult,
-    CertifyEntry,
     Certification,
+    CertifyEntry,
     ConfidenceTrail,
     ContextDrift,
     PathCertifyEntry,
@@ -83,14 +84,14 @@ class XProofClient:
         self,
         method: str,
         path: str,
-        json: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
+        json: Optional[dict[str, Any]] = None,
+        params: Optional[dict[str, Any]] = None,
         auth_required: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send an HTTP request to the xProof API and return parsed JSON."""
         url = f"{self.base_url}{path}"
 
-        headers: Optional[Dict[str, str]] = None
+        headers: Optional[dict[str, str]] = None
         if not auth_required:
             headers = {"Authorization": ""}
 
@@ -201,7 +202,7 @@ class XProofClient:
         what: Optional[str] = None,
         when: Optional[str] = None,
         why: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> Certification:
         """Certify a file by path. The file is hashed locally (SHA-256).
 
@@ -250,7 +251,7 @@ class XProofClient:
         when: Optional[str] = None,
         why: Optional[str] = None,
         reversibility_class: Optional[ReversibilityClass] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> Certification:
         """Certify a file using a pre-computed SHA-256 hash.
 
@@ -282,7 +283,7 @@ class XProofClient:
         if not self.api_key:
             raise ValueError("api_key is required — call register() or pass an api_key")
 
-        proof_metadata: Dict[str, Any] = dict(metadata) if metadata else {}
+        proof_metadata: dict[str, Any] = dict(metadata) if metadata else {}
         if who is not None:
             proof_metadata["who"] = who
         if what is not None:
@@ -294,7 +295,7 @@ class XProofClient:
         if reversibility_class is not None:
             proof_metadata["reversibility_class"] = reversibility_class
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "filename": file_name,
             "file_hash": file_hash,
             "author_name": author,
@@ -320,7 +321,7 @@ class XProofClient:
         when: Optional[str] = None,
         why: Optional[str] = None,
         reversibility_class: Optional[ReversibilityClass] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> Certification:
         """Certify a file hash with confidence-level anchoring.
 
@@ -365,7 +366,7 @@ class XProofClient:
         if not decision_id or not decision_id.strip():
             raise ValueError("decision_id is required")
 
-        proof_metadata: Dict[str, Any] = dict(metadata) if metadata else {}
+        proof_metadata: dict[str, Any] = dict(metadata) if metadata else {}
         proof_metadata["confidence_level"] = confidence_level
         proof_metadata["threshold_stage"] = threshold_stage
         proof_metadata["decision_id"] = decision_id
@@ -380,7 +381,7 @@ class XProofClient:
         if reversibility_class is not None:
             proof_metadata["reversibility_class"] = reversibility_class
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "filename": file_name,
             "file_hash": file_hash,
             "author_name": author,
@@ -515,7 +516,7 @@ class XProofClient:
         if len(files) > 50:
             raise ValueError("Batch certification supports a maximum of 50 files")
 
-        entries: List[Dict[str, Any]] = []
+        entries: list[dict[str, Any]] = []
         for f in files:
             if "path" in f:
                 f_path = cast(PathCertifyEntry, f)
@@ -529,7 +530,7 @@ class XProofClient:
             else:
                 raise ValueError("Each file entry must contain either 'path' or 'file_hash'")
 
-            entry: Dict[str, Any] = {
+            entry: dict[str, Any] = {
                 "filename": fname,
                 "file_hash": fhash,
             }
@@ -537,7 +538,7 @@ class XProofClient:
                 entry["metadata"] = f.get("metadata")
             entries.append(entry)
 
-        payload: Dict[str, Any] = {"files": entries}
+        payload: dict[str, Any] = {"files": entries}
         author = None
         for f in files:
             if f.get("author"):

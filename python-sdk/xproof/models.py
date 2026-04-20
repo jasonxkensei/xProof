@@ -1,7 +1,7 @@
 """Data models for the xProof SDK."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Sequence, TypedDict, Union
+from typing import Any, Literal, Optional, TypedDict, Union
 
 ReversibilityClass = Literal["reversible", "costly", "irreversible"]
 
@@ -16,7 +16,7 @@ class CertifyEntry(TypedDict):
     file_hash: str
     file_name: str
     author: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 class PathCertifyEntry(TypedDict, total=False):
@@ -29,7 +29,7 @@ class PathCertifyEntry(TypedDict, total=False):
     path: str
     file_name: str
     author: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 BatchFileEntry = Union[CertifyEntry, PathCertifyEntry]
@@ -42,11 +42,11 @@ class ContextDriftStage:
 
     proof_id: str
     context_break: bool = False
-    drifted_fields: List[str] = field(default_factory=list)
-    raw: Dict[str, Any] = field(default_factory=dict)
+    drifted_fields: list[str] = field(default_factory=list)
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ContextDriftStage":
+    def from_dict(cls, data: dict[str, Any]) -> "ContextDriftStage":
         return cls(
             proof_id=data.get("proof_id", ""),
             context_break=data.get("context_break", False),
@@ -62,14 +62,14 @@ class ContextDrift:
     decision_id: str = ""
     context_coherent: bool = True
     drift_score: float = 0.0
-    fields_drifted: List[str] = field(default_factory=list)
-    fields_stable: List[str] = field(default_factory=list)
-    fields_absent: List[str] = field(default_factory=list)
-    stages: List[ContextDriftStage] = field(default_factory=list)
-    raw: Dict[str, Any] = field(default_factory=dict)
+    fields_drifted: list[str] = field(default_factory=list)
+    fields_stable: list[str] = field(default_factory=list)
+    fields_absent: list[str] = field(default_factory=list)
+    stages: list[ContextDriftStage] = field(default_factory=list)
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ContextDrift":
+    def from_dict(cls, data: dict[str, Any]) -> "ContextDrift":
         """Create a ContextDrift from an API response dictionary."""
         return cls(
             decision_id=data.get("decision_id", ""),
@@ -92,7 +92,7 @@ class PolicyViolation:
     severity: str = "error"
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PolicyViolation":
+    def from_dict(cls, data: dict[str, Any]) -> "PolicyViolation":
         return cls(
             rule=data.get("rule", ""),
             message=data.get("message", ""),
@@ -111,10 +111,10 @@ class ConfidenceTrailStage:
     anchored_at: str = ""
     transaction_hash: str = ""
     transaction_url: str = ""
-    policy_violations: List[PolicyViolation] = field(default_factory=list)
+    policy_violations: list[PolicyViolation] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ConfidenceTrailStage":
+    def from_dict(cls, data: dict[str, Any]) -> "ConfidenceTrailStage":
         metadata = data.get("metadata", {})
         violations_raw = data.get("policy_violations", [])
         return cls(
@@ -141,12 +141,12 @@ class ConfidenceTrail:
     current_stage: str = ""
     is_finalized: bool = False
     policy_compliant: bool = True
-    policy_violations: List[PolicyViolation] = field(default_factory=list)
-    stages: List[ConfidenceTrailStage] = field(default_factory=list)
-    raw: Dict[str, Any] = field(default_factory=dict)
+    policy_violations: list[PolicyViolation] = field(default_factory=list)
+    stages: list[ConfidenceTrailStage] = field(default_factory=list)
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ConfidenceTrail":
+    def from_dict(cls, data: dict[str, Any]) -> "ConfidenceTrail":
         """Create a ConfidenceTrail from an API response dictionary."""
         stages = [ConfidenceTrailStage.from_dict(s) for s in data.get("stages", [])]
         violations_raw = data.get("policy_violations", [])
@@ -170,12 +170,12 @@ class PolicyCheckResult:
     decision_id: str
     total_anchors: int = 0
     policy_compliant: bool = True
-    policy_violations: List[PolicyViolation] = field(default_factory=list)
+    policy_violations: list[PolicyViolation] = field(default_factory=list)
     checked_at: str = ""
-    raw: Dict[str, Any] = field(default_factory=dict)
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PolicyCheckResult":
+    def from_dict(cls, data: dict[str, Any]) -> "PolicyCheckResult":
         """Create a PolicyCheckResult from an API response dictionary."""
         violations_raw = data.get("policy_violations", [])
         return cls(
@@ -208,7 +208,7 @@ class Certification:
     reversibility_class: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Certification":
+    def from_dict(cls, data: dict[str, Any]) -> "Certification":
         """Create a Certification from an API response dictionary."""
         blockchain = data.get("blockchain", {})
         metadata = data.get("metadata", {})
@@ -260,11 +260,11 @@ class BatchResult:
     """Result of a batch certification request."""
 
     batch_id: str = ""
-    results: List[Certification] = field(default_factory=list)
+    results: list[Certification] = field(default_factory=list)
     summary: BatchResultSummary = field(default_factory=BatchResultSummary)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "BatchResult":
+    def from_dict(cls, data: dict[str, Any]) -> "BatchResult":
         """Create a BatchResult from an API response dictionary."""
         raw_results = data.get("results", [])
         results = [Certification.from_dict(r) for r in raw_results]
@@ -298,14 +298,14 @@ class PricingInfo:
     protocol: str = ""
     version: str = ""
     price_usd: float = 0.0
-    tiers: List[PricingTier] = field(default_factory=list)
-    payment_methods: List[Dict[str, str]] = field(default_factory=list)
-    raw: Dict[str, Any] = field(default_factory=dict)
+    tiers: list[PricingTier] = field(default_factory=list)
+    payment_methods: list[dict[str, str]] = field(default_factory=list)
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PricingInfo":
+    def from_dict(cls, data: dict[str, Any]) -> "PricingInfo":
         """Create a PricingInfo from an API response dictionary."""
-        tiers: List[PricingTier] = []
+        tiers: list[PricingTier] = []
         for t in data.get("tiers", []):
             tiers.append(
                 PricingTier(
@@ -341,11 +341,11 @@ class RegistrationResult:
     api_key: str
     agent_name: str
     trial: TrialInfo = field(default_factory=TrialInfo)
-    endpoints: Dict[str, str] = field(default_factory=dict)
-    raw: Dict[str, Any] = field(default_factory=dict)
+    endpoints: dict[str, str] = field(default_factory=dict)
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "RegistrationResult":
+    def from_dict(cls, data: dict[str, Any]) -> "RegistrationResult":
         """Create a RegistrationResult from an API response dictionary."""
         trial_data = data.get("trial", {})
         trial = TrialInfo(
