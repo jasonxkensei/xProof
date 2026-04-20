@@ -87,6 +87,31 @@ class ConfidenceTrail:
 
 
 @dataclass
+class PolicyCheckResult:
+    """Lightweight governance compliance report for a decision chain."""
+
+    decision_id: str
+    total_anchors: int = 0
+    policy_compliant: bool = True
+    policy_violations: List[PolicyViolation] = field(default_factory=list)
+    checked_at: str = ""
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PolicyCheckResult":
+        """Create a PolicyCheckResult from an API response dictionary."""
+        violations_raw = data.get("policy_violations", [])
+        return cls(
+            decision_id=data.get("decision_id", ""),
+            total_anchors=data.get("total_anchors", 0),
+            policy_compliant=data.get("policy_compliant", True),
+            policy_violations=[PolicyViolation.from_dict(v) for v in violations_raw],
+            checked_at=data.get("checked_at", ""),
+            raw=data,
+        )
+
+
+@dataclass
 class Certification:
     """Represents a blockchain-anchored certification."""
 

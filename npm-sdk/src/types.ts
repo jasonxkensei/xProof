@@ -128,6 +128,15 @@ export interface ConfidenceTrail {
   stages: ConfidenceTrailStage[];
 }
 
+export interface PolicyCheckResult {
+  decisionId: string;
+  totalAnchors: number;
+  policyCompliant: boolean;
+  policyViolations: PolicyViolation[];
+  checkedAt: string;
+  raw: Record<string, unknown>;
+}
+
 export interface BatchFileEntry {
   fileHash: string;
   fileName?: string;

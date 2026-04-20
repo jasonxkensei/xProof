@@ -27,6 +27,7 @@ export type {
   ConfidenceTrailStage,
   ConfidenceTrailDrift,
   PolicyViolation,
+  PolicyCheckResult,
   ExecutionContext,
   ContextDriftStage,
   ContextDrift,

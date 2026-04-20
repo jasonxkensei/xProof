@@ -31,10 +31,11 @@ import type {
   ContextDriftStage,
   ExecutionContext,
   PolicyViolation,
+  PolicyCheckResult,
   ReversibilityClass,
 } from "./types.js";
 
-const VERSION = "0.1.6";
+const VERSION = "0.1.7";
 const DEFAULT_BASE_URL = "https://xproof.app";
 const DEFAULT_TIMEOUT = 30_000;
 
@@ -300,6 +301,54 @@ export class XProofClient {
         "apiKey is required — call XProofClient.register() or pass an apiKey"
       );
     }
+  }
+
+  /**
+   * Check policy compliance for a decision chain without fetching the full trail.
+   *
+   * Calls `GET /api/proofs/policy-check?decision_id=<id>` and returns a lightweight
+   * compliance report: whether the chain is policy-compliant and any violations found.
+   *
+   * @param decisionId - The shared decision chain identifier.
+   * @returns A `PolicyCheckResult` with `policyCompliant`, `policyViolations`, and metadata.
+   */
+  async getPolicyCheck(decisionId: string): Promise<PolicyCheckResult> {
+    if (!decisionId || !decisionId.trim()) {
+      throw new ValidationError("decisionId is required", {});
+    }
+    const data = await this.request(
+      "GET",
+      `/api/proofs/policy-check?decision_id=${encodeURIComponent(decisionId)}`,
+      { authRequired: false }
+    );
+    const violations = ((data.policy_violations as unknown[]) ?? []).map(
+      (v) => {
+        const vv = v as Record<string, unknown>;
+        return {
+          proofId: (vv.proof_id as string) ?? "",
+          confidenceLevel:
+            vv.confidence_level != null
+              ? (vv.confidence_level as number)
+              : null,
+          reversibilityClass:
+            (vv.reversibility_class as ReversibilityClass) ?? "reversible",
+          thresholdStage:
+            vv.threshold_stage != null
+              ? (vv.threshold_stage as string)
+              : null,
+          threshold: (vv.threshold as number) ?? 0,
+          rule: (vv.rule as string) ?? "",
+        } satisfies PolicyViolation;
+      }
+    );
+    return {
+      decisionId: (data.decision_id as string) ?? decisionId,
+      totalAnchors: (data.total_anchors as number) ?? 0,
+      policyCompliant: (data.policy_compliant as boolean) ?? true,
+      policyViolations: violations,
+      checkedAt: (data.checked_at as string) ?? "",
+      raw: data,
+    };
   }
 
   private async request(

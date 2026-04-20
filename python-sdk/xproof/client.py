@@ -18,13 +18,14 @@ from .models import (
     BatchResult,
     Certification,
     ConfidenceTrail,
+    PolicyCheckResult,
     PricingInfo,
     RegistrationResult,
     ReversibilityClass,
 )
 from .utils import hash_file
 
-__version__ = "0.2.5"
+__version__ = "0.2.6"
 
 DEFAULT_BASE_URL = "https://xproof.app"
 DEFAULT_TIMEOUT = 30
@@ -399,6 +400,32 @@ class XProofClient:
             auth_required=False,
         )
         return ConfidenceTrail.from_dict(data)
+
+    def get_policy_check(self, decision_id: str) -> PolicyCheckResult:
+        """Check policy compliance for a decision chain without fetching the full trail.
+
+        A lightweight alternative to :meth:`get_confidence_trail` for agents that
+        only need to know whether a decision chain is compliant and which proofs
+        violated the reversibility policy.
+
+        Args:
+            decision_id: The shared identifier linking proofs in the chain.
+
+        Returns:
+            A :class:`PolicyCheckResult` with ``policy_compliant``,
+            ``policy_violations``, ``total_anchors``, and ``checked_at``.
+            Access the raw API dict via ``.raw``.
+
+        Raises:
+            NotFoundError: If no proofs exist for this decision_id.
+        """
+        from urllib.parse import quote
+        data = self._request(
+            "GET",
+            f"/api/proofs/policy-check?decision_id={quote(decision_id, safe='')}",
+            auth_required=False,
+        )
+        return PolicyCheckResult.from_dict(data)
 
     def get_context_drift(self, decision_id: str) -> Dict[str, Any]:
         """Detect execution context drift across a decision chain.
