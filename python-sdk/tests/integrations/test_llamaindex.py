@@ -1,11 +1,11 @@
 """Tests for the LlamaIndex xProof callback handler."""
 
-import json
 import hashlib
+import json
 import sys
 from enum import Enum
-from unittest.mock import MagicMock
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -47,7 +47,7 @@ sys.modules.setdefault("llama_index.core.callbacks", MagicMock())
 sys.modules.setdefault("llama_index.core.callbacks.base", fake_callbacks_base)
 sys.modules.setdefault("llama_index.core.callbacks.schema", fake_callbacks_schema)
 
-from xproof.integrations.llamaindex import XProofCallbackHandler
+from xproof.integrations.llamaindex import XProofCallbackHandler  # noqa: E402
 
 
 def _hash_data(data: Any) -> str:

@@ -6,6 +6,7 @@ repos:
         entry: ruff check --fix
         language: system
         types: [python]
+        files: ^python-sdk/
         args: ["--config", "python-sdk/pyproject.toml"]
         pass_filenames: true
 
@@ -14,6 +15,7 @@ repos:
         entry: ruff format
         language: system
         types: [python]
+        files: ^python-sdk/
         args: ["--config", "python-sdk/pyproject.toml"]
         pass_filenames: true
 
@@ -22,5 +24,6 @@ repos:
         entry: make -C python-sdk typecheck
         language: system
         types: [python]
+        files: ^python-sdk/
         pass_filenames: false
-        always_run: true
+        always_run: false
