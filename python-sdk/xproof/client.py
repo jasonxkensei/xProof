@@ -20,6 +20,7 @@ from .models import (
     CertifyEntry,
     Certification,
     ConfidenceTrail,
+    ContextDrift,
     PathCertifyEntry,
     PolicyCheckResult,
     PricingInfo,
@@ -435,7 +436,7 @@ class XProofClient:
         )
         return PolicyCheckResult.from_dict(data)
 
-    def get_context_drift(self, decision_id: str) -> Dict[str, Any]:
+    def get_context_drift(self, decision_id: str) -> ContextDrift:
         """Detect execution context drift across a decision chain.
 
         Compares ``model_hash``, ``tools_version``, ``strategy_snapshot``, and
@@ -446,15 +447,15 @@ class XProofClient:
             decision_id: The shared identifier linking proofs in the chain.
 
         Returns:
-            A dictionary with:
+            A :class:`ContextDrift` with:
 
             - ``context_coherent`` (bool): True if no drift was detected.
             - ``drift_score`` (float): 0.0 = fully coherent, 1.0 = total drift.
             - ``fields_drifted`` (list[str]): Fields that changed at least once.
             - ``fields_stable`` (list[str]): Fields present in all stages and unchanged.
             - ``fields_absent`` (list[str]): Fields never populated in any stage.
-            - ``stages`` (list[dict]): Per-stage context with ``context_break``
-              and ``drifted_fields`` flags.
+            - ``stages`` (list[ContextDriftStage]): Per-stage context snapshots.
+            - ``raw`` (dict): The unmodified API response.
         """
         from urllib.parse import quote
         data = self._request(
@@ -462,7 +463,7 @@ class XProofClient:
             f"/api/context-drift/{quote(decision_id, safe='')}",
             auth_required=False,
         )
-        return data
+        return ContextDrift.from_dict(data)
 
     def batch_certify(
         self,

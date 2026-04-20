@@ -2,7 +2,7 @@
 
 import pytest
 import responses
-from xproof import NotFoundError, XProofClient
+from xproof import ContextDrift, ContextDriftStage, NotFoundError, XProofClient
 
 BASE = "https://xproof.app"
 
@@ -43,19 +43,22 @@ def test_get_context_drift_coherent():
     client = XProofClient()
     result = client.get_context_drift(decision_id)
 
-    assert result["context_coherent"] is True
-    assert result["drift_score"] == 0.0
-    assert result["fields_drifted"] == []
-    assert "model_hash" in result["fields_stable"]
-    assert "tools_version" in result["fields_stable"]
-    assert "strategy_snapshot" in result["fields_stable"]
-    assert "operator_scope" in result["fields_stable"]
-    assert result["fields_absent"] == []
+    assert isinstance(result, ContextDrift)
+    assert result.context_coherent is True
+    assert result.drift_score == 0.0
+    assert result.fields_drifted == []
+    assert "model_hash" in result.fields_stable
+    assert "tools_version" in result.fields_stable
+    assert "strategy_snapshot" in result.fields_stable
+    assert "operator_scope" in result.fields_stable
+    assert result.fields_absent == []
 
-    assert len(result["stages"]) == 2
-    assert result["stages"][0]["proof_id"] == "proof-001"
-    assert result["stages"][0]["context_break"] is False
-    assert result["stages"][0]["drifted_fields"] == []
+    assert len(result.stages) == 2
+    stage = result.stages[0]
+    assert isinstance(stage, ContextDriftStage)
+    assert stage.proof_id == "proof-001"
+    assert stage.context_break is False
+    assert stage.drifted_fields == []
 
 
 @responses.activate
@@ -89,24 +92,25 @@ def test_get_context_drift_with_drift():
     client = XProofClient()
     result = client.get_context_drift(decision_id)
 
-    assert result["context_coherent"] is False
-    assert result["drift_score"] == 0.5
-    assert "model_hash" in result["fields_drifted"]
-    assert "tools_version" in result["fields_drifted"]
-    assert result["fields_stable"] == ["operator_scope"]
-    assert result["fields_absent"] == ["strategy_snapshot"]
+    assert isinstance(result, ContextDrift)
+    assert result.context_coherent is False
+    assert result.drift_score == 0.5
+    assert "model_hash" in result.fields_drifted
+    assert "tools_version" in result.fields_drifted
+    assert result.fields_stable == ["operator_scope"]
+    assert result.fields_absent == ["strategy_snapshot"]
 
-    assert len(result["stages"]) == 2
-    first = result["stages"][0]
-    assert first["proof_id"] == "proof-a"
-    assert first["context_break"] is False
-    assert first["drifted_fields"] == []
+    assert len(result.stages) == 2
+    first = result.stages[0]
+    assert first.proof_id == "proof-a"
+    assert first.context_break is False
+    assert first.drifted_fields == []
 
-    second = result["stages"][1]
-    assert second["proof_id"] == "proof-b"
-    assert second["context_break"] is True
-    assert "model_hash" in second["drifted_fields"]
-    assert "tools_version" in second["drifted_fields"]
+    second = result.stages[1]
+    assert second.proof_id == "proof-b"
+    assert second.context_break is True
+    assert "model_hash" in second.drifted_fields
+    assert "tools_version" in second.drifted_fields
 
 
 @responses.activate
@@ -141,10 +145,11 @@ def test_get_context_drift_total_drift():
     client = XProofClient()
     result = client.get_context_drift(decision_id)
 
-    assert result["context_coherent"] is False
-    assert result["drift_score"] == 1.0
-    assert set(result["fields_drifted"]) == set(all_fields)
-    assert result["fields_stable"] == []
+    assert isinstance(result, ContextDrift)
+    assert result.context_coherent is False
+    assert result.drift_score == 1.0
+    assert set(result.fields_drifted) == set(all_fields)
+    assert result.fields_stable == []
 
 
 @responses.activate
@@ -211,8 +216,8 @@ def test_get_context_drift_url_encodes_decision_id():
 
 
 @responses.activate
-def test_get_context_drift_returns_raw_dict():
-    """get_context_drift() returns the raw API response dict directly."""
+def test_get_context_drift_raw_preserved():
+    """get_context_drift() preserves the full raw API response in result.raw."""
     decision_id = "raw-dict-test"
     api_response = {
         "context_coherent": True,
@@ -232,6 +237,8 @@ def test_get_context_drift_returns_raw_dict():
     client = XProofClient()
     result = client.get_context_drift(decision_id)
 
-    assert isinstance(result, dict)
-    assert result == api_response
-    assert result.get("extra_field") == "preserved"
+    assert isinstance(result, ContextDrift)
+    assert result.raw == api_response
+    assert result.raw.get("extra_field") == "preserved"
+    assert result.fields_stable == ["model_hash"]
+    assert result.fields_absent == ["strategy_snapshot"]

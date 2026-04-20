@@ -37,6 +37,53 @@ BatchFileEntry = Union[CertifyEntry, PathCertifyEntry]
 
 
 @dataclass
+class ContextDriftStage:
+    """Per-stage context snapshot from a context-drift check."""
+
+    proof_id: str
+    context_break: bool = False
+    drifted_fields: List[str] = field(default_factory=list)
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ContextDriftStage":
+        return cls(
+            proof_id=data.get("proof_id", ""),
+            context_break=data.get("context_break", False),
+            drifted_fields=data.get("drifted_fields", []),
+            raw=data,
+        )
+
+
+@dataclass
+class ContextDrift:
+    """Context drift analysis result for a decision chain."""
+
+    decision_id: str = ""
+    context_coherent: bool = True
+    drift_score: float = 0.0
+    fields_drifted: List[str] = field(default_factory=list)
+    fields_stable: List[str] = field(default_factory=list)
+    fields_absent: List[str] = field(default_factory=list)
+    stages: List[ContextDriftStage] = field(default_factory=list)
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ContextDrift":
+        """Create a ContextDrift from an API response dictionary."""
+        return cls(
+            decision_id=data.get("decision_id", ""),
+            context_coherent=data.get("context_coherent", True),
+            drift_score=data.get("drift_score", 0.0),
+            fields_drifted=data.get("fields_drifted", []),
+            fields_stable=data.get("fields_stable", []),
+            fields_absent=data.get("fields_absent", []),
+            stages=[ContextDriftStage.from_dict(s) for s in data.get("stages", [])],
+            raw=data,
+        )
+
+
+@dataclass
 class PolicyViolation:
     """A single policy violation detected by the server."""
 
