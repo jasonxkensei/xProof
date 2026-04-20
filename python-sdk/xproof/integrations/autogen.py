@@ -11,9 +11,11 @@ architecture is out of scope.
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from ..client import XProofClient
+from ..exceptions import PolicyViolationError
+from ..models import ReversibilityClass
 
 
 def _hash_data(data: Any) -> str:
@@ -196,6 +198,140 @@ def register_xproof_hooks(
     )
 
     return hooks
+
+
+def xproof_certify_decision(
+    decision_text: str = "",
+    file_hash: Optional[str] = None,
+    confidence_level: float = 0.0,
+    threshold_stage: str = "pre-commitment",
+    decision_id: str = "",
+    reversibility_class: Optional[str] = None,
+    file_name: Optional[str] = None,
+    author: str = "autogen-agent",
+    who: Optional[str] = None,
+    what: Optional[str] = None,
+    when: Optional[str] = None,
+    why: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    api_key: str = "",
+    client: Optional[XProofClient] = None,
+) -> str:
+    """Certify an AutoGen agent decision and gate on the compliance check.
+
+    This is the AutoGen equivalent of LangChain's ``XProofCertifyTool`` — a
+    plain callable that wraps :meth:`~xproof.XProofClient.certify_with_confidence`
+    and :meth:`~xproof.XProofClient.get_policy_check` into a single call.
+
+    Register it as a tool on any AutoGen agent using
+    ``agent.register_for_llm`` / ``agent.register_for_execution``, or call it
+    directly from an agent's reply function.
+
+    Either ``decision_text`` (hashed automatically) or a pre-computed
+    ``file_hash`` must be supplied; ``decision_text`` takes precedence.
+
+    Args:
+        decision_text: Raw text hashed to produce ``file_hash``.
+        file_hash: Pre-computed 64-char hex SHA-256.  Used only when
+            ``decision_text`` is empty.
+        confidence_level: Agent's self-assessed confidence between 0.0 and
+            1.0.
+        threshold_stage: One of ``initial``, ``partial``,
+            ``pre-commitment``, ``final``.
+        decision_id: Shared ID linking proofs in the same decision chain.
+        reversibility_class: ``reversible``, ``costly``, or
+            ``irreversible``.
+        file_name: Artifact label (defaults to
+            ``<decision_id>-<stage>.json``).
+        author: Agent identity used as the proof author and default
+            ``who`` value.
+        who: 4W — agent identity (defaults to *author*).
+        what: 4W — action description (defaults to the hash).
+        when: 4W — ISO-8601 timestamp (defaults to current UTC time).
+        why: 4W — reason for the decision.
+        metadata: Extra key-value pairs stored with the proof.
+        api_key: xProof API key (ignored if *client* is provided).
+        client: Pre-configured :class:`~xproof.client.XProofClient`.
+
+    Returns:
+        The on-chain ``transaction_hash`` when the policy check passes.
+
+    Raises:
+        ValueError: If neither ``decision_text`` nor ``file_hash`` is
+            provided, or if ``decision_id`` is empty.
+        PolicyViolationError: If ``get_policy_check`` reports one or
+            more violations.
+
+    Example::
+
+        from xproof.integrations.autogen import xproof_certify_decision
+        from xproof.exceptions import PolicyViolationError
+        import json
+
+        decision = {"action": "delete_records", "scope": "inactive", "records": 4821}
+
+        try:
+            tx_hash = xproof_certify_decision(
+                decision_text=json.dumps(decision, sort_keys=True),
+                confidence_level=0.97,
+                threshold_stage="pre-commitment",
+                decision_id="del-run-2026-04-20",
+                reversibility_class="irreversible",
+                why="Scheduled GDPR data-retention cleanup",
+                author="data-hygiene-agent",
+                api_key="pm_...",
+            )
+            print(f"Policy compliant — proceeding (tx: {tx_hash})")
+        except PolicyViolationError as exc:
+            for v in exc.violations:
+                print(f"BLOCKED [{v.severity.upper()}] {v.rule}: {v.message}")
+    """
+    if not decision_id:
+        raise ValueError("decision_id must be provided.")
+
+    if decision_text:
+        resolved_hash = hashlib.sha256(decision_text.encode()).hexdigest()
+    elif file_hash:
+        resolved_hash = file_hash
+    else:
+        raise ValueError("Either decision_text or file_hash must be provided.")
+
+    xproof_client = client or XProofClient(api_key=api_key)
+    artifact_name = file_name or f"{decision_id}-{threshold_stage}.json"
+    resolved_who = who if who is not None else author
+    resolved_what = what if what is not None else resolved_hash
+    resolved_when = when if when is not None else datetime.now(timezone.utc).isoformat()
+
+    cert = xproof_client.certify_with_confidence(
+        file_hash=resolved_hash,
+        file_name=artifact_name,
+        author=author,
+        confidence_level=confidence_level,
+        threshold_stage=threshold_stage,
+        decision_id=decision_id,
+        who=resolved_who,
+        what=resolved_what,
+        when=resolved_when,
+        why=why,
+        reversibility_class=cast(Optional[ReversibilityClass], reversibility_class),
+        metadata=metadata,
+    )
+
+    check = xproof_client.get_policy_check(decision_id)
+
+    if not check.policy_compliant:
+        violation_lines = [
+            f"[{v.severity.upper()}] {v.rule}: {v.message}"
+            for v in check.policy_violations
+        ]
+        summary = "; ".join(violation_lines)
+        raise PolicyViolationError(
+            message=f"Policy compliance check failed for decision '{decision_id}': {summary}",
+            decision_id=decision_id,
+            violations=check.policy_violations,
+        )
+
+    return cert.transaction_hash
 
 
 try:

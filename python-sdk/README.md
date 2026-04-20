@@ -346,6 +346,115 @@ agent = initialize_agent(
 )
 ```
 
+#### Option A — One-line CrewAI tool (recommended for CrewAI agents)
+
+`XProofCrewCertifyTool` provides the same one-call certification loop for
+CrewAI agents.  `XProofNativeCrewCertifyTool` wraps it as a native
+`BaseTool` subclass so it can be added directly to a CrewAI agent's
+`tools` list.
+
+```python
+import json
+from xproof.integrations.crewai import XProofCrewCertifyTool
+from xproof.exceptions import PolicyViolationError
+
+certify = XProofCrewCertifyTool(api_key="pm_...", author="data-hygiene-agent")
+
+decision = {
+    "action": "delete_customer_records",
+    "scope": "inactive_accounts",
+    "records_affected": 4821,
+    "retention_policy_checked": True,
+    "legal_hold_clear": True,
+}
+decision_id = "del-run-2026-04-20"
+
+try:
+    tx_hash = certify.run(
+        decision_text=json.dumps(decision, sort_keys=True),
+        confidence_level=0.97,
+        threshold_stage="pre-commitment",
+        decision_id=decision_id,
+        reversibility_class="irreversible",
+        why="Scheduled GDPR data-retention cleanup",
+    )
+    print(f"Policy compliant — proceeding (tx: {tx_hash})")
+    # delete_customer_records(decision["scope"])   # your execution here
+except PolicyViolationError as exc:
+    for v in exc.violations:
+        print(f"BLOCKED [{v.severity.upper()}] {v.rule}: {v.message}")
+    raise RuntimeError("Deletion aborted: policy compliance check failed.") from exc
+```
+
+To attach it natively to a CrewAI `Agent`:
+
+```python
+from crewai import Agent
+from xproof.integrations.crewai import XProofNativeCrewCertifyTool
+
+certify_tool = XProofNativeCrewCertifyTool(
+    api_key="pm_...", author="data-hygiene-agent"
+)
+agent = Agent(role="analyst", tools=[certify_tool], ...)
+```
+
+#### Option A — One-line AutoGen tool (recommended for AutoGen agents)
+
+`xproof_certify_decision` is a plain callable with the same full loop —
+hash → certify → policy check → gate — designed to be registered as a
+function tool on any AutoGen `ConversableAgent`.
+
+```python
+import json
+from xproof.integrations.autogen import xproof_certify_decision
+from xproof.exceptions import PolicyViolationError
+
+decision = {
+    "action": "delete_customer_records",
+    "scope": "inactive_accounts",
+    "records_affected": 4821,
+    "retention_policy_checked": True,
+    "legal_hold_clear": True,
+}
+decision_id = "del-run-2026-04-20"
+
+try:
+    tx_hash = xproof_certify_decision(
+        decision_text=json.dumps(decision, sort_keys=True),
+        confidence_level=0.97,
+        threshold_stage="pre-commitment",
+        decision_id=decision_id,
+        reversibility_class="irreversible",
+        why="Scheduled GDPR data-retention cleanup",
+        author="data-hygiene-agent",
+        api_key="pm_...",
+    )
+    print(f"Policy compliant — proceeding (tx: {tx_hash})")
+    # delete_customer_records(decision["scope"])   # your execution here
+except PolicyViolationError as exc:
+    for v in exc.violations:
+        print(f"BLOCKED [{v.severity.upper()}] {v.rule}: {v.message}")
+    raise RuntimeError("Deletion aborted: policy compliance check failed.") from exc
+```
+
+You can also register it as a tool on an AutoGen agent so the LLM can
+invoke it by name:
+
+```python
+from autogen import AssistantAgent, UserProxyAgent
+from functools import partial
+from xproof.integrations.autogen import xproof_certify_decision
+
+# Bind api_key once; the agent passes the decision fields per call.
+certify = partial(xproof_certify_decision, api_key="pm_...", author="analyst-agent")
+
+assistant = AssistantAgent("analyst", llm_config={...})
+user_proxy = UserProxyAgent("user_proxy", human_input_mode="NEVER")
+
+assistant.register_for_llm(name="certify_decision", description="Certify a decision on-chain")(certify)
+user_proxy.register_for_execution(name="certify_decision")(certify)
+```
+
 #### Option B — Manual four-step loop (framework-agnostic)
 
 ```python
