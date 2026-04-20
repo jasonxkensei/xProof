@@ -34,6 +34,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build"
