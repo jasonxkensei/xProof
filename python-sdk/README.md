@@ -280,6 +280,74 @@ This example shows a realistic governance loop for an autonomous agent that is
 about to permanently delete customer records — an irreversible action that
 requires a confidence level of at least 0.95 before proceeding.
 
+#### Option A — One-line LangChain tool (recommended for LangChain / LCEL agents)
+
+If you are already running a LangChain or LCEL agent, drop in `XProofCertifyTool`
+to collapse the four-step hash → certify → check → gate loop into a single
+`tool.run()` call.
+
+```python
+import json
+from xproof.langchain_tool import XProofCertifyTool
+from xproof.exceptions import PolicyViolationError
+
+certify = XProofCertifyTool(api_key="pm_...", author="data-hygiene-agent")
+
+decision = {
+    "action": "delete_customer_records",
+    "scope": "inactive_accounts",
+    "records_affected": 4821,
+    "retention_policy_checked": True,
+    "legal_hold_clear": True,
+}
+decision_id = "del-run-2026-04-20"
+
+try:
+    tx_hash = certify.run({
+        "decision_text": json.dumps(decision, sort_keys=True),
+        "confidence_level": 0.97,
+        "threshold_stage": "pre-commitment",
+        "decision_id": decision_id,
+        "reversibility_class": "irreversible",
+        "why": "Scheduled GDPR data-retention cleanup",
+    })
+    print(f"Policy compliant — proceeding (tx: {tx_hash})")
+    # delete_customer_records(decision["scope"])   # your execution here
+except PolicyViolationError as exc:
+    for v in exc.violations:
+        print(f"BLOCKED [{v.severity.upper()}] {v.rule}: {v.message}")
+    raise RuntimeError("Deletion aborted: policy compliance check failed.") from exc
+```
+
+The tool hashes `decision_text` with SHA-256, calls
+`certify_with_confidence`, and immediately runs `get_policy_check`.
+If the check passes it returns the `transaction_hash`; if it fails it raises
+`PolicyViolationError` with the full list of violations attached.
+
+The tool accepts every parameter that `certify_with_confidence` does —
+`who`, `what`, `when`, `why`, `reversibility_class`, `metadata`, and per-call
+`author` — so you retain full provenance control.  When `who`, `what`, or
+`when` are omitted the tool supplies sensible defaults (resolved author, SHA-256
+hash, current UTC timestamp respectively); explicitly passing any of them
+overrides those defaults.  You can also pass a pre-computed `file_hash` instead
+of `decision_text` if you have already hashed the payload externally.
+
+You can also bind the tool to a LangChain agent directly:
+
+```python
+from langchain.agents import initialize_agent, AgentType
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(model="gpt-4o")
+agent = initialize_agent(
+    tools=[certify],
+    llm=llm,
+    agent=AgentType.OPENAI_FUNCTIONS,
+)
+```
+
+#### Option B — Manual four-step loop (framework-agnostic)
+
 ```python
 import hashlib, json
 from xproof import XProofClient

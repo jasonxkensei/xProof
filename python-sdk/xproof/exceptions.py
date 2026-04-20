@@ -52,3 +52,22 @@ class ServerError(XProofError):
 
     def __init__(self, message: str = "Internal server error", status_code: int = 500, response: object = None) -> None:
         super().__init__(message, status_code=status_code, response=response)
+
+
+class PolicyViolationError(XProofError):
+    """Raised when a compliance gate blocks execution due to a policy violation.
+
+    Attributes:
+        decision_id: The decision chain identifier that failed the check.
+        violations: List of raw violation dicts from ``PolicyCheckResult``.
+    """
+
+    def __init__(
+        self,
+        message: str = "Policy compliance check failed",
+        decision_id: str = "",
+        violations: object = None,
+    ) -> None:
+        super().__init__(message)
+        self.decision_id = decision_id
+        self.violations = violations or []
