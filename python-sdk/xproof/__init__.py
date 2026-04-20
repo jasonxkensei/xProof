@@ -14,6 +14,9 @@ from .models import (
     BatchResult,
     BatchResultSummary,
     Certification,
+    ConfidenceTrail,
+    ConfidenceTrailStage,
+    PolicyViolation,
     PricingInfo,
     PricingTier,
     RegistrationResult,
@@ -21,7 +24,7 @@ from .models import (
 )
 from .utils import hash_bytes, hash_file
 
-__version__ = "0.2.3"
+__version__ = "0.2.5"
 
 __all__ = [
     "XProofClient",
@@ -30,6 +33,9 @@ __all__ = [
     "Certification",
     "BatchResult",
     "BatchResultSummary",
+    "ConfidenceTrail",
+    "ConfidenceTrailStage",
+    "PolicyViolation",
     "PricingInfo",
     "PricingTier",
     "RegistrationResult",

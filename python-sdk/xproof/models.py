@@ -1,7 +1,89 @@
 """Data models for the xProof SDK."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
+
+ReversibilityClass = Literal["reversible", "costly", "irreversible"]
+
+
+@dataclass
+class PolicyViolation:
+    """A single policy violation detected by the server."""
+
+    rule: str
+    message: str
+    severity: str = "error"
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PolicyViolation":
+        return cls(
+            rule=data.get("rule", ""),
+            message=data.get("message", ""),
+            severity=data.get("severity", "error"),
+        )
+
+
+@dataclass
+class ConfidenceTrailStage:
+    """One stage anchor in a confidence trail."""
+
+    proof_id: str
+    confidence_level: float
+    threshold_stage: str
+    reversibility_class: Optional[str] = None
+    anchored_at: str = ""
+    transaction_hash: str = ""
+    transaction_url: str = ""
+    policy_violations: List[PolicyViolation] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ConfidenceTrailStage":
+        metadata = data.get("metadata", {})
+        violations_raw = data.get("policy_violations", [])
+        return cls(
+            proof_id=data.get("proof_id", data.get("id", "")),
+            confidence_level=data.get("confidence_level", metadata.get("confidence_level", 0.0)),
+            threshold_stage=data.get("threshold_stage", metadata.get("threshold_stage", "")),
+            reversibility_class=data.get(
+                "reversibility_class", metadata.get("reversibility_class")
+            ),
+            anchored_at=data.get("anchored_at", data.get("created_at", "")),
+            transaction_hash=data.get("transaction_hash", ""),
+            transaction_url=data.get("transaction_url", ""),
+            policy_violations=[PolicyViolation.from_dict(v) for v in violations_raw],
+        )
+
+
+@dataclass
+class ConfidenceTrail:
+    """Full confidence trail for a decision chain."""
+
+    decision_id: str
+    total_anchors: int = 0
+    current_confidence: float = 0.0
+    current_stage: str = ""
+    is_finalized: bool = False
+    policy_compliant: bool = True
+    policy_violations: List[PolicyViolation] = field(default_factory=list)
+    stages: List[ConfidenceTrailStage] = field(default_factory=list)
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ConfidenceTrail":
+        """Create a ConfidenceTrail from an API response dictionary."""
+        stages = [ConfidenceTrailStage.from_dict(s) for s in data.get("stages", [])]
+        violations_raw = data.get("policy_violations", [])
+        return cls(
+            decision_id=data.get("decision_id", ""),
+            total_anchors=data.get("total_anchors", len(stages)),
+            current_confidence=data.get("current_confidence", 0.0),
+            current_stage=data.get("current_stage", ""),
+            is_finalized=data.get("is_finalized", False),
+            policy_compliant=data.get("policy_compliant", True),
+            policy_violations=[PolicyViolation.from_dict(v) for v in violations_raw],
+            stages=stages,
+            raw=data,
+        )
 
 
 @dataclass
@@ -21,11 +103,13 @@ class Certification:
     is_public: bool = True
     certificate_url: str = ""
     verify_url: str = ""
+    reversibility_class: Optional[str] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Certification":
         """Create a Certification from an API response dictionary."""
         blockchain = data.get("blockchain", {})
+        metadata = data.get("metadata", {})
         return cls(
             id=data.get("id", data.get("proof_id", "")),
             file_name=data.get("fileName", data.get("filename", data.get("file_name", ""))),
@@ -46,6 +130,9 @@ class Certification:
             is_public=data.get("isPublic", data.get("is_public", True)),
             certificate_url=data.get("certificateUrl", data.get("certificate_url", "")),
             verify_url=data.get("verifyUrl", data.get("verify_url", "")),
+            reversibility_class=data.get(
+                "reversibility_class", metadata.get("reversibility_class")
+            ),
         )
 
 
