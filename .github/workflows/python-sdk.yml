@@ -35,9 +35,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      - name: Run linter (ruff)
+        working-directory: python-sdk
+        run: make lint
+
       - name: Run tests
         working-directory: python-sdk
-        run: python -m pytest tests/ -v --tb=short
+        run: make test
 
       - name: Build package
         working-directory: python-sdk
