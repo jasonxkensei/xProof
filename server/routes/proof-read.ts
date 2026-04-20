@@ -7,7 +7,7 @@ import { computeTrustScoreByWallet } from "../trust";
 import { publicReadRateLimiter } from "../reliability";
 import { generateCertificatePDF } from "../certificateGenerator";
 import { computeDrift, DRIFT_MONITORED_FIELDS } from "./helpers";
-import { REVERSIBILITY_CLASSES, IRREVERSIBLE_CONFIDENCE_THRESHOLD } from "../auditSchema";
+import { IRREVERSIBLE_CONFIDENCE_THRESHOLD } from "../auditSchema";
 
 export function registerProofReadRoutes(app: Express) {
   app.get("/api/proof/check", async (req, res) => {
@@ -184,8 +184,8 @@ export function registerProofReadRoutes(app: Express) {
             proof_id: s.proof_id,
             confidence_level: s.confidence_level,
             reversibility_class: meta.reversibility_class,
+            threshold_stage: s.threshold_stage,
             threshold: IRREVERSIBLE_CONFIDENCE_THRESHOLD,
-            stage: s.threshold_stage,
             rule: `irreversible actions require confidence_level >= ${IRREVERSIBLE_CONFIDENCE_THRESHOLD}`,
           };
         });
