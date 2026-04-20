@@ -332,6 +332,22 @@ hash, current UTC timestamp respectively); explicitly passing any of them
 overrides those defaults.  You can also pass a pre-computed `file_hash` instead
 of `decision_text` if you have already hashed the payload externally.
 
+**Async support:** `XProofCertifyTool` fully supports async LangChain pipelines.
+`_arun` is implemented via `asyncio.to_thread`, so it is safe to use in async
+LCEL chains and async agent executors without blocking the event loop:
+
+```python
+# Inside an async LCEL chain or async agent executor:
+tx_hash = await certify.arun({
+    "decision_text": json.dumps(decision, sort_keys=True),
+    "confidence_level": 0.97,
+    "threshold_stage": "pre-commitment",
+    "decision_id": decision_id,
+    "reversibility_class": "irreversible",
+    "why": "Scheduled GDPR data-retention cleanup",
+})
+```
+
 You can also bind the tool to a LangChain agent directly:
 
 ```python

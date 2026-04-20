@@ -267,3 +267,77 @@ def test_violation_error_message_contains_severity_and_rule(tool, mock_client):
     error_message = str(exc_info.value)
     assert "ERROR" in error_message
     assert "irreversible_confidence_threshold" in error_message
+
+
+# ---------------------------------------------------------------------------
+# Async (_arun) tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_arun_successful_certification_returns_transaction_hash(tool, mock_client):
+    """_arun happy path: returns the transaction_hash when the policy check passes."""
+    result = await tool._arun(
+        decision_text="Approve GDPR data deletion",
+        confidence_level=0.97,
+        decision_id=DECISION_ID,
+        threshold_stage="pre-commitment",
+    )
+
+    assert result == TRANSACTION_HASH
+    mock_client.certify_with_confidence.assert_called_once()
+    mock_client.get_policy_check.assert_called_once_with(DECISION_ID)
+
+
+@pytest.mark.asyncio
+async def test_arun_policy_violation_raises_policy_violation_error(tool, mock_client):
+    """_arun propagates PolicyViolationError when the policy check fails."""
+    violations = [
+        PolicyViolation(
+            rule="irreversible_confidence_threshold",
+            message="Confidence too low for irreversible action",
+            severity="error",
+        )
+    ]
+    mock_client.get_policy_check.return_value = _make_violation_check(violations)
+
+    with pytest.raises(PolicyViolationError):
+        await tool._arun(
+            decision_text="Delete production database",
+            confidence_level=0.5,
+            decision_id=DECISION_ID,
+            threshold_stage="final",
+            reversibility_class="irreversible",
+        )
+
+
+@pytest.mark.asyncio
+async def test_arun_raises_value_error_when_no_hash_source(tool, mock_client):
+    """_arun raises ValueError when neither decision_text nor file_hash is provided."""
+    with pytest.raises(ValueError, match="Either decision_text or file_hash must be provided"):
+        await tool._arun(
+            decision_text="",
+            file_hash=None,
+            confidence_level=0.9,
+            decision_id=DECISION_ID,
+            threshold_stage="pre-commitment",
+        )
+
+    mock_client.certify_with_confidence.assert_not_called()
+    mock_client.get_policy_check.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_arun_sha256_hash_of_decision_text_is_correct(tool, mock_client):
+    """_arun hashes decision_text with SHA-256 before calling certify_with_confidence."""
+    decision_text = "Async GDPR data deletion for user 99"
+    expected_hash = hashlib.sha256(decision_text.encode()).hexdigest()
+
+    await tool._arun(
+        decision_text=decision_text,
+        confidence_level=0.95,
+        decision_id=DECISION_ID,
+        threshold_stage="pre-commitment",
+    )
+
+    call_kwargs = mock_client.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["file_hash"] == expected_hash

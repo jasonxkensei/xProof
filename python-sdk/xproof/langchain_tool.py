@@ -1,5 +1,6 @@
 """LangChain BaseTool wrapper for one-line xProof decision certification."""
 
+import asyncio
 import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Type, cast
@@ -264,5 +265,50 @@ class XProofCertifyTool(BaseTool):  # type: ignore[misc]  # BaseTool is Any when
 
         return cert.transaction_hash
 
-    async def _arun(self, *args: Any, **kwargs: Any) -> str:
-        raise NotImplementedError("XProofCertifyTool does not support async execution yet.")
+    async def _arun(
+        self,
+        confidence_level: float,
+        decision_id: str,
+        decision_text: str = "",
+        file_hash: Optional[str] = None,
+        threshold_stage: str = "pre-commitment",
+        reversibility_class: Optional[str] = None,
+        file_name: Optional[str] = None,
+        author: Optional[str] = None,
+        who: Optional[str] = None,
+        what: Optional[str] = None,
+        when: Optional[str] = None,
+        why: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Async variant of :meth:`_run`.
+
+        Executes the synchronous certification and policy-check logic in a
+        thread pool via :func:`asyncio.to_thread` so it does not block the
+        event loop.  Drop-in compatible with async LangChain / LCEL pipelines
+        and async agent executors.
+
+        Args and return value are identical to :meth:`_run`.
+
+        Raises:
+            ValueError: If neither ``decision_text`` nor ``file_hash`` is
+                provided.
+            PolicyViolationError: If ``get_policy_check`` reports one or
+                more violations.
+        """
+        return await asyncio.to_thread(
+            self._run,
+            confidence_level=confidence_level,
+            decision_id=decision_id,
+            decision_text=decision_text,
+            file_hash=file_hash,
+            threshold_stage=threshold_stage,
+            reversibility_class=reversibility_class,
+            file_name=file_name,
+            author=author,
+            who=who,
+            what=what,
+            when=when,
+            why=why,
+            metadata=metadata,
+        )
