@@ -14,4 +14,13 @@ dependencies = [
     "ruff>=0.15.11",
     "twine>=6.2.0",
     "types-requests>=2.33.0.20260408",
+    "xproof",
 ]
+
+[tool.uv.workspace]
+members = [
+    "python-sdk",
+]
+
+[tool.uv.sources]
+xproof = { workspace = true }
