@@ -1,0 +1,269 @@
+"""Unit tests for XProofCertifyTool using a mocked XProofClient."""
+
+import hashlib
+from unittest.mock import MagicMock
+
+import pytest
+
+pytest.importorskip("langchain_core", reason="langchain-core not installed")
+
+from xproof.exceptions import PolicyViolationError
+from xproof.langchain_tool import XProofCertifyTool
+from xproof.models import Certification, PolicyCheckResult, PolicyViolation
+
+
+DECISION_ID = "test-decision-001"
+TRANSACTION_HASH = "0xdeadbeefcafe1234"
+
+
+def _make_cert(transaction_hash: str = TRANSACTION_HASH) -> Certification:
+    return Certification(
+        id="proof-001",
+        file_name=f"{DECISION_ID}-pre-commitment.json",
+        file_hash="a" * 64,
+        transaction_hash=transaction_hash,
+        transaction_url="https://explorer.multiversx.com/tx/abc",
+        created_at="2026-04-20T10:00:00Z",
+    )
+
+
+def _make_compliant_check() -> PolicyCheckResult:
+    return PolicyCheckResult(
+        decision_id=DECISION_ID,
+        total_anchors=1,
+        policy_compliant=True,
+        policy_violations=[],
+        checked_at="2026-04-20T10:00:00Z",
+    )
+
+
+def _make_violation_check(violations: list) -> PolicyCheckResult:
+    return PolicyCheckResult(
+        decision_id=DECISION_ID,
+        total_anchors=1,
+        policy_compliant=False,
+        policy_violations=violations,
+        checked_at="2026-04-20T10:00:00Z",
+    )
+
+
+@pytest.fixture
+def mock_client():
+    client = MagicMock()
+    client.certify_with_confidence.return_value = _make_cert()
+    client.get_policy_check.return_value = _make_compliant_check()
+    return client
+
+
+@pytest.fixture
+def tool(mock_client):
+    return XProofCertifyTool(api_key="pm_test", author="test-agent", client=mock_client)
+
+
+def test_successful_certification_returns_transaction_hash(tool, mock_client):
+    """Happy path: run() returns the transaction_hash when policy check passes."""
+    result = tool._run(
+        decision_text="Approve GDPR data deletion",
+        confidence_level=0.97,
+        decision_id=DECISION_ID,
+        threshold_stage="pre-commitment",
+    )
+
+    assert result == TRANSACTION_HASH
+    mock_client.certify_with_confidence.assert_called_once()
+    mock_client.get_policy_check.assert_called_once_with(DECISION_ID)
+
+
+def test_policy_violation_raises_policy_violation_error(tool, mock_client):
+    """When policy_compliant is False, PolicyViolationError is raised."""
+    violations = [
+        PolicyViolation(
+            rule="irreversible_confidence_threshold",
+            message="Confidence too low for irreversible action",
+            severity="error",
+        )
+    ]
+    mock_client.get_policy_check.return_value = _make_violation_check(violations)
+
+    with pytest.raises(PolicyViolationError):
+        tool._run(
+            decision_text="Delete production database",
+            confidence_level=0.5,
+            decision_id=DECISION_ID,
+            threshold_stage="final",
+            reversibility_class="irreversible",
+        )
+
+
+def test_policy_violation_error_includes_violations_list(tool, mock_client):
+    """PolicyViolationError.violations contains the full list of PolicyViolation objects."""
+    violations = [
+        PolicyViolation(
+            rule="irreversible_confidence_threshold",
+            message="Confidence too low for irreversible action",
+            severity="error",
+        ),
+        PolicyViolation(
+            rule="missing_reversibility_class",
+            message="Anchor at stage 'partial' lacks a reversibility_class field",
+            severity="warning",
+        ),
+    ]
+    mock_client.get_policy_check.return_value = _make_violation_check(violations)
+
+    with pytest.raises(PolicyViolationError) as exc_info:
+        tool._run(
+            decision_text="Some risky action",
+            confidence_level=0.4,
+            decision_id=DECISION_ID,
+            threshold_stage="partial",
+        )
+
+    err = exc_info.value
+    assert len(err.violations) == 2
+    assert err.violations[0].rule == "irreversible_confidence_threshold"
+    assert err.violations[1].rule == "missing_reversibility_class"
+    assert err.decision_id == DECISION_ID
+
+
+def test_sha256_hash_of_decision_text_is_correct(tool, mock_client):
+    """decision_text is SHA-256 hashed correctly before being passed to certify_with_confidence."""
+    decision_text = "Approve GDPR data deletion for user 42"
+    expected_hash = hashlib.sha256(decision_text.encode()).hexdigest()
+
+    tool._run(
+        decision_text=decision_text,
+        confidence_level=0.95,
+        decision_id=DECISION_ID,
+        threshold_stage="pre-commitment",
+    )
+
+    call_kwargs = mock_client.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["file_hash"] == expected_hash
+
+
+def test_default_file_name_uses_decision_id_and_stage(tool, mock_client):
+    """When file_name is not provided, it defaults to '<decision_id>-<stage>.json'."""
+    decision_id = "run-2026-04-20"
+    stage = "final"
+
+    tool._run(
+        decision_text="Final decision payload",
+        confidence_level=0.99,
+        decision_id=decision_id,
+        threshold_stage=stage,
+    )
+
+    call_kwargs = mock_client.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["file_name"] == f"{decision_id}-{stage}.json"
+
+
+def test_explicit_file_name_overrides_default(tool, mock_client):
+    """When file_name is explicitly provided, it is passed through unchanged."""
+    custom_name = "custom-artifact.json"
+
+    tool._run(
+        decision_text="Some decision",
+        confidence_level=0.9,
+        decision_id=DECISION_ID,
+        threshold_stage="partial",
+        file_name=custom_name,
+    )
+
+    call_kwargs = mock_client.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["file_name"] == custom_name
+
+
+def test_pre_computed_file_hash_used_when_decision_text_empty(tool, mock_client):
+    """When decision_text is empty, the provided file_hash is passed directly."""
+    pre_computed = "b" * 64
+
+    tool._run(
+        decision_text="",
+        file_hash=pre_computed,
+        confidence_level=0.9,
+        decision_id=DECISION_ID,
+        threshold_stage="pre-commitment",
+    )
+
+    call_kwargs = mock_client.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["file_hash"] == pre_computed
+
+
+def test_decision_text_takes_precedence_over_file_hash(tool, mock_client):
+    """decision_text hash is used even when file_hash is also provided."""
+    decision_text = "Text to hash"
+    expected_hash = hashlib.sha256(decision_text.encode()).hexdigest()
+    pre_computed = "c" * 64
+
+    tool._run(
+        decision_text=decision_text,
+        file_hash=pre_computed,
+        confidence_level=0.9,
+        decision_id=DECISION_ID,
+        threshold_stage="pre-commitment",
+    )
+
+    call_kwargs = mock_client.certify_with_confidence.call_args.kwargs
+    assert call_kwargs["file_hash"] == expected_hash
+
+
+def test_raises_value_error_when_no_hash_source(tool, mock_client):
+    """ValueError is raised when neither decision_text nor file_hash is supplied.
+
+    certify_with_confidence and get_policy_check must not be called — the error
+    fires before any network or compliance work begins.
+    """
+    with pytest.raises(ValueError, match="Either decision_text or file_hash must be provided"):
+        tool._run(
+            decision_text="",
+            file_hash=None,
+            confidence_level=0.9,
+            decision_id=DECISION_ID,
+            threshold_stage="pre-commitment",
+        )
+
+    mock_client.certify_with_confidence.assert_not_called()
+    mock_client.get_policy_check.assert_not_called()
+
+
+def test_policy_violation_error_message_contains_decision_id(tool, mock_client):
+    """The PolicyViolationError message includes the decision_id for traceability."""
+    violations = [
+        PolicyViolation(rule="some_rule", message="Some violation", severity="error")
+    ]
+    mock_client.get_policy_check.return_value = _make_violation_check(violations)
+
+    with pytest.raises(PolicyViolationError) as exc_info:
+        tool._run(
+            decision_text="A decision",
+            confidence_level=0.5,
+            decision_id=DECISION_ID,
+            threshold_stage="pre-commitment",
+        )
+
+    assert DECISION_ID in str(exc_info.value)
+
+
+def test_violation_error_message_contains_severity_and_rule(tool, mock_client):
+    """The PolicyViolationError message includes severity and rule for each violation."""
+    violations = [
+        PolicyViolation(
+            rule="irreversible_confidence_threshold",
+            message="Confidence too low",
+            severity="error",
+        )
+    ]
+    mock_client.get_policy_check.return_value = _make_violation_check(violations)
+
+    with pytest.raises(PolicyViolationError) as exc_info:
+        tool._run(
+            decision_text="Risky action",
+            confidence_level=0.3,
+            decision_id=DECISION_ID,
+            threshold_stage="pre-commitment",
+        )
+
+    error_message = str(exc_info.value)
+    assert "ERROR" in error_message
+    assert "irreversible_confidence_threshold" in error_message
