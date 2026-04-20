@@ -1,7 +1,7 @@
 """Main client for the xProof API."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 import requests
 
@@ -20,6 +20,7 @@ from .models import (
     ConfidenceTrail,
     PricingInfo,
     RegistrationResult,
+    ReversibilityClass,
 )
 from .utils import hash_file
 
@@ -238,7 +239,7 @@ class XProofClient:
         what: Optional[str] = None,
         when: Optional[str] = None,
         why: Optional[str] = None,
-        reversibility_class: Optional[str] = None,
+        reversibility_class: Optional[ReversibilityClass] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Certification:
         """Certify a file using a pre-computed SHA-256 hash.
@@ -308,7 +309,7 @@ class XProofClient:
         what: Optional[str] = None,
         when: Optional[str] = None,
         why: Optional[str] = None,
-        reversibility_class: Optional[str] = None,
+        reversibility_class: Optional[ReversibilityClass] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Certification:
         """Certify a file hash with confidence-level anchoring.
@@ -331,9 +332,10 @@ class XProofClient:
             what: 4W -- action hash or description.
             when: 4W -- ISO-8601 timestamp.
             why: 4W -- instruction or reason.
-            reversibility_class: Governance class — one of ``reversible``,
-                ``costly``, or ``irreversible``. Irreversible actions above
-                the configured confidence threshold trigger a policy violation.
+            reversibility_class: Governance class, typed as one of
+                ``'reversible'``, ``'costly'``, or ``'irreversible'``.
+                Irreversible actions above the configured confidence threshold
+                trigger a policy violation.
             metadata: Extra key-value metadata stored alongside the proof.
 
         Returns:

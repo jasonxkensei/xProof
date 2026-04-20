@@ -20,6 +20,7 @@ from .models import (
     PricingInfo,
     PricingTier,
     RegistrationResult,
+    ReversibilityClass,
     TrialInfo,
 )
 from .utils import hash_bytes, hash_file
@@ -36,6 +37,7 @@ __all__ = [
     "ConfidenceTrail",
     "ConfidenceTrailStage",
     "PolicyViolation",
+    "ReversibilityClass",
     "PricingInfo",
     "PricingTier",
     "RegistrationResult",
