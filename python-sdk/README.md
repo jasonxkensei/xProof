@@ -200,6 +200,27 @@ print(proof.file_name, proof.blockchain_status)
 proof = client.verify_hash("e3b0c442...")
 ```
 
+## Policy Compliance
+
+Check whether a decision meets governance requirements — without fetching the full confidence trail:
+
+```python
+from xproof import XProofClient, PolicyCheckResult
+
+client = XProofClient(api_key="pm_your_key")
+
+result: PolicyCheckResult = client.get_policy_check("trade-xyz-2026")
+
+if result.policy_compliant:
+    print("Decision is compliant.")
+else:
+    for v in result.policy_violations:
+        print(f"VIOLATION [{v.severity}] — {v.rule}")
+        print(f"  {v.message}")
+```
+
+`get_policy_check()` is a lightweight yes/no compliance check. It returns `result.policy_compliant` (bool) and `result.policy_violations` (list). For the full audit trail including timestamps and intermediate confidence checkpoints, use `get_confidence_trail()` instead.
+
 ---
 
 ## Governance & Policy Enforcement
@@ -236,14 +257,10 @@ check: PolicyCheckResult = client.get_policy_check("trade-xyz-2026")
 
 if not check.policy_compliant:
     for v in check.policy_violations:
-        print(f"VIOLATION — {v.rule}")
-        print(f"  proof:      {v.proof_id}")
-        print(f"  confidence: {v.confidence_level} (required: {v.threshold})")
-        print(f"  class:      {v.reversibility_class}")
-        # → VIOLATION — irreversible actions require confidence_level >= 0.95
-        # →   proof:      abc-uuid
-        # →   confidence: 0.72 (required: 0.95)
-        # →   class:      irreversible
+        print(f"VIOLATION [{v.severity}] — {v.rule}")
+        print(f"  {v.message}")
+        # → VIOLATION [error] — irreversible actions require confidence_level >= 0.95
+        # →   confidence 0.72 is below the required threshold of 0.95
 ```
 
 ### Full confidence trail with policy result
