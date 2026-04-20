@@ -29,7 +29,12 @@ from .models import (
 )
 from .utils import hash_file
 
-__version__ = "0.2.7"
+try:
+    from importlib.metadata import version as _pkg_version
+
+    __version__ = _pkg_version("xproof")
+except Exception:
+    __version__ = "0.2.7"  # fallback when running from uninstalled source
 
 DEFAULT_BASE_URL = "https://xproof.app"
 DEFAULT_TIMEOUT = 30

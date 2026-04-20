@@ -32,7 +32,12 @@ from .models import (
 )
 from .utils import hash_bytes, hash_file
 
-__version__ = "0.2.7"
+try:
+    from importlib.metadata import version as _pkg_version, PackageNotFoundError as _PNF
+
+    __version__ = _pkg_version("xproof")
+except Exception:
+    __version__ = "0.2.7"  # fallback when running from uninstalled source
 
 __all__ = [
     "XProofClient",
