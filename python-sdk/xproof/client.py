@@ -29,7 +29,7 @@ from .models import (
 )
 from .utils import hash_file
 
-__version__ = "0.2.6"
+__version__ = "0.2.7"
 
 DEFAULT_BASE_URL = "https://xproof.app"
 DEFAULT_TIMEOUT = 30
