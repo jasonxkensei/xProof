@@ -753,6 +753,20 @@ def test_certify_with_confidence_valid_reversibility_class_accepted(good_class):
 # ---------------------------------------------------------------------------
 
 
+def test_valid_threshold_stages_constant():
+    """VALID_THRESHOLD_STAGES must be exactly the four documented values (#93).
+
+    Any addition, removal, or typo in the constant causes this test to fail
+    immediately — before a downstream caller is affected.
+    """
+    assert XProofClient.VALID_THRESHOLD_STAGES == (
+        "initial",
+        "partial",
+        "pre-commitment",
+        "final",
+    )
+
+
 @pytest.mark.parametrize("stage", ["initial", "partial", "pre-commitment", "final"])
 @responses.activate
 def test_certify_with_confidence_all_threshold_stages(stage):
