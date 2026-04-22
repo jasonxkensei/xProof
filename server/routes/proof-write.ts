@@ -371,6 +371,13 @@ export function registerProofWriteRoutes(app: Express) {
       let ownerUserId = certUserId;
 
       if (!ownerUserId) {
+        // API keys always carry a non-null userId (schema enforces NOT NULL). If we somehow
+        // reached here with an API-key auth but no userId, reject instead of misattributing
+        // the certification to the shared system account.
+        if (authMethod === "api_key") {
+          return res.status(401).json({ error: "UNAUTHORIZED", message: "API key has no associated account. Please re-register." });
+        }
+        // x402 / anonymous path: attribute to shared system account (intentional for agent-first flows)
         let [systemUser] = await db
           .select()
           .from(users)
@@ -665,6 +672,11 @@ export function registerProofWriteRoutes(app: Express) {
       }
 
       if (!ownerUserId) {
+        // Reject orphaned API-key requests rather than misattributing to shared system account.
+        if (authMethod === "api_key") {
+          return res.status(401).json({ error: "UNAUTHORIZED", message: "API key has no associated account. Please re-register." });
+        }
+        // x402 / anonymous path: attribute to shared system account (intentional for agent-first flows)
         let [systemUser] = await db
           .select()
           .from(users)
@@ -911,6 +923,11 @@ export function registerProofWriteRoutes(app: Express) {
       let ownerUserId = certUserId;
 
       if (!ownerUserId) {
+        // Reject orphaned API-key requests rather than misattributing to shared system account.
+        if (authMethod === "api_key") {
+          return res.status(401).json({ error: "UNAUTHORIZED", message: "API key has no associated account. Please re-register." });
+        }
+        // x402 / anonymous path: attribute to shared system account (intentional for agent-first flows)
         let [systemUser] = await db
           .select()
           .from(users)
