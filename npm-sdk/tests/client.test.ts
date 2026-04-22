@@ -417,6 +417,52 @@ describe("XProofClient", () => {
     });
   });
 
+  describe("getConfidenceTrail()", () => {
+    it("URL-encodes special characters in decisionId", async () => {
+      const fetchMock = mockFetch(200, {
+        decision_id: "dec/with spaces&special=chars",
+        total_anchors: 0,
+        current_confidence: null,
+        current_stage: null,
+        is_finalized: false,
+        policy_compliant: true,
+        policy_violations: [],
+        context_drift: null,
+        stages: [],
+      });
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient();
+      await client.getConfidenceTrail("dec/with spaces&special=chars");
+
+      const [url] = fetchMock.mock.calls[0];
+      expect(url).toContain("dec%2Fwith%20spaces%26special%3Dchars");
+    });
+  });
+
+  describe("getContextDrift()", () => {
+    it("URL-encodes special characters in decisionId", async () => {
+      const fetchMock = mockFetch(200, {
+        decision_id: "dec/with spaces&special=chars",
+        context_coherent: true,
+        drift_score: 0,
+        fields_monitored: [],
+        fields_drifted: [],
+        fields_stable: [],
+        fields_absent: [],
+        total_anchors: 0,
+        stages: [],
+      });
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient();
+      await client.getContextDrift("dec/with spaces&special=chars");
+
+      const [url] = fetchMock.mock.calls[0];
+      expect(url).toContain("dec%2Fwith%20spaces%26special%3Dchars");
+    });
+  });
+
   describe("certify (file-path)", () => {
     it("hashes file and delegates to certifyHash", async () => {
       const fetchMock = mockFetch(201, {
