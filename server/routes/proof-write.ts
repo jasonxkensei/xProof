@@ -9,7 +9,7 @@ import { paymentRateLimiter, publicSearchRateLimiter } from "../reliability";
 import { isX402Configured, verifyX402Payment, send402Response } from "../x402";
 import { recordOnBlockchain, isMultiversXConfigured } from "../blockchain";
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing";
-import { auditLogSchema, AUDIT_LOG_JSON_SCHEMA, type AgentAuditLog, REVERSIBILITY_CLASSES, JURISDICTION_TYPES } from "../auditSchema";
+import { auditLogSchema, AUDIT_LOG_JSON_SCHEMA, type AgentAuditLog, REVERSIBILITY_CLASSES, JURISDICTION_TYPES, validateTimestampOrdering } from "../auditSchema";
 import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
 import { checkRateLimit, isAdminWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, getApiKeyOwnerWallet, TRIAL_QUOTA, RATE_LIMIT_MAX_VALUE, buildCanonicalId } from "./helpers";
 
@@ -185,13 +185,7 @@ export function registerProofWriteRoutes(app: Express) {
   .refine((data) => {
     if (!data.metadata) return true;
     const m = data.metadata;
-    const ira = m.instruction_received_at ? Date.parse(m.instruction_received_at) : null;
-    const rsa = m.reasoning_started_at ? Date.parse(m.reasoning_started_at) : null;
-    const ata = m.action_taken_at ? Date.parse(m.action_taken_at) : null;
-    if (ira !== null && rsa !== null && rsa < ira) return false;
-    if (rsa !== null && ata !== null && ata < rsa) return false;
-    if (ira !== null && ata !== null && rsa === null && ata < ira) return false;
-    return true;
+    return validateTimestampOrdering(m.instruction_received_at, m.reasoning_started_at, m.action_taken_at).valid;
   }, { message: "Timestamp ordering must satisfy: instruction_received_at <= reasoning_started_at <= action_taken_at", path: ["metadata"] });
 
   app.post("/api/proof", paymentRateLimiter, async (req, res) => {

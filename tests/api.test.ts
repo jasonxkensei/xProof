@@ -410,4 +410,55 @@ describe("xproof API", () => {
       expect([401, 403]).toContain(res.status);
     });
   });
+
+  describe("Timestamp Decomposition — Task #87", () => {
+    it("GET /.well-known/agent-audit-schema.json includes all 4 new timing fields", async () => {
+      const res = await fetch(`${BASE_URL}/.well-known/agent-audit-schema.json`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.properties).toBeDefined();
+      expect(body.properties.instruction_received_at).toBeDefined();
+      expect(body.properties.instruction_received_at.format).toBe("date-time");
+      expect(body.properties.reasoning_started_at).toBeDefined();
+      expect(body.properties.reasoning_started_at.format).toBe("date-time");
+      expect(body.properties.action_taken_at).toBeDefined();
+      expect(body.properties.action_taken_at.format).toBe("date-time");
+      expect(body.properties.jurisdiction_type).toBeDefined();
+      expect(body.properties.jurisdiction_type.enum).toEqual(
+        expect.arrayContaining(["instruction_following", "autonomous_inference", "human_approved"])
+      );
+      expect(body.properties.jurisdiction_type.enum).toHaveLength(3);
+    });
+
+    it("GET /api/confidence-trail/:decisionId returns 404 for unknown decision_id", async () => {
+      const res = await fetch(`${BASE_URL}/api/confidence-trail/nonexistent-decision-xyz`);
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBeDefined();
+      expect(body.decision_id).toBe("nonexistent-decision-xyz");
+    });
+
+    it("GET /api/confidence-trail/:decisionId returns 400 for empty decision_id segment", async () => {
+      const res = await fetch(`${BASE_URL}/api/confidence-trail/%20`);
+      expect([400, 404]).toContain(res.status);
+    });
+
+    it("POST /api/proof returns 401 without auth (timing fields do not bypass auth)", async () => {
+      const res = await fetch(`${BASE_URL}/api/proof`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file_hash: "a3f5b2c1d4e6f789012345678901234567890123456789abcdef0123456789ab",
+          filename: "test-agent-decision.json",
+          metadata: {
+            instruction_received_at: "2026-04-20T14:31:58Z",
+            reasoning_started_at: "2026-04-20T14:31:59Z",
+            action_taken_at: "2026-04-20T14:32:07Z",
+            jurisdiction_type: "autonomous_inference",
+          },
+        }),
+      });
+      expect(res.status).toBe(401);
+    });
+  });
 });

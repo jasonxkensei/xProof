@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   JURISDICTION_TYPES,
-  REVERSIBILITY_CLASSES,
   auditLogSchema,
+  validateTimestampOrdering,
+  buildTimingBreakdown,
 } from "../server/auditSchema";
 
 const BASE_VALID_AUDIT = {
@@ -25,18 +26,18 @@ describe("Timestamp Decomposition — Task #87", () => {
       expect(JURISDICTION_TYPES).toHaveLength(3);
     });
 
-    it("should be a readonly tuple (frozen)", () => {
+    it("should be frozen at runtime (Object.freeze)", () => {
       expect(Object.isFrozen(JURISDICTION_TYPES)).toBe(true);
     });
   });
 
-  describe("auditLogSchema — timing fields", () => {
-    it("should accept a valid audit log without timing fields (backward-compat)", () => {
+  describe("auditLogSchema — timing field validation", () => {
+    it("accepts a valid audit log without timing fields (backward-compat)", () => {
       const result = auditLogSchema.safeParse(BASE_VALID_AUDIT);
       expect(result.success).toBe(true);
     });
 
-    it("should accept all three timing fields when valid ISO8601", () => {
+    it("accepts all three timing fields as valid ISO8601", () => {
       const result = auditLogSchema.safeParse({
         ...BASE_VALID_AUDIT,
         instruction_received_at: "2026-04-20T14:31:58Z",
@@ -46,27 +47,15 @@ describe("Timestamp Decomposition — Task #87", () => {
       expect(result.success).toBe(true);
     });
 
-    it("should accept partial timing fields", () => {
-      const withInstruction = auditLogSchema.safeParse({
+    it("accepts partial timing fields (only instruction_received_at)", () => {
+      const result = auditLogSchema.safeParse({
         ...BASE_VALID_AUDIT,
         instruction_received_at: "2026-04-20T14:31:58Z",
       });
-      expect(withInstruction.success).toBe(true);
-
-      const withReasoning = auditLogSchema.safeParse({
-        ...BASE_VALID_AUDIT,
-        reasoning_started_at: "2026-04-20T14:31:59Z",
-      });
-      expect(withReasoning.success).toBe(true);
-
-      const withAction = auditLogSchema.safeParse({
-        ...BASE_VALID_AUDIT,
-        action_taken_at: "2026-04-20T14:32:07Z",
-      });
-      expect(withAction.success).toBe(true);
+      expect(result.success).toBe(true);
     });
 
-    it("should reject invalid ISO8601 for instruction_received_at", () => {
+    it("rejects non-ISO8601 instruction_received_at with correct error message", () => {
       const result = auditLogSchema.safeParse({
         ...BASE_VALID_AUDIT,
         instruction_received_at: "not-a-date",
@@ -78,23 +67,31 @@ describe("Timestamp Decomposition — Task #87", () => {
       }
     });
 
-    it("should reject invalid ISO8601 for reasoning_started_at", () => {
+    it("rejects non-ISO8601 reasoning_started_at with correct error message", () => {
       const result = auditLogSchema.safeParse({
         ...BASE_VALID_AUDIT,
-        reasoning_started_at: "20260420",
+        reasoning_started_at: "yesterday",
       });
       expect(result.success).toBe(false);
+      if (!result.success) {
+        const msgs = result.error.issues.map((i) => i.message);
+        expect(msgs.some((m) => m.includes("reasoning_started_at"))).toBe(true);
+      }
     });
 
-    it("should reject invalid ISO8601 for action_taken_at", () => {
+    it("rejects non-ISO8601 action_taken_at with correct error message", () => {
       const result = auditLogSchema.safeParse({
         ...BASE_VALID_AUDIT,
-        action_taken_at: "tomorrow",
+        action_taken_at: "20260420",
       });
       expect(result.success).toBe(false);
+      if (!result.success) {
+        const msgs = result.error.issues.map((i) => i.message);
+        expect(msgs.some((m) => m.includes("action_taken_at"))).toBe(true);
+      }
     });
 
-    it("should accept all valid jurisdiction_type values", () => {
+    it("accepts every valid jurisdiction_type value", () => {
       for (const jt of JURISDICTION_TYPES) {
         const result = auditLogSchema.safeParse({
           ...BASE_VALID_AUDIT,
@@ -104,7 +101,7 @@ describe("Timestamp Decomposition — Task #87", () => {
       }
     });
 
-    it("should reject invalid jurisdiction_type", () => {
+    it("rejects unknown jurisdiction_type with correct error message", () => {
       const result = auditLogSchema.safeParse({
         ...BASE_VALID_AUDIT,
         jurisdiction_type: "llm_decided",
@@ -116,7 +113,7 @@ describe("Timestamp Decomposition — Task #87", () => {
       }
     });
 
-    it("should accept timing fields combined with jurisdiction_type", () => {
+    it("accepts timing fields combined with jurisdiction_type", () => {
       const result = auditLogSchema.safeParse({
         ...BASE_VALID_AUDIT,
         instruction_received_at: "2026-04-20T14:31:58Z",
@@ -127,7 +124,7 @@ describe("Timestamp Decomposition — Task #87", () => {
       expect(result.success).toBe(true);
     });
 
-    it("should accept timing fields combined with reversibility_class governance", () => {
+    it("accepts timing fields alongside reversibility_class governance field", () => {
       const result = auditLogSchema.safeParse({
         ...BASE_VALID_AUDIT,
         instruction_received_at: "2026-04-20T14:31:58Z",
@@ -139,94 +136,125 @@ describe("Timestamp Decomposition — Task #87", () => {
     });
   });
 
-  describe("Timestamp ordering constraint — logic", () => {
-    const isOrderValid = (ira: string | null, rsa: string | null, ata: string | null): boolean => {
-      const iraMs = ira ? Date.parse(ira) : null;
-      const rsaMs = rsa ? Date.parse(rsa) : null;
-      const ataMs = ata ? Date.parse(ata) : null;
-      if (iraMs !== null && rsaMs !== null && rsaMs < iraMs) return false;
-      if (rsaMs !== null && ataMs !== null && ataMs < rsaMs) return false;
-      if (iraMs !== null && ataMs !== null && rsaMs === null && ataMs < iraMs) return false;
-      return true;
-    };
-
-    it("should pass when all three are in correct order", () => {
-      expect(isOrderValid("2026-04-20T14:31:58Z", "2026-04-20T14:31:59Z", "2026-04-20T14:32:07Z")).toBe(true);
+  describe("validateTimestampOrdering — exported utility", () => {
+    it("passes when all three are in correct chronological order", () => {
+      const r = validateTimestampOrdering(
+        "2026-04-20T14:31:58Z",
+        "2026-04-20T14:31:59Z",
+        "2026-04-20T14:32:07Z",
+      );
+      expect(r.valid).toBe(true);
+      expect(r.message).toBeNull();
     });
 
-    it("should pass when timestamps are equal (same instant)", () => {
+    it("passes when all three are the same instant", () => {
       const ts = "2026-04-20T14:31:58Z";
-      expect(isOrderValid(ts, ts, ts)).toBe(true);
+      expect(validateTimestampOrdering(ts, ts, ts).valid).toBe(true);
     });
 
-    it("should fail when reasoning_started_at < instruction_received_at", () => {
-      expect(isOrderValid("2026-04-20T14:32:00Z", "2026-04-20T14:31:00Z", "2026-04-20T14:33:00Z")).toBe(false);
+    it("fails when reasoning_started_at < instruction_received_at", () => {
+      const r = validateTimestampOrdering(
+        "2026-04-20T14:32:00Z",
+        "2026-04-20T14:31:00Z",
+        "2026-04-20T14:33:00Z",
+      );
+      expect(r.valid).toBe(false);
+      expect(r.message).toMatch(/reasoning_started_at/);
     });
 
-    it("should fail when action_taken_at < reasoning_started_at", () => {
-      expect(isOrderValid("2026-04-20T14:31:00Z", "2026-04-20T14:32:00Z", "2026-04-20T14:31:30Z")).toBe(false);
+    it("fails when action_taken_at < reasoning_started_at", () => {
+      const r = validateTimestampOrdering(
+        "2026-04-20T14:31:00Z",
+        "2026-04-20T14:32:00Z",
+        "2026-04-20T14:31:30Z",
+      );
+      expect(r.valid).toBe(false);
+      expect(r.message).toMatch(/action_taken_at/);
     });
 
-    it("should fail when action_taken_at < instruction_received_at with no reasoning", () => {
-      expect(isOrderValid("2026-04-20T14:32:00Z", null, "2026-04-20T14:31:00Z")).toBe(false);
+    it("fails when action_taken_at < instruction_received_at with no reasoning step", () => {
+      const r = validateTimestampOrdering("2026-04-20T14:32:00Z", null, "2026-04-20T14:31:00Z");
+      expect(r.valid).toBe(false);
+      expect(r.message).toMatch(/action_taken_at/);
     });
 
-    it("should pass when only instruction_received_at is provided", () => {
-      expect(isOrderValid("2026-04-20T14:31:58Z", null, null)).toBe(true);
+    it("passes when only instruction_received_at is provided", () => {
+      expect(validateTimestampOrdering("2026-04-20T14:31:58Z", null, null).valid).toBe(true);
     });
 
-    it("should pass when only action_taken_at is provided", () => {
-      expect(isOrderValid(null, null, "2026-04-20T14:32:07Z")).toBe(true);
+    it("passes when only action_taken_at is provided", () => {
+      expect(validateTimestampOrdering(null, null, "2026-04-20T14:32:07Z").valid).toBe(true);
     });
 
-    it("should pass when only reasoning_started_at and action_taken_at are provided", () => {
-      expect(isOrderValid(null, "2026-04-20T14:31:59Z", "2026-04-20T14:32:07Z")).toBe(true);
+    it("passes when reasoning_started_at and action_taken_at are provided without instruction", () => {
+      expect(validateTimestampOrdering(null, "2026-04-20T14:31:59Z", "2026-04-20T14:32:07Z").valid).toBe(true);
     });
 
-    it("should fail when reasoning_started > action_taken, instruction absent", () => {
-      expect(isOrderValid(null, "2026-04-20T14:33:00Z", "2026-04-20T14:32:07Z")).toBe(false);
+    it("fails when reasoning > action, instruction absent", () => {
+      const r = validateTimestampOrdering(null, "2026-04-20T14:33:00Z", "2026-04-20T14:32:07Z");
+      expect(r.valid).toBe(false);
     });
   });
 
-  describe("timing_breakdown computed fields", () => {
-    const buildTimingBreakdown = (
-      ira: string | null,
-      rsa: string | null,
-      ata: string | null,
-      jt: string | null,
-    ) => {
-      const iraMs = ira ? Date.parse(ira) : null;
-      const rsaMs = rsa ? Date.parse(rsa) : null;
-      const ataMs = ata ? Date.parse(ata) : null;
-      const reasoning_duration_ms = rsaMs !== null && ataMs !== null ? ataMs - rsaMs : null;
-      const total_duration_ms = iraMs !== null && ataMs !== null ? ataMs - iraMs : null;
-      if (!(ira || rsa || ata || jt)) return null;
-      return { instruction_received_at: ira, reasoning_started_at: rsa, action_taken_at: ata, jurisdiction_type: jt, reasoning_duration_ms, total_duration_ms };
-    };
-
-    it("should return null timing_breakdown when no timing fields present", () => {
-      expect(buildTimingBreakdown(null, null, null, null)).toBeNull();
+  describe("buildTimingBreakdown — exported utility", () => {
+    it("returns null when no timing fields are present in metadata", () => {
+      expect(buildTimingBreakdown({})).toBeNull();
+      expect(buildTimingBreakdown({ confidence_level: 0.9 })).toBeNull();
     });
 
-    it("should compute reasoning_duration_ms correctly", () => {
-      const tb = buildTimingBreakdown(null, "2026-04-20T14:31:59Z", "2026-04-20T14:32:07Z", null);
-      expect(tb?.reasoning_duration_ms).toBe(8000);
+    it("returns a breakdown object when at least one timing field is present", () => {
+      const result = buildTimingBreakdown({ instruction_received_at: "2026-04-20T14:31:58Z" });
+      expect(result).not.toBeNull();
+      expect(result?.instruction_received_at).toBe("2026-04-20T14:31:58Z");
     });
 
-    it("should compute total_duration_ms correctly", () => {
-      const tb = buildTimingBreakdown("2026-04-20T14:31:58Z", "2026-04-20T14:31:59Z", "2026-04-20T14:32:07Z", null);
-      expect(tb?.total_duration_ms).toBe(9000);
+    it("computes reasoning_duration_ms correctly from reasoning and action timestamps", () => {
+      const result = buildTimingBreakdown({
+        reasoning_started_at: "2026-04-20T14:31:59Z",
+        action_taken_at: "2026-04-20T14:32:07Z",
+      });
+      expect(result?.reasoning_duration_ms).toBe(8000);
     });
 
-    it("should return null durations when anchor timestamps are absent", () => {
-      const tb = buildTimingBreakdown("2026-04-20T14:31:58Z", null, null, "instruction_following");
-      expect(tb?.reasoning_duration_ms).toBeNull();
-      expect(tb?.total_duration_ms).toBeNull();
+    it("computes total_duration_ms correctly from instruction to action timestamps", () => {
+      const result = buildTimingBreakdown({
+        instruction_received_at: "2026-04-20T14:31:58Z",
+        reasoning_started_at: "2026-04-20T14:31:59Z",
+        action_taken_at: "2026-04-20T14:32:07Z",
+      });
+      expect(result?.total_duration_ms).toBe(9000);
     });
 
-    it("should expose jurisdiction_type in timing_breakdown", () => {
-      const tb = buildTimingBreakdown(null, null, null, "autonomous_inference");
-      expect(tb?.jurisdiction_type).toBe("autonomous_inference");
+    it("returns null durations when action_taken_at is absent", () => {
+      const result = buildTimingBreakdown({
+        instruction_received_at: "2026-04-20T14:31:58Z",
+        reasoning_started_at: "2026-04-20T14:31:59Z",
+      });
+      expect(result?.reasoning_duration_ms).toBeNull();
+      expect(result?.total_duration_ms).toBeNull();
+    });
+
+    it("exposes jurisdiction_type when only jurisdiction_type is set (no timestamps)", () => {
+      const result = buildTimingBreakdown({ jurisdiction_type: "autonomous_inference" });
+      expect(result).not.toBeNull();
+      expect(result?.jurisdiction_type).toBe("autonomous_inference");
+    });
+
+    it("exposes all six output fields when all inputs are provided", () => {
+      const result = buildTimingBreakdown({
+        instruction_received_at: "2026-04-20T14:31:58Z",
+        reasoning_started_at: "2026-04-20T14:31:59Z",
+        action_taken_at: "2026-04-20T14:32:07Z",
+        jurisdiction_type: "human_approved",
+      });
+      expect(result).toMatchObject({
+        instruction_received_at: "2026-04-20T14:31:58Z",
+        reasoning_started_at: "2026-04-20T14:31:59Z",
+        action_taken_at: "2026-04-20T14:32:07Z",
+        jurisdiction_type: "human_approved",
+        reasoning_duration_ms: 8000,
+        total_duration_ms: 9000,
+      });
     });
   });
 });

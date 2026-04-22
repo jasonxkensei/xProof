@@ -17,11 +17,11 @@ export const RISK_LEVELS = ["low", "medium", "high", "critical"] as const;
 
 export const DECISIONS = ["approved", "rejected", "deferred"] as const;
 
-export const JURISDICTION_TYPES = [
+export const JURISDICTION_TYPES = Object.freeze([
   "instruction_following",
   "autonomous_inference",
   "human_approved",
-] as const;
+] as const);
 
 export const inputsManifestSchema = z.object({
   fields: z.array(z.string().max(128)).min(1, "At least one field name is required").max(50, "Maximum 50 fields"),
@@ -73,6 +73,45 @@ export const auditLogSchema = z.object({
 });
 
 export type AgentAuditLog = z.infer<typeof auditLogSchema>;
+
+export function validateTimestampOrdering(
+  instruction_received_at: string | null | undefined,
+  reasoning_started_at: string | null | undefined,
+  action_taken_at: string | null | undefined,
+): { valid: boolean; message: string | null } {
+  const ira = instruction_received_at ? Date.parse(instruction_received_at) : null;
+  const rsa = reasoning_started_at ? Date.parse(reasoning_started_at) : null;
+  const ata = action_taken_at ? Date.parse(action_taken_at) : null;
+  if (ira !== null && rsa !== null && rsa < ira) {
+    return { valid: false, message: "reasoning_started_at must be >= instruction_received_at" };
+  }
+  if (rsa !== null && ata !== null && ata < rsa) {
+    return { valid: false, message: "action_taken_at must be >= reasoning_started_at" };
+  }
+  if (ira !== null && ata !== null && rsa === null && ata < ira) {
+    return { valid: false, message: "action_taken_at must be >= instruction_received_at" };
+  }
+  return { valid: true, message: null };
+}
+
+export function buildTimingBreakdown(meta: Record<string, any>): Record<string, any> | null {
+  const ira: string | null = meta.instruction_received_at ?? null;
+  const rsa: string | null = meta.reasoning_started_at ?? null;
+  const ata: string | null = meta.action_taken_at ?? null;
+  const jt: string | null = meta.jurisdiction_type ?? null;
+  if (!(ira || rsa || ata || jt)) return null;
+  const iraMs = ira ? Date.parse(ira) : null;
+  const rsaMs = rsa ? Date.parse(rsa) : null;
+  const ataMs = ata ? Date.parse(ata) : null;
+  return {
+    instruction_received_at: ira,
+    reasoning_started_at: rsa,
+    action_taken_at: ata,
+    jurisdiction_type: jt,
+    reasoning_duration_ms: rsaMs !== null && ataMs !== null ? ataMs - rsaMs : null,
+    total_duration_ms: iraMs !== null && ataMs !== null ? ataMs - iraMs : null,
+  };
+}
 
 export const AUDIT_LOG_JSON_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
