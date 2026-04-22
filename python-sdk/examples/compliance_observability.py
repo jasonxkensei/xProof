@@ -313,7 +313,36 @@ def _build_mock_client_for_tool(decision_id: str, compliant: bool) -> MagicMock:
 
 
 def run_crewai_certification(decision_id: str) -> None:
-    """Demonstrate XProofCrewCertifyTool — happy path and policy violation."""
+    """Demonstrate XProofCrewCertifyTool in a crew context.
+
+    In a live CrewAI pipeline the tool is added to an agent's tool list and
+    the LLM invokes it directly::
+
+        from xproof.integrations.crewai import XProofNativeCrewCertifyTool
+        from crewai import Agent, Crew, Task
+
+        certify_tool = XProofNativeCrewCertifyTool(
+            api_key="pm_...", author="data-hygiene-agent"
+        )
+        agent = Agent(
+            role="Data Hygiene Specialist",
+            goal="Delete PII records in compliance with GDPR policy",
+            tools=[certify_tool],
+        )
+        task = Task(description="Delete eu-region PII records", agent=agent)
+        crew = Crew(agents=[agent], tasks=[task])
+        crew.kickoff()
+
+    ``XProofNativeCrewCertifyTool`` (shown above) is the native CrewAI
+    ``BaseTool`` subclass — it wraps :class:`XProofCrewCertifyTool`, the plain
+    Python variant that works without the ``crewai`` package.  Both run the
+    same certification loop; use ``XProofNativeCrewCertifyTool`` when adding
+    the tool to a CrewAI agent's ``tools`` list, and ``XProofCrewCertifyTool``
+    when calling it directly from your own code.
+
+    Here we use :class:`XProofCrewCertifyTool` with a mocked client so the
+    example remains self-contained and network-free.
+    """
     from xproof.exceptions import PolicyViolationError
     from xproof.integrations.crewai import XProofCrewCertifyTool
 
@@ -364,24 +393,42 @@ def run_crewai_certification(decision_id: str) -> None:
 
 
 def run_autogen_certification(decision_id: str) -> None:
-    """Demonstrate xproof_certify_decision — happy path and policy violation."""
+    """Demonstrate xproof_certify_decision registered as an AutoGen function tool.
+
+    In a live AutoGen pipeline the function is registered on agents like this::
+
+        assistant.register_for_llm(
+            name="xproof_certify_decision",
+            description="Certify a decision on-chain and gate on the compliance policy.",
+        )(xproof_certify_decision)
+
+        user_proxy.register_for_execution(
+            name="xproof_certify_decision",
+        )(xproof_certify_decision)
+
+    Here we call the function directly with a mocked client to keep the
+    example self-contained and network-free.  The delete-records scenario is
+    identical to the CrewAI section above so both integrations are directly
+    comparable.
+    """
     from xproof.exceptions import PolicyViolationError
     from xproof.integrations.autogen import xproof_certify_decision
 
     import json as _json
 
     decision_text = _json.dumps(
-        {"action": "approve_trade", "symbol": "EGLD", "amount_usd": 250_000}
+        {"action": "delete_pii_records", "scope": "eu-region", "count": 15_000}
     )
 
     compliant_client = _build_mock_client_for_tool(decision_id + "-ok", compliant=True)
     tx = xproof_certify_decision(
         decision_text=decision_text,
-        confidence_level=0.88,
-        threshold_stage="final",
+        confidence_level=0.97,
+        threshold_stage="pre-commitment",
         decision_id=decision_id + "-ok",
-        reversibility_class="costly",
-        why="Approved by trading model v3.2",
+        reversibility_class="irreversible",
+        why="Scheduled GDPR retention cleanup",
+        author="data-hygiene-agent",
         client=compliant_client,
     )
     assert tx == "tx-mvx-crew-demo"
@@ -392,10 +439,11 @@ def run_autogen_certification(decision_id: str) -> None:
         xproof_certify_decision(
             decision_text=decision_text,
             confidence_level=0.97,
-            threshold_stage="final",
+            threshold_stage="pre-commitment",
             decision_id=decision_id + "-blocked",
             reversibility_class="irreversible",
-            why="High-confidence auto-approval",
+            why="Scheduled GDPR retention cleanup",
+            author="data-hygiene-agent",
             client=blocked_client,
         )
         raise AssertionError("Expected PolicyViolationError was not raised")
