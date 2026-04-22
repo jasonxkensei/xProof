@@ -139,7 +139,7 @@ export class XProofClient {
   }
 
   async verify(proofId: string): Promise<Certification> {
-    const data = await this.request("GET", `/api/proof/${proofId}`, {
+    const data = await this.request("GET", `/api/proof/${encodeURIComponent(proofId)}`, {
       authRequired: false,
     });
     return parseCertification(data);

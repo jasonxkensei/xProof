@@ -181,6 +181,24 @@ describe("XProofClient", () => {
     expect(fetchMock.mock.calls[0][1].headers["Authorization"]).toBeUndefined();
   });
 
+  it("verify URL-encodes proof IDs that contain slashes or spaces", async () => {
+    const fetchMock = mockFetch(200, {
+      id: "folder/sub id",
+      fileName: "doc.pdf",
+      fileHash: "xyz",
+      transactionHash: "tx-enc",
+      transactionUrl: "",
+      createdAt: "",
+    });
+    globalThis.fetch = fetchMock;
+
+    const client = new XProofClient({ apiKey: "pm_test" });
+    await client.verify("folder/sub id");
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/api/proof/folder%2Fsub%20id`);
+  });
+
   it("verifyHash uses /api/proof/hash/ endpoint", async () => {
     const fetchMock = mockFetch(200, {
       id: "proof-vh",
