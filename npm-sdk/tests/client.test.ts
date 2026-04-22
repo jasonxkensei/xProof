@@ -218,6 +218,24 @@ describe("XProofClient", () => {
     expect(url).toBe(`${BASE}/api/proof/hash/abc123`);
   });
 
+  it("verifyHash URL-encodes special characters in fileHash", async () => {
+    const fetchMock = mockFetch(200, {
+      id: "proof-enc",
+      fileName: "doc.pdf",
+      fileHash: "hash/with spaces&chars",
+      transactionHash: "tx-enc",
+      transactionUrl: "",
+      createdAt: "",
+    });
+    globalThis.fetch = fetchMock;
+
+    const client = new XProofClient();
+    await client.verifyHash("hash/with spaces&chars");
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toContain("hash%2Fwith%20spaces%26chars");
+  });
+
   it("getPricing returns parsed pricing info", async () => {
     const fetchMock = mockFetch(200, {
       protocol: "xproof",

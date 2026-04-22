@@ -146,7 +146,7 @@ export class XProofClient {
   }
 
   async verifyHash(fileHash: string): Promise<Certification> {
-    const data = await this.request("GET", `/api/proof/hash/${fileHash}`, {
+    const data = await this.request("GET", `/api/proof/hash/${encodeURIComponent(fileHash)}`, {
       authRequired: false,
     });
     return parseCertification(data);
