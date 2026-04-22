@@ -459,8 +459,18 @@ export function registerAttestationsRoutes(app: Express) {
   app.get("/widget/trust/:wallet.js", async (req, res) => {
     try {
       const { wallet } = req.params;
+
+      // Strict wallet format validation before any interpolation into JS.
+      // MultiversX addresses are always erd1 followed by exactly 58 lowercase
+      // alphanumeric characters — no quotes, slashes, or other JS-injectable chars.
+      if (!/^erd1[a-z0-9]{58}$/.test(wallet)) {
+        res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+        return res.status(400).send(`/* invalid wallet address */`);
+      }
+
       const baseUrl = `https://${req.get("host")}`;
 
+      // wallet is now guaranteed to contain only [a-z0-9] — safe to embed as a JS literal.
       const js = `(function(){
   var w="${wallet}";
   var base="${baseUrl}";
@@ -485,7 +495,7 @@ export function registerAttestationsRoutes(app: Express) {
       res.setHeader("Cache-Control", "public, max-age=300");
       res.send(js);
     } catch (err: any) {
-      res.status(500).send(`/* error: ${err.message} */`);
+      res.status(500).send(`/* internal error */`);
     }
   });
 

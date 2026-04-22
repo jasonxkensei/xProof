@@ -62,7 +62,26 @@ export function registerProofReadRoutes(app: Express) {
         }
       }
 
-      res.json({ ...certification, ownerWallet });
+      // Return only explicitly public fields — never spread the full DB row.
+      // Internal fields (userId, webhookUrl, webhookStatus, webhookAttempts,
+      // webhookLastAttempt, authMethod, blockchainLatencyMs, updatedAt) are excluded.
+      res.json({
+        id: certification.id,
+        fileName: certification.fileName,
+        fileHash: certification.fileHash,
+        fileType: certification.fileType,
+        fileSize: certification.fileSize,
+        authorName: certification.authorName,
+        authorSignature: certification.authorSignature,
+        transactionHash: certification.transactionHash,
+        transactionUrl: certification.transactionUrl,
+        blockchainStatus: certification.blockchainStatus,
+        certificateUrl: certification.certificateUrl,
+        isPublic: certification.isPublic,
+        metadata: certification.metadata,
+        createdAt: certification.createdAt,
+        ownerWallet,
+      });
     } catch (error) {
       logger.withRequest(req).error("Failed to fetch proof");
       res.status(500).json({ message: "Failed to fetch proof" });
