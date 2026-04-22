@@ -375,6 +375,8 @@ if not check.policy_compliant:
         # →   confidence 0.72 is below the required threshold of 0.95
 ```
 
+Prefer `get_policy_check()` when you only need a fast governance gate. It avoids fetching the full confidence trail, which is better reserved for post-incident review or detailed forensic analysis.
+
 ### Full confidence trail with policy result
 
 ```python
