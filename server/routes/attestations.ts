@@ -479,10 +479,13 @@ export function registerAttestationsRoutes(app: Express) {
 
       const baseUrl = `https://${req.get("host")}`;
 
-      // wallet is now guaranteed to contain only [a-z0-9] — safe to embed as a JS literal.
+      // Use JSON.stringify to safely serialize both values into JS string literals,
+      // providing defense-in-depth even though wallet is already regex-validated.
+      const safeWallet = JSON.stringify(wallet);
+      const safeBase = JSON.stringify(baseUrl);
       const js = `(function(){
-  var w="${wallet}";
-  var base="${baseUrl}";
+  var w=${safeWallet};
+  var base=${safeBase};
   function inject(el){
     var img=document.createElement("img");
     img.src=base+"/badge/trust/"+w+".svg";
