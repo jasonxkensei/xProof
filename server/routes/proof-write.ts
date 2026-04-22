@@ -426,6 +426,9 @@ export function registerProofWriteRoutes(app: Express) {
       // 2. Account-level webhook_url set at registration — fires for every proof automatically
       let effectiveWebhookUrl = data.webhook_url || null;
       let effectiveWebhookSecret: string | null = null;
+      // True when the webhook URL came from the request body (not account-level), so we
+      // generate a fresh random secret and return it to the caller in the response.
+      const isPerProofWebhook = !!data.webhook_url;
 
       if (!effectiveWebhookUrl && ownerUserId) {
         const [ownerUser] = await db.select({ webhookUrl: users.webhookUrl, webhookSecret: users.webhookSecret })
@@ -438,6 +441,7 @@ export function registerProofWriteRoutes(app: Express) {
       }
 
       let webhookStatus: string = effectiveWebhookUrl ? "pending" : "not_requested";
+      let generatedWebhookSecret: string | null = null;
 
       if (effectiveWebhookUrl) {
         const { scheduleWebhookDelivery, isValidWebhookUrl } = await import("../webhook");
@@ -446,9 +450,13 @@ export function registerProofWriteRoutes(app: Express) {
             .set({ webhookUrl: effectiveWebhookUrl, webhookStatus: "pending" })
             .where(eq(certifications.id, certification.id));
 
-          const webhookSecret = effectiveWebhookSecret
-            || (authMethod === "api_key" ? authHeader!.slice(7) : (process.env.SESSION_SECRET || "xproof-x402"));
-          scheduleWebhookDelivery(certification.id, effectiveWebhookUrl, baseUrl, webhookSecret);
+          // Never reuse the API key as the signing secret — generate a random one-time
+          // secret so webhook receivers cannot call xproof on the caller's behalf.
+          if (!effectiveWebhookSecret) {
+            generatedWebhookSecret = crypto.randomBytes(32).toString("hex");
+            effectiveWebhookSecret = generatedWebhookSecret;
+          }
+          scheduleWebhookDelivery(certification.id, effectiveWebhookUrl, baseUrl, effectiveWebhookSecret);
         } else {
           webhookStatus = "failed";
           await db.update(certifications)
@@ -481,6 +489,10 @@ export function registerProofWriteRoutes(app: Express) {
         },
         timestamp: certification.createdAt?.toISOString() || new Date().toISOString(),
         webhook_status: webhookStatus,
+        // webhook_secret is returned only for per-proof webhooks (when webhook_url is supplied in
+        // this request). Store it securely — use it to verify X-xProof-Signature on callbacks.
+        // Account-level webhooks use the secret set at registration (/api/agents/register).
+        ...(isPerProofWebhook && generatedWebhookSecret ? { webhook_secret: generatedWebhookSecret } : {}),
         ...(trialInfo ? { trial: { remaining: Math.max(0, trialInfo.remaining - 1) } } : {}),
         ...(creditInfo ? { credits: { remaining: Math.max(0, creditInfo.balance - 1) } } : {}),
         message: "File certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
@@ -905,6 +917,9 @@ export function registerProofWriteRoutes(app: Express) {
       const results: any[] = [];
       let createdCount = 0;
       let existingCount = 0;
+      // Shared random signing secret for all per-batch webhook deliveries in this request.
+      // Generated lazily on first use so callers using account-level secrets aren't affected.
+      let batchGeneratedWebhookSecret: string | null = null;
 
       for (const file of data.files) {
         if (trialInfo && trialInfo.remaining - createdCount <= 0) {
@@ -989,9 +1004,14 @@ export function registerProofWriteRoutes(app: Express) {
             await db.update(certifications)
               .set({ webhookUrl: batchEffectiveWebhookUrl, webhookStatus: "pending" })
               .where(eq(certifications.id, certification.id));
-            const batchWebhookSecret = batchEffectiveWebhookSecret
-              || (authMethod === "api_key" ? authHeader!.slice(7) : (process.env.SESSION_SECRET || "xproof-x402"));
-            scheduleWebhookDelivery(certification.id, batchEffectiveWebhookUrl, baseUrl, batchWebhookSecret);
+            // Never reuse the API key — use account secret if available, else generate a fresh one
+            if (!batchEffectiveWebhookSecret) {
+              if (!batchGeneratedWebhookSecret) {
+                batchGeneratedWebhookSecret = crypto.randomBytes(32).toString("hex");
+              }
+              batchEffectiveWebhookSecret = batchGeneratedWebhookSecret;
+            }
+            scheduleWebhookDelivery(certification.id, batchEffectiveWebhookUrl, baseUrl, batchEffectiveWebhookSecret);
           }
         }
       }
@@ -1018,6 +1038,10 @@ export function registerProofWriteRoutes(app: Express) {
         created: createdCount,
         existing: existingCount,
         results,
+        // webhook_secret is present only when a per-batch webhook_url was provided in this request.
+        // Store it securely — use it to verify X-xProof-Signature on webhook callbacks for this batch.
+        // Account-level webhooks use the secret configured at registration (/api/agents/register).
+        ...(data.webhook_url && batchGeneratedWebhookSecret ? { webhook_secret: batchGeneratedWebhookSecret } : {}),
         ...(trialInfo ? { trial: { remaining: Math.max(0, trialInfo.remaining - createdCount) } } : {}),
         ...(creditInfo ? { credits: { remaining: Math.max(0, creditInfo.balance - createdCount) } } : {}),
       });

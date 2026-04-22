@@ -7,6 +7,7 @@ import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
 import { attestationIssuanceRateLimiter, publicSearchRateLimiter } from "../reliability";
 import { computeTrustScoreByWallet } from "../trust";
+import { isValidWebhookUrl } from "../webhook";
 
 export function registerAttestationsRoutes(app: Express) {
   // ============================================
@@ -32,6 +33,13 @@ export function registerAttestationsRoutes(app: Express) {
 
       if (data.subjectWallet === issuerWallet) {
         return res.status(400).json({ message: "Cannot self-attest" });
+      }
+
+      // Reject SSRF-prone webhook URLs (http://, localhost, private IPs, .internal, etc.)
+      if (data.webhookUrl && !isValidWebhookUrl(data.webhookUrl)) {
+        return res.status(400).json({
+          message: "webhookUrl must be a public HTTPS URL. Loopback, private IP, and internal network addresses are not permitted.",
+        });
       }
 
       const issuerCertCheck = await db.execute(sql`
@@ -178,7 +186,8 @@ export function registerAttestationsRoutes(app: Express) {
         UPDATE attestations SET status = 'revoked', revoked_at = NOW() WHERE id = ${id}
       `);
 
-      if (webhookUrl) {
+      // Only dispatch if URL is still valid (guards pre-existing rows created before this fix)
+      if (webhookUrl && isValidWebhookUrl(webhookUrl)) {
         try {
           const timestamp = Math.floor(Date.now() / 1000).toString();
           const payload = JSON.stringify({

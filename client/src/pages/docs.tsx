@@ -528,21 +528,31 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
         method: "POST",
         path: "(your webhook URL)",
         auth: "HMAC-SHA256 signature",
-        description: `When you provide a webhook_url in POST /api/proof or /api/batch, xproof sends a POST request to your URL when the proof is confirmed on-chain. The request includes an X-xProof-Signature header containing an HMAC-SHA256 signature of the body, computed with your API key as the secret.`,
+        description: `When you provide a webhook_url in POST /api/proof or /api/batch, xproof sends a POST request to your URL when the proof is confirmed on-chain. The request includes an X-xProof-Signature header containing an HMAC-SHA256 signature of the body. For per-proof and per-batch webhooks the signing secret is returned as webhook_secret in the API response — store it securely and use it to verify the signature. For account-level webhooks (set at /api/agents/register) the secret you configured at registration is used instead.`,
         response: `{
   "event": "proof.confirmed",
   "proof_id": "uuid",
   "file_hash": "abc123...",
   "tx_hash": "0x...",
   "timestamp": "2025-01-01T00:00:00Z"
+}
+
+// POST /api/proof response (when webhook_url supplied):
+{
+  "proof_id": "...",
+  "webhook_status": "pending",
+  "webhook_secret": "<unique-32-byte-hex-secret>",
+  ...
 }`,
         curl: `# Verify webhook signature in your handler:
-# signature = HMAC-SHA256(request_body, your_api_key)
+# The signing secret is returned as webhook_secret in the /api/proof (or /api/batch) response.
+# signature = HMAC-SHA256(request_body, webhook_secret)
 # Compare with X-xProof-Signature header
 
 # Python example:
 import hmac, hashlib
-expected = hmac.new(api_key.encode(), request.body, hashlib.sha256).hexdigest()
+secret = webhook_secret.encode()  # from the POST /api/proof response
+expected = hmac.new(secret, request.body, hashlib.sha256).hexdigest()
 assert hmac.compare_digest(expected, request.headers["X-xProof-Signature"])`,
       },
     ],
