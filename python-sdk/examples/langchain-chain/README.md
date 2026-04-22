@@ -1,26 +1,74 @@
-# LangChain + xProof Example
+# LangChain + xProof Examples
 
-Demonstrates automatic certification of LangChain LLM and tool calls
-using the xProof callback handler.
+Two standalone scripts show different xProof integration points for
+LangChain agents.  Choose the one that matches your use case.
+
+| Script | Integration | Best for |
+|---|---|---|
+| `main.py` | `XProofCallbackHandler` | Certifying every LLM call automatically |
+| `certify_tool_demo.py` | `XProofCertifyTool` | Certifying a specific high-stakes decision |
 
 ## Setup
 
 ```bash
-cd python-sdk/examples/langchain-chain
+pip install -e ../..          # install the xproof package in editable mode
+# or, to pin dependencies:
 pip install -r requirements.txt
 ```
 
-## Run
+---
+
+## `main.py` — LLM-call certification via callback handler
+
+`XProofCallbackHandler` hooks into LangChain's callback system so every
+`on_llm_start` / `on_llm_end` event is automatically hashed and certified
+on-chain.  No changes to your chain logic are required — just pass the
+handler to your chain's `callbacks` parameter.
 
 ```bash
 python main.py
 ```
 
 The script will:
-1. Register a trial xProof agent
-2. Simulate LangChain LLM calls with the XProofCallbackHandler
-3. Each LLM call is automatically hashed and certified on-chain
-4. Show the resulting proof trail with 4W metadata
+
+1. Register a trial xProof agent.
+2. Simulate two LangChain LLM calls with the handler attached.
+3. Flush the batch — both calls are certified on-chain in one round trip.
+4. Verify each proof by ID and print the result.
 
 Each proof is anchored on MultiversX and verifiable at
 `https://xproof.app/verify/<proofId>`.
+
+---
+
+## `certify_tool_demo.py` — Decision certification via tool
+
+`XProofCertifyTool` collapses the hash → certify → policy-check → gate
+loop into a single `tool.run()` call.  Use it when an agent must certify
+a specific decision (not every LLM turn) before executing an irreversible
+action.
+
+The demo uses the canonical **GDPR PII-deletion scenario**:
+
+- **Action:** `delete_pii_records`
+- **Scope:** `eu-region`
+- **Count:** 15 000 records
+- `confidence_level: 0.97`, `threshold_stage: "pre-commitment"`,
+  `reversibility_class: "irreversible"`
+- `why: "Scheduled GDPR retention cleanup"`
+
+```bash
+python certify_tool_demo.py
+```
+
+The script runs two scenarios back-to-back — no API key or network access
+required (the client is mocked):
+
+1. **Compliant** (confidence 0.97) — policy passes, deletion is allowed to
+   proceed; the transaction hash is printed.
+2. **Blocked** (confidence 0.82) — policy violated, `PolicyViolationError`
+   is raised with a structured rule message and the deletion is aborted.
+
+This scenario mirrors the CrewAI and AutoGen sections in
+`examples/compliance_observability.py` so all three frameworks are
+directly comparable.
