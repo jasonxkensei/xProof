@@ -10,10 +10,16 @@ LangChain agents.  Choose the one that matches your use case.
 
 ## Setup
 
+Run these commands from the `python-sdk/` directory:
+
 ```bash
-pip install -e ../..          # install the xproof package in editable mode
-# or, to pin dependencies:
-pip install -r requirements.txt
+pip install -e .              # install the xproof package in editable mode
+```
+
+Or, to pin to the example's locked dependencies (run from this directory):
+
+```bash
+pip install -r examples/langchain-chain/requirements.txt
 ```
 
 ---
@@ -52,7 +58,7 @@ The demo uses the canonical **GDPR PII-deletion scenario**:
 
 - **Action:** `delete_pii_records`
 - **Scope:** `eu-region`
-- **Count:** 15 000 records
+- **Count:** `15_000` records
 - `confidence_level: 0.97`, `threshold_stage: "pre-commitment"`,
   `reversibility_class: "irreversible"`
 - `why: "Scheduled GDPR retention cleanup"`
