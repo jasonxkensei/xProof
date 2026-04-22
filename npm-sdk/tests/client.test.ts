@@ -456,6 +456,17 @@ describe("XProofClient", () => {
       const [url] = fetchMock.mock.calls[0];
       expect(url).toContain("dec%2Fwith%20spaces%26special%3Dchars");
     });
+
+    it("throws ValidationError for empty decisionId without hitting the network", async () => {
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient();
+
+      await expect(client.getConfidenceTrail("")).rejects.toThrow(ValidationError);
+      await expect(client.getConfidenceTrail("   ")).rejects.toThrow(ValidationError);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 
   describe("getContextDrift()", () => {
@@ -478,6 +489,17 @@ describe("XProofClient", () => {
 
       const [url] = fetchMock.mock.calls[0];
       expect(url).toContain("dec%2Fwith%20spaces%26special%3Dchars");
+    });
+
+    it("throws ValidationError for empty decisionId without hitting the network", async () => {
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient();
+
+      await expect(client.getContextDrift("")).rejects.toThrow(ValidationError);
+      await expect(client.getContextDrift("   ")).rejects.toThrow(ValidationError);
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 

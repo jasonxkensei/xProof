@@ -224,6 +224,9 @@ export class XProofClient {
   }
 
   async getConfidenceTrail(decisionId: string): Promise<ConfidenceTrail> {
+    if (!decisionId || !decisionId.trim()) {
+      throw new ValidationError("decisionId is required", {});
+    }
     const data = await this.request(
       "GET",
       `/api/confidence-trail/${encodeURIComponent(decisionId)}`,
@@ -284,6 +287,9 @@ export class XProofClient {
   }
 
   async getContextDrift(decisionId: string): Promise<ContextDrift> {
+    if (!decisionId || !decisionId.trim()) {
+      throw new ValidationError("decisionId is required", {});
+    }
     const data = await this.request(
       "GET",
       `/api/context-drift/${encodeURIComponent(decisionId)}`,
