@@ -43,17 +43,22 @@ export async function createMcpServer(ctx: McpContext) {
         if (!auth.valid || !auth.keyHash) {
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "Valid API key required. Include Authorization: Bearer pm_xxx header." }) }], isError: true };
         }
+        // Every active API key must have an owner — reject rather than misattribute to system account
+        if (!auth.userId) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "API key has no associated account. Please re-register." }) }], isError: true };
+        }
 
-        // Billing check
-        const trialInfo = auth.userId ? await getTrialUser({ userId: auth.userId }) : null;
+        // Billing: enforce trial quota and prepaid-credit requirements
+        const trialInfo = await getTrialUser({ userId: auth.userId });
         let mcpCreditInfo: { userId: string; balance: number } | null = null;
         if (trialInfo && trialInfo.remaining <= 0) {
-          const balance = auth.userId ? await getUserCreditBalance(auth.userId) : 0;
+          const balance = await getUserCreditBalance(auth.userId);
           if (balance <= 0) {
             return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
           }
-          mcpCreditInfo = { userId: auth.userId!, balance };
-        } else if (!trialInfo && auth.userId) {
+          mcpCreditInfo = { userId: auth.userId, balance };
+        } else if (!trialInfo) {
+          // Non-trial account: always require prepaid credits unless admin-exempt
           const ownerWallet = await getApiKeyOwnerWallet({ userId: auth.userId });
           if (!ownerWallet || !isAdminWallet(ownerWallet)) {
             const balance = await getUserCreditBalance(auth.userId);
@@ -86,22 +91,9 @@ export async function createMcpServer(ctx: McpContext) {
 
         const result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
 
-        // Attribution: use the real API key owner, not a shared system account
-        let certUserId: string;
-        if (auth.userId) {
-          certUserId = auth.userId;
-        } else {
-          let [systemUser] = await db.select().from(users)
-            .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
-          if (!systemUser) {
-            [systemUser] = await db.insert(users).values({
-              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
-              subscriptionTier: "business",
-              subscriptionStatus: "active",
-            }).returning();
-          }
-          certUserId = systemUser.id!;
-        }
+        // Attribution: always use the verified API key owner (never a shared system account).
+        // auth.userId is guaranteed non-null here because we checked it above.
+        const certUserId = auth.userId;
 
         const [certification] = await db.insert(certifications).values({
           userId: certUserId,
@@ -180,17 +172,22 @@ export async function createMcpServer(ctx: McpContext) {
         if (!auth.valid || !auth.keyHash) {
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "Valid API key required. Include Authorization: Bearer pm_xxx header." }) }], isError: true };
         }
+        // Every active API key must have an owner — reject rather than misattribute to system account
+        if (!auth.userId) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "API key has no associated account. Please re-register." }) }], isError: true };
+        }
 
-        // Billing check
-        const cwcTrialInfo = auth.userId ? await getTrialUser({ userId: auth.userId }) : null;
+        // Billing: enforce trial quota and prepaid-credit requirements
+        const cwcTrialInfo = await getTrialUser({ userId: auth.userId });
         let cwcCreditInfo: { userId: string; balance: number } | null = null;
         if (cwcTrialInfo && cwcTrialInfo.remaining <= 0) {
-          const balance = auth.userId ? await getUserCreditBalance(auth.userId) : 0;
+          const balance = await getUserCreditBalance(auth.userId);
           if (balance <= 0) {
             return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
           }
-          cwcCreditInfo = { userId: auth.userId!, balance };
-        } else if (!cwcTrialInfo && auth.userId) {
+          cwcCreditInfo = { userId: auth.userId, balance };
+        } else if (!cwcTrialInfo) {
+          // Non-trial account: always require prepaid credits unless admin-exempt
           const ownerWallet = await getApiKeyOwnerWallet({ userId: auth.userId });
           if (!ownerWallet || !isAdminWallet(ownerWallet)) {
             const balance = await getUserCreditBalance(auth.userId);
@@ -203,22 +200,8 @@ export async function createMcpServer(ctx: McpContext) {
 
         const result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
 
-        // Attribution: use the real API key owner
-        let cwcCertUserId: string;
-        if (auth.userId) {
-          cwcCertUserId = auth.userId;
-        } else {
-          let [systemUser] = await db.select().from(users)
-            .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
-          if (!systemUser) {
-            [systemUser] = await db.insert(users).values({
-              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
-              subscriptionTier: "business",
-              subscriptionStatus: "active",
-            }).returning();
-          }
-          cwcCertUserId = systemUser.id!;
-        }
+        // Attribution: always use the verified API key owner (never a shared system account)
+        const cwcCertUserId = auth.userId;
 
         const metadata: Record<string, unknown> = {
           confidence_level,
@@ -490,17 +473,22 @@ export async function createMcpServer(ctx: McpContext) {
             isError: true,
           };
         }
+        // Every active API key must have an owner — reject rather than misattribute to system account
+        if (!auth.userId) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "API key has no associated account. Please re-register." }) }], isError: true };
+        }
 
-        // Billing check
-        const auditTrialInfo = auth.userId ? await getTrialUser({ userId: auth.userId }) : null;
+        // Billing: enforce trial quota and prepaid-credit requirements
+        const auditTrialInfo = await getTrialUser({ userId: auth.userId });
         let auditCreditInfo: { userId: string; balance: number } | null = null;
         if (auditTrialInfo && auditTrialInfo.remaining <= 0) {
-          const balance = auth.userId ? await getUserCreditBalance(auth.userId) : 0;
+          const balance = await getUserCreditBalance(auth.userId);
           if (balance <= 0) {
             return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
           }
-          auditCreditInfo = { userId: auth.userId!, balance };
-        } else if (!auditTrialInfo && auth.userId) {
+          auditCreditInfo = { userId: auth.userId, balance };
+        } else if (!auditTrialInfo) {
+          // Non-trial account: always require prepaid credits unless admin-exempt
           const ownerWallet = await getApiKeyOwnerWallet({ userId: auth.userId });
           if (!ownerWallet || !isAdminWallet(ownerWallet)) {
             const balance = await getUserCreditBalance(auth.userId);
@@ -515,22 +503,8 @@ export async function createMcpServer(ctx: McpContext) {
         const fileHash = crypto.createHash("sha256").update(canonicalJson).digest("hex");
         const fileName = `audit-log-${params.session_id}.json`;
 
-        // Attribution: use the real API key owner
-        let auditCertUserId: string;
-        if (auth.userId) {
-          auditCertUserId = auth.userId;
-        } else {
-          let [systemUser] = await db.select().from(users)
-            .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
-          if (!systemUser) {
-            [systemUser] = await db.insert(users).values({
-              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
-              subscriptionTier: "business",
-              subscriptionStatus: "active",
-            }).returning();
-          }
-          auditCertUserId = systemUser.id!;
-        }
+        // Attribution: always use the verified API key owner (never a shared system account)
+        const auditCertUserId = auth.userId;
 
         const result = await recordOnBlockchain(fileHash, fileName, params.agent_id);
 

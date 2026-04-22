@@ -326,7 +326,10 @@ export function registerAcpRoutes(app: Express) {
         });
       }
 
-      // Attribution: always use the user who created the checkout, never the confirmation requester
+      // Attribution: use the checkout creator's userId — never the caller of this confirm endpoint.
+      // The checkout was created by a specific API key owner; confirm may be called by any agent
+      // that holds the checkout_id (including anonymous callers), but the certification always
+      // records under the original checkout owner to prevent ownership hijacking.
       let acpOwnerId: string | null = checkout.userId || null;
 
       if (!acpOwnerId) {

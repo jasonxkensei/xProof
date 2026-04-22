@@ -12,13 +12,18 @@ export function registerMcpRoutesRoutes(app: Express) {
 
       const method = req.body?.method;
       const toolName = req.body?.params?.name;
-      if (method === "tools/call" && toolName === "certify_file" && !auth.valid) {
+
+      // Block all write tools at transport level when the caller is not authenticated.
+      // Each tool also performs an internal auth check, but this early return prevents
+      // the MCP server from even initialising for unauthenticated write calls.
+      const WRITE_TOOLS = new Set(["certify_file", "certify_with_confidence", "audit_agent_session"]);
+      if (method === "tools/call" && WRITE_TOOLS.has(toolName) && !auth.valid) {
         return res.status(200).json({
           jsonrpc: "2.0",
           id: req.body?.id || null,
           error: {
             code: -32600,
-            message: "Authentication required. Include 'Authorization: Bearer pm_xxx' header for certify_file.",
+            message: `Authentication required. Include 'Authorization: Bearer pm_xxx' header for ${toolName}.`,
           },
         });
       }
