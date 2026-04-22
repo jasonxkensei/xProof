@@ -120,7 +120,8 @@ export function verifyWebhookSignature(
 /**
  * Deliver a webhook notification to the agent's URL.
  * Called after a certification is recorded on-chain.
- * Uses the API key hash as the HMAC signing secret.
+ * Signs the payload with the provided signingSecret (a random 32-byte hex string
+ * generated per-proof and returned as webhook_secret in the API response).
  */
 export async function deliverWebhook(
   certificationId: string,

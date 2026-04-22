@@ -546,13 +546,20 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
 }`,
         curl: `# Verify webhook signature in your handler:
 # The signing secret is returned as webhook_secret in the /api/proof (or /api/batch) response.
-# signature = HMAC-SHA256(request_body, webhook_secret)
-# Compare with X-xProof-Signature header
+# Signed message = timestamp + "." + raw_request_body
+# signature = HMAC-SHA256(webhook_secret, signed_message)
+# Compare with X-xProof-Signature header; also validate X-xProof-Timestamp (unix seconds)
+# to guard against replay attacks (reject if > 5 minutes old).
 
 # Python example:
-import hmac, hashlib
-secret = webhook_secret.encode()  # from the POST /api/proof response
-expected = hmac.new(secret, request.body, hashlib.sha256).hexdigest()
+import hmac, hashlib, time
+webhook_secret = b"<your webhook_secret from API response>"
+timestamp = request.headers["X-xProof-Timestamp"]
+raw_body = request.body  # raw bytes before JSON parsing
+if abs(time.time() - int(timestamp)) > 300:
+    raise ValueError("Timestamp too old — possible replay attack")
+signed_message = (timestamp + "." + raw_body.decode()).encode()
+expected = hmac.new(webhook_secret, signed_message, hashlib.sha256).hexdigest()
 assert hmac.compare_digest(expected, request.headers["X-xProof-Signature"])`,
       },
     ],
