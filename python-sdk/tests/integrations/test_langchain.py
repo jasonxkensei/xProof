@@ -9,6 +9,26 @@ import pytest
 pytest.importorskip("langchain_core", reason="langchain-core not installed")
 
 from xproof.integrations.langchain import XProofCallbackHandler
+from xproof.models import BatchResult, BatchResultSummary, Certification
+
+
+def _make_batch_result(*proof_ids: str) -> BatchResult:
+    certs = [
+        Certification(
+            id=pid,
+            file_name=f"{pid}.json",
+            file_hash="a" * 64,
+            transaction_hash=f"tx-{pid}",
+            transaction_url="",
+            created_at="2026-04-22T09:00:00Z",
+        )
+        for pid in proof_ids
+    ]
+    return BatchResult(
+        batch_id="batch-test",
+        results=certs,
+        summary=BatchResultSummary(total=len(certs), created=len(certs), existing=0),
+    )
 
 
 @pytest.fixture
@@ -19,7 +39,7 @@ def mock_client():
         file_hash="h",
         transaction_hash="tx",
     )
-    client.batch_certify.return_value = MagicMock()
+    client.batch_certify.return_value = _make_batch_result("proof-batch-1", "proof-batch-2")
     return client
 
 
@@ -171,9 +191,13 @@ def test_batch_mode_manual_flush(mock_client):
     mock_client.certify_hash.assert_not_called()
     assert len(handler._pending) == 2
 
-    handler.flush()
+    results = handler.flush()
     mock_client.batch_certify.assert_called_once()
     assert len(handler._pending) == 0
+    assert results is not None
+    assert isinstance(results, list)
+    assert len(results) == 2
+    assert all(hasattr(r, "id") and hasattr(r, "file_hash") for r in results)
 
 
 def test_batch_mode_auto_flush_on_root_chain_end(mock_client):
