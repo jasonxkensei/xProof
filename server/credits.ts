@@ -60,15 +60,15 @@ function getBaseClient() {
 
 /**
  * Verifies a USDC transfer on Base mainnet.
- * Returns true if the tx is confirmed, sent >= minAmount USDC to `payTo`,
- * and (optionally) originated from `fromAddress`.
+ * Returns { valid, error, txTimestamp } where txTimestamp is the block time of the tx.
+ * txTimestamp is used by callers to enforce that the purchase intent predates the payment.
  */
 export async function verifyUsdcOnBase(
   txHash: string,
   payTo: string,
   minAmountRaw: string,
   fromAddress?: string,
-): Promise<{ valid: boolean; error?: string }> {
+): Promise<{ valid: boolean; error?: string; txTimestamp?: Date }> {
   try {
     const client = getBaseClient();
     const receipt = await client.getTransactionReceipt({
@@ -77,6 +77,12 @@ export async function verifyUsdcOnBase(
 
     if (!receipt) return { valid: false, error: "Transaction not found on Base" };
     if (receipt.status !== "success") return { valid: false, error: "Transaction failed or pending" };
+
+    // Fetch block timestamp — required to enforce that tx postdates the purchase intent.
+    // If timestamp is unavailable we fail-closed (return invalid) so callers cannot skip
+    // the pre-dated-intent check due to a missing timestamp.
+    const block = await client.getBlock({ blockNumber: receipt.blockNumber });
+    const txTimestamp = new Date(Number(block.timestamp) * 1000);
 
     const payToLower = payTo.toLowerCase();
     const minAmount = BigInt(minAmountRaw);
@@ -102,7 +108,7 @@ export async function verifyUsdcOnBase(
       }
 
       const amount = BigInt(log.data);
-      if (amount >= minAmount) return { valid: true };
+      if (amount >= minAmount) return { valid: true, txTimestamp };
     }
 
     return { valid: false, error: `No USDC transfer to ${payTo} found in tx` };

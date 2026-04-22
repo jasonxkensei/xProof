@@ -10,7 +10,7 @@ import { logger } from "./logger";
 import { auditLogSchema } from "./auditSchema";
 import { reconstructAuditTrail } from "./audit-trail";
 import { isX402Configured, verifyX402PaymentRaw, getInvestigatePaymentRequirements } from "./x402";
-import { getTrialUser, getUserCreditBalance, consumeTrialCredit, consumeCredit, isAdminWallet, getApiKeyOwnerWallet } from "./routes/helpers";
+import { getTrialUser, getUserCreditBalance, consumeTrialCredit, consumeCredit, atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit, isAdminWallet, getApiKeyOwnerWallet } from "./routes/helpers";
 
 interface McpContext {
   baseUrl: string;
@@ -89,27 +89,45 @@ export async function createMcpServer(ctx: McpContext) {
           };
         }
 
-        const result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
+        // Atomically consume credit BEFORE the blockchain write to prevent parallel-request race conditions.
+        if (trialInfo && !mcpCreditInfo) {
+          const consumed = await atomicConsumeTrialCredit(trialInfo.userId);
+          if (!consumed) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+          }
+        } else if (mcpCreditInfo) {
+          const consumed = await atomicConsumeCredit(mcpCreditInfo.userId);
+          if (!consumed) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." }) }], isError: true };
+          }
+        }
 
         // Attribution: always use the verified API key owner (never a shared system account).
         // auth.userId is guaranteed non-null here because we checked it above.
         const certUserId = auth.userId;
 
-        const [certification] = await db.insert(certifications).values({
-          userId: certUserId,
-          fileName: filename,
-          fileHash: file_hash,
-          fileType: filename.split(".").pop() || "unknown",
-          authorName: author_name || "AI Agent",
-          transactionHash: result.transactionHash,
-          transactionUrl: result.transactionUrl,
-          blockchainStatus: "confirmed",
-          isPublic: true,
-          authMethod: "api_key",
-        }).returning();
-
-        if (trialInfo && !mcpCreditInfo) await consumeTrialCredit(trialInfo.userId);
-        else if (mcpCreditInfo) await consumeCredit(mcpCreditInfo.userId);
+        let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+        let certification: (typeof certifications)["$inferSelect"];
+        try {
+          result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
+          [certification] = await db.insert(certifications).values({
+            userId: certUserId,
+            fileName: filename,
+            fileHash: file_hash,
+            fileType: filename.split(".").pop() || "unknown",
+            authorName: author_name || "AI Agent",
+            transactionHash: result.transactionHash,
+            transactionUrl: result.transactionUrl,
+            blockchainStatus: "confirmed",
+            isPublic: true,
+            authMethod: "api_key",
+          }).returning();
+        } catch (writeErr: any) {
+          // Refund credit so the user is not charged for a failed write.
+          if (trialInfo && !mcpCreditInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+          else if (mcpCreditInfo) await refundCredit(mcpCreditInfo.userId).catch(() => {});
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "BLOCKCHAIN_ERROR", message: "Blockchain or DB write failed. Your credit has been refunded." }) }], isError: true };
+        }
 
         let webhookStatus = webhook_url ? "pending" : "not_requested";
         let mcpWebhookSecret: string | null = null;
@@ -198,7 +216,18 @@ export async function createMcpServer(ctx: McpContext) {
           }
         }
 
-        const result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
+        // Atomically consume credit BEFORE the blockchain write to prevent parallel-request race conditions.
+        if (cwcTrialInfo && !cwcCreditInfo) {
+          const consumed = await atomicConsumeTrialCredit(cwcTrialInfo.userId);
+          if (!consumed) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+          }
+        } else if (cwcCreditInfo) {
+          const consumed = await atomicConsumeCredit(cwcCreditInfo.userId);
+          if (!consumed) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." }) }], isError: true };
+          }
+        }
 
         // Attribution: always use the verified API key owner (never a shared system account)
         const cwcCertUserId = auth.userId;
@@ -212,22 +241,28 @@ export async function createMcpServer(ctx: McpContext) {
         if (who) metadata.who = who;
         if (reversibility_class) metadata.reversibility_class = reversibility_class;
 
-        const [certification] = await db.insert(certifications).values({
-          userId: cwcCertUserId,
-          fileName: filename,
-          fileHash: file_hash,
-          fileType: filename.split(".").pop() || "unknown",
-          authorName: author_name || "AI Agent",
-          transactionHash: result.transactionHash,
-          transactionUrl: result.transactionUrl,
-          blockchainStatus: "confirmed",
-          isPublic: true,
-          authMethod: "api_key",
-          metadata,
-        }).returning();
-
-        if (cwcTrialInfo && !cwcCreditInfo) await consumeTrialCredit(cwcTrialInfo.userId);
-        else if (cwcCreditInfo) await consumeCredit(cwcCreditInfo.userId);
+        let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+        let certification: (typeof certifications)["$inferSelect"];
+        try {
+          result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
+          [certification] = await db.insert(certifications).values({
+            userId: cwcCertUserId,
+            fileName: filename,
+            fileHash: file_hash,
+            fileType: filename.split(".").pop() || "unknown",
+            authorName: author_name || "AI Agent",
+            transactionHash: result.transactionHash,
+            transactionUrl: result.transactionUrl,
+            blockchainStatus: "confirmed",
+            isPublic: true,
+            authMethod: "api_key",
+            metadata,
+          }).returning();
+        } catch (writeErr: any) {
+          if (cwcTrialInfo && !cwcCreditInfo) await refundTrialCredit(cwcTrialInfo.userId).catch(() => {});
+          else if (cwcCreditInfo) await refundCredit(cwcCreditInfo.userId).catch(() => {});
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "BLOCKCHAIN_ERROR", message: "Blockchain or DB write failed. Your credit has been refunded." }) }], isError: true };
+        }
 
         return {
           content: [{
@@ -506,24 +541,41 @@ export async function createMcpServer(ctx: McpContext) {
         // Attribution: always use the verified API key owner (never a shared system account)
         const auditCertUserId = auth.userId;
 
-        const result = await recordOnBlockchain(fileHash, fileName, params.agent_id);
+        // Atomically consume credit BEFORE the blockchain write to prevent parallel-request race conditions.
+        if (auditTrialInfo && !auditCreditInfo) {
+          const consumed = await atomicConsumeTrialCredit(auditTrialInfo.userId);
+          if (!consumed) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+          }
+        } else if (auditCreditInfo) {
+          const consumed = await atomicConsumeCredit(auditCreditInfo.userId);
+          if (!consumed) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." }) }], isError: true };
+          }
+        }
 
-        const [certification] = await db.insert(certifications).values({
-          userId: auditCertUserId,
-          fileName,
-          fileHash,
-          fileType: "json",
-          authorName: params.agent_id,
-          transactionHash: result.transactionHash,
-          transactionUrl: result.transactionUrl,
-          blockchainStatus: "confirmed",
-          isPublic: true,
-          authMethod: "api_key",
-          metadata: params,
-        }).returning();
-
-        if (auditTrialInfo && !auditCreditInfo) await consumeTrialCredit(auditTrialInfo.userId);
-        else if (auditCreditInfo) await consumeCredit(auditCreditInfo.userId);
+        let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+        let certification: (typeof certifications)["$inferSelect"];
+        try {
+          result = await recordOnBlockchain(fileHash, fileName, params.agent_id);
+          [certification] = await db.insert(certifications).values({
+            userId: auditCertUserId,
+            fileName,
+            fileHash,
+            fileType: "json",
+            authorName: params.agent_id,
+            transactionHash: result.transactionHash,
+            transactionUrl: result.transactionUrl,
+            blockchainStatus: "confirmed",
+            isPublic: true,
+            authMethod: "api_key",
+            metadata: params,
+          }).returning();
+        } catch (writeErr: any) {
+          if (auditTrialInfo && !auditCreditInfo) await refundTrialCredit(auditTrialInfo.userId).catch(() => {});
+          else if (auditCreditInfo) await refundCredit(auditCreditInfo.userId).catch(() => {});
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "BLOCKCHAIN_ERROR", message: "Blockchain or DB write failed. Your credit has been refunded." }) }], isError: true };
+        }
 
         return {
           content: [{

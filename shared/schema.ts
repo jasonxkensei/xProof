@@ -163,6 +163,10 @@ export const acpCheckoutRequestSchema = z.object({
     type: z.enum(["agent", "user"]),
     id: z.string().optional(),
   }).optional(),
+  // MultiversX wallet address (erd1...) that will send the EGLD payment.
+  // Required for non-admin checkouts to cryptographically bind the payment sender
+  // to this checkout and prevent tx hijacking by a competing actor.
+  payer_wallet: z.string().optional(),
 });
 
 export type ACPCheckoutRequest = z.infer<typeof acpCheckoutRequestSchema>;

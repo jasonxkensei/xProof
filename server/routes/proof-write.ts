@@ -11,7 +11,8 @@ import { recordOnBlockchain, isMultiversXConfigured } from "../blockchain";
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing";
 import { auditLogSchema, AUDIT_LOG_JSON_SCHEMA, type AgentAuditLog, REVERSIBILITY_CLASSES, JURISDICTION_TYPES, validateTimestampOrdering, isStrictDatetime } from "../auditSchema";
 import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
-import { checkRateLimit, isAdminWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, getApiKeyOwnerWallet, TRIAL_QUOTA, RATE_LIMIT_MAX_VALUE, buildCanonicalId } from "./helpers";
+import { checkRateLimit, isAdminWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit, getApiKeyOwnerWallet, TRIAL_QUOTA, RATE_LIMIT_MAX_VALUE, buildCanonicalId } from "./helpers";
+import { inArray } from "drizzle-orm";
 
 export function registerProofWriteRoutes(app: Express) {
   // ============================================
@@ -365,8 +366,30 @@ export function registerProofWriteRoutes(app: Express) {
         });
       }
 
-      const result = await recordOnBlockchain(data.file_hash, data.filename, data.author_name || "AI Agent");
+      // Atomically consume credit BEFORE the blockchain write so concurrent requests cannot
+      // both read the same positive balance and both proceed through the entitlement gate.
+      if (trialInfo) {
+        const consumed = await atomicConsumeTrialCredit(trialInfo.userId);
+        if (!consumed) {
+          return res.status(402).json({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue." });
+        }
+      } else if (creditInfo) {
+        const consumed = await atomicConsumeCredit(creditInfo.userId);
+        if (!consumed) {
+          return res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." });
+        }
+      }
 
+      let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+      try {
+        result = await recordOnBlockchain(data.file_hash, data.filename, data.author_name || "AI Agent");
+      } catch (blockchainErr: any) {
+        // Refund credit so the user is not charged for a failed write.
+        if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+        else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+        logger.withRequest(req).error("Blockchain write failed, credit refunded", { error: blockchainErr?.message, fileHash: data.file_hash });
+        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." });
+      }
       const certUserId = trialInfo ? trialInfo.userId : (creditInfo ? creditInfo.userId : apiKeyUserId);
       let ownerUserId = certUserId;
 
@@ -396,29 +419,33 @@ export function registerProofWriteRoutes(app: Express) {
         ownerUserId = systemUser.id!;
       }
 
-      if (trialInfo) {
-        await consumeTrialCredit(trialInfo.userId);
-      } else if (creditInfo) {
-        await consumeCredit(creditInfo.userId);
+      let certification: (typeof certifications)["$inferSelect"];
+      try {
+        [certification] = await db
+          .insert(certifications)
+          .values({
+            userId: ownerUserId,
+            fileName: data.filename,
+            fileHash: data.file_hash,
+            fileType: data.filename.split(".").pop() || "unknown",
+            authorName: data.author_name || "AI Agent",
+            transactionHash: result.transactionHash,
+            transactionUrl: result.transactionUrl,
+            blockchainStatus: "confirmed",
+            isPublic: true,
+            authMethod,
+            ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+            ...(data.metadata ? { metadata: data.metadata } : {}),
+          })
+          .returning();
+      } catch (dbErr: any) {
+        // DB insert failed after a successful blockchain write — refund the credit.
+        // The on-chain record exists but we cannot surface it without a DB row.
+        if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+        else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+        logger.withRequest(req).error("DB insert failed after blockchain write, credit refunded", { error: dbErr?.message, fileHash: data.file_hash, txHash: result.transactionHash });
+        return res.status(502).json({ error: "DB_ERROR", message: "Failed to record certification in database after blockchain write. Your credit has been refunded." });
       }
-
-      const [certification] = await db
-        .insert(certifications)
-        .values({
-          userId: ownerUserId,
-          fileName: data.filename,
-          fileHash: data.file_hash,
-          fileType: data.filename.split(".").pop() || "unknown",
-          authorName: data.author_name || "AI Agent",
-          transactionHash: result.transactionHash,
-          transactionUrl: result.transactionUrl,
-          blockchainStatus: "confirmed",
-          isPublic: true,
-          authMethod,
-          ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
-          ...(data.metadata ? { metadata: data.metadata } : {}),
-        })
-        .returning();
 
       logger.withRequest(req).info("File certified", { fileHash: data.file_hash, certificationId: certification.id, txHash: result.transactionHash, authMethod, adminExempt: isAdminExempt });
 
@@ -658,19 +685,29 @@ export function registerProofWriteRoutes(app: Express) {
         return res.status(503).json({ error: "BLOCKCHAIN_UNAVAILABLE", message: "MultiversX is not configured on this server." });
       }
 
-      // Record on blockchain
-      const result = await recordOnBlockchain(fileHash, fileName);
-      if (!result.success) {
-        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: result.error || "Failed to record on blockchain" });
-      }
-
-      // Consume auth credit
+      // Atomically consume credit BEFORE the blockchain write to prevent parallel-request overspend.
       if (trialInfo) {
-        await consumeTrialCredit(trialInfo.userId);
+        const consumed = await atomicConsumeTrialCredit(trialInfo.userId);
+        if (!consumed) {
+          return res.status(402).json({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue." });
+        }
       } else if (creditInfo) {
-        await consumeCredit(creditInfo.userId);
+        const consumed = await atomicConsumeCredit(creditInfo.userId);
+        if (!consumed) {
+          return res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." });
+        }
       }
 
+      // Record on blockchain; refund credit if the write fails so users are never charged for failed certifications.
+      let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+      try {
+        result = await recordOnBlockchain(fileHash, fileName);
+      } catch (blockchainErr: any) {
+        if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+        else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+        logger.withRequest(req).error("Blockchain write failed, credit refunded", { error: blockchainErr?.message, fileHash });
+        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." });
+      }
       if (!ownerUserId) {
         // Reject orphaned API-key requests rather than misattributing to shared system account.
         if (authMethod === "api_key") {
@@ -695,23 +732,31 @@ export function registerProofWriteRoutes(app: Express) {
       }
 
       // Store certification with full audit log in metadata
-      const [certification] = await db
-        .insert(certifications)
-        .values({
-          userId: ownerUserId,
-          fileName,
-          fileHash,
-          fileType: "json",
-          authorName: data.agent_id,
-          transactionHash: result.transactionHash,
-          transactionUrl: result.transactionUrl,
-          blockchainStatus: "confirmed",
-          isPublic: true,
-          authMethod,
-          metadata: data as Record<string, any>,
-          ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
-        })
-        .returning();
+      let certification: (typeof certifications)["$inferSelect"];
+      try {
+        [certification] = await db
+          .insert(certifications)
+          .values({
+            userId: ownerUserId,
+            fileName,
+            fileHash,
+            fileType: "json",
+            authorName: data.agent_id,
+            transactionHash: result.transactionHash,
+            transactionUrl: result.transactionUrl,
+            blockchainStatus: "confirmed",
+            isPublic: true,
+            authMethod,
+            metadata: data as Record<string, any>,
+            ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+          })
+          .returning();
+      } catch (dbErr: any) {
+        if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+        else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+        logger.withRequest(req).error("DB insert failed after blockchain write, credit refunded", { error: dbErr?.message, fileHash, txHash: result.transactionHash });
+        return res.status(502).json({ error: "DB_ERROR", message: "Failed to record certification in database after blockchain write. Your credit has been refunded." });
+      }
 
       logger.withRequest(req).info("Agent audit log certified", {
         certificationId: certification.id,
@@ -946,61 +991,111 @@ export function registerProofWriteRoutes(app: Express) {
         ownerUserId = systemUser.id!;
       }
 
+      // Pre-count new files and atomically consume credits upfront.
+      // This prevents a single request from creating more proofs than the user's balance covers
+      // (e.g. 1 credit used to certify 50 unique files), and prevents parallel batch requests
+      // from racing through the same positive balance.
+      const allHashes = data.files.map((f) => f.file_hash);
+      const alreadyExistingRows = allHashes.length > 0
+        ? await db.select({ fileHash: certifications.fileHash })
+            .from(certifications)
+            .where(inArray(certifications.fileHash, allHashes))
+        : [];
+      const alreadyExistingSet = new Set(alreadyExistingRows.map((r) => r.fileHash));
+      const newFileCount = data.files.filter((f) => !alreadyExistingSet.has(f.file_hash)).length;
+
+      if (newFileCount > 0 && !isAdminExempt) {
+        if (trialInfo) {
+          if (newFileCount > trialInfo.remaining) {
+            return res.status(402).json({
+              error: "INSUFFICIENT_TRIAL_QUOTA",
+              message: `Batch requires ${newFileCount} new certifications but only ${trialInfo.remaining} trial credits remain.`,
+              trial: { remaining: trialInfo.remaining, requested: newFileCount },
+            });
+          }
+          const consumed = await atomicConsumeTrialCredit(trialInfo.userId, newFileCount);
+          if (!consumed) {
+            return res.status(402).json({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue." });
+          }
+        } else if (creditInfo) {
+          if (newFileCount > creditInfo.balance) {
+            return res.status(402).json({
+              error: "INSUFFICIENT_CREDITS",
+              message: `Batch requires ${newFileCount} credits for new certifications but balance is ${creditInfo.balance}.`,
+              credits: { balance: creditInfo.balance, requested: newFileCount },
+            });
+          }
+          const consumed = await atomicConsumeCredit(creditInfo.userId, newFileCount);
+          if (!consumed) {
+            return res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." });
+          }
+        }
+      }
+
       const results: any[] = [];
       let createdCount = 0;
       let existingCount = 0;
+      // Track blockchain/DB write failures so we can refund those slots after the loop.
+      let failedCount = 0;
       // Shared random signing secret for all per-batch webhook deliveries in this request.
       // Generated lazily on first use so callers using account-level secrets aren't affected.
       let batchGeneratedWebhookSecret: string | null = null;
 
       for (const file of data.files) {
-        if (trialInfo && trialInfo.remaining - createdCount <= 0) {
-          results.push({
-            file_hash: file.file_hash,
-            filename: file.filename,
-            status: "skipped",
-            reason: "Trial quota exhausted",
-          });
+        // Use the pre-fetched existence set; for confirmed-existing files, fetch the full record
+        if (alreadyExistingSet.has(file.file_hash)) {
+          const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, file.file_hash));
+          if (existing) {
+            existingCount++;
+            results.push({
+              file_hash: existing.fileHash,
+              filename: existing.fileName,
+              proof_id: existing.id,
+              verify_url: `${baseUrl}/proof/${existing.id}`,
+              badge_url: `${baseUrl}/badge/${existing.id}`,
+              status: "existing",
+            });
+            continue;
+          }
+        }
+
+        let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+        try {
+          result = await recordOnBlockchain(file.file_hash, file.filename, data.author_name || "AI Agent");
+        } catch (batchBlockchainErr: any) {
+          // Blockchain write failed for this item — do not count it as created; refund at end of loop.
+          failedCount++;
+          results.push({ file_hash: file.file_hash, filename: file.filename, status: "failed", reason: "Blockchain write error" });
+          logger.withRequest(req).error("Batch: blockchain write failed for item", { fileHash: file.file_hash, error: batchBlockchainErr?.message });
           continue;
         }
 
-        const [existing] = await db
-          .select()
-          .from(certifications)
-          .where(eq(certifications.fileHash, file.file_hash));
-
-        if (existing) {
-          existingCount++;
-          results.push({
-            file_hash: existing.fileHash,
-            filename: existing.fileName,
-            proof_id: existing.id,
-            verify_url: `${baseUrl}/proof/${existing.id}`,
-            badge_url: `${baseUrl}/badge/${existing.id}`,
-            status: "existing",
-          });
+        let certification: (typeof certifications)["$inferSelect"];
+        try {
+          [certification] = await db
+            .insert(certifications)
+            .values({
+              userId: ownerUserId!,
+              fileName: file.filename,
+              fileHash: file.file_hash,
+              fileType: file.filename.split(".").pop() || "unknown",
+              authorName: data.author_name || "AI Agent",
+              transactionHash: result.transactionHash,
+              transactionUrl: result.transactionUrl,
+              blockchainStatus: "confirmed",
+              isPublic: true,
+              authMethod,
+              ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+              ...(file.metadata ? { metadata: file.metadata } : {}),
+            })
+            .returning();
+        } catch (dbErr: any) {
+          // DB insert failed after blockchain write — refund this slot.
+          failedCount++;
+          results.push({ file_hash: file.file_hash, filename: file.filename, status: "failed", reason: "DB insert error after blockchain write" });
+          logger.withRequest(req).error("Batch: DB insert failed after blockchain write", { fileHash: file.file_hash, error: dbErr?.message });
           continue;
         }
-
-        const result = await recordOnBlockchain(file.file_hash, file.filename, data.author_name || "AI Agent");
-
-        const [certification] = await db
-          .insert(certifications)
-          .values({
-            userId: ownerUserId!,
-            fileName: file.filename,
-            fileHash: file.file_hash,
-            fileType: file.filename.split(".").pop() || "unknown",
-            authorName: data.author_name || "AI Agent",
-            transactionHash: result.transactionHash,
-            transactionUrl: result.transactionUrl,
-            blockchainStatus: "confirmed",
-            isPublic: true,
-            authMethod,
-            ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
-            ...(file.metadata ? { metadata: file.metadata } : {}),
-          })
-          .returning();
 
         createdCount++;
         results.push({
@@ -1048,13 +1143,14 @@ export function registerProofWriteRoutes(app: Express) {
         }
       }
 
-      if (trialInfo && createdCount > 0) {
-        await consumeTrialCredit(trialInfo.userId, createdCount);
-      } else if (creditInfo && createdCount > 0) {
-        await consumeCredit(creditInfo.userId, createdCount);
+      // Refund credits for any items whose blockchain/DB write failed.
+      // Credits were atomically consumed upfront for all newFileCount; failed items are returned here.
+      if (failedCount > 0 && !isAdminExempt) {
+        if (trialInfo) await refundTrialCredit(trialInfo.userId, failedCount).catch(() => {});
+        else if (creditInfo) await refundCredit(creditInfo.userId, failedCount).catch(() => {});
       }
 
-      logger.withRequest(req).info("Batch certification completed", { batchId, created: createdCount, existing: existingCount, total: data.files.length, authMethod, adminExempt: isAdminExempt, trial: !!trialInfo, credits: !!creditInfo });
+      logger.withRequest(req).info("Batch certification completed", { batchId, created: createdCount, failed: failedCount, existing: existingCount, total: data.files.length, authMethod, adminExempt: isAdminExempt, trial: !!trialInfo, credits: !!creditInfo });
 
       if (trialInfo) {
         res.setHeader("X-Trial-Remaining", Math.max(0, trialInfo.remaining - createdCount).toString());

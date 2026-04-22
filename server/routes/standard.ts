@@ -10,7 +10,7 @@ import { isX402Configured, verifyX402Payment, send402Response } from "../x402";
 import { recordOnBlockchain, isMultiversXConfigured } from "../blockchain";
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing";
 import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
-import { isAdminWallet, getApiKeyOwnerWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, buildCanonicalId } from "./helpers";
+import { isAdminWallet, getApiKeyOwnerWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit, TRIAL_QUOTA, buildCanonicalId } from "./helpers";
 
 export function registerStandardRoutes(app: Express) {
   const SHA256_REGEX = /^sha256:[a-fA-F0-9]{64}$/;
@@ -106,6 +106,9 @@ export function registerStandardRoutes(app: Express) {
 
       let authMethod: "api_key" | "x402" = "api_key";
       let apiKeyUserId: string | null = null;
+      let standardIsAdminExempt = false;
+      let standardTrialInfo: { isTrial: boolean; remaining: number; userId: string } | null = null;
+      let standardCreditInfo: { userId: string; balance: number } | null = null;
       const authHeader = req.headers.authorization;
       const hasBearerToken = authHeader && authHeader.startsWith("Bearer ");
       const hasX402Payment = !!req.headers["x-payment"];
@@ -128,6 +131,49 @@ export function registerStandardRoutes(app: Express) {
           .where(eq(apiKeys.id, apiKey.id))
           .execute()
           .catch((err) => logger.error("Failed to update API key stats", { error: err.message }));
+
+        // Enforce billing parity with /api/proof: trial quota, prepaid credits, or admin exemption required.
+        standardTrialInfo = await getTrialUser(apiKey);
+        if (standardTrialInfo) {
+          if (standardTrialInfo.remaining <= 0) {
+            const balance = apiKey.userId ? await getUserCreditBalance(apiKey.userId) : 0;
+            if (balance > 0 && apiKey.userId) {
+              standardCreditInfo = { userId: apiKey.userId, balance };
+              standardTrialInfo = null;
+            } else {
+              const baseUrl = `https://${req.get("host")}`;
+              return res.status(402).json({
+                error: "TRIAL_EXHAUSTED",
+                message: `Trial quota exhausted (${TRIAL_QUOTA}/${TRIAL_QUOTA} used). Purchase prepaid credits or pay per request via x402.`,
+                trial: { quota: TRIAL_QUOTA, used: TRIAL_QUOTA, remaining: 0 },
+                upgrade: {
+                  prepaid_credits: { endpoint: `POST ${baseUrl}/api/credits/purchase` },
+                  x402_pay_per_use: { description: "Pay per request — omit Authorization header, include X-PAYMENT header" },
+                },
+              });
+            }
+          }
+        } else {
+          const ownerWallet = await getApiKeyOwnerWallet(apiKey);
+          if (ownerWallet && isAdminWallet(ownerWallet)) {
+            standardIsAdminExempt = true;
+            logger.withRequest(req).info("Admin wallet exempt from standard anchor payment", { walletAddress: ownerWallet });
+          } else if (apiKey.userId) {
+            const balance = await getUserCreditBalance(apiKey.userId);
+            if (balance > 0) {
+              standardCreditInfo = { userId: apiKey.userId, balance };
+            } else {
+              return res.status(402).json({
+                error: "PAYMENT_REQUIRED",
+                message: "No prepaid credits available. Purchase credits or pay per request via x402.",
+                upgrade: {
+                  prepaid_credits: { endpoint: `POST https://${req.get("host")}/api/credits/purchase` },
+                  x402_pay_per_use: { description: "Pay per request — omit Authorization header, include X-PAYMENT header" },
+                },
+              });
+            }
+          }
+        }
       } else if (hasX402Payment && isX402Configured()) {
         const x402Result = await verifyX402Payment(req, "proof");
         if (!x402Result.valid) {
@@ -154,8 +200,33 @@ export function registerStandardRoutes(app: Express) {
         return res.status(503).json({ error: "Blockchain anchoring is not configured" });
       }
 
-      const result = await recordOnBlockchain(canonicalHash, fileName, authorName);
+      // Atomically consume credit before the blockchain write so parallel requests cannot
+      // both read the same positive balance and both proceed past the entitlement gate.
+      if (!standardIsAdminExempt && authMethod === "api_key") {
+        if (standardTrialInfo) {
+          const consumed = await atomicConsumeTrialCredit(standardTrialInfo.userId);
+          if (!consumed) {
+            return res.status(402).json({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue." });
+          }
+        } else if (standardCreditInfo) {
+          const consumed = await atomicConsumeCredit(standardCreditInfo.userId);
+          if (!consumed) {
+            return res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." });
+          }
+        }
+      }
 
+      let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+      try {
+        result = await recordOnBlockchain(canonicalHash, fileName, authorName);
+      } catch (blockchainErr: any) {
+        // Refund credit so the user is not charged for a failed write.
+        if (!standardIsAdminExempt && authMethod === "api_key") {
+          if (standardTrialInfo) await refundTrialCredit(standardTrialInfo.userId).catch(() => {});
+          else if (standardCreditInfo) await refundCredit(standardCreditInfo.userId).catch(() => {});
+        }
+        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." });
+      }
       const standardMetadata = {
         standard_version: proof.version,
         standard_proof: true,
@@ -190,19 +261,28 @@ export function registerStandardRoutes(app: Express) {
 
       const blockchainStatus = result.transactionHash.startsWith("sim_") ? "pending" : "confirmed";
 
-      const [cert] = await db.insert(certifications).values({
-        userId,
-        fileName,
-        fileHash: canonicalHash,
-        fileType: "application/x-agent-proof-standard",
-        authorName,
-        transactionHash: result.transactionHash,
-        transactionUrl: result.transactionUrl,
-        blockchainStatus,
-        authMethod,
-        metadata: standardMetadata,
-        isPublic: true,
-      }).returning();
+      let cert: (typeof certifications)["$inferSelect"];
+      try {
+        [cert] = await db.insert(certifications).values({
+          userId,
+          fileName,
+          fileHash: canonicalHash,
+          fileType: "application/x-agent-proof-standard",
+          authorName,
+          transactionHash: result.transactionHash,
+          transactionUrl: result.transactionUrl,
+          blockchainStatus,
+          authMethod,
+          metadata: standardMetadata,
+          isPublic: true,
+        }).returning();
+      } catch (dbErr: any) {
+        if (!standardIsAdminExempt && authMethod === "api_key") {
+          if (standardTrialInfo) await refundTrialCredit(standardTrialInfo.userId).catch(() => {});
+          else if (standardCreditInfo) await refundCredit(standardCreditInfo.userId).catch(() => {});
+        }
+        return res.status(502).json({ error: "DB_ERROR", message: "Failed to record certification in database after blockchain write. Your credit has been refunded." });
+      }
 
       const baseUrl = `https://${req.get("host")}`;
 

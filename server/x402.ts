@@ -257,7 +257,8 @@ export async function verifyX402Payment(req: Request, route: "proof" | "batch" |
           asset: "USDC",
         });
       } catch (settleErr: any) {
-        logger.error("Settlement error (non-blocking)", { component: "x402", error: settleErr.message });
+        logger.error("Settlement failed — request rejected", { component: "x402", error: settleErr.message });
+        return { valid: false, error: `Payment settlement failed: ${settleErr.message}` };
       }
       return { valid: true };
     }
@@ -299,7 +300,8 @@ export async function verifyX402PaymentRaw(paymentHeader: string, host: string, 
           asset: "USDC",
         });
       } catch (settleErr: any) {
-        logger.error("Settlement error (non-blocking)", { component: "x402", error: settleErr.message });
+        logger.error("Settlement failed — request rejected", { component: "x402", error: settleErr.message });
+        return { valid: false, error: `Payment settlement failed: ${settleErr.message}` };
       }
       return { valid: true };
     }

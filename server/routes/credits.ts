@@ -1,5 +1,6 @@
 import { type Express } from "express";
 import crypto from "crypto";
+import { recoverMessageAddress } from "viem";
 import { db } from "../db";
 import { logger } from "../logger";
 import { apiKeys, creditPurchases, creditPurchaseIntents } from "@shared/schema";
@@ -50,7 +51,7 @@ export function registerCreditsRoutes(app: Express) {
         return res.status(400).json({ error: "NO_ACCOUNT", message: "API key has no associated account" });
       }
 
-      const body = req.body as { package_id?: string; payer_address?: string };
+      const body = req.body as { package_id?: string; payer_address?: string; signature?: string };
       const pkg = getPackage(body?.package_id || "");
       if (!pkg) {
         return res.status(400).json({
@@ -69,9 +70,62 @@ export function registerCreditsRoutes(app: Express) {
         });
       }
 
+      // Require EIP-191 signature proving the caller controls payer_address.
+      // Without ownership proof, an attacker could pre-create an intent claiming any victim wallet
+      // address. The attacker would never receive the credits (our confirm checks tx sender) but
+      // they could cause a DoS by blocking the legitimate owner's purchase.
+      // Message format (deterministic): "xproof-credit-purchase:<package_id>:<payer_address_lowercase>"
+      // Sign with: eth_sign / personal_sign (EIP-191 prefix "Ethereum Signed Message:\n...")
+      const ownershipMessage = `xproof-credit-purchase:${pkg.id}:${payerAddress}`;
+      if (!body?.signature) {
+        return res.status(400).json({
+          error: "SIGNATURE_REQUIRED",
+          message: `Provide an EIP-191 (personal_sign) signature of "${ownershipMessage}" signed by the private key of payer_address to prove wallet ownership.`,
+          message_to_sign: ownershipMessage,
+        });
+      }
+      try {
+        const recovered = await recoverMessageAddress({
+          message: ownershipMessage,
+          signature: body.signature as `0x${string}`,
+        });
+        if (recovered.toLowerCase() !== payerAddress) {
+          return res.status(403).json({
+            error: "INVALID_SIGNATURE",
+            message: `Signature does not prove ownership of ${payerAddress}. Recovered address: ${recovered.toLowerCase()}. Sign "${ownershipMessage}" with the private key of payer_address.`,
+          });
+        }
+      } catch (sigErr: any) {
+        return res.status(400).json({
+          error: "INVALID_SIGNATURE",
+          message: `Could not verify signature: ${sigErr?.message}. Sign "${ownershipMessage}" using EIP-191 personal_sign with the private key of payer_address and provide the 0x... hex result as "signature".`,
+        });
+      }
+
       const payTo = process.env.X402_PAY_TO || "";
       if (!payTo) {
         return res.status(503).json({ error: "PAYMENT_NOT_CONFIGURED", message: "Credit purchases are not yet enabled" });
+      }
+
+      // Enforce one active intent per payer_address across all users.
+      // This prevents an attacker from pre-creating an intent for a known victim wallet,
+      // then using the victim's on-chain payment to credit the attacker's account.
+      // Each physical wallet can only have one pending, unexpired intent at any time.
+      const now = new Date();
+      const [existingIntent] = await db
+        .select({ id: creditPurchaseIntents.id, userId: creditPurchaseIntents.userId })
+        .from(creditPurchaseIntents)
+        .where(
+          and(
+            eq(creditPurchaseIntents.payerAddress, payerAddress),
+            gt(creditPurchaseIntents.expiresAt, now),
+          )
+        );
+      if (existingIntent && existingIntent.userId !== apiKey.userId!) {
+        return res.status(409).json({
+          error: "PAYER_ADDRESS_IN_USE",
+          message: "An active purchase intent already exists for this payer_address under a different account. Each wallet address can only have one pending intent at a time. Wait for the existing intent to expire (24h) or use a different wallet address.",
+        });
       }
 
       // Create a purchase intent to bind this request to the authenticated user.
@@ -180,12 +234,30 @@ export function registerCreditsRoutes(app: Express) {
       }
 
       // Verify the USDC transfer on Base, enforcing that the sender matches the registered payer_address
-      const { valid, error: verifyError } = await verifyUsdcOnBase(txHash, payTo, pkg.price_usdc_raw, intent.payerAddress);
+      const { valid, error: verifyError, txTimestamp } = await verifyUsdcOnBase(txHash, payTo, pkg.price_usdc_raw, intent.payerAddress);
       if (!valid) {
         return res.status(402).json({
           error: "PAYMENT_VERIFICATION_FAILED",
           message: verifyError || "Could not verify USDC transfer on Base",
           expected: { pay_to: payTo, amount_usdc: pkg.price_usdc, asset: "USDC", network: "eip155:8453" },
+        });
+      }
+
+      // Fail closed: if the block timestamp is unavailable we cannot verify ordering, so reject.
+      if (!txTimestamp) {
+        return res.status(402).json({
+          error: "TX_TIMESTAMP_UNAVAILABLE",
+          message: "Transaction block timestamp could not be verified. Cannot confirm payment without proof that the transaction postdates this purchase intent.",
+        });
+      }
+
+      // Reject if the on-chain transaction predates the purchase intent.
+      // This prevents an attacker from observing a victim's payment, creating a new intent
+      // with the same payer_address, and claiming the victim's credits.
+      if (intent.createdAt && txTimestamp < intent.createdAt) {
+        return res.status(403).json({
+          error: "TX_PREDATES_INTENT",
+          message: "Transaction occurred before this purchase intent was created. Cannot claim credits for a payment that predates this intent. Call POST /api/credits/purchase first, then send the USDC transfer.",
         });
       }
 

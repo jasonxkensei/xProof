@@ -140,9 +140,60 @@ export async function consumeCredit(userId: string, count: number = 1): Promise<
     .where(eq(users.id, userId));
 }
 
+/**
+ * Atomically check and consume `count` prepaid credits.
+ * Returns true if successful, false if insufficient balance.
+ * Uses a single UPDATE with a WHERE guard so concurrent requests
+ * cannot both read the same positive balance and both proceed.
+ */
+export async function atomicConsumeCredit(userId: string, count: number = 1): Promise<boolean> {
+  const result = await db.update(users)
+    .set({ creditBalance: sql`credit_balance - ${count}` })
+    .where(and(eq(users.id, userId), gte(users.creditBalance, count)))
+    .returning({ id: users.id });
+  return result.length > 0;
+}
+
+/**
+ * Atomically check and consume `count` trial credits.
+ * Returns true if successful, false if quota exhausted.
+ */
+export async function atomicConsumeTrialCredit(userId: string, count: number = 1): Promise<boolean> {
+  const result = await db.update(users)
+    .set({ trialUsed: sql`COALESCE(trial_used, 0) + ${count}` })
+    .where(and(
+      eq(users.id, userId),
+      sql`COALESCE(trial_quota, ${TRIAL_QUOTA}) - COALESCE(trial_used, 0) >= ${count}`,
+    ))
+    .returning({ id: users.id });
+  return result.length > 0;
+}
+
 export async function addCredits(userId: string, amount: number): Promise<void> {
   await db.update(users)
     .set({ creditBalance: sql`credit_balance + ${amount}` })
+    .where(eq(users.id, userId));
+}
+
+/**
+ * Restore `count` prepaid credits after a blockchain/DB write failure.
+ * Call this in the catch block whenever atomicConsumeCredit already ran
+ * but the downstream operation failed — so users are not charged for
+ * certifications that were never recorded.
+ */
+export async function refundCredit(userId: string, count: number = 1): Promise<void> {
+  await db.update(users)
+    .set({ creditBalance: sql`credit_balance + ${count}` })
+    .where(eq(users.id, userId));
+}
+
+/**
+ * Restore `count` trial credits after a blockchain/DB write failure.
+ * Clamps at zero to guard against double-refunds producing a negative used count.
+ */
+export async function refundTrialCredit(userId: string, count: number = 1): Promise<void> {
+  await db.update(users)
+    .set({ trialUsed: sql`GREATEST(0, COALESCE(trial_used, 0) - ${count})` })
     .where(eq(users.id, userId));
 }
 

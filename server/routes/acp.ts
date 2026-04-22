@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db, pool } from "../db";
 import { logger } from "../logger";
 import { certifications, users, apiKeys, acpCheckouts, attestations, acpCheckoutRequestSchema, acpConfirmRequestSchema, type ACPProduct, type ACPCheckoutResponse, type ACPConfirmResponse } from "@shared/schema";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, gt } from "drizzle-orm";
 import { publicReadRateLimiter } from "../reliability";
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing";
 import { recordOnBlockchain } from "../blockchain";
@@ -93,6 +93,7 @@ export function registerAcpRoutes(app: Express) {
       // Check if the API key owner is an admin wallet
       let acpAdminExempt = false;
       const acpApiKey = (req as any).apiKey;
+      const requestingUserId = acpApiKey?.userId || null;
       if (acpApiKey?.userId) {
         const ownerWallet = await getApiKeyOwnerWallet(acpApiKey);
         if (ownerWallet && isAdminWallet(ownerWallet)) {
@@ -128,24 +129,79 @@ export function registerAcpRoutes(app: Express) {
       // Persist payment invariants so they can be verified at confirm time
       const expectedValue = acpAdminExempt ? "0" : pricing.priceEgld;
 
-      const [checkout] = await db
-        .insert(acpCheckouts)
-        .values({
-          productId: data.product_id,
-          fileHash: data.inputs.file_hash,
-          fileName: data.inputs.filename,
-          authorName: data.inputs.author_name || "AI Agent",
-          metadata: data.inputs.metadata || {},
-          buyerType: data.buyer?.type || "agent",
-          buyerId: data.buyer?.id,
-          userId: acpApiKey?.userId || null,
-          status: "pending",
-          expectedReceiver: xproofWallet,
-          expectedValue,
-          expectedData: dataField,
-          expiresAt,
-        })
-        .returning();
+      // Require payer_wallet for non-admin checkouts to bind the expected transaction sender.
+      // This prevents a third party from observing a pending checkout for a file they control
+      // and then using the legitimate payer's tx_hash to confirm it.
+      let payerWallet: string | null = null;
+      if (!acpAdminExempt) {
+        const raw = (data.payer_wallet || "").trim();
+        if (!raw.startsWith("erd1") || raw.length < 60) {
+          return res.status(400).json({
+            error: "PAYER_WALLET_REQUIRED",
+            message: "Provide the MultiversX wallet address (erd1...) that will send the EGLD payment as payer_wallet. This binds the checkout to the expected payment sender and prevents tx hijacking.",
+          });
+        }
+        payerWallet = raw;
+      }
+
+      // Deduplication via DB-level advisory lock + serialized check-then-insert.
+      // pg_advisory_xact_lock(hashtext(file_hash)) serializes concurrent checkout requests
+      // for the same file hash within a single PostgreSQL transaction, eliminating the
+      // read-before-write race window that a naive application-level check would leave open.
+      // The lock is released automatically when the transaction commits or rolls back.
+      let checkout: typeof acpCheckouts.$inferSelect;
+      try {
+        checkout = await db.transaction(async (tx) => {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${data.inputs.file_hash}))`);
+
+          const nowTx = new Date();
+          const [pendingCheckout] = await tx
+            .select({ id: acpCheckouts.id, userId: acpCheckouts.userId })
+            .from(acpCheckouts)
+            .where(
+              and(
+                eq(acpCheckouts.fileHash, data.inputs.file_hash),
+                eq(acpCheckouts.status, "pending"),
+                gt(acpCheckouts.expiresAt, nowTx),
+              )
+            );
+
+          if (pendingCheckout && pendingCheckout.userId !== requestingUserId) {
+            throw Object.assign(new Error("DUPLICATE_PENDING_CHECKOUT"), { code: "DUPLICATE_PENDING_CHECKOUT" });
+          }
+
+          const [newCheckout] = await tx
+            .insert(acpCheckouts)
+            .values({
+              productId: data.product_id,
+              fileHash: data.inputs.file_hash,
+              fileName: data.inputs.filename,
+              authorName: data.inputs.author_name || "AI Agent",
+              metadata: {
+                ...(data.inputs.metadata || {}),
+                ...(payerWallet ? { expectedSender: payerWallet } : {}),
+              },
+              buyerType: data.buyer?.type || "agent",
+              buyerId: data.buyer?.id,
+              userId: requestingUserId,
+              status: "pending",
+              expectedReceiver: xproofWallet,
+              expectedValue,
+              expectedData: dataField,
+              expiresAt,
+            })
+            .returning();
+          return newCheckout;
+        });
+      } catch (txErr: any) {
+        if (txErr.code === "DUPLICATE_PENDING_CHECKOUT") {
+          return res.status(409).json({
+            error: "DUPLICATE_PENDING_CHECKOUT",
+            message: "A pending checkout already exists for this file hash. Each file can have at most one pending ACP checkout at a time. Wait for the existing checkout to expire or complete before creating a new one.",
+          });
+        }
+        throw txErr;
+      }
 
       const response: ACPCheckoutResponse = {
         checkout_id: checkout.id,
@@ -307,7 +363,55 @@ export function registerAcpRoutes(app: Express) {
                 });
               }
 
+              // Verify tx sender matches the expected payer wallet captured at checkout creation.
+              // This prevents a competing actor from using their own tx to confirm someone else's
+              // checkout (tx hijacking). If no expectedSender was stored, reject as fail-closed.
+              const checkoutMeta = checkout.metadata as Record<string, unknown> | null;
+              const expectedSender: string | undefined = checkoutMeta?.expectedSender as string | undefined;
+              if (!expectedSender) {
+                logger.withRequest(req).warn("ACP confirm: checkout has no expectedSender — created before sender binding was enforced; rejecting fail-closed", { checkoutId: checkout.id, txHash: data.tx_hash });
+                return res.status(402).json({
+                  error: "SENDER_BINDING_MISSING",
+                  message: "This checkout was created without a payer_wallet binding. Re-create the checkout providing payer_wallet to bind the expected payment sender.",
+                });
+              }
+              if (txData.sender !== expectedSender) {
+                logger.withRequest(req).warn("ACP confirm: tx sender mismatch", {
+                  txHash: data.tx_hash,
+                  checkoutId: checkout.id,
+                  txSender: txData.sender,
+                  expectedSender,
+                });
+                return res.status(402).json({
+                  error: "PAYMENT_VERIFICATION_FAILED",
+                  message: `Transaction sender (${txData.sender}) does not match the expected payer wallet (${expectedSender}) that was provided when the checkout was created.`,
+                });
+              }
+
               txVerified = true;
+
+              // Reject if we cannot verify the checkout predates the transaction (fail-closed).
+              // This prevents an attacker from observing a victim's payment, creating a new
+              // checkout for the same file_hash/filename, and confirming with the victim's tx.
+              if (!txData.timestamp) {
+                logger.withRequest(req).warn("ACP confirm: transaction timestamp unavailable — cannot verify checkout/tx ordering", { txHash: data.tx_hash });
+                return res.status(402).json({
+                  error: "TX_TIMESTAMP_UNAVAILABLE",
+                  message: "Transaction timestamp could not be verified. Payment cannot be attributed without proof that the checkout predates the transaction.",
+                });
+              }
+              const txTime = new Date(txData.timestamp * 1000);
+              if (checkout.createdAt && checkout.createdAt > txTime) {
+                logger.withRequest(req).warn("ACP confirm: checkout postdates transaction", {
+                  txHash: data.tx_hash,
+                  checkoutCreatedAt: checkout.createdAt,
+                  txTime,
+                });
+                return res.status(402).json({
+                  error: "CHECKOUT_POSTDATES_TRANSACTION",
+                  message: "This checkout was created after the transaction was submitted. Payment cannot be attributed to a checkout that did not exist when the payment was made.",
+                });
+              }
             }
           }
         }
