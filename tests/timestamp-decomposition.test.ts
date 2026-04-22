@@ -4,6 +4,7 @@ import {
   auditLogSchema,
   validateTimestampOrdering,
   buildTimingBreakdown,
+  isStrictDatetime,
 } from "../server/auditSchema";
 
 const BASE_VALID_AUDIT = {
@@ -133,6 +134,32 @@ describe("Timestamp Decomposition — Task #87", () => {
         reversibility_class: "irreversible",
       });
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe("isStrictDatetime — strict ISO8601 datetime validator", () => {
+    it("accepts UTC Z-suffixed datetime strings", () => {
+      expect(isStrictDatetime("2026-04-20T14:31:58Z")).toBe(true);
+      expect(isStrictDatetime("2026-04-20T14:31:58.123Z")).toBe(true);
+    });
+
+    it("accepts timezone-offset datetime strings", () => {
+      expect(isStrictDatetime("2026-04-20T14:31:58+05:30")).toBe(true);
+      expect(isStrictDatetime("2026-04-20T00:00:00-08:00")).toBe(true);
+    });
+
+    it("rejects date-only strings (not datetime)", () => {
+      expect(isStrictDatetime("2026-04-20")).toBe(false);
+    });
+
+    it("rejects naive datetime strings (no timezone offset)", () => {
+      expect(isStrictDatetime("2026-04-20T14:31:58")).toBe(false);
+    });
+
+    it("rejects arbitrary strings", () => {
+      expect(isStrictDatetime("not-a-date")).toBe(false);
+      expect(isStrictDatetime("yesterday")).toBe(false);
+      expect(isStrictDatetime("20260420")).toBe(false);
     });
   });
 

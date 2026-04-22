@@ -23,6 +23,12 @@ export const JURISDICTION_TYPES = Object.freeze([
   "human_approved",
 ] as const);
 
+const _strictDatetimeSchema = z.string().datetime({ offset: true });
+
+export function isStrictDatetime(v: string): boolean {
+  return _strictDatetimeSchema.safeParse(v).success;
+}
+
 export const inputsManifestSchema = z.object({
   fields: z.array(z.string().max(128)).min(1, "At least one field name is required").max(50, "Maximum 50 fields"),
   sources: z.array(z.string().max(256)).max(20, "Maximum 20 sources").optional(),
@@ -54,15 +60,15 @@ export const auditLogSchema = z.object({
   }).optional(),
   instruction_received_at: z
     .string()
-    .refine((v) => !isNaN(Date.parse(v)), { message: "instruction_received_at must be a valid ISO8601 date string" })
+    .datetime({ offset: true, message: "instruction_received_at must be a valid ISO8601 date-time with timezone (e.g. 2026-04-20T14:31:58Z)" })
     .optional(),
   reasoning_started_at: z
     .string()
-    .refine((v) => !isNaN(Date.parse(v)), { message: "reasoning_started_at must be a valid ISO8601 date string" })
+    .datetime({ offset: true, message: "reasoning_started_at must be a valid ISO8601 date-time with timezone (e.g. 2026-04-20T14:31:59Z)" })
     .optional(),
   action_taken_at: z
     .string()
-    .refine((v) => !isNaN(Date.parse(v)), { message: "action_taken_at must be a valid ISO8601 date string" })
+    .datetime({ offset: true, message: "action_taken_at must be a valid ISO8601 date-time with timezone (e.g. 2026-04-20T14:32:07Z)" })
     .optional(),
   jurisdiction_type: z.enum(JURISDICTION_TYPES, {
     errorMap: () => ({ message: `jurisdiction_type must be one of: ${JURISDICTION_TYPES.join(", ")}` }),
