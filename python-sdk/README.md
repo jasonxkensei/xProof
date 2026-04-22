@@ -408,11 +408,9 @@ from xproof.exceptions import PolicyViolationError
 certify = XProofCertifyTool(api_key="pm_...", author="data-hygiene-agent")
 
 decision = {
-    "action": "delete_customer_records",
-    "scope": "inactive_accounts",
-    "records_affected": 4821,
-    "retention_policy_checked": True,
-    "legal_hold_clear": True,
+    "action": "delete_pii_records",
+    "scope": "eu-region",
+    "count": 15_000,
 }
 decision_id = "del-run-2026-04-20"
 
@@ -423,10 +421,10 @@ try:
         "threshold_stage": "pre-commitment",
         "decision_id": decision_id,
         "reversibility_class": "irreversible",
-        "why": "Scheduled GDPR data-retention cleanup",
+        "why": "Scheduled GDPR retention cleanup",
     })
     print(f"Policy compliant — proceeding (tx: {tx_hash})")
-    # delete_customer_records(decision["scope"])   # your execution here
+    # delete_pii_records(decision["scope"])   # your execution here
 except PolicyViolationError as exc:
     for v in exc.violations:
         print(f"BLOCKED [{v.severity.upper()}] {v.rule}: {v.message}")
@@ -458,7 +456,7 @@ tx_hash = await certify.arun({
     "threshold_stage": "pre-commitment",
     "decision_id": decision_id,
     "reversibility_class": "irreversible",
-    "why": "Scheduled GDPR data-retention cleanup",
+    "why": "Scheduled GDPR retention cleanup",
 })
 ```
 
@@ -491,11 +489,9 @@ from xproof.exceptions import PolicyViolationError
 certify = XProofCrewCertifyTool(api_key="pm_...", author="data-hygiene-agent")
 
 decision = {
-    "action": "delete_customer_records",
-    "scope": "inactive_accounts",
-    "records_affected": 4821,
-    "retention_policy_checked": True,
-    "legal_hold_clear": True,
+    "action": "delete_pii_records",
+    "scope": "eu-region",
+    "count": 15_000,
 }
 decision_id = "del-run-2026-04-20"
 
@@ -506,10 +502,10 @@ try:
         threshold_stage="pre-commitment",
         decision_id=decision_id,
         reversibility_class="irreversible",
-        why="Scheduled GDPR data-retention cleanup",
+        why="Scheduled GDPR retention cleanup",
     )
     print(f"Policy compliant — proceeding (tx: {tx_hash})")
-    # delete_customer_records(decision["scope"])   # your execution here
+    # delete_pii_records(decision["scope"])   # your execution here
 except PolicyViolationError as exc:
     for v in exc.violations:
         print(f"BLOCKED [{v.severity.upper()}] {v.rule}: {v.message}")
@@ -540,11 +536,9 @@ from xproof.integrations.autogen import xproof_certify_decision
 from xproof.exceptions import PolicyViolationError
 
 decision = {
-    "action": "delete_customer_records",
-    "scope": "inactive_accounts",
-    "records_affected": 4821,
-    "retention_policy_checked": True,
-    "legal_hold_clear": True,
+    "action": "delete_pii_records",
+    "scope": "eu-region",
+    "count": 15_000,
 }
 decision_id = "del-run-2026-04-20"
 
@@ -555,12 +549,12 @@ try:
         threshold_stage="pre-commitment",
         decision_id=decision_id,
         reversibility_class="irreversible",
-        why="Scheduled GDPR data-retention cleanup",
+        why="Scheduled GDPR retention cleanup",
         author="data-hygiene-agent",
         api_key="pm_...",
     )
     print(f"Policy compliant — proceeding (tx: {tx_hash})")
-    # delete_customer_records(decision["scope"])   # your execution here
+    # delete_pii_records(decision["scope"])   # your execution here
 except PolicyViolationError as exc:
     for v in exc.violations:
         print(f"BLOCKED [{v.severity.upper()}] {v.rule}: {v.message}")
@@ -601,13 +595,9 @@ def hash_string(s: str) -> str:
 # chain-of-thought or tool-call output produced just before execution.)
 
 decision = {
-    "action": "delete_customer_records",
-    "scope": "inactive_accounts",
-    "records_affected": 4821,
-    "retention_policy_checked": True,
-    "legal_hold_clear": True,
-    "agent": "data-hygiene-agent",
-    "run_id": "del-run-2026-04-20",
+    "action": "delete_pii_records",
+    "scope": "eu-region",
+    "count": 15_000,
 }
 decision_id = "del-run-2026-04-20"
 reasoning_hash = hash_string(json.dumps(decision, sort_keys=True))
@@ -643,7 +633,7 @@ if not check.policy_compliant:
 
 # ── Step 4: Execute only when compliant ──────────────────────────────────────
 print(f"Policy compliant — proceeding with deletion (cert: {cert.transaction_hash})")
-# delete_customer_records(decision["scope"])   # your actual execution here
+# delete_pii_records(decision["scope"])   # your actual execution here
 ```
 
 **What happens if the agent's confidence is too low?**
