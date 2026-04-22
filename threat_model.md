@@ -6,6 +6,8 @@ xproof is an on-chain notary and accountability layer for AI agents and human us
 
 Production security analysis should focus on `server/`, `shared/`, and production-rendered client/server content. `python-sdk/`, `npm-sdk/`, `xproof-examples/`, tests, and task artifacts are normally dev/distribution surfaces and should be ignored unless production reachability is demonstrated. Replit handles TLS in production; sandbox/mock environments are not production.
 
+Host-header-derived absolute URLs should only be treated as a production vulnerability when there is evidence that the deployed edge accepts attacker-controlled `Host` values and forwards them unchanged to Express. Bare `req.get('host')` usage is a lead to validate, not a stand-alone finding on this platform.
+
 ## Assets
 
 - **Wallet-backed user identities and sessions** — browser sessions represent a MultiversX wallet and gate API-key management, profile changes, trust operations, and admin routes.
@@ -28,7 +30,7 @@ Production security analysis should focus on `server/`, `shared/`, and productio
 ## Scan Anchors
 
 - **Production entry points**: `server/index.ts`, `server/routes.ts`, `server/routes/*`
-- **Highest-risk files**: `server/routes/auth.ts`, `server/walletAuth.ts`, `server/replitAuth.ts`, `server/routes/helpers.ts`, `server/routes/proof-write.ts`, `server/routes/acp.ts`, `server/routes/credits.ts`, `server/mcp.ts`, `server/webhook.ts`, `server/routes/admin.ts`, `server/routes/attestations.ts`, `client/src/hooks/useWalletAuth.ts`, `client/src/components/wallet-login-modal.tsx`
+- **Highest-risk files**: `server/routes/auth.ts`, `server/walletAuth.ts`, `server/replitAuth.ts`, `server/routes/helpers.ts`, `server/routes/proof-write.ts`, `server/routes/acp.ts`, `server/routes/credits.ts`, `server/credits.ts`, `server/routes/standard.ts`, `server/x402.ts`, `server/mcp.ts`, `server/webhook.ts`, `server/routes/admin.ts`, `server/routes/attestations.ts`, `server/routes/proof-read.ts`, `client/src/hooks/useWalletAuth.ts`, `client/src/components/wallet-login-modal.tsx`
 - **Public surfaces**: `server/routes/proof-read.ts`, `server/routes/attestations.ts`, embeddable trust-widget routes, discovery/content/docs routes, prerendered pages in `server/prerender.ts`
 - **Usually dev-only**: `python-sdk/`, `npm-sdk/`, `xproof-examples/`, tests, local task files
 
@@ -49,7 +51,9 @@ The main tampering risk is unauthorized proof creation or mutation of trust/busi
 
 Required guarantees:
 - Proof and audit creation MUST consume the correct quota or verify the required payment on every write-capable API and MCP path.
+- Credit and trial entitlement consumption MUST be atomic or reserved before durable writes and blockchain work begin.
 - Payment confirmation MUST verify recipient, amount, chain/context, and transaction success before creating a proof.
+- Payment intents and checkouts MUST be bound to the paying account before the on-chain payment occurs; post-hoc claim of another tenant's transaction MUST be impossible.
 - Certifications MUST be attributed to the actual authenticated account when an API key is used; shared system-user fallbacks MUST be limited to intentionally anonymous paid flows.
 
 ### Repudiation
@@ -66,6 +70,7 @@ Most proof data is intentionally public, but not every internal secret or owner 
 
 Required guarantees:
 - Public proof and trust APIs MUST only expose data intentionally designated as public.
+- Public hash lookups, trust lookups, and certificate downloads MUST respect both per-proof visibility (`certifications.isPublic`) and profile visibility (`users.isPublicProfile`) rules.
 - Session secrets, API keys, and signing secrets MUST never appear in client-facing responses or logs.
 - Example/demo code outside the production runtime SHOULD be documented as out of scope for production scans unless later wired into the deployed app.
 
@@ -85,4 +90,4 @@ The most serious project-specific EoP risks are broken wallet auth, fail-open ad
 Required guarantees:
 - Alternate auth or convenience endpoints MUST not grant broader access than the primary auth path.
 - Admin helpers MUST default to deny when configuration or session context is missing.
-- MCP, REST, and commerce flows MUST enforce the same authorization, accounting, and attribution rules for equivalent operations.
+- MCP, REST, and commerce flows MUST enforce the same authorization, accounting, attribution, and settlement fail-closed rules for equivalent operations.
