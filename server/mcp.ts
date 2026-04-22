@@ -120,13 +120,16 @@ export async function createMcpServer(ctx: McpContext) {
         else if (mcpCreditInfo) await consumeCredit(mcpCreditInfo.userId);
 
         let webhookStatus = webhook_url ? "pending" : "not_requested";
+        let mcpWebhookSecret: string | null = null;
         if (webhook_url) {
           const { scheduleWebhookDelivery, isValidWebhookUrl } = await import("./webhook");
           if (isValidWebhookUrl(webhook_url)) {
             await db.update(certifications)
               .set({ webhookUrl: webhook_url, webhookStatus: "pending" })
               .where(eq(certifications.id, certification.id));
-            scheduleWebhookDelivery(certification.id, webhook_url, baseUrl, auth.keyHash);
+            // Never reuse the API key hash as signing secret — generate a fresh random secret.
+            mcpWebhookSecret = crypto.randomBytes(32).toString("hex");
+            scheduleWebhookDelivery(certification.id, webhook_url, baseUrl, mcpWebhookSecret);
           } else {
             webhookStatus = "failed";
           }
@@ -145,6 +148,9 @@ export async function createMcpServer(ctx: McpContext) {
               blockchain: { network: "MultiversX", transaction_hash: result.transactionHash, explorer_url: result.transactionUrl },
               timestamp: certification.createdAt?.toISOString(),
               webhook_status: webhookStatus,
+              // webhook_secret is present only when webhook_url was supplied.
+              // Store it securely to verify X-xProof-Signature on callbacks.
+              ...(mcpWebhookSecret ? { webhook_secret: mcpWebhookSecret } : {}),
               message: "File certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
             }),
           }],
