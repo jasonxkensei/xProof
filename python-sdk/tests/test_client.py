@@ -619,6 +619,23 @@ def test_certify_with_confidence_invalid_confidence_too_high():
         )
 
 
+@pytest.mark.parametrize(
+    "bad_value",
+    [None, "high", float("nan"), float("inf"), float("-inf")],
+)
+def test_certify_with_confidence_rejects_non_finite_confidence(bad_value):
+    client = XProofClient(api_key="pm_test")
+    with pytest.raises(ValueError, match="finite number"):
+        client.certify_with_confidence(
+            file_hash="a" * 64,
+            file_name="f.json",
+            author="Agent",
+            confidence_level=bad_value,
+            threshold_stage="initial",
+            decision_id="dec-bad",
+        )
+
+
 def test_certify_with_confidence_invalid_threshold_stage():
     client = XProofClient(api_key="pm_test")
     with pytest.raises(ValueError, match="threshold_stage must be one of"):

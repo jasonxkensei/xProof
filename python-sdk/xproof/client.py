@@ -1,5 +1,6 @@
 """Main client for the xProof API."""
 
+import math
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Optional, Union, cast
@@ -369,6 +370,11 @@ class XProofClient:
         """
         if not self.api_key:
             raise ValueError("api_key is required — call register() or pass an api_key")
+        if not isinstance(confidence_level, (int, float)) or not math.isfinite(confidence_level):
+            raise ValueError(
+                "confidence_level must be a finite number between 0.0 and 1.0"
+                f" — got {confidence_level!r}"
+            )
         if not 0.0 <= confidence_level <= 1.0:
             raise ValueError("confidence_level must be between 0.0 and 1.0")
         if threshold_stage not in self.VALID_THRESHOLD_STAGES:
