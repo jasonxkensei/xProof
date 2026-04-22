@@ -21,16 +21,16 @@ client with your registered API key (see the
 
 ## Examples at a glance
 
-| Directory / file | Framework | Description |
+| Directory / file | Integration class(es) | Description |
 |---|---|---|
-| [`langchain-chain/`](langchain-chain/README.md) | LangChain | Callback handler (`main.py`) and certify-tool demo (`certify_tool_demo.py`) — two integration patterns for LangChain agents |
-| [`crewai-crew/`](crewai-crew/README.md) | CrewAI | 3-agent crew (researcher, writer, reviewer) with per-agent on-chain certification |
-| [`autogen/`](autogen/README.md) | AutoGen | Certifies every message exchanged between AutoGen agents with 4W metadata |
-| [`llamaindex/`](llamaindex/README.md) | LlamaIndex | Certifies LLM calls, queries, and tool invocations from a LlamaIndex pipeline |
-| [`openai-agents/`](openai-agents/README.md) | OpenAI Agents SDK | Certifies tool calls and agent completions; self-contained, no extra sub-modules |
-| [`fetchai/`](fetchai/README.md) | Fetch.ai uAgents | On-chain proof anchoring for uAgent messages via `XProofuAgentMiddleware` |
-| [`deerflow/`](deerflow/README.md) | DeerFlow | xProof as a DeerFlow skill — blockchain-anchored proof for any DeerFlow agent output |
-| [`compliance_observability.py`](compliance_observability.py) | Core SDK | Standalone script demonstrating compliance logging and observability patterns |
+| [`langchain-chain/`](langchain-chain/README.md) | `XProofCallbackHandler`, `XProofCertifyTool` | Callback handler (`main.py`) and certify-tool demo (`certify_tool_demo.py`) — two integration patterns for LangChain agents |
+| [`crewai-crew/`](crewai-crew/README.md) | `XProofCrewCertifyTool`, `XProofCrewCallback` | 3-agent crew (researcher, writer, reviewer) with per-agent on-chain certification |
+| [`autogen/`](autogen/README.md) | `XProofAutoGenHooks` | Certifies every message exchanged between AutoGen agents with 4W metadata |
+| [`llamaindex/`](llamaindex/README.md) | `XProofCallbackHandler` | Certifies LLM calls, queries, and tool invocations from a LlamaIndex pipeline |
+| [`openai-agents/`](openai-agents/README.md) | `XProofRunHooks`, `XProofTracingProcessor` | Certifies tool calls and agent completions; self-contained, no extra sub-modules |
+| [`fetchai/`](fetchai/README.md) | `XProofuAgentMiddleware` | On-chain proof anchoring for Fetch.ai uAgent messages |
+| [`deerflow/`](deerflow/README.md) | `XProofDeerFlowSkill` | xProof as a DeerFlow skill — blockchain-anchored proof for any DeerFlow agent output |
+| [`compliance_observability.py`](compliance_observability.py) | `XProofClient` (core SDK) | Standalone script demonstrating compliance logging and observability patterns |
 
 ## Choosing the right example
 
