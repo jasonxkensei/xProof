@@ -1187,3 +1187,80 @@ def test_certify_with_confidence_empty_timing_dict_ignored():
         "jurisdiction_type",
     ):
         assert key not in meta
+
+
+def test_certify_with_confidence_invalid_jurisdiction_type_raises():
+    """An invalid jurisdiction_type value raises ValueError before any HTTP call."""
+    client = XProofClient(api_key="pm_test")
+    with pytest.raises(ValueError, match="timing\\['jurisdiction_type'\\] must be one of"):
+        client.certify_with_confidence(
+            file_hash="f" * 64,
+            file_name="bad.json",
+            author="Agent",
+            confidence_level=0.8,
+            threshold_stage="partial",
+            decision_id="dec-jt-bad",
+            timing={"jurisdiction_type": "not_a_valid_type"},  # type: ignore[typeddict-item]
+        )
+
+
+@responses.activate
+def test_batch_certify_with_timing_in_certify_entry():
+    """timing in a CertifyEntry is forwarded as metadata fields in the batch payload."""
+    from xproof import TimingBreakdown
+    from xproof.models import CertifyEntry
+
+    responses.add(
+        responses.POST,
+        f"{BASE}/api/batch",
+        json={
+            "batch_id": "batch-timing-001",
+            "total": 1,
+            "created": 1,
+            "existing": 0,
+            "results": [
+                {
+                    "file_hash": "ht",
+                    "filename": "timed.json",
+                    "proof_id": "proof-t1",
+                    "verify_url": "",
+                    "badge_url": "",
+                    "status": "created",
+                }
+            ],
+        },
+        status=201,
+    )
+    client = XProofClient(api_key="pm_test")
+    timing: TimingBreakdown = {
+        "instruction_received_at": "2026-04-20T09:00:00Z",
+        "action_taken_at": "2026-04-20T09:00:08Z",
+        "jurisdiction_type": "human_approved",
+    }
+    entry: CertifyEntry = {
+        "file_hash": "ht",
+        "file_name": "timed.json",
+        "author": "AgentT",
+        "timing": timing,
+    }
+    result = client.batch_certify([entry])
+    assert result.summary.created == 1
+    req_body = json.loads(responses.calls[0].request.body)
+    file_meta = req_body["files"][0]["metadata"]
+    assert file_meta["instruction_received_at"] == "2026-04-20T09:00:00Z"
+    assert file_meta["action_taken_at"] == "2026-04-20T09:00:08Z"
+    assert file_meta["jurisdiction_type"] == "human_approved"
+
+
+def test_batch_certify_invalid_jurisdiction_type_raises():
+    """An invalid jurisdiction_type in a CertifyEntry timing raises ValueError."""
+    from xproof.models import CertifyEntry
+
+    client = XProofClient(api_key="pm_test")
+    entry: CertifyEntry = {
+        "file_hash": "hb",
+        "file_name": "bad.json",
+        "timing": {"jurisdiction_type": "not_valid"},  # type: ignore[typeddict-item]
+    }
+    with pytest.raises(ValueError, match="timing\\['jurisdiction_type'\\] must be one of"):
+        client.batch_certify([entry])

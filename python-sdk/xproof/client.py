@@ -16,6 +16,7 @@ from .exceptions import (
     XProofError,
 )
 from .models import (
+    JURISDICTION_TYPES,
     BatchFileEntry,
     BatchResult,
     Certification,
@@ -390,6 +391,12 @@ class XProofClient:
         if reversibility_class is not None:
             proof_metadata["reversibility_class"] = reversibility_class
         if timing:
+            jt = timing.get("jurisdiction_type")
+            if jt is not None and jt not in JURISDICTION_TYPES:
+                raise ValueError(
+                    f"timing['jurisdiction_type'] must be one of: "
+                    f"{', '.join(JURISDICTION_TYPES)}"
+                )
             for key in (
                 "instruction_received_at",
                 "reasoning_started_at",
@@ -554,8 +561,25 @@ class XProofClient:
                 "filename": fname,
                 "file_hash": fhash,
             }
-            if f.get("metadata"):
-                entry["metadata"] = f.get("metadata")
+            entry_meta: dict[str, Any] = dict(f.get("metadata") or {})
+            entry_timing = f.get("timing")
+            if entry_timing:
+                jt = entry_timing.get("jurisdiction_type")
+                if jt is not None and jt not in JURISDICTION_TYPES:
+                    raise ValueError(
+                        f"timing['jurisdiction_type'] must be one of: "
+                        f"{', '.join(JURISDICTION_TYPES)}"
+                    )
+                for key in (
+                    "instruction_received_at",
+                    "reasoning_started_at",
+                    "action_taken_at",
+                    "jurisdiction_type",
+                ):
+                    if key in entry_timing:
+                        entry_meta[key] = entry_timing[key]
+            if entry_meta:
+                entry["metadata"] = entry_meta
             entries.append(entry)
 
         payload: dict[str, Any] = {"files": entries}
