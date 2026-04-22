@@ -18,7 +18,7 @@ except ImportError:
         ) from err
 
 from ..client import XProofClient
-from ..models import CertifyEntry
+from ..models import CertifyEntry, Certification
 
 
 def _hash_data(data: Any) -> str:
@@ -94,12 +94,18 @@ class XProofCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]  # BaseC
                 metadata=entry["metadata"],
             )
 
-    def flush(self) -> None:
-        """Send all pending certifications in a batch."""
+    def flush(self) -> list[Certification]:
+        """Send all pending certifications in a batch.
+
+        Returns:
+            List of :class:`~xproof.models.Certification` objects, one per
+            certified item.  Returns an empty list if there was nothing pending.
+        """
         if not self._pending:
-            return
-        self.client.batch_certify(self._pending)
+            return []
+        result = self.client.batch_certify(self._pending)
         self._pending.clear()
+        return result.results
 
     def on_llm_start(
         self,
