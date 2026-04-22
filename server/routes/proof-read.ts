@@ -149,6 +149,30 @@ export function registerProofReadRoutes(app: Express) {
 
       const stages = results.map((r) => {
         const meta = (r.metadata || {}) as Record<string, any>;
+
+        const ira = meta.instruction_received_at ?? null;
+        const rsa = meta.reasoning_started_at ?? null;
+        const ata = meta.action_taken_at ?? null;
+        const iraMs = ira ? Date.parse(ira) : null;
+        const rsaMs = rsa ? Date.parse(rsa) : null;
+        const ataMs = ata ? Date.parse(ata) : null;
+        const reasoning_duration_ms =
+          rsaMs !== null && ataMs !== null ? ataMs - rsaMs : null;
+        const total_duration_ms =
+          iraMs !== null && ataMs !== null ? ataMs - iraMs : null;
+        const jt: string | null = meta.jurisdiction_type ?? null;
+
+        const timing_breakdown = (ira || rsa || ata || jt)
+          ? {
+              instruction_received_at: ira,
+              reasoning_started_at: rsa,
+              action_taken_at: ata,
+              jurisdiction_type: jt,
+              reasoning_duration_ms,
+              total_duration_ms,
+            }
+          : null;
+
         return {
           proof_id: r.id,
           file_name: r.fileName,
@@ -162,6 +186,7 @@ export function registerProofReadRoutes(app: Express) {
             status: r.blockchainStatus,
           },
           anchored_at: r.createdAt,
+          timing_breakdown,
           metadata: meta,
         };
       });

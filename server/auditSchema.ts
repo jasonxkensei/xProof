@@ -17,6 +17,12 @@ export const RISK_LEVELS = ["low", "medium", "high", "critical"] as const;
 
 export const DECISIONS = ["approved", "rejected", "deferred"] as const;
 
+export const JURISDICTION_TYPES = [
+  "instruction_following",
+  "autonomous_inference",
+  "human_approved",
+] as const;
+
 export const inputsManifestSchema = z.object({
   fields: z.array(z.string().max(128)).min(1, "At least one field name is required").max(50, "Maximum 50 fields"),
   sources: z.array(z.string().max(256)).max(20, "Maximum 20 sources").optional(),
@@ -45,6 +51,21 @@ export const auditLogSchema = z.object({
   context: z.record(z.any()).optional(),
   reversibility_class: z.enum(REVERSIBILITY_CLASSES, {
     errorMap: () => ({ message: `reversibility_class must be one of: ${REVERSIBILITY_CLASSES.join(", ")}` }),
+  }).optional(),
+  instruction_received_at: z
+    .string()
+    .refine((v) => !isNaN(Date.parse(v)), { message: "instruction_received_at must be a valid ISO8601 date string" })
+    .optional(),
+  reasoning_started_at: z
+    .string()
+    .refine((v) => !isNaN(Date.parse(v)), { message: "reasoning_started_at must be a valid ISO8601 date string" })
+    .optional(),
+  action_taken_at: z
+    .string()
+    .refine((v) => !isNaN(Date.parse(v)), { message: "action_taken_at must be a valid ISO8601 date string" })
+    .optional(),
+  jurisdiction_type: z.enum(JURISDICTION_TYPES, {
+    errorMap: () => ({ message: `jurisdiction_type must be one of: ${JURISDICTION_TYPES.join(", ")}` }),
   }).optional(),
   timestamp: z
     .string()
@@ -164,6 +185,42 @@ export const AUDIT_LOG_JSON_SCHEMA = {
       type: "object",
       description: "Optional additional metadata (strategy name, version, environment, etc.)",
       examples: [{ strategy: "momentum-v2", environment: "production", version: "1.4.2" }],
+    },
+    instruction_received_at: {
+      type: "string",
+      format: "date-time",
+      description:
+        "ISO8601 timestamp of when the agent received the instruction or trigger that initiated this decision. " +
+        "Combined with reasoning_started_at and action_taken_at, enables forensic reconstruction of the decision timeline. " +
+        "If omitted, xProof cannot distinguish between deliberate reasoning time and execution latency.",
+      examples: ["2026-04-20T14:31:58Z"],
+    },
+    reasoning_started_at: {
+      type: "string",
+      format: "date-time",
+      description:
+        "ISO8601 timestamp of when the agent began its reasoning process (e.g. first LLM call, first tool invocation). " +
+        "The interval reasoning_started_at → action_taken_at is the verifiable 'thinking time' of the agent.",
+      examples: ["2026-04-20T14:31:59Z"],
+    },
+    action_taken_at: {
+      type: "string",
+      format: "date-time",
+      description:
+        "ISO8601 timestamp of when the agent committed to and executed the action. " +
+        "Must be >= reasoning_started_at >= instruction_received_at when all three are provided.",
+      examples: ["2026-04-20T14:32:07Z"],
+    },
+    jurisdiction_type: {
+      type: "string",
+      enum: JURISDICTION_TYPES,
+      description:
+        "Legal accountability classification for this decision. " +
+        "'instruction_following' = the agent executed an explicit instruction from a human or upstream system — accountability follows the principal. " +
+        "'autonomous_inference' = the agent reached its own conclusion without explicit instruction — agent (and its operator) bears primary accountability. " +
+        "'human_approved' = the agent recommended an action and a human explicitly approved before execution — shared accountability. " +
+        "This field is the on-chain evidence for dispute resolution: it determines *who* bears legal responsibility when something goes wrong.",
+      examples: ["autonomous_inference"],
     },
     reversibility_class: {
       type: "string",
