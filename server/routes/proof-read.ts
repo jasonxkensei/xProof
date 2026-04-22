@@ -22,7 +22,9 @@ export function registerProofReadRoutes(app: Express) {
         .from(certifications)
         .where(eq(certifications.fileHash, hash.toLowerCase()));
 
-      if (existing) {
+      // Only reveal existence and ID for public proofs — treat non-public as not found
+      // to avoid leaking proof IDs and anchoring timestamps for private certifications.
+      if (existing && existing.isPublic) {
         return res.json({
           exists: true,
           proof_id: existing.id,
@@ -378,7 +380,9 @@ export function registerProofReadRoutes(app: Express) {
         .from(certifications)
         .where(eq(certifications.fileHash, hash.toLowerCase()));
 
-      if (!cert) {
+      // Apply same isPublic gate as /api/proof/:id and /api/proof/hash/:hash —
+      // a known hash must not expose owner identity or trust data for private certifications.
+      if (!cert || !cert.isPublic) {
         return res.status(404).json({ error: "No proof found for this hash", verified: false, score: 0 });
       }
 
@@ -389,7 +393,9 @@ export function registerProofReadRoutes(app: Express) {
           .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
           .from(users)
           .where(eq(users.id, cert.userId));
-        if (owner?.walletAddress) {
+        // Only disclose wallet address when the owner has opted into a public profile —
+        // consistent with the guard in /api/proof/:id (line 60) and /api/proof/hash/:hash (line 113).
+        if (owner?.walletAddress && owner.isPublicProfile) {
           agentWallet = owner.walletAddress;
           agentTrust = await computeTrustScoreByWallet(owner.walletAddress);
         }
@@ -1551,6 +1557,13 @@ export function registerProofReadRoutes(app: Express) {
         .where(eq(certifications.id, certId));
 
       if (!certification) {
+        return res.status(404).json({ message: "Certificate not found" });
+      }
+
+      // Non-public certifications must not be downloadable by anonymous callers —
+      // the PDF embeds filename, SHA-256 hash, author name, and blockchain details
+      // that the owner may not have chosen to disclose.
+      if (!certification.isPublic) {
         return res.status(404).json({ message: "Certificate not found" });
       }
 
