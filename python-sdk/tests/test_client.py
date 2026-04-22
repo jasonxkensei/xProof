@@ -973,3 +973,217 @@ def test_batch_certify_with_metadata_in_certify_entry():
     }
     result = client.batch_certify([entry])
     assert result.summary.created == 1
+
+
+# ---------------------------------------------------------------------------
+# certify_with_confidence() — timing breakdown (#88)
+# ---------------------------------------------------------------------------
+
+
+@responses.activate
+def test_certify_with_confidence_timing_sent_in_metadata():
+    """timing fields are merged into metadata when timing kwarg is provided."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    from xproof import TimingBreakdown
+
+    timing: TimingBreakdown = {
+        "instruction_received_at": "2026-04-20T14:30:00Z",
+        "reasoning_started_at": "2026-04-20T14:30:01Z",
+        "action_taken_at": "2026-04-20T14:30:05Z",
+        "jurisdiction_type": "autonomous_inference",
+    }
+    client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="decision.json",
+        author="Agent",
+        confidence_level=0.9,
+        threshold_stage="pre-commitment",
+        decision_id="dec-timing-01",
+        timing=timing,
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta["instruction_received_at"] == "2026-04-20T14:30:00Z"
+    assert meta["reasoning_started_at"] == "2026-04-20T14:30:01Z"
+    assert meta["action_taken_at"] == "2026-04-20T14:30:05Z"
+    assert meta["jurisdiction_type"] == "autonomous_inference"
+    assert meta["confidence_level"] == 0.9
+    assert meta["decision_id"] == "dec-timing-01"
+
+
+@responses.activate
+def test_certify_with_confidence_partial_timing_sent():
+    """Only provided timing keys appear in metadata; absent keys are not sent."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    from xproof import TimingBreakdown
+
+    timing: TimingBreakdown = {
+        "instruction_received_at": "2026-04-20T10:00:00Z",
+        "action_taken_at": "2026-04-20T10:00:09Z",
+    }
+    client.certify_with_confidence(
+        file_hash="b" * 64,
+        file_name="partial.json",
+        author="Agent",
+        confidence_level=0.75,
+        threshold_stage="partial",
+        decision_id="dec-timing-02",
+        timing=timing,
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta["instruction_received_at"] == "2026-04-20T10:00:00Z"
+    assert meta["action_taken_at"] == "2026-04-20T10:00:09Z"
+    assert "reasoning_started_at" not in meta
+    assert "jurisdiction_type" not in meta
+
+
+@responses.activate
+def test_certify_with_confidence_no_timing_no_keys_sent():
+    """When timing is None, no timing keys appear in metadata."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    client.certify_with_confidence(
+        file_hash="c" * 64,
+        file_name="notiming.json",
+        author="Agent",
+        confidence_level=0.8,
+        threshold_stage="initial",
+        decision_id="dec-timing-03",
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    for key in (
+        "instruction_received_at",
+        "reasoning_started_at",
+        "action_taken_at",
+        "jurisdiction_type",
+    ):
+        assert key not in meta, f"Unexpected key in metadata: {key}"
+
+
+@responses.activate
+def test_certification_from_dict_parses_timing_breakdown():
+    """Certification.from_dict deserialises timing_breakdown from the API response."""
+    api_response = {
+        **CERT_RESPONSE,
+        "timing_breakdown": {
+            "instruction_received_at": "2026-04-20T14:30:00Z",
+            "reasoning_started_at": "2026-04-20T14:30:01Z",
+            "action_taken_at": "2026-04-20T14:30:05Z",
+            "jurisdiction_type": "instruction_following",
+            "reasoning_duration_ms": 4000,
+            "total_duration_ms": 5000,
+        },
+    }
+    responses.add(responses.POST, f"{BASE}/api/proof", json=api_response, status=201)
+    client = XProofClient(api_key="pm_test")
+    from xproof import TimingBreakdown
+
+    cert = client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="analysis.json",
+        author="AgentX",
+        confidence_level=0.95,
+        threshold_stage="final",
+        decision_id="dec-timing-04",
+    )
+    assert cert.timing_breakdown is not None
+    tb: TimingBreakdown = cert.timing_breakdown
+    assert tb["instruction_received_at"] == "2026-04-20T14:30:00Z"
+    assert tb["reasoning_started_at"] == "2026-04-20T14:30:01Z"
+    assert tb["action_taken_at"] == "2026-04-20T14:30:05Z"
+    assert tb["jurisdiction_type"] == "instruction_following"
+    assert tb["reasoning_duration_ms"] == 4000
+    assert tb["total_duration_ms"] == 5000
+
+
+@responses.activate
+def test_certification_from_dict_timing_breakdown_none_when_absent():
+    """timing_breakdown is None when the API response does not include it."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    cert = client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="analysis.json",
+        author="AgentX",
+        confidence_level=0.8,
+        threshold_stage="partial",
+        decision_id="dec-timing-05",
+    )
+    assert cert.timing_breakdown is None
+
+
+@responses.activate
+def test_certify_with_confidence_timing_and_4w_combined():
+    """timing fields coexist with 4W fields in metadata without conflict."""
+    from xproof import TimingBreakdown
+
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    timing: TimingBreakdown = {
+        "instruction_received_at": "2026-04-20T08:00:00Z",
+        "action_taken_at": "2026-04-20T08:00:10Z",
+        "jurisdiction_type": "human_approved",
+    }
+    client.certify_with_confidence(
+        file_hash="d" * 64,
+        file_name="combined.json",
+        author="Agent",
+        confidence_level=0.97,
+        threshold_stage="final",
+        decision_id="dec-timing-06",
+        who="erd1xyz...",
+        why="GDPR retention audit",
+        reversibility_class="irreversible",
+        timing=timing,
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta["who"] == "erd1xyz..."
+    assert meta["why"] == "GDPR retention audit"
+    assert meta["reversibility_class"] == "irreversible"
+    assert meta["instruction_received_at"] == "2026-04-20T08:00:00Z"
+    assert meta["action_taken_at"] == "2026-04-20T08:00:10Z"
+    assert meta["jurisdiction_type"] == "human_approved"
+
+
+def test_timing_breakdown_and_jurisdiction_type_exported():
+    """TimingBreakdown and JurisdictionType are importable from the top-level package."""
+    from xproof import JURISDICTION_TYPES, TimingBreakdown
+
+    assert "instruction_following" in JURISDICTION_TYPES
+    assert "autonomous_inference" in JURISDICTION_TYPES
+    assert "human_approved" in JURISDICTION_TYPES
+    assert len(JURISDICTION_TYPES) == 3
+
+    tb: TimingBreakdown = {
+        "action_taken_at": "2026-04-20T14:30:05Z",
+        "jurisdiction_type": "autonomous_inference",
+    }
+    assert tb["jurisdiction_type"] == "autonomous_inference"
+
+
+@responses.activate
+def test_certify_with_confidence_empty_timing_dict_ignored():
+    """An empty timing dict sends no timing keys."""
+    from xproof import TimingBreakdown
+
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    timing: TimingBreakdown = {}
+    client.certify_with_confidence(
+        file_hash="e" * 64,
+        file_name="empty.json",
+        author="Agent",
+        confidence_level=0.5,
+        threshold_stage="initial",
+        decision_id="dec-timing-07",
+        timing=timing,
+    )
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    for key in (
+        "instruction_received_at",
+        "reasoning_started_at",
+        "action_taken_at",
+        "jurisdiction_type",
+    ):
+        assert key not in meta

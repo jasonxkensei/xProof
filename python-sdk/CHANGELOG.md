@@ -7,6 +7,33 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.8] — 2026-04-22
+
+### Added
+- `TimingBreakdown` — `TypedDict` (all fields optional) for anchoring the full
+  decision chronology on-chain: `instruction_received_at`, `reasoning_started_at`,
+  `action_taken_at`, `jurisdiction_type`. Computed read-back fields:
+  `reasoning_duration_ms`, `total_duration_ms`.
+- `JurisdictionType` — `Literal` type with three values:
+  `"instruction_following"`, `"autonomous_inference"`, `"human_approved"`.
+- `JURISDICTION_TYPES` — tuple of all valid `JurisdictionType` values for
+  runtime validation.
+- `timing: Optional[TimingBreakdown] = None` kwarg on `certify_with_confidence()`.
+  Timing fields are merged into `proof_metadata` before the POST.
+- `timing_breakdown: Optional[TimingBreakdown]` field on `Certification`.
+  `Certification.from_dict()` now deserialises `timing_breakdown` from the
+  top-level or `metadata` sub-dict of the API response, including computed
+  duration fields.
+- `CertifyEntry.timing` optional field for use with `batch_certify()`.
+- All three new public symbols exported from `xproof.__all__`.
+- 8 new unit tests covering: timing payload sent, partial timing, no timing,
+  `timing_breakdown` deserialisation, absent timing_breakdown → `None`,
+  timing + 4W combined, `JURISDICTION_TYPES` export, empty timing dict ignored.
+- **README**: *Timing Breakdown* section with code example, `jurisdiction_type`
+  table, and read-back usage.
+
+---
+
 ## [0.2.7] — 2026-04-20
 
 ### Added

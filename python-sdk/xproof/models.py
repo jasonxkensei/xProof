@@ -5,18 +5,68 @@ from typing import Any, Literal, Optional, TypedDict, Union
 
 ReversibilityClass = Literal["reversible", "costly", "irreversible"]
 
+JurisdictionType = Literal["instruction_following", "autonomous_inference", "human_approved"]
+"""Legal accountability classification for an agent decision.
 
-class CertifyEntry(TypedDict):
+- ``instruction_following``: The agent executed an explicit instruction from a
+  human or upstream system — accountability follows the principal.
+- ``autonomous_inference``: The agent reached its own conclusion without an
+  explicit instruction — agent (and its operator) bears primary accountability.
+- ``human_approved``: The agent recommended an action and a human explicitly
+  approved it before execution — shared accountability.
+"""
+
+JURISDICTION_TYPES: tuple[str, ...] = (
+    "instruction_following",
+    "autonomous_inference",
+    "human_approved",
+)
+"""Tuple of all valid :data:`JurisdictionType` values — useful for runtime validation."""
+
+
+class TimingBreakdown(TypedDict, total=False):
+    """Decomposed decision timeline for forensic audit.
+
+    Pass a ``TimingBreakdown`` to :meth:`~xproof.XProofClient.certify_with_confidence`
+    via the ``timing`` parameter to anchor the full decision chronology on-chain.
+
+    All fields are optional and ISO8601 date-time strings with timezone offset
+    (e.g. ``"2026-04-20T14:31:58Z"``).
+
+    When read back from the API via a :class:`~xproof.Certification` or a
+    :class:`~xproof.ConfidenceTrailStage`, two additional computed fields are
+    included:
+
+    - ``reasoning_duration_ms`` — milliseconds between *reasoning_started_at*
+      and *action_taken_at* (the verifiable "thinking time").
+    - ``total_duration_ms`` — milliseconds between *instruction_received_at*
+      and *action_taken_at*.
+    """
+
+    instruction_received_at: str
+    reasoning_started_at: str
+    action_taken_at: str
+    jurisdiction_type: JurisdictionType
+    reasoning_duration_ms: Optional[int]
+    total_duration_ms: Optional[int]
+
+
+class _CertifyEntryRequired(TypedDict):
+    file_hash: str
+    file_name: str
+
+
+class CertifyEntry(_CertifyEntryRequired, total=False):
     """Typed shape for a hash-based entry passed to certify_hash or batch_certify.
 
     All integration modules produce this shape.  ``file_hash`` must be a
-    64-character hex-encoded SHA-256 digest.
+    64-character hex-encoded SHA-256 digest.  ``file_name`` is also required;
+    ``author``, ``metadata``, and ``timing`` are optional.
     """
 
-    file_hash: str
-    file_name: str
     author: str
     metadata: dict[str, Any]
+    timing: TimingBreakdown
 
 
 class PathCertifyEntry(TypedDict, total=False):
@@ -206,12 +256,32 @@ class Certification:
     certificate_url: str = ""
     verify_url: str = ""
     reversibility_class: Optional[str] = None
+    timing_breakdown: Optional[TimingBreakdown] = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Certification":
         """Create a Certification from an API response dictionary."""
         blockchain = data.get("blockchain", {})
         metadata = data.get("metadata", {})
+
+        raw_timing: Optional[dict[str, Any]] = data.get(
+            "timing_breakdown", metadata.get("timing_breakdown")
+        )
+        timing: Optional[TimingBreakdown] = None
+        if raw_timing and isinstance(raw_timing, dict):
+            tb: TimingBreakdown = {}
+            for key in (
+                "instruction_received_at",
+                "reasoning_started_at",
+                "action_taken_at",
+                "jurisdiction_type",
+                "reasoning_duration_ms",
+                "total_duration_ms",
+            ):
+                if key in raw_timing and raw_timing[key] is not None:
+                    tb[key] = raw_timing[key]  # type: ignore[literal-required]
+            timing = tb if tb else None
+
         return cls(
             id=data.get("id", data.get("proof_id", "")),
             file_name=data.get("fileName", data.get("filename", data.get("file_name", ""))),
@@ -231,6 +301,7 @@ class Certification:
             reversibility_class=data.get(
                 "reversibility_class", metadata.get("reversibility_class")
             ),
+            timing_breakdown=timing,
         )
 
 

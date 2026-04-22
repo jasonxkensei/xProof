@@ -12,6 +12,7 @@ from .exceptions import (
     XProofError,
 )
 from .models import (
+    JURISDICTION_TYPES,
     BatchFileEntry,
     BatchResult,
     BatchResultSummary,
@@ -21,6 +22,7 @@ from .models import (
     ConfidenceTrailStage,
     ContextDrift,
     ContextDriftStage,
+    JurisdictionType,
     PathCertifyEntry,
     PolicyCheckResult,
     PolicyViolation,
@@ -28,6 +30,7 @@ from .models import (
     PricingTier,
     RegistrationResult,
     ReversibilityClass,
+    TimingBreakdown,
     TrialInfo,
 )
 from .utils import hash_bytes, hash_file
@@ -53,6 +56,9 @@ __all__ = [
     "ConfidenceTrailStage",
     "ContextDrift",
     "ContextDriftStage",
+    "JURISDICTION_TYPES",
+    "JurisdictionType",
+    "TimingBreakdown",
     "PolicyCheckResult",
     "PolicyViolation",
     "ReversibilityClass",

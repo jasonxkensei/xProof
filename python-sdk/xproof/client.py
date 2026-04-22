@@ -27,6 +27,7 @@ from .models import (
     PricingInfo,
     RegistrationResult,
     ReversibilityClass,
+    TimingBreakdown,
 )
 from .utils import hash_file
 
@@ -320,6 +321,7 @@ class XProofClient:
         when: Optional[str] = None,
         why: Optional[str] = None,
         reversibility_class: Optional[ReversibilityClass] = None,
+        timing: Optional[TimingBreakdown] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> Certification:
         """Certify a file hash with confidence-level anchoring.
@@ -346,10 +348,18 @@ class XProofClient:
                 ``'reversible'``, ``'costly'``, or ``'irreversible'``.
                 Irreversible actions above the configured confidence threshold
                 trigger a policy violation.
+            timing: Optional :class:`~xproof.TimingBreakdown` dict with up to
+                four ISO8601 timestamps (``instruction_received_at``,
+                ``reasoning_started_at``, ``action_taken_at``) and an optional
+                ``jurisdiction_type`` legal classification. These are stored in
+                the proof metadata and returned as ``timing_breakdown`` on the
+                :class:`~xproof.Certification` response.
             metadata: Extra key-value metadata stored alongside the proof.
 
         Returns:
-            A :class:`Certification` with the on-chain proof details.
+            A :class:`Certification` with the on-chain proof details,
+            including a populated ``timing_breakdown`` when the server echoes
+            the timing fields.
 
         Raises:
             ValueError: If confidence_level or threshold_stage is invalid.
@@ -379,6 +389,15 @@ class XProofClient:
             proof_metadata["why"] = why
         if reversibility_class is not None:
             proof_metadata["reversibility_class"] = reversibility_class
+        if timing:
+            for key in (
+                "instruction_received_at",
+                "reasoning_started_at",
+                "action_taken_at",
+                "jurisdiction_type",
+            ):
+                if key in timing:
+                    proof_metadata[key] = timing[key]  # type: ignore[literal-required]
 
         payload: dict[str, Any] = {
             "filename": file_name,

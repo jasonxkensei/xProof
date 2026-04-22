@@ -262,6 +262,79 @@ else:
 
 ---
 
+## Timing Breakdown
+
+Anchor the full decision chronology on-chain so forensic auditors can distinguish real-time reasoning from post-hoc reconstruction. Pass a `TimingBreakdown` dict to `certify_with_confidence()`:
+
+```python
+from xproof import XProofClient, TimingBreakdown
+import time
+
+client = XProofClient(api_key="pm_your_key")
+
+# Capture timestamps at each lifecycle event
+instruction_ts = "2026-04-20T14:30:00Z"  # when the agent received the task
+reasoning_ts   = "2026-04-20T14:30:01Z"  # when reasoning/planning started
+action_ts      = "2026-04-20T14:30:05Z"  # when the action was executed
+
+timing: TimingBreakdown = {
+    "instruction_received_at": instruction_ts,
+    "reasoning_started_at":    reasoning_ts,
+    "action_taken_at":         action_ts,
+    "jurisdiction_type":       "autonomous_inference",  # legal accountability class
+}
+
+cert = client.certify_with_confidence(
+    file_hash="e3b0c44298fc1c149afb...",
+    file_name="trade-decision.json",
+    author="trading-agent",
+    confidence_level=0.97,
+    threshold_stage="pre-commitment",
+    decision_id="trade-xyz-2026",
+    reversibility_class="irreversible",
+    timing=timing,
+)
+
+# The server echoes timing_breakdown with computed durations
+tb = cert.timing_breakdown
+if tb:
+    print(f"Thinking time : {tb.get('reasoning_duration_ms')} ms")
+    print(f"Total latency : {tb.get('total_duration_ms')} ms")
+```
+
+### jurisdiction_type
+
+The `jurisdiction_type` field records the legal accountability classification for the decision:
+
+| Value | Meaning |
+|---|---|
+| `instruction_following` | Agent executed an explicit human instruction — accountability follows the principal |
+| `autonomous_inference` | Agent reached its own conclusion — agent and its operator bear primary accountability |
+| `human_approved` | Agent recommended; a human explicitly approved — shared accountability |
+
+```python
+from xproof import JURISDICTION_TYPES
+
+print(JURISDICTION_TYPES)
+# ('instruction_following', 'autonomous_inference', 'human_approved')
+```
+
+### Reading timing_breakdown from a Certification
+
+When the server echoes the timestamps it also computes:
+- `reasoning_duration_ms` — milliseconds between `reasoning_started_at` and `action_taken_at`
+- `total_duration_ms` — milliseconds between `instruction_received_at` and `action_taken_at`
+
+```python
+tb = cert.timing_breakdown      # TimingBreakdown | None
+if tb is not None:
+    print(tb["instruction_received_at"])   # "2026-04-20T14:30:00Z"
+    print(tb["reasoning_duration_ms"])     # 4000
+    print(tb["total_duration_ms"])         # 5000
+```
+
+---
+
 ## Governance & Policy Enforcement
 
 xProof detects automatically when an agent acted with insufficient confidence on an irreversible action — and writes the evidence on-chain before you ever open an incident report.
