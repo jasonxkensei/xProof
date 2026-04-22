@@ -712,6 +712,11 @@ def test_certify_with_confidence_reversibility_class_omitted_when_none():
     assert "reversibility_class" not in meta
 
 
+def test_valid_reversibility_classes_constant():
+    """VALID_REVERSIBILITY_CLASSES must be exactly the expected tuple."""
+    assert XProofClient.VALID_REVERSIBILITY_CLASSES == ("reversible", "costly", "irreversible")
+
+
 @pytest.mark.parametrize("bad_class", ["maybe", "", "REVERSIBLE", "unknown", "0"])
 def test_certify_with_confidence_invalid_reversibility_class_raises(bad_class):
     """Invalid reversibility_class must raise ValueError before any network call."""
