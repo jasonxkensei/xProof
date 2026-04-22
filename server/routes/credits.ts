@@ -2,8 +2,8 @@ import { type Express } from "express";
 import crypto from "crypto";
 import { db } from "../db";
 import { logger } from "../logger";
-import { apiKeys, creditPurchases } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { apiKeys, creditPurchases, creditPurchaseIntents } from "@shared/schema";
+import { eq, and, gt } from "drizzle-orm";
 import { CREDIT_PACKAGES, getPackage, verifyUsdcOnBase } from "../credits";
 import { addCredits, getUserCreditBalance } from "./helpers";
 
@@ -65,6 +65,18 @@ export function registerCreditsRoutes(app: Express) {
         return res.status(503).json({ error: "PAYMENT_NOT_CONFIGURED", message: "Credit purchases are not yet enabled" });
       }
 
+      // Create a purchase intent to bind this request to the authenticated user.
+      // The caller must echo back intent_token at /confirm to prevent another account
+      // from claiming the same Base transaction hash.
+      const intentToken = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
+      await db.insert(creditPurchaseIntents).values({
+        userId: apiKey.userId!,
+        packageId: pkg.id,
+        intentToken,
+        expiresAt,
+      });
+
       return res.status(202).json({
         status: "payment_required",
         package: pkg,
@@ -77,7 +89,8 @@ export function registerCreditsRoutes(app: Express) {
           amount_raw: pkg.price_usdc_raw,
           decimals: 6,
         },
-        next_step: "After sending USDC on Base, call POST /api/credits/confirm with { package_id, tx_hash }",
+        intent_token: intentToken,
+        next_step: "After sending USDC on Base, call POST /api/credits/confirm with { package_id, tx_hash, intent_token }",
       });
     } catch (err: any) {
       logger.withRequest(req).error("Credits purchase error", { error: err.message });
@@ -105,7 +118,7 @@ export function registerCreditsRoutes(app: Express) {
         return res.status(400).json({ error: "NO_ACCOUNT", message: "API key has no associated account" });
       }
 
-      const body = req.body as { package_id?: string; tx_hash?: string };
+      const body = req.body as { package_id?: string; tx_hash?: string; intent_token?: string };
       const pkg = getPackage(body?.package_id || "");
       if (!pkg) {
         return res.status(400).json({
@@ -117,6 +130,31 @@ export function registerCreditsRoutes(app: Express) {
       const txHash = (body?.tx_hash || "").trim();
       if (!txHash.startsWith("0x") || txHash.length < 66) {
         return res.status(400).json({ error: "INVALID_TX_HASH", message: "Provide a valid Base tx hash (0x...)" });
+      }
+
+      const intentToken = (body?.intent_token || "").trim();
+      if (!intentToken) {
+        return res.status(400).json({ error: "INTENT_TOKEN_REQUIRED", message: "Provide the intent_token returned by POST /api/credits/purchase" });
+      }
+
+      // Verify the intent token belongs to the calling user and has not expired
+      const now = new Date();
+      const [intent] = await db
+        .select()
+        .from(creditPurchaseIntents)
+        .where(
+          and(
+            eq(creditPurchaseIntents.intentToken, intentToken),
+            eq(creditPurchaseIntents.userId, apiKey.userId!),
+            eq(creditPurchaseIntents.packageId, pkg.id),
+            gt(creditPurchaseIntents.expiresAt, now),
+          )
+        );
+      if (!intent) {
+        return res.status(403).json({
+          error: "INVALID_INTENT_TOKEN",
+          message: "intent_token is invalid, expired, or does not belong to this account. Call POST /api/credits/purchase first.",
+        });
       }
 
       // Prevent double-claim
@@ -140,7 +178,7 @@ export function registerCreditsRoutes(app: Express) {
         });
       }
 
-      // Record purchase and add credits atomically
+      // Record purchase and add credits, then consume the intent to prevent reuse
       await db.insert(creditPurchases).values({
         userId: apiKey.userId,
         packageId: pkg.id,
@@ -150,6 +188,7 @@ export function registerCreditsRoutes(app: Express) {
         network: "eip155:8453",
       });
       await addCredits(apiKey.userId, pkg.certs);
+      await db.delete(creditPurchaseIntents).where(eq(creditPurchaseIntents.intentToken, intentToken));
 
       const newBalance = await getUserCreditBalance(apiKey.userId);
       logger.withRequest(req).info("Credits added", { userId: apiKey.userId, package: pkg.id, credits: pkg.certs, txHash });

@@ -117,6 +117,7 @@ export function registerAcpRoutes(app: Express) {
           metadata: data.inputs.metadata || {},
           buyerType: data.buyer?.type || "agent",
           buyerId: data.buyer?.id,
+          userId: acpApiKey?.userId || null,
           status: "pending",
           expiresAt,
         })
@@ -228,6 +229,7 @@ export function registerAcpRoutes(app: Express) {
         ? "https://explorer.multiversx.com"
         : "https://devnet-explorer.multiversx.com";
 
+      const xproofReceiverAddress = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS;
       let txVerified = false;
       let txStatus = "pending";
 
@@ -236,25 +238,35 @@ export function registerAcpRoutes(app: Express) {
         if (txResponse.ok) {
           const txData = await txResponse.json();
           txStatus = txData.status;
-          txVerified = txData.status === "success";
+          if (txData.status === "success") {
+            const receiverOk = !xproofReceiverAddress || txData.receiver === xproofReceiverAddress;
+            if (!receiverOk) {
+              logger.withRequest(req).warn("ACP confirm: tx receiver mismatch", { txHash: data.tx_hash, txReceiver: txData.receiver, expected: xproofReceiverAddress });
+              return res.status(402).json({
+                error: "PAYMENT_VERIFICATION_FAILED",
+                message: "Transaction receiver does not match xproof payment address",
+              });
+            }
+            txVerified = true;
+          }
         }
       } catch (err) {
-        logger.withRequest(req).warn("Could not verify transaction, proceeding anyway", { txHash: data.tx_hash });
-        // For MVP, we proceed even if verification fails
-        // In production, you'd want stricter verification
-        txVerified = true;
+        logger.withRequest(req).error("Could not verify ACP transaction", { txHash: data.tx_hash });
+        return res.status(503).json({
+          error: "VERIFICATION_UNAVAILABLE",
+          message: "Could not verify transaction on MultiversX at this time. Please retry.",
+        });
       }
 
-      let acpOwnerId: string | null = null;
-      const acpAuthHeader = req.headers.authorization;
-      if (acpAuthHeader && acpAuthHeader.startsWith("Bearer ")) {
-        const acpRawKey = acpAuthHeader.slice(7);
-        if (acpRawKey.startsWith("pm_")) {
-          const acpKeyHash = crypto.createHash("sha256").update(acpRawKey).digest("hex");
-          const [acpKey] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, acpKeyHash));
-          if (acpKey?.userId) acpOwnerId = acpKey.userId;
-        }
+      if (!txVerified) {
+        return res.status(402).json({
+          error: "PAYMENT_VERIFICATION_FAILED",
+          message: `Transaction not yet confirmed on-chain (status: ${txStatus}). Retry once the transaction is successful.`,
+        });
       }
+
+      // Attribution: always use the user who created the checkout, never the confirmation requester
+      let acpOwnerId: string | null = checkout.userId || null;
 
       if (!acpOwnerId) {
         let [systemUser] = await db

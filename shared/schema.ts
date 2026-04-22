@@ -218,6 +218,7 @@ export const acpCheckouts = pgTable("acp_checkouts", {
   metadata: jsonb("metadata"),
   buyerType: varchar("buyer_type").default("agent"),
   buyerId: varchar("buyer_id"),
+  userId: varchar("user_id").references(() => users.id), // internal user who created the checkout
   status: varchar("status").default("pending"), // pending, confirmed, expired, failed
   txHash: text("tx_hash"),
   certificationId: varchar("certification_id").references(() => certifications.id),
@@ -298,6 +299,19 @@ export const creditPurchases = pgTable("credit_purchases", {
 
 export type CreditPurchase = typeof creditPurchases.$inferSelect;
 export type InsertCreditPurchase = typeof creditPurchases.$inferInsert;
+
+// Credit purchase intents — binds a /credits/purchase call to the initiating user
+// Prevents another account from claiming the same Base tx hash via /credits/confirm.
+export const creditPurchaseIntents = pgTable("credit_purchase_intents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  packageId: varchar("package_id").notNull(),
+  intentToken: varchar("intent_token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type CreditPurchaseIntent = typeof creditPurchaseIntents.$inferSelect;
 
 // agent_violations — records structural anomalies detected during investigate_proof.
 // type: "fault" (irrefutable, auto-confirmed) | "breach" (ambiguous, admin-confirmed)

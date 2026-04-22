@@ -293,6 +293,21 @@ export function registerProofWriteRoutes(app: Express) {
           if (ownerWallet && isAdminWallet(ownerWallet)) {
             isAdminExempt = true;
             logger.withRequest(req).info("Admin wallet exempt from payment", { walletAddress: ownerWallet });
+          } else if (apiKey.userId) {
+            // Non-trial, non-admin: require prepaid credits
+            const balance = await getUserCreditBalance(apiKey.userId);
+            if (balance > 0) {
+              creditInfo = { userId: apiKey.userId, balance };
+            } else {
+              return res.status(402).json({
+                error: "PAYMENT_REQUIRED",
+                message: "No prepaid credits available. Purchase credits or pay per request via x402.",
+                upgrade: {
+                  prepaid_credits: { endpoint: `POST https://${req.get("host")}/api/credits/purchase` },
+                  x402_pay_per_use: { description: "Pay per request — omit Authorization header, include x-payment header" },
+                },
+              });
+            }
           }
         }
       } else if (hasX402Payment && isX402Configured()) {
@@ -561,6 +576,21 @@ export function registerProofWriteRoutes(app: Express) {
           const ownerWallet = await getApiKeyOwnerWallet(apiKey);
           if (ownerWallet && isAdminWallet(ownerWallet)) {
             isAdminExempt = true;
+          } else if (apiKey.userId) {
+            // Non-trial, non-admin: require prepaid credits
+            const balance = await getUserCreditBalance(apiKey.userId);
+            if (balance > 0) {
+              creditInfo = { userId: apiKey.userId, balance };
+            } else {
+              return res.status(402).json({
+                error: "PAYMENT_REQUIRED",
+                message: "No prepaid credits available. Purchase credits or pay per request via x402.",
+                upgrade: {
+                  prepaid_credits: { endpoint: `POST ${baseUrl}/api/credits/purchase` },
+                  x402_pay_per_use: { description: "Pay per request — omit Authorization header, include x-payment header" },
+                },
+              });
+            }
           }
         }
         if (apiKey.userId) ownerUserId = apiKey.userId;

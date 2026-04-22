@@ -10,10 +10,11 @@ import { logger } from "./logger";
 import { auditLogSchema } from "./auditSchema";
 import { reconstructAuditTrail } from "./audit-trail";
 import { isX402Configured, verifyX402PaymentRaw, getInvestigatePaymentRequirements } from "./x402";
+import { getTrialUser, getUserCreditBalance, consumeTrialCredit, consumeCredit, isAdminWallet, getApiKeyOwnerWallet } from "./routes/helpers";
 
 interface McpContext {
   baseUrl: string;
-  auth: { valid: boolean; keyHash?: string; apiKeyId?: number };
+  auth: { valid: boolean; keyHash?: string; apiKeyId?: number; userId?: string };
   xPaymentHeader?: string;
   host: string;
 }
@@ -43,6 +44,26 @@ export async function createMcpServer(ctx: McpContext) {
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "Valid API key required. Include Authorization: Bearer pm_xxx header." }) }], isError: true };
         }
 
+        // Billing check
+        const trialInfo = auth.userId ? await getTrialUser({ userId: auth.userId }) : null;
+        let mcpCreditInfo: { userId: string; balance: number } | null = null;
+        if (trialInfo && trialInfo.remaining <= 0) {
+          const balance = auth.userId ? await getUserCreditBalance(auth.userId) : 0;
+          if (balance <= 0) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+          }
+          mcpCreditInfo = { userId: auth.userId!, balance };
+        } else if (!trialInfo && auth.userId) {
+          const ownerWallet = await getApiKeyOwnerWallet({ userId: auth.userId });
+          if (!ownerWallet || !isAdminWallet(ownerWallet)) {
+            const balance = await getUserCreditBalance(auth.userId);
+            if (balance <= 0) {
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "PAYMENT_REQUIRED", message: "No credits available. Purchase prepaid credits to use MCP certification tools." }) }], isError: true };
+            }
+            mcpCreditInfo = { userId: auth.userId, balance };
+          }
+        }
+
         const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
         if (existing) {
           return {
@@ -65,19 +86,25 @@ export async function createMcpServer(ctx: McpContext) {
 
         const result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
 
-        let [systemUser] = await db.select().from(users)
-          .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
-
-        if (!systemUser) {
-          [systemUser] = await db.insert(users).values({
-            walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
-            subscriptionTier: "business",
-            subscriptionStatus: "active",
-          }).returning();
+        // Attribution: use the real API key owner, not a shared system account
+        let certUserId: string;
+        if (auth.userId) {
+          certUserId = auth.userId;
+        } else {
+          let [systemUser] = await db.select().from(users)
+            .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+          if (!systemUser) {
+            [systemUser] = await db.insert(users).values({
+              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+              subscriptionTier: "business",
+              subscriptionStatus: "active",
+            }).returning();
+          }
+          certUserId = systemUser.id!;
         }
 
         const [certification] = await db.insert(certifications).values({
-          userId: systemUser.id!,
+          userId: certUserId,
           fileName: filename,
           fileHash: file_hash,
           fileType: filename.split(".").pop() || "unknown",
@@ -88,6 +115,9 @@ export async function createMcpServer(ctx: McpContext) {
           isPublic: true,
           authMethod: "api_key",
         }).returning();
+
+        if (trialInfo && !mcpCreditInfo) await consumeTrialCredit(trialInfo.userId);
+        else if (mcpCreditInfo) await consumeCredit(mcpCreditInfo.userId);
 
         let webhookStatus = webhook_url ? "pending" : "not_requested";
         if (webhook_url) {
@@ -145,17 +175,43 @@ export async function createMcpServer(ctx: McpContext) {
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "Valid API key required. Include Authorization: Bearer pm_xxx header." }) }], isError: true };
         }
 
+        // Billing check
+        const cwcTrialInfo = auth.userId ? await getTrialUser({ userId: auth.userId }) : null;
+        let cwcCreditInfo: { userId: string; balance: number } | null = null;
+        if (cwcTrialInfo && cwcTrialInfo.remaining <= 0) {
+          const balance = auth.userId ? await getUserCreditBalance(auth.userId) : 0;
+          if (balance <= 0) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+          }
+          cwcCreditInfo = { userId: auth.userId!, balance };
+        } else if (!cwcTrialInfo && auth.userId) {
+          const ownerWallet = await getApiKeyOwnerWallet({ userId: auth.userId });
+          if (!ownerWallet || !isAdminWallet(ownerWallet)) {
+            const balance = await getUserCreditBalance(auth.userId);
+            if (balance <= 0) {
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "PAYMENT_REQUIRED", message: "No credits available. Purchase prepaid credits to use MCP certification tools." }) }], isError: true };
+            }
+            cwcCreditInfo = { userId: auth.userId, balance };
+          }
+        }
+
         const result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
 
-        let [systemUser] = await db.select().from(users)
-          .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
-
-        if (!systemUser) {
-          [systemUser] = await db.insert(users).values({
-            walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
-            subscriptionTier: "business",
-            subscriptionStatus: "active",
-          }).returning();
+        // Attribution: use the real API key owner
+        let cwcCertUserId: string;
+        if (auth.userId) {
+          cwcCertUserId = auth.userId;
+        } else {
+          let [systemUser] = await db.select().from(users)
+            .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+          if (!systemUser) {
+            [systemUser] = await db.insert(users).values({
+              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+              subscriptionTier: "business",
+              subscriptionStatus: "active",
+            }).returning();
+          }
+          cwcCertUserId = systemUser.id!;
         }
 
         const metadata: Record<string, unknown> = {
@@ -168,7 +224,7 @@ export async function createMcpServer(ctx: McpContext) {
         if (reversibility_class) metadata.reversibility_class = reversibility_class;
 
         const [certification] = await db.insert(certifications).values({
-          userId: systemUser.id!,
+          userId: cwcCertUserId,
           fileName: filename,
           fileHash: file_hash,
           fileType: filename.split(".").pop() || "unknown",
@@ -180,6 +236,9 @@ export async function createMcpServer(ctx: McpContext) {
           authMethod: "api_key",
           metadata,
         }).returning();
+
+        if (cwcTrialInfo && !cwcCreditInfo) await consumeTrialCredit(cwcTrialInfo.userId);
+        else if (cwcCreditInfo) await consumeCredit(cwcCreditInfo.userId);
 
         return {
           content: [{
@@ -426,24 +485,51 @@ export async function createMcpServer(ctx: McpContext) {
           };
         }
 
+        // Billing check
+        const auditTrialInfo = auth.userId ? await getTrialUser({ userId: auth.userId }) : null;
+        let auditCreditInfo: { userId: string; balance: number } | null = null;
+        if (auditTrialInfo && auditTrialInfo.remaining <= 0) {
+          const balance = auth.userId ? await getUserCreditBalance(auth.userId) : 0;
+          if (balance <= 0) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+          }
+          auditCreditInfo = { userId: auth.userId!, balance };
+        } else if (!auditTrialInfo && auth.userId) {
+          const ownerWallet = await getApiKeyOwnerWallet({ userId: auth.userId });
+          if (!ownerWallet || !isAdminWallet(ownerWallet)) {
+            const balance = await getUserCreditBalance(auth.userId);
+            if (balance <= 0) {
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "PAYMENT_REQUIRED", message: "No credits available. Purchase prepaid credits to use MCP certification tools." }) }], isError: true };
+            }
+            auditCreditInfo = { userId: auth.userId, balance };
+          }
+        }
+
         const canonicalJson = JSON.stringify(params, Object.keys(params).sort());
         const fileHash = crypto.createHash("sha256").update(canonicalJson).digest("hex");
         const fileName = `audit-log-${params.session_id}.json`;
 
-        let [systemUser] = await db.select().from(users)
-          .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
-        if (!systemUser) {
-          [systemUser] = await db.insert(users).values({
-            walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
-            subscriptionTier: "business",
-            subscriptionStatus: "active",
-          }).returning();
+        // Attribution: use the real API key owner
+        let auditCertUserId: string;
+        if (auth.userId) {
+          auditCertUserId = auth.userId;
+        } else {
+          let [systemUser] = await db.select().from(users)
+            .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+          if (!systemUser) {
+            [systemUser] = await db.insert(users).values({
+              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+              subscriptionTier: "business",
+              subscriptionStatus: "active",
+            }).returning();
+          }
+          auditCertUserId = systemUser.id!;
         }
 
         const result = await recordOnBlockchain(fileHash, fileName, params.agent_id);
 
         const [certification] = await db.insert(certifications).values({
-          userId: systemUser.id!,
+          userId: auditCertUserId,
           fileName,
           fileHash,
           fileType: "json",
@@ -455,6 +541,9 @@ export async function createMcpServer(ctx: McpContext) {
           authMethod: "api_key",
           metadata: params,
         }).returning();
+
+        if (auditTrialInfo && !auditCreditInfo) await consumeTrialCredit(auditTrialInfo.userId);
+        else if (auditCreditInfo) await consumeCredit(auditCreditInfo.userId);
 
         return {
           content: [{
@@ -619,7 +708,7 @@ export async function createMcpServer(ctx: McpContext) {
   return server;
 }
 
-export async function authenticateApiKey(authHeader: string | undefined): Promise<{ valid: boolean; keyHash?: string; apiKeyId?: number }> {
+export async function authenticateApiKey(authHeader: string | undefined): Promise<{ valid: boolean; keyHash?: string; apiKeyId?: number; userId?: string }> {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return { valid: false };
   }
@@ -638,5 +727,5 @@ export async function authenticateApiKey(authHeader: string | undefined): Promis
     .execute()
     .catch((err) => logger.error("Failed to update API key stats", { error: err.message }));
 
-  return { valid: true, keyHash, apiKeyId: apiKey.id };
+  return { valid: true, keyHash, apiKeyId: apiKey.id, userId: apiKey.userId || undefined };
 }
