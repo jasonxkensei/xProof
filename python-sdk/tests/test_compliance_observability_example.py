@@ -38,3 +38,17 @@ def test_compliance_observability_webhook_failure() -> None:
     import examples.compliance_observability as obs
 
     obs.run_with_webhook_failure("ci-test-decision-webhook-fail")
+
+
+def test_compliance_observability_crewai() -> None:
+    """CrewAI section — XProofCrewCertifyTool happy path and PolicyViolationError."""
+    import examples.compliance_observability as obs
+
+    obs.run_crewai_certification("ci-test-crewai")
+
+
+def test_compliance_observability_autogen() -> None:
+    """AutoGen section — xproof_certify_decision happy path and PolicyViolationError."""
+    import examples.compliance_observability as obs
+
+    obs.run_autogen_certification("ci-test-autogen")

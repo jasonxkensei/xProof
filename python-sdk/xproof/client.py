@@ -307,6 +307,7 @@ class XProofClient:
         return Certification.from_dict(data)
 
     VALID_THRESHOLD_STAGES = ("initial", "partial", "pre-commitment", "final")
+    VALID_REVERSIBILITY_CLASSES = ("reversible", "costly", "irreversible")
 
     def certify_with_confidence(
         self,
@@ -363,7 +364,8 @@ class XProofClient:
             the timing fields.
 
         Raises:
-            ValueError: If confidence_level or threshold_stage is invalid.
+            ValueError: If confidence_level, threshold_stage, or
+                reversibility_class is invalid.
         """
         if not self.api_key:
             raise ValueError("api_key is required — call register() or pass an api_key")
@@ -375,6 +377,11 @@ class XProofClient:
             )
         if not decision_id or not decision_id.strip():
             raise ValueError("decision_id is required")
+        if reversibility_class is not None and reversibility_class not in self.VALID_REVERSIBILITY_CLASSES:
+            raise ValueError(
+                f"reversibility_class must be one of: "
+                f"{', '.join(self.VALID_REVERSIBILITY_CLASSES)}"
+            )
 
         proof_metadata: dict[str, Any] = dict(metadata) if metadata else {}
         proof_metadata["confidence_level"] = confidence_level

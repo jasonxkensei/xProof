@@ -712,6 +712,42 @@ def test_certify_with_confidence_reversibility_class_omitted_when_none():
     assert "reversibility_class" not in meta
 
 
+@pytest.mark.parametrize("bad_class", ["maybe", "", "REVERSIBLE", "unknown", "0"])
+def test_certify_with_confidence_invalid_reversibility_class_raises(bad_class):
+    """Invalid reversibility_class must raise ValueError before any network call."""
+    client = XProofClient(api_key="pm_test")
+    with pytest.raises(ValueError, match="reversibility_class must be one of"):
+        client.certify_with_confidence(
+            file_hash="a" * 64,
+            file_name="f.json",
+            author="Agent",
+            confidence_level=0.8,
+            threshold_stage="partial",
+            decision_id="dec-bad-rev",
+            reversibility_class=bad_class,
+        )
+
+
+@pytest.mark.parametrize("good_class", ["reversible", "costly", "irreversible"])
+@responses.activate
+def test_certify_with_confidence_valid_reversibility_class_accepted(good_class):
+    """All three valid reversibility_class values must be accepted without error."""
+    responses.add(responses.POST, f"{BASE}/api/proof", json=CERT_RESPONSE, status=201)
+    client = XProofClient(api_key="pm_test")
+    cert = client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="f.json",
+        author="Agent",
+        confidence_level=0.8,
+        threshold_stage="partial",
+        decision_id="dec-good-rev",
+        reversibility_class=good_class,
+    )
+    assert cert is not None
+    meta = json.loads(responses.calls[0].request.body)["metadata"]
+    assert meta["reversibility_class"] == good_class
+
+
 # ---------------------------------------------------------------------------
 # certify_with_confidence() — all 4 threshold_stage values (#58)
 # ---------------------------------------------------------------------------

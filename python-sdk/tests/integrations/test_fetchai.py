@@ -97,6 +97,49 @@ class TestCertifyOutgoingFlag:
 
 
 # ---------------------------------------------------------------------------
+# runtime setters for certify_incoming / certify_outgoing (#75)
+# ---------------------------------------------------------------------------
+
+
+class TestCertifyFlagSetters:
+    def test_certify_incoming_setter_disables(self, middleware, mock_client):
+        assert middleware.certify_incoming
+        middleware.certify_incoming = False
+        assert not middleware.certify_incoming
+        result = middleware.certify_incoming(message="hi", sender="a1")
+        assert result is None
+        mock_client.certify_hash.assert_not_called()
+
+    def test_certify_incoming_setter_re_enables(self, middleware, mock_client):
+        middleware.certify_incoming = False
+        middleware.certify_incoming = True
+        assert middleware.certify_incoming
+        middleware.certify_incoming(message="hi", sender="a1")
+        mock_client.certify_hash.assert_called_once()
+
+    def test_certify_outgoing_setter_disables(self, middleware, mock_client):
+        assert middleware.certify_outgoing
+        middleware.certify_outgoing = False
+        assert not middleware.certify_outgoing
+        result = middleware.certify_outgoing(response="out", recipient="a1")
+        assert result is None
+        mock_client.certify_hash.assert_not_called()
+
+    def test_certify_outgoing_setter_re_enables(self, middleware, mock_client):
+        middleware.certify_outgoing = False
+        middleware.certify_outgoing = True
+        assert middleware.certify_outgoing
+        middleware.certify_outgoing(response="out", recipient="a1")
+        mock_client.certify_hash.assert_called_once()
+
+    def test_setters_coerce_to_bool(self, middleware):
+        middleware.certify_incoming = 0
+        assert middleware._cert_incoming is False
+        middleware.certify_outgoing = 1
+        assert middleware._cert_outgoing is True
+
+
+# ---------------------------------------------------------------------------
 # 4W metadata in incoming / outgoing
 # ---------------------------------------------------------------------------
 

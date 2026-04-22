@@ -154,6 +154,28 @@ class XProofuAgentMiddleware:
         """
         return _CertFlag(self._cert_outgoing, self._certify_outgoing_impl)
 
+    @certify_incoming.setter
+    def certify_incoming(self, value: bool) -> None:
+        """Enable or disable incoming certification at runtime.
+
+        Example::
+
+            middleware.certify_incoming = False  # pause WHY anchoring
+            middleware.certify_incoming = True   # re-enable
+        """
+        self._cert_incoming = bool(value)
+
+    @certify_outgoing.setter
+    def certify_outgoing(self, value: bool) -> None:
+        """Enable or disable outgoing certification at runtime.
+
+        Example::
+
+            middleware.certify_outgoing = False  # pause WHAT anchoring
+            middleware.certify_outgoing = True   # re-enable
+        """
+        self._cert_outgoing = bool(value)
+
     def _certify(
         self,
         file_hash: str,

@@ -281,19 +281,158 @@ def run_with_webhook_failure(decision_id: str) -> None:
     print(json.dumps({"result": "ok", "webhook": "failure_logged_not_raised"}))
 
 
+def _build_mock_client_for_tool(decision_id: str, compliant: bool) -> MagicMock:
+    """Return a mock client wired for XProofCrewCertifyTool / xproof_certify_decision."""
+    from xproof.models import PolicyCheckResult
+
+    cert = MagicMock()
+    cert.transaction_hash = "tx-mvx-crew-demo"
+
+    policy_check = PolicyCheckResult.from_dict(
+        {
+            "decision_id": decision_id,
+            "total_anchors": 1,
+            "policy_compliant": compliant,
+            "policy_violations": []
+            if compliant
+            else [
+                {
+                    "rule": "irreversible-above-threshold",
+                    "severity": "error",
+                    "message": "Irreversible action at 0.97 exceeds the 0.90 threshold.",
+                }
+            ],
+            "checked_at": "2026-04-22T09:00:00Z",
+        }
+    )
+
+    mock = MagicMock()
+    mock.certify_with_confidence.return_value = cert
+    mock.get_policy_check.return_value = policy_check
+    return mock
+
+
+def run_crewai_certification(decision_id: str) -> None:
+    """Demonstrate XProofCrewCertifyTool — happy path and policy violation."""
+    from xproof.exceptions import PolicyViolationError
+    from xproof.integrations.crewai import XProofCrewCertifyTool
+
+    import json as _json
+
+    decision_text = _json.dumps(
+        {"action": "delete_pii_records", "scope": "eu-region", "count": 15_000}
+    )
+
+    compliant_client = _build_mock_client_for_tool(decision_id + "-ok", compliant=True)
+    tool_ok = XProofCrewCertifyTool(client=compliant_client, author="data-hygiene-agent")
+    tx = tool_ok.run(
+        decision_text=decision_text,
+        confidence_level=0.97,
+        threshold_stage="pre-commitment",
+        decision_id=decision_id + "-ok",
+        reversibility_class="irreversible",
+        why="Scheduled GDPR retention cleanup",
+    )
+    assert tx == "tx-mvx-crew-demo", "Expected transaction hash from certified call"
+    print(json.dumps({"result": "ok", "tool": "XProofCrewCertifyTool", "tx": tx}))
+
+    blocked_client = _build_mock_client_for_tool(decision_id + "-blocked", compliant=False)
+    tool_blocked = XProofCrewCertifyTool(client=blocked_client, author="data-hygiene-agent")
+    try:
+        tool_blocked.run(
+            decision_text=decision_text,
+            confidence_level=0.97,
+            threshold_stage="pre-commitment",
+            decision_id=decision_id + "-blocked",
+            reversibility_class="irreversible",
+            why="Scheduled GDPR retention cleanup",
+        )
+        raise AssertionError("Expected PolicyViolationError was not raised")
+    except PolicyViolationError as exc:
+        assert exc.violations, "PolicyViolationError must carry at least one violation"
+        v = exc.violations[0]
+        print(
+            json.dumps(
+                {
+                    "result": "blocked",
+                    "tool": "XProofCrewCertifyTool",
+                    "rule": v.rule,
+                    "severity": v.severity,
+                }
+            )
+        )
+
+
+def run_autogen_certification(decision_id: str) -> None:
+    """Demonstrate xproof_certify_decision — happy path and policy violation."""
+    from xproof.exceptions import PolicyViolationError
+    from xproof.integrations.autogen import xproof_certify_decision
+
+    import json as _json
+
+    decision_text = _json.dumps(
+        {"action": "approve_trade", "symbol": "EGLD", "amount_usd": 250_000}
+    )
+
+    compliant_client = _build_mock_client_for_tool(decision_id + "-ok", compliant=True)
+    tx = xproof_certify_decision(
+        decision_text=decision_text,
+        confidence_level=0.88,
+        threshold_stage="final",
+        decision_id=decision_id + "-ok",
+        reversibility_class="costly",
+        why="Approved by trading model v3.2",
+        client=compliant_client,
+    )
+    assert tx == "tx-mvx-crew-demo"
+    print(json.dumps({"result": "ok", "tool": "xproof_certify_decision", "tx": tx}))
+
+    blocked_client = _build_mock_client_for_tool(decision_id + "-blocked", compliant=False)
+    try:
+        xproof_certify_decision(
+            decision_text=decision_text,
+            confidence_level=0.97,
+            threshold_stage="final",
+            decision_id=decision_id + "-blocked",
+            reversibility_class="irreversible",
+            why="High-confidence auto-approval",
+            client=blocked_client,
+        )
+        raise AssertionError("Expected PolicyViolationError was not raised")
+    except PolicyViolationError as exc:
+        assert exc.violations
+        v = exc.violations[0]
+        print(
+            json.dumps(
+                {
+                    "result": "blocked",
+                    "tool": "xproof_certify_decision",
+                    "rule": v.rule,
+                    "severity": v.severity,
+                }
+            )
+        )
+
+
 def main() -> None:
     decision_id = "demo-decision-42"
 
     print(f"Running compliance observability example for decision '{decision_id}' ...\n")
 
-    print("1/3 — Core observability pattern (no webhook)")
+    print("1/5 — Core observability pattern (no webhook)")
     run(decision_id)
 
-    print("2/3 — Webhook delivery: success path")
+    print("2/5 — Webhook delivery: success path")
     run_with_webhook_success(decision_id)
 
-    print("3/3 — Webhook delivery: failure path (must log warning, not raise)")
+    print("3/5 — Webhook delivery: failure path (must log warning, not raise)")
     run_with_webhook_failure(decision_id)
+
+    print("4/5 — CrewAI: XProofCrewCertifyTool (compliant + blocked)")
+    run_crewai_certification(decision_id)
+
+    print("5/5 — AutoGen: xproof_certify_decision (compliant + blocked)")
+    run_autogen_certification(decision_id)
 
     print("\nAll assertions passed — example exited cleanly.")
 
