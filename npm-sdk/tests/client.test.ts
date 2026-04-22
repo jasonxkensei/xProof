@@ -484,6 +484,179 @@ describe("XProofClient", () => {
       await expect(client.certify("/tmp/x.txt", "a")).rejects.toThrow("apiKey is required");
     });
   });
+
+  describe("certifyWithConfidence() — timing", () => {
+    const okResponse = {
+      id: "p-timing",
+      fileName: "decision.json",
+      fileHash: "a".repeat(64),
+      transactionHash: "tx-t",
+      transactionUrl: "",
+      createdAt: "2026-04-22T10:00:00Z",
+    };
+
+    it("sends timing fields as snake_case inside metadata.timing_breakdown", async () => {
+      const fetchMock = mockFetch(201, okResponse);
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient({ apiKey: "pm_test" });
+      await client.certifyWithConfidence(
+        "a".repeat(64),
+        "decision.json",
+        "agent",
+        {
+          confidenceLevel: 0.97,
+          thresholdStage: "final",
+          decisionId: "dec-timing-001",
+          timing: {
+            instructionReceivedAt: "2026-04-22T09:59:50Z",
+            reasoningStartedAt: "2026-04-22T09:59:51Z",
+            actionTakenAt: "2026-04-22T09:59:58Z",
+            jurisdictionType: "autonomous_inference",
+          },
+        }
+      );
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      const tb = body.metadata?.timing_breakdown;
+      expect(tb).toBeDefined();
+      expect(tb.instruction_received_at).toBe("2026-04-22T09:59:50Z");
+      expect(tb.reasoning_started_at).toBe("2026-04-22T09:59:51Z");
+      expect(tb.action_taken_at).toBe("2026-04-22T09:59:58Z");
+      expect(tb.jurisdiction_type).toBe("autonomous_inference");
+    });
+
+    it("omits timing_breakdown from metadata when no timing provided", async () => {
+      const fetchMock = mockFetch(201, okResponse);
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient({ apiKey: "pm_test" });
+      await client.certifyWithConfidence(
+        "b".repeat(64),
+        "decision.json",
+        "agent",
+        {
+          confidenceLevel: 0.80,
+          thresholdStage: "initial",
+          decisionId: "dec-no-timing",
+        }
+      );
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.metadata?.timing_breakdown).toBeUndefined();
+    });
+
+    it("accepts partial timing (only some fields provided)", async () => {
+      const fetchMock = mockFetch(201, okResponse);
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient({ apiKey: "pm_test" });
+      await client.certifyWithConfidence(
+        "c".repeat(64),
+        "decision.json",
+        "agent",
+        {
+          confidenceLevel: 0.90,
+          thresholdStage: "partial",
+          decisionId: "dec-partial-timing",
+          timing: {
+            instructionReceivedAt: "2026-04-22T10:00:00Z",
+          },
+        }
+      );
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      const tb = body.metadata?.timing_breakdown;
+      expect(tb).toBeDefined();
+      expect(tb.instruction_received_at).toBe("2026-04-22T10:00:00Z");
+      expect(tb.reasoning_started_at).toBeUndefined();
+      expect(tb.action_taken_at).toBeUndefined();
+      expect(tb.jurisdiction_type).toBeUndefined();
+    });
+
+    it("throws ValidationError for invalid jurisdictionType without hitting the network", async () => {
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient({ apiKey: "pm_test" });
+      await expect(
+        client.certifyWithConfidence(
+          "d".repeat(64),
+          "decision.json",
+          "agent",
+          {
+            confidenceLevel: 0.80,
+            thresholdStage: "initial",
+            decisionId: "dec-bad-jt",
+            timing: {
+              jurisdictionType: "not_valid" as any,
+            },
+          }
+        )
+      ).rejects.toThrow(ValidationError);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("accepts all three valid jurisdictionType values", async () => {
+      const jurisdictionTypes = [
+        "instruction_following",
+        "autonomous_inference",
+        "human_approved",
+      ] as const;
+
+      for (const jt of jurisdictionTypes) {
+        const fetchMock = mockFetch(201, okResponse);
+        globalThis.fetch = fetchMock;
+
+        const client = new XProofClient({ apiKey: "pm_test" });
+        await expect(
+          client.certifyWithConfidence(
+            "e".repeat(64),
+            "decision.json",
+            "agent",
+            {
+              confidenceLevel: 0.95,
+              thresholdStage: "final",
+              decisionId: `dec-jt-${jt}`,
+              timing: { jurisdictionType: jt },
+            }
+          )
+        ).resolves.toBeDefined();
+
+        const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+        expect(body.metadata.timing_breakdown.jurisdiction_type).toBe(jt);
+      }
+    });
+
+    it("does not send computed-only fields (reasoningDurationMs / totalDurationMs) in payload", async () => {
+      const fetchMock = mockFetch(201, okResponse);
+      globalThis.fetch = fetchMock;
+
+      const client = new XProofClient({ apiKey: "pm_test" });
+      await client.certifyWithConfidence(
+        "f".repeat(64),
+        "decision.json",
+        "agent",
+        {
+          confidenceLevel: 0.95,
+          thresholdStage: "final",
+          decisionId: "dec-no-computed",
+          timing: {
+            instructionReceivedAt: "2026-04-22T10:00:00Z",
+            reasoningDurationMs: 7000,
+            totalDurationMs: 8000,
+          },
+        }
+      );
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      const tb = body.metadata?.timing_breakdown;
+      expect(tb).toBeDefined();
+      expect(tb.instruction_received_at).toBe("2026-04-22T10:00:00Z");
+      expect(tb.reasoning_duration_ms).toBeUndefined();
+      expect(tb.total_duration_ms).toBeUndefined();
+    });
+  });
 });
 
 const INTEGRATION = process.env.XPROOF_INTEGRATION === "1";

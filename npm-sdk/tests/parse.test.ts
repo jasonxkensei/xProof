@@ -143,3 +143,89 @@ describe("parseRegistrationResult", () => {
     expect(reg.trial.remaining).toBe(0);
   });
 });
+
+describe("parseCertification — timingBreakdown", () => {
+  it("deserialises full timing_breakdown from top-level field", () => {
+    const data = {
+      id: "p-tb",
+      timing_breakdown: {
+        instruction_received_at: "2026-04-22T09:59:50Z",
+        reasoning_started_at: "2026-04-22T09:59:51Z",
+        action_taken_at: "2026-04-22T09:59:58Z",
+        jurisdiction_type: "autonomous_inference",
+        reasoning_duration_ms: 7000,
+        total_duration_ms: 8000,
+      },
+    };
+    const cert = parseCertification(data);
+    expect(cert.timingBreakdown).toBeDefined();
+    expect(cert.timingBreakdown!.instructionReceivedAt).toBe("2026-04-22T09:59:50Z");
+    expect(cert.timingBreakdown!.reasoningStartedAt).toBe("2026-04-22T09:59:51Z");
+    expect(cert.timingBreakdown!.actionTakenAt).toBe("2026-04-22T09:59:58Z");
+    expect(cert.timingBreakdown!.jurisdictionType).toBe("autonomous_inference");
+    expect(cert.timingBreakdown!.reasoningDurationMs).toBe(7000);
+    expect(cert.timingBreakdown!.totalDurationMs).toBe(8000);
+  });
+
+  it("deserialises timing_breakdown nested inside metadata", () => {
+    const data = {
+      id: "p-tb-meta",
+      metadata: {
+        timing_breakdown: {
+          instruction_received_at: "2026-04-22T10:00:00Z",
+          jurisdiction_type: "instruction_following",
+        },
+      },
+    };
+    const cert = parseCertification(data);
+    expect(cert.timingBreakdown).toBeDefined();
+    expect(cert.timingBreakdown!.instructionReceivedAt).toBe("2026-04-22T10:00:00Z");
+    expect(cert.timingBreakdown!.jurisdictionType).toBe("instruction_following");
+  });
+
+  it("top-level timing_breakdown takes precedence over metadata.timing_breakdown", () => {
+    const data = {
+      id: "p-tb-priority",
+      timing_breakdown: {
+        instruction_received_at: "2026-04-22T10:00:00Z",
+        jurisdiction_type: "human_approved",
+      },
+      metadata: {
+        timing_breakdown: {
+          instruction_received_at: "1970-01-01T00:00:00Z",
+          jurisdiction_type: "instruction_following",
+        },
+      },
+    };
+    const cert = parseCertification(data);
+    expect(cert.timingBreakdown!.jurisdictionType).toBe("human_approved");
+    expect(cert.timingBreakdown!.instructionReceivedAt).toBe("2026-04-22T10:00:00Z");
+  });
+
+  it("returns undefined timingBreakdown when no timing data present", () => {
+    const cert = parseCertification({ id: "p-no-timing" });
+    expect(cert.timingBreakdown).toBeUndefined();
+  });
+
+  it("returns undefined timingBreakdown for empty timing_breakdown object", () => {
+    const cert = parseCertification({ id: "p-empty-timing", timing_breakdown: {} });
+    expect(cert.timingBreakdown).toBeUndefined();
+  });
+
+  it("handles partial timing_breakdown (only some fields present)", () => {
+    const data = {
+      id: "p-partial-tb",
+      timing_breakdown: {
+        action_taken_at: "2026-04-22T10:01:00Z",
+      },
+    };
+    const cert = parseCertification(data);
+    expect(cert.timingBreakdown).toBeDefined();
+    expect(cert.timingBreakdown!.actionTakenAt).toBe("2026-04-22T10:01:00Z");
+    expect(cert.timingBreakdown!.instructionReceivedAt).toBeUndefined();
+    expect(cert.timingBreakdown!.reasoningStartedAt).toBeUndefined();
+    expect(cert.timingBreakdown!.jurisdictionType).toBeUndefined();
+    expect(cert.timingBreakdown!.reasoningDurationMs).toBeUndefined();
+    expect(cert.timingBreakdown!.totalDurationMs).toBeUndefined();
+  });
+});

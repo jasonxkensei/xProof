@@ -191,6 +191,86 @@ if (result.policyCompliant) {
 
 ---
 
+## Timing Breakdown
+
+Anchor the full decision chronology on-chain alongside the confidence anchor. Three ISO8601 timestamps mark **when the instruction arrived**, **when reasoning began**, and **when the action fired**. A `jurisdictionType` field records who was accountable for the decision.
+
+```typescript
+import { XProofClient, hashString, JURISDICTION_TYPES } from "@xproof/xproof";
+import type { TimingBreakdown } from "@xproof/xproof";
+
+const client = new XProofClient({ apiKey: "pm_your_key" });
+
+const instructionReceivedAt = new Date().toISOString();
+// ... agent reasons ...
+const reasoningStartedAt = new Date().toISOString();
+// ... reasoning completes, agent executes ...
+const actionTakenAt = new Date().toISOString();
+
+const timing: TimingBreakdown = {
+  instructionReceivedAt,
+  reasoningStartedAt,
+  actionTakenAt,
+  jurisdictionType: "autonomous_inference", // agent reached its own conclusion
+};
+
+const cert = await client.certifyWithConfidence(
+  hashString(JSON.stringify({ action: "approve_transfer", amount: 50_000 })),
+  "transfer-decision.json",
+  "treasury-agent",
+  {
+    confidenceLevel: 0.97,
+    thresholdStage: "final",
+    decisionId: "transfer-xyz-2026",
+    reversibilityClass: "irreversible",
+    timing,
+  }
+);
+
+// cert.timingBreakdown is populated in the API response:
+console.log(cert.timingBreakdown?.reasoningDurationMs); // ms between reasoning_started_at and action_taken_at
+console.log(cert.timingBreakdown?.totalDurationMs);     // ms between instruction_received_at and action_taken_at
+```
+
+### `jurisdictionType` values
+
+| Value | Meaning | Who bears accountability |
+|---|---|---|
+| `"instruction_following"` | Agent executed an explicit human instruction | Principal (human) |
+| `"autonomous_inference"` | Agent reached its own conclusion | Agent and its operator |
+| `"human_approved"` | Agent recommended, human approved before action | Shared |
+
+All valid values are exported as the `JURISDICTION_TYPES` constant for runtime validation:
+
+```typescript
+import { JURISDICTION_TYPES } from "@xproof/xproof";
+
+// ["instruction_following", "autonomous_inference", "human_approved"]
+console.log(JURISDICTION_TYPES);
+
+// Runtime guard
+function isValidJurisdiction(s: string): boolean {
+  return (JURISDICTION_TYPES as readonly string[]).includes(s);
+}
+```
+
+### Reading timing data back
+
+```typescript
+const cert = await client.verify("certification-uuid");
+
+if (cert.timingBreakdown) {
+  const { instructionReceivedAt, reasoningDurationMs, totalDurationMs } = cert.timingBreakdown;
+  console.log(`Instruction at: ${instructionReceivedAt}`);
+  console.log(`Reasoning took: ${reasoningDurationMs}ms`);
+  console.log(`Total latency:  ${totalDurationMs}ms`);
+}
+```
+
+> All four fields (`instructionReceivedAt`, `reasoningStartedAt`, `actionTakenAt`, `jurisdictionType`) are optional — you can anchor whichever timestamps are available. `reasoningDurationMs` and `totalDurationMs` are computed server-side and appear only in responses, never in requests.
+
+---
+
 ## Governance & Policy Enforcement
 
 xProof detects automatically when an agent acted with insufficient confidence on an irreversible action — and writes the evidence on-chain before you ever open an incident report.

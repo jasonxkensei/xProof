@@ -1,3 +1,47 @@
+export type JurisdictionType =
+  | "instruction_following"
+  | "autonomous_inference"
+  | "human_approved";
+
+/**
+ * All valid `JurisdictionType` values — useful for runtime validation.
+ *
+ * - `instruction_following` — agent executed an explicit human instruction;
+ *   accountability follows the principal.
+ * - `autonomous_inference` — agent reached its own conclusion; agent and its
+ *   operator bear primary accountability.
+ * - `human_approved` — agent recommended, human approved; shared accountability.
+ */
+export const JURISDICTION_TYPES: readonly JurisdictionType[] = [
+  "instruction_following",
+  "autonomous_inference",
+  "human_approved",
+] as const;
+
+/**
+ * Decomposed decision timeline for forensic audit.
+ *
+ * Pass a `TimingBreakdown` to `certifyWithConfidence()` via `confidence.timing`
+ * to anchor the full decision chronology on-chain.
+ *
+ * All timestamp fields are optional ISO8601 strings with a timezone offset
+ * (e.g. `"2026-04-20T14:31:58Z"`).
+ *
+ * When read back from the API the server populates two computed fields:
+ * - `reasoningDurationMs` — ms between `reasoningStartedAt` and `actionTakenAt`
+ * - `totalDurationMs` — ms between `instructionReceivedAt` and `actionTakenAt`
+ */
+export interface TimingBreakdown {
+  instructionReceivedAt?: string;
+  reasoningStartedAt?: string;
+  actionTakenAt?: string;
+  jurisdictionType?: JurisdictionType;
+  /** Computed by server; present in API responses only. */
+  reasoningDurationMs?: number;
+  /** Computed by server; present in API responses only. */
+  totalDurationMs?: number;
+}
+
 export interface Certification {
   id: string;
   fileName: string;
@@ -10,6 +54,7 @@ export interface Certification {
   isPublic: boolean;
   certificateUrl: string;
   verifyUrl: string;
+  timingBreakdown?: TimingBreakdown;
 }
 
 export interface BatchResultSummary {
@@ -79,6 +124,8 @@ export interface ConfidenceOptions {
   thresholdStage: ThresholdStage;
   decisionId: string;
   reversibilityClass?: ReversibilityClass;
+  /** Optional timing breakdown to anchor the full decision chronology on-chain. */
+  timing?: TimingBreakdown;
 }
 
 export interface ConfidenceTrailStage {

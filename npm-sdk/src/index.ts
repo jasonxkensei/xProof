@@ -8,6 +8,7 @@ export {
   RateLimitError,
   ServerError,
 } from "./errors.js";
+export { JURISDICTION_TYPES } from "./types.js";
 export type {
   Certification,
   BatchResult,
@@ -31,5 +32,7 @@ export type {
   ExecutionContext,
   ContextDriftStage,
   ContextDrift,
+  JurisdictionType,
+  TimingBreakdown,
 } from "./types.js";
 export { hashFile, hashBuffer, hashString } from "./hash.js";

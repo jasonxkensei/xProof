@@ -34,6 +34,7 @@ import type {
   PolicyCheckResult,
   ReversibilityClass,
 } from "./types.js";
+import { JURISDICTION_TYPES } from "./types.js";
 
 const VERSION = "0.1.7";
 const DEFAULT_BASE_URL = "https://xproof.app";
@@ -186,6 +187,30 @@ export class XProofClient {
     // confidence.reversibilityClass takes priority over fourW.reversibilityClass
     if (confidence.reversibilityClass !== undefined)
       metadata.reversibility_class = confidence.reversibilityClass;
+
+    if (confidence.timing !== undefined) {
+      const t = confidence.timing;
+      if (
+        t.jurisdictionType !== undefined &&
+        !(JURISDICTION_TYPES as readonly string[]).includes(t.jurisdictionType)
+      ) {
+        throw new ValidationError(
+          `timing.jurisdictionType must be one of: ${JURISDICTION_TYPES.join(", ")}`,
+          {}
+        );
+      }
+      const timingSnake: Record<string, unknown> = {};
+      if (t.instructionReceivedAt !== undefined)
+        timingSnake.instruction_received_at = t.instructionReceivedAt;
+      if (t.reasoningStartedAt !== undefined)
+        timingSnake.reasoning_started_at = t.reasoningStartedAt;
+      if (t.actionTakenAt !== undefined)
+        timingSnake.action_taken_at = t.actionTakenAt;
+      if (t.jurisdictionType !== undefined)
+        timingSnake.jurisdiction_type = t.jurisdictionType;
+      if (Object.keys(timingSnake).length > 0)
+        metadata.timing_breakdown = timingSnake;
+    }
 
     const payload: Record<string, unknown> = {
       filename: fileName,

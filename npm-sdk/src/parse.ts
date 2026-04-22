@@ -5,11 +5,53 @@ import type {
   PricingInfo,
   PricingTier,
   RegistrationResult,
+  TimingBreakdown,
+  JurisdictionType,
   TrialInfo,
 } from "./types.js";
 
+function parseTimingBreakdown(
+  raw: Record<string, unknown>
+): TimingBreakdown | undefined {
+  const tb: TimingBreakdown = {};
+  let hasAnyField = false;
+
+  if (raw.instruction_received_at != null) {
+    tb.instructionReceivedAt = raw.instruction_received_at as string;
+    hasAnyField = true;
+  }
+  if (raw.reasoning_started_at != null) {
+    tb.reasoningStartedAt = raw.reasoning_started_at as string;
+    hasAnyField = true;
+  }
+  if (raw.action_taken_at != null) {
+    tb.actionTakenAt = raw.action_taken_at as string;
+    hasAnyField = true;
+  }
+  if (raw.jurisdiction_type != null) {
+    tb.jurisdictionType = raw.jurisdiction_type as JurisdictionType;
+    hasAnyField = true;
+  }
+  if (raw.reasoning_duration_ms != null) {
+    tb.reasoningDurationMs = raw.reasoning_duration_ms as number;
+    hasAnyField = true;
+  }
+  if (raw.total_duration_ms != null) {
+    tb.totalDurationMs = raw.total_duration_ms as number;
+    hasAnyField = true;
+  }
+
+  return hasAnyField ? tb : undefined;
+}
+
 export function parseCertification(data: Record<string, unknown>): Certification {
   const blockchain = (data.blockchain as Record<string, unknown>) || {};
+
+  const rawTiming =
+    (data.timing_breakdown as Record<string, unknown> | undefined) ??
+    ((data.metadata as Record<string, unknown> | undefined)
+      ?.timing_breakdown as Record<string, unknown> | undefined);
+
   return {
     id: (data.id as string) || (data.proof_id as string) || "",
     fileName:
@@ -43,6 +85,7 @@ export function parseCertification(data: Record<string, unknown>): Certification
       "",
     verifyUrl:
       (data.verifyUrl as string) || (data.verify_url as string) || "",
+    timingBreakdown: rawTiming ? parseTimingBreakdown(rawTiming) : undefined,
   };
 }
 
