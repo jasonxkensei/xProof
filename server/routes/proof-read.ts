@@ -20,11 +20,11 @@ export function registerProofReadRoutes(app: Express) {
       const [existing] = await db
         .select()
         .from(certifications)
-        .where(eq(certifications.fileHash, hash.toLowerCase()));
+        .where(and(eq(certifications.fileHash, hash.toLowerCase()), eq(certifications.isPublic, true)));
 
       // Only reveal existence and ID for public proofs — treat non-public as not found
       // to avoid leaking proof IDs and anchoring timestamps for private certifications.
-      if (existing && existing.isPublic) {
+      if (existing) {
         return res.json({
           exists: true,
           proof_id: existing.id,
@@ -100,9 +100,9 @@ export function registerProofReadRoutes(app: Express) {
       const [cert] = await db
         .select()
         .from(certifications)
-        .where(eq(certifications.fileHash, hash.toLowerCase()));
+        .where(and(eq(certifications.fileHash, hash.toLowerCase()), eq(certifications.isPublic, true)));
 
-      if (!cert || !cert.isPublic) {
+      if (!cert) {
         return res.status(404).json({ error: "No proof found for this hash" });
       }
 
@@ -378,11 +378,11 @@ export function registerProofReadRoutes(app: Express) {
       const [cert] = await db
         .select()
         .from(certifications)
-        .where(eq(certifications.fileHash, hash.toLowerCase()));
+        .where(and(eq(certifications.fileHash, hash.toLowerCase()), eq(certifications.isPublic, true)));
 
       // Apply same isPublic gate as /api/proof/:id and /api/proof/hash/:hash —
-      // a known hash must not expose owner identity or trust data for private certifications.
-      if (!cert || !cert.isPublic) {
+      // isPublic is already filtered in the SQL predicate, so a missing row means not found.
+      if (!cert) {
         return res.status(404).json({ error: "No proof found for this hash", verified: false, score: 0 });
       }
 
