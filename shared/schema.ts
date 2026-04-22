@@ -220,7 +220,11 @@ export const acpCheckouts = pgTable("acp_checkouts", {
   buyerId: varchar("buyer_id"),
   userId: varchar("user_id").references(() => users.id), // internal user who created the checkout
   status: varchar("status").default("pending"), // pending, confirmed, expired, failed
-  txHash: text("tx_hash"),
+  // Payment invariants captured at checkout time — verified at confirm time
+  expectedReceiver: text("expected_receiver"),  // xproof wallet at checkout creation
+  expectedValue: text("expected_value"),        // EGLD amount in atomic units (or "0" for admin)
+  expectedData: text("expected_data"),          // base64 data field: certify@<hash>@<filename>
+  txHash: text("tx_hash").unique(),             // unique: prevents replay of same tx across checkouts
   certificationId: varchar("certification_id").references(() => certifications.id),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -307,6 +311,8 @@ export const creditPurchaseIntents = pgTable("credit_purchase_intents", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   packageId: varchar("package_id").notNull(),
   intentToken: varchar("intent_token").notNull().unique(),
+  // EVM wallet that will originate the Base USDC transfer — verified as tx sender at confirm time
+  payerAddress: varchar("payer_address").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });

@@ -50,7 +50,7 @@ export function registerCreditsRoutes(app: Express) {
         return res.status(400).json({ error: "NO_ACCOUNT", message: "API key has no associated account" });
       }
 
-      const body = req.body as { package_id?: string };
+      const body = req.body as { package_id?: string; payer_address?: string };
       const pkg = getPackage(body?.package_id || "");
       if (!pkg) {
         return res.status(400).json({
@@ -60,20 +60,31 @@ export function registerCreditsRoutes(app: Express) {
         });
       }
 
+      // Require the EVM wallet that will send the USDC so we can verify tx sender at confirm time
+      const payerAddress = (body?.payer_address || "").trim().toLowerCase();
+      if (!payerAddress.startsWith("0x") || payerAddress.length !== 42) {
+        return res.status(400).json({
+          error: "PAYER_ADDRESS_REQUIRED",
+          message: "Provide your EVM wallet address (payer_address) that will send the USDC on Base",
+        });
+      }
+
       const payTo = process.env.X402_PAY_TO || "";
       if (!payTo) {
         return res.status(503).json({ error: "PAYMENT_NOT_CONFIGURED", message: "Credit purchases are not yet enabled" });
       }
 
       // Create a purchase intent to bind this request to the authenticated user.
-      // The caller must echo back intent_token at /confirm to prevent another account
-      // from claiming the same Base transaction hash.
+      // The caller must echo back intent_token at /confirm. The payer_address is
+      // verified as the on-chain sender to prevent another account from claiming
+      // the same Base transaction hash.
       const intentToken = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
       await db.insert(creditPurchaseIntents).values({
         userId: apiKey.userId!,
         packageId: pkg.id,
         intentToken,
+        payerAddress,
         expiresAt,
       });
 
@@ -90,7 +101,7 @@ export function registerCreditsRoutes(app: Express) {
           decimals: 6,
         },
         intent_token: intentToken,
-        next_step: "After sending USDC on Base, call POST /api/credits/confirm with { package_id, tx_hash, intent_token }",
+        next_step: "After sending USDC on Base from payer_address, call POST /api/credits/confirm with { package_id, tx_hash, intent_token }",
       });
     } catch (err: any) {
       logger.withRequest(req).error("Credits purchase error", { error: err.message });
@@ -168,8 +179,8 @@ export function registerCreditsRoutes(app: Express) {
         return res.status(503).json({ error: "PAYMENT_NOT_CONFIGURED" });
       }
 
-      // Verify the USDC transfer on Base
-      const { valid, error: verifyError } = await verifyUsdcOnBase(txHash, payTo, BigInt(pkg.price_usdc_raw));
+      // Verify the USDC transfer on Base, enforcing that the sender matches the registered payer_address
+      const { valid, error: verifyError } = await verifyUsdcOnBase(txHash, payTo, pkg.price_usdc_raw, intent.payerAddress);
       if (!valid) {
         return res.status(402).json({
           error: "PAYMENT_VERIFICATION_FAILED",

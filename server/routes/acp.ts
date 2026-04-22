@@ -107,6 +107,27 @@ export function registerAcpRoutes(app: Express) {
       // Create checkout session (expires in 1 hour)
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
       
+      const chainId = process.env.MULTIVERSX_CHAIN_ID || "1"; // 1 = Mainnet
+
+      // Receiver wallet for certification fees
+      const xproofWallet = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS;
+      if (!xproofWallet) {
+        logger.withRequest(req).error("No receiver wallet configured");
+        return res.status(500).json({
+          error: "CONFIGURATION_ERROR",
+          message: "xproof wallet not configured",
+        });
+      }
+
+      // Build transaction payload for MultiversX
+      // Data format: certify@<hash>@<filename>
+      const dataField = Buffer.from(
+        `certify@${data.inputs.file_hash}@${data.inputs.filename}`
+      ).toString("base64");
+
+      // Persist payment invariants so they can be verified at confirm time
+      const expectedValue = acpAdminExempt ? "0" : pricing.priceEgld;
+
       const [checkout] = await db
         .insert(acpCheckouts)
         .values({
@@ -119,27 +140,12 @@ export function registerAcpRoutes(app: Express) {
           buyerId: data.buyer?.id,
           userId: acpApiKey?.userId || null,
           status: "pending",
+          expectedReceiver: xproofWallet,
+          expectedValue,
+          expectedData: dataField,
           expiresAt,
         })
         .returning();
-
-      // Build transaction payload for MultiversX
-      // Data format: certify@<hash>@<filename>
-      const dataField = Buffer.from(
-        `certify@${data.inputs.file_hash}@${data.inputs.filename}`
-      ).toString("base64");
-
-      const chainId = process.env.MULTIVERSX_CHAIN_ID || "1"; // 1 = Mainnet
-      
-      // Receiver wallet for certification fees (admin wallet preferred)
-      const xproofWallet = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS;
-      if (!xproofWallet) {
-        logger.withRequest(req).error("No receiver wallet configured");
-        return res.status(500).json({
-          error: "CONFIGURATION_ERROR",
-          message: "xproof wallet not configured",
-        });
-      }
 
       const response: ACPCheckoutResponse = {
         checkout_id: checkout.id,
@@ -220,6 +226,18 @@ export function registerAcpRoutes(app: Express) {
         });
       }
 
+      // Block tx replay: a tx_hash may only be used for one checkout
+      const [replayCheck] = await db
+        .select({ id: acpCheckouts.id })
+        .from(acpCheckouts)
+        .where(eq(acpCheckouts.txHash, data.tx_hash));
+      if (replayCheck && replayCheck.id !== checkout.id) {
+        return res.status(409).json({
+          error: "TX_ALREADY_USED",
+          message: "This transaction has already been used to confirm another checkout",
+        });
+      }
+
       // Verify transaction on MultiversX
       const chainId = process.env.MULTIVERSX_CHAIN_ID || "1";
       const apiUrl = chainId === "1"
@@ -229,7 +247,9 @@ export function registerAcpRoutes(app: Express) {
         ? "https://explorer.multiversx.com"
         : "https://devnet-explorer.multiversx.com";
 
-      const xproofReceiverAddress = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS;
+      // Admin-exempt checkouts have expectedValue "0" — skip on-chain payment checks
+      const isAdminExempt = checkout.expectedValue === "0";
+
       let txVerified = false;
       let txStatus = "pending";
 
@@ -239,15 +259,56 @@ export function registerAcpRoutes(app: Express) {
           const txData = await txResponse.json();
           txStatus = txData.status;
           if (txData.status === "success") {
-            const receiverOk = !xproofReceiverAddress || txData.receiver === xproofReceiverAddress;
-            if (!receiverOk) {
-              logger.withRequest(req).warn("ACP confirm: tx receiver mismatch", { txHash: data.tx_hash, txReceiver: txData.receiver, expected: xproofReceiverAddress });
-              return res.status(402).json({
-                error: "PAYMENT_VERIFICATION_FAILED",
-                message: "Transaction receiver does not match xproof payment address",
-              });
+            if (isAdminExempt) {
+              txVerified = true;
+            } else {
+              // Verify receiver matches what was quoted at checkout creation
+              const expectedReceiver = checkout.expectedReceiver;
+              if (expectedReceiver && txData.receiver !== expectedReceiver) {
+                logger.withRequest(req).warn("ACP confirm: tx receiver mismatch", {
+                  txHash: data.tx_hash,
+                  txReceiver: txData.receiver,
+                  expected: expectedReceiver,
+                });
+                return res.status(402).json({
+                  error: "PAYMENT_VERIFICATION_FAILED",
+                  message: "Transaction receiver does not match the xproof payment address quoted at checkout",
+                });
+              }
+
+              // Verify value (EGLD in atomic units) meets or exceeds the quoted price
+              const expectedValue = checkout.expectedValue;
+              if (expectedValue && expectedValue !== "0") {
+                const onChainValue = BigInt(txData.value || "0");
+                const requiredValue = BigInt(expectedValue);
+                if (onChainValue < requiredValue) {
+                  logger.withRequest(req).warn("ACP confirm: insufficient value", {
+                    txHash: data.tx_hash,
+                    onChainValue: onChainValue.toString(),
+                    required: requiredValue.toString(),
+                  });
+                  return res.status(402).json({
+                    error: "PAYMENT_VERIFICATION_FAILED",
+                    message: "Transaction value is less than the price quoted at checkout",
+                  });
+                }
+              }
+
+              // Verify data field matches the canonical payload from checkout
+              const expectedData = checkout.expectedData;
+              if (expectedData && txData.data !== expectedData) {
+                logger.withRequest(req).warn("ACP confirm: tx data mismatch", {
+                  txHash: data.tx_hash,
+                  checkoutId: checkout.id,
+                });
+                return res.status(402).json({
+                  error: "PAYMENT_VERIFICATION_FAILED",
+                  message: "Transaction data field does not match the certify payload for this checkout",
+                });
+              }
+
+              txVerified = true;
             }
-            txVerified = true;
           }
         }
       } catch (err) {

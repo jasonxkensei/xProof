@@ -60,12 +60,14 @@ function getBaseClient() {
 
 /**
  * Verifies a USDC transfer on Base mainnet.
- * Returns true if the tx is confirmed and sent >= minAmount USDC to `payTo`.
+ * Returns true if the tx is confirmed, sent >= minAmount USDC to `payTo`,
+ * and (optionally) originated from `fromAddress`.
  */
 export async function verifyUsdcOnBase(
   txHash: string,
   payTo: string,
   minAmountRaw: string,
+  fromAddress?: string,
 ): Promise<{ valid: boolean; error?: string }> {
   try {
     const client = getBaseClient();
@@ -78,6 +80,7 @@ export async function verifyUsdcOnBase(
 
     const payToLower = payTo.toLowerCase();
     const minAmount = BigInt(minAmountRaw);
+    const fromLower = fromAddress ? fromAddress.toLowerCase() : null;
 
     for (const log of receipt.logs) {
       if (
@@ -86,9 +89,17 @@ export async function verifyUsdcOnBase(
         log.topics.length < 3
       ) continue;
 
+      // topics[1] is the `from` address (padded to 32 bytes)
       // topics[2] is the `to` address (padded to 32 bytes)
+      const fromAddr = "0x" + (log.topics[1] as string).slice(26);
       const toAddr = "0x" + (log.topics[2] as string).slice(26);
+
       if (toAddr.toLowerCase() !== payToLower) continue;
+
+      // If a sender is required, verify it
+      if (fromLower && fromAddr.toLowerCase() !== fromLower) {
+        return { valid: false, error: `USDC sender ${fromAddr} does not match expected payer ${fromAddress}` };
+      }
 
       const amount = BigInt(log.data);
       if (amount >= minAmount) return { valid: true };
