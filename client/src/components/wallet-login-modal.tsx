@@ -35,16 +35,49 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
   const isLoggedIn = useGetIsLoggedIn();
   const { address } = useGetAccount();
 
+  const getNativeAuthToken = (): string | null => {
+    const keys = Object.keys(localStorage);
+    for (const key of keys) {
+      if (key.includes('nativeAuth') || key.includes('token')) {
+        const value = localStorage.getItem(key);
+        if (value && value.length > 50) return value;
+      }
+    }
+    const direct = localStorage.getItem('nativeAuthToken') || localStorage.getItem('loginToken');
+    if (direct) return direct;
+    const sKeys = Object.keys(sessionStorage);
+    for (const key of sKeys) {
+      if (key.includes('nativeAuth') || key.includes('token')) {
+        const value = sessionStorage.getItem(key);
+        if (value && value.length > 50) return value;
+      }
+    }
+    return null;
+  };
+
   const syncAndRedirect = useCallback(async (walletAddress: string): Promise<boolean> => {
     if (syncAttempted.current) return false;
     syncAttempted.current = true;
     
     try {
       logger.log('Syncing wallet with backend:', walletAddress);
-      
-      const response = await fetch('/api/auth/wallet/simple-sync', {
+
+      const nativeAuthToken = getNativeAuthToken();
+      if (!nativeAuthToken) {
+        logger.error('No native auth token available; cannot authenticate without cryptographic proof');
+        setError('Authentication requires a cryptographic signature from your wallet. Please try connecting again.');
+        setLoading(false);
+        setWaitingForConnection(false);
+        syncAttempted.current = false;
+        return false;
+      }
+
+      const response = await fetch('/api/auth/wallet/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${nativeAuthToken}`,
+        },
         credentials: 'include',
         body: JSON.stringify({ walletAddress }),
       });

@@ -81,47 +81,15 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // Simple wallet sync - creates session without Native Auth verification
-  // Used as fallback when SDK doesn't provide Native Auth token
-  // Note: Less secure than full Native Auth, but still requires SDK login
-  app.post("/api/auth/wallet/simple-sync", async (req, res) => {
-    try {
-      const { walletAddress } = req.body;
-      
-      if (!walletAddress || !walletAddress.startsWith("erd1")) {
-        return res.status(400).json({ message: "Invalid MultiversX wallet address" });
-      }
-
-      logger.withRequest(req).info("Simple wallet sync", { walletAddress });
-
-      // Check if user exists, create if not
-      let [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
-
-      if (!user) {
-        // Create new user with free tier
-        const regIp2 = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
-        const regIpHash2 = crypto.createHash("sha256").update(regIp2).digest("hex");
-        [user] = await db
-          .insert(users)
-          .values({
-            walletAddress,
-            subscriptionTier: "free",
-            subscriptionStatus: "active",
-            monthlyUsage: 0,
-            usageResetDate: new Date(),
-            registrationIpHash: regIpHash2,
-          })
-          .returning();
-      }
-
-      // Create wallet session
-      await createWalletSession(req, walletAddress);
-
-      res.json(user);
-    } catch (error: any) {
-      logger.withRequest(req).error("Simple wallet sync failed", { error: error.message });
-      res.status(500).json({ message: "Failed to create session" });
-    }
+  // DISABLED: This endpoint was a critical authentication bypass.
+  // It accepted any wallet address without cryptographic proof of ownership,
+  // allowing impersonation of any MultiversX wallet including admin wallets.
+  // Use /api/auth/wallet/sync with a Native Auth token instead.
+  app.post("/api/auth/wallet/simple-sync", (req, res) => {
+    res.status(410).json({
+      message: "This endpoint has been disabled due to a security vulnerability. Use Native Auth with /api/auth/wallet/sync instead.",
+      error: "ENDPOINT_DISABLED",
+    });
   });
 
   // Get current user endpoint (for checking authentication status)

@@ -101,7 +101,7 @@ export function useWalletAuth() {
     
     syncPromise = (async () => {
       try {
-        // Try native auth first
+        // Require Native Auth token — simple-sync has been disabled as a security fix.
         const nativeAuthToken = getNativeAuthTokenFromStorage();
         if (nativeAuthToken) {
           const syncResponse = await fetch('/api/auth/wallet/sync', {
@@ -119,23 +119,12 @@ export function useWalletAuth() {
             const userData = await syncResponse.json();
             return userData;
           }
+
+          logger.log('Native auth sync failed, status:', syncResponse.status);
+        } else {
+          logger.log('No native auth token found; cannot establish session without cryptographic proof');
         }
-        
-        // Fallback to simple sync
-        const simpleSyncResponse = await fetch('/api/auth/wallet/simple-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ walletAddress }),
-        });
-        
-        if (simpleSyncResponse.ok) {
-          logger.log('Backend session created via simple sync');
-          const userData = await simpleSyncResponse.json();
-          return userData;
-        }
-        
-        logger.log('Could not establish backend session');
+
         return null;
       } catch (error) {
         logger.error('Sync error:', error);

@@ -52,6 +52,19 @@ These are automatically set by the Replit environment. Do not set manually unles
 
 ---
 
+## Admin Authorization
+
+> **Security note:** Both variables use **fail-closed semantics**. If neither `ADMIN_SECRET` nor `ADMIN_WALLETS` is configured in a deployment, every admin-only endpoint (`/api/admin/*`) will respond with `403 Forbidden`. There is no circumstance in which admin routes are reachable without at least one of these variables being set.
+
+| Variable | Required | Description |
+|---|---|---|
+| `ADMIN_WALLETS` | Recommended in production | Comma-separated list of MultiversX wallet addresses (`erd1...`) that are granted admin access. Example: `erd1abc...,erd1xyz...`. When set, only sessions authenticated as one of these wallets can reach admin routes (in addition to callers presenting a valid `ADMIN_SECRET` header). |
+| `ADMIN_SECRET` | Optional | A shared secret string. If set, any HTTP request that sends this value in the `x-admin-secret` header is granted admin access without a wallet session. Use a strong random value (e.g. `openssl rand -hex 32`). Intended for server-to-server or CI automation use only. |
+
+**Required for production:** At least one of `ADMIN_WALLETS` or `ADMIN_SECRET` must be configured, otherwise all admin endpoints are permanently inaccessible (by design). Omitting both variables in production is a safe default — it simply disables the admin API until the configuration is intentionally supplied.
+
+---
+
 ## Variable Prefixes
 
 - **`VITE_`** prefix: Variables prefixed with `VITE_` are exposed to the frontend via Vite's `import.meta.env`. Never prefix sensitive values (API keys, secrets) with `VITE_`.

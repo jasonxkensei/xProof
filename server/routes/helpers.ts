@@ -156,8 +156,14 @@ export function requireAdmin(req: any, res: express.Response, next: express.Next
     return next();
   }
   const adminWallets = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim()).filter(Boolean);
+  // Fail closed: if no admin configuration is present, deny all access.
+  // Previously this fell through to next() when ADMIN_WALLETS was unset, allowing
+  // any authenticated (or unauthenticated) caller to reach admin-only endpoints.
+  if (adminWallets.length === 0) {
+    return res.status(403).json({ error: "Forbidden: admin access required" });
+  }
   const userWallet = req.session?.walletAddress;
-  if (adminWallets.length > 0 && !adminWallets.includes(userWallet)) {
+  if (!adminWallets.includes(userWallet)) {
     return res.status(403).json({ error: "Forbidden: admin access required" });
   }
   next();
