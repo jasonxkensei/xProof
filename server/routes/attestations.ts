@@ -123,14 +123,25 @@ export function registerAttestationsRoutes(app: Express) {
   app.get("/api/attestations/:wallet", async (req, res) => {
     try {
       const { wallet } = req.params;
+
+      const subjectCheck = await db.execute(sql`
+        SELECT is_public_profile FROM users WHERE wallet_address = ${wallet} LIMIT 1
+      `);
+      const subjectUser = (subjectCheck.rows as any[])[0];
+      if (subjectUser && !subjectUser.is_public_profile) {
+        return res.status(404).json({ error: "Wallet not found or not public" });
+      }
+
       const now = new Date();
       const result = await db.execute(sql`
-        SELECT id, subject_wallet, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, status, created_at
-        FROM attestations
-        WHERE subject_wallet = ${wallet}
-          AND status = 'active'
-          AND (expires_at IS NULL OR expires_at > ${now})
-        ORDER BY created_at DESC
+        SELECT a.id, a.subject_wallet, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at
+        FROM attestations a
+        LEFT JOIN users issuer_u ON issuer_u.wallet_address = a.issuer_wallet
+        WHERE a.subject_wallet = ${wallet}
+          AND a.status = 'active'
+          AND (a.expires_at IS NULL OR a.expires_at > ${now})
+          AND (issuer_u.id IS NULL OR issuer_u.is_public_profile = true)
+        ORDER BY a.created_at DESC
       `);
       res.json(result.rows);
     } catch (err: any) {
@@ -146,10 +157,23 @@ export function registerAttestationsRoutes(app: Express) {
         SELECT id, subject_wallet, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, status, revoked_at, created_at
         FROM attestations
         WHERE id = ${id}
+          AND status = 'active'
+          AND (expires_at IS NULL OR expires_at > NOW())
         LIMIT 1
       `);
       const row = (result.rows as any[])[0];
       if (!row) return res.status(404).json({ error: "Attestation not found" });
+
+      const [subjectCheck, issuerCheck] = await Promise.all([
+        db.execute(sql`SELECT is_public_profile FROM users WHERE wallet_address = ${row.subject_wallet} LIMIT 1`),
+        db.execute(sql`SELECT is_public_profile FROM users WHERE wallet_address = ${row.issuer_wallet} LIMIT 1`),
+      ]);
+      const subjectUser = (subjectCheck.rows as any[])[0];
+      const issuerUser = (issuerCheck.rows as any[])[0];
+      if ((subjectUser && !subjectUser.is_public_profile) || (issuerUser && !issuerUser.is_public_profile)) {
+        return res.status(404).json({ error: "Attestation not found" });
+      }
+
       res.json(row);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -249,23 +273,35 @@ export function registerAttestationsRoutes(app: Express) {
     try {
       const { wallet } = req.params;
 
+      const issuerCheck = await db.execute(sql`
+        SELECT is_public_profile FROM users WHERE wallet_address = ${wallet} LIMIT 1
+      `);
+      const issuerUser = (issuerCheck.rows as any[])[0];
+      if (issuerUser && !issuerUser.is_public_profile) {
+        return res.status(404).json({ error: "Wallet not found or not public" });
+      }
+
       const stats = await db.execute(sql`
         SELECT
-          COUNT(*) FILTER (WHERE status = 'active') AS active_count,
-          COUNT(*) FILTER (WHERE status = 'revoked') AS revoked_count,
-          COUNT(DISTINCT domain) AS domain_count,
-          COUNT(DISTINCT subject_wallet) AS agents_attested,
-          MIN(created_at) AS first_issued_at,
-          MAX(created_at) AS last_issued_at
-        FROM attestations
-        WHERE issuer_wallet = ${wallet}
+          COUNT(*) FILTER (WHERE a.status = 'active') AS active_count,
+          COUNT(*) FILTER (WHERE a.status = 'revoked') AS revoked_count,
+          COUNT(DISTINCT a.domain) AS domain_count,
+          COUNT(DISTINCT a.subject_wallet) AS agents_attested,
+          MIN(a.created_at) AS first_issued_at,
+          MAX(a.created_at) AS last_issued_at
+        FROM attestations a
+        LEFT JOIN users subject_u ON subject_u.wallet_address = a.subject_wallet
+        WHERE a.issuer_wallet = ${wallet}
+          AND (subject_u.id IS NULL OR subject_u.is_public_profile = true)
       `);
 
       const issued = await db.execute(sql`
-        SELECT id, subject_wallet, issuer_name, domain, standard, title, description, expires_at, status, revoked_at, created_at
-        FROM attestations
-        WHERE issuer_wallet = ${wallet}
-        ORDER BY created_at DESC
+        SELECT a.id, a.subject_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.revoked_at, a.created_at
+        FROM attestations a
+        LEFT JOIN users subject_u ON subject_u.wallet_address = a.subject_wallet
+        WHERE a.issuer_wallet = ${wallet}
+          AND (subject_u.id IS NULL OR subject_u.is_public_profile = true)
+        ORDER BY a.created_at DESC
         LIMIT 100
       `);
 
@@ -432,6 +468,7 @@ export function registerAttestationsRoutes(app: Express) {
         SELECT file_name, file_hash, blockchain_status AS status, created_at, transaction_hash
         FROM certifications
         WHERE user_id = ${agentUser.id}
+          AND is_public = true
           AND created_at >= NOW() - INTERVAL '90 days'
         ORDER BY created_at DESC
         LIMIT 50

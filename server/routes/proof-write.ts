@@ -56,6 +56,9 @@ export function registerProofWriteRoutes(app: Express) {
         sqlConditions.push(sql`${certifications.metadata} IS NOT NULL`);
       }
 
+      sqlConditions.push(eq(certifications.isPublic, true));
+      sqlConditions.push(eq(users.isPublicProfile, true));
+
       const whereClause = and(...sqlConditions);
 
       const countResult = await db

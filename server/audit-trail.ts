@@ -58,7 +58,7 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
   const [contestedProof] = await db
     .select()
     .from(certifications)
-    .where(and(eq(certifications.id, proofId), eq(certifications.userId, user.id)));
+    .where(and(eq(certifications.id, proofId), eq(certifications.userId, user.id), eq(certifications.isPublic, true)));
 
   if (!contestedProof) {
     throw { status: 404, error: "Proof not found for this agent" } as AuditTrailError;
@@ -83,7 +83,7 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
         const actionCerts = await db
           .select()
           .from(certifications)
-          .where(and(eq(certifications.userId, user.id), inArray(certifications.id, actionIds)));
+          .where(and(eq(certifications.userId, user.id), eq(certifications.isPublic, true), inArray(certifications.id, actionIds)));
         const sorted = actionCerts.sort((a, b) => new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime());
         for (const cert of sorted) {
           const cm = (cert.metadata || {}) as Record<string, any>;
@@ -105,6 +105,7 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
         SELECT * FROM certifications
         WHERE user_id = ${user.id}
           AND blockchain_status = 'confirmed'
+          AND is_public = true
           AND metadata->>'action_type' = ${baseType}
           AND metadata->>'post_id' = ${postId}
           AND (
@@ -128,6 +129,7 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
         SELECT * FROM certifications
         WHERE user_id = ${user.id}
           AND blockchain_status = 'confirmed'
+          AND is_public = true
           AND metadata->>'action_type' = ${reasoningType}
           AND metadata->>'post_id' = ${postId}
           AND (
@@ -157,6 +159,7 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
       FROM certifications
       WHERE user_id = ${user.id}
         AND blockchain_status = 'confirmed'
+        AND is_public = true
         AND (metadata->>'type' = 'heartbeat' OR metadata->>'action_type' = 'heartbeat')
         AND created_at >= ${contestedProof.createdAt}
       ORDER BY created_at ASC

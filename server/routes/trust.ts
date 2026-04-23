@@ -144,7 +144,7 @@ export function registerTrustRoutes(app: Express) {
         db.execute(sql`
           SELECT COUNT(*) AS total
           FROM certifications
-          WHERE user_id = ${user.id} AND blockchain_status = 'confirmed'
+          WHERE user_id = ${user.id} AND blockchain_status = 'confirmed' AND is_public = true
         `),
         db.execute(sql`
           SELECT
@@ -177,7 +177,7 @@ export function registerTrustRoutes(app: Express) {
               ELSE NULL
             END AS version_number
           FROM certifications
-          WHERE user_id = ${user.id} AND blockchain_status = 'confirmed'
+          WHERE user_id = ${user.id} AND blockchain_status = 'confirmed' AND is_public = true
           ORDER BY created_at DESC
           LIMIT ${limit} OFFSET ${offset}
         `),
@@ -320,23 +320,23 @@ export function registerTrustRoutes(app: Express) {
             createdAt: certifications.createdAt,
           })
           .from(certifications)
-          .where(eq(certifications.userId, user.id))
+          .where(and(eq(certifications.userId, user.id), eq(certifications.isPublic, true), eq(certifications.blockchainStatus, "confirmed")))
           .orderBy(desc(certifications.createdAt))
           .limit(20),
         db.execute(sql`
           SELECT
             a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at,
-            COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') AS issuer_confirmed_certs,
+            COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) AS issuer_confirmed_certs,
             CASE
-              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 30 THEN 'Verified'
-              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 10 THEN 'Trusted'
-              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 3 THEN 'Active'
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) >= 30 THEN 'Verified'
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) >= 10 THEN 'Trusted'
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) >= 3 THEN 'Active'
               ELSE 'Newcomer'
             END AS issuer_level,
             CASE
-              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 30 THEN 50
-              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 10 THEN 40
-              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed') >= 3 THEN 25
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) >= 30 THEN 50
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) >= 10 THEN 40
+              WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) >= 3 THEN 25
               ELSE 10
             END AS attestation_value
           FROM attestations a
@@ -357,6 +357,7 @@ export function registerTrustRoutes(app: Express) {
           .from(certifications)
           .where(and(
             eq(certifications.userId, user.id),
+            eq(certifications.isPublic, true),
             gte(certifications.createdAt, thirtyDaysAgo),
             sql`${certifications.metadata}->>'decision_id' IS NOT NULL`
           ))
