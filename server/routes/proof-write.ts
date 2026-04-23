@@ -746,22 +746,13 @@ export function registerProofWriteRoutes(app: Express) {
         }
       }
 
-      // Record on blockchain; refund credit if the write fails so users are never charged for failed certifications.
-      let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
-      try {
-        result = await recordOnBlockchain(fileHash, fileName);
-      } catch (blockchainErr: any) {
-        if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
-        else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
-        logger.withRequest(req).error("Blockchain write failed, credit refunded", { error: blockchainErr?.message, fileHash });
-        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." });
-      }
+      // Resolve ownerUserId before the pending-row insert (ownerUserId is needed as a foreign key).
       if (!ownerUserId) {
-        // Reject orphaned API-key requests rather than misattributing to shared system account.
         if (authMethod === "api_key") {
+          if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+          else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
           return res.status(401).json({ error: "UNAUTHORIZED", message: "API key has no associated account. Please re-register." });
         }
-        // x402 / anonymous path: attribute to shared system account (intentional for agent-first flows)
         let [systemUser] = await db
           .select()
           .from(users)
@@ -779,10 +770,13 @@ export function registerProofWriteRoutes(app: Express) {
         ownerUserId = systemUser.id!;
       }
 
-      // Store certification with full audit log in metadata
-      let certification: (typeof certifications)["$inferSelect"];
+      // Insert a pending reservation row BEFORE the blockchain write.
+      // The unique constraint on fileHash prevents concurrent identical audit requests from both
+      // reaching the expensive on-chain write — the losing request gets a constraint error here
+      // instead of wasting a blockchain transaction and then having its credit refunded.
+      let auditPending: (typeof certifications)["$inferSelect"];
       try {
-        [certification] = await db
+        [auditPending] = await db
           .insert(certifications)
           .values({
             userId: ownerUserId,
@@ -790,20 +784,63 @@ export function registerProofWriteRoutes(app: Express) {
             fileHash,
             fileType: "json",
             authorName: data.agent_id,
-            transactionHash: result.transactionHash,
-            transactionUrl: result.transactionUrl,
-            blockchainStatus: "confirmed",
+            blockchainStatus: "pending",
             isPublic: true,
             authMethod,
             metadata: data as Record<string, any>,
-            ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
           })
           .returning();
-      } catch (dbErr: any) {
+      } catch (reserveErr: any) {
+        // Unique constraint — a concurrent request already reserved or completed this audit hash.
         if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
         else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
-        logger.withRequest(req).error("DB insert failed after blockchain write, credit refunded", { error: dbErr?.message, fileHash, txHash: result.transactionHash });
-        return res.status(502).json({ error: "DB_ERROR", message: "Failed to record certification in database after blockchain write. Your credit has been refunded." });
+        const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
+        if (existing) {
+          logger.withRequest(req).info("Concurrent duplicate audit request detected, credit refunded", { fileHash, certificationId: existing.id });
+          return res.status(200).json({
+            status: existing.blockchainStatus === "confirmed" ? "already_certified" : existing.blockchainStatus,
+            proof_id: existing.id,
+            audit_url: `${baseUrl}/audit/${existing.id}`,
+            proof_url: `${baseUrl}/proof/${existing.id}`,
+            file_hash: fileHash,
+            message: "This exact audit log was already certified. Returning existing proof.",
+          });
+        }
+        logger.withRequest(req).error("Audit pending reservation insert failed unexpectedly", { error: reserveErr?.message, fileHash });
+        return res.status(502).json({ error: "DB_ERROR", message: "Failed to reserve certification slot. Your credit has been refunded." });
+      }
+
+      // Record on blockchain; refund credit and remove pending row if the write fails.
+      let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+      try {
+        result = await recordOnBlockchain(fileHash, fileName);
+      } catch (blockchainErr: any) {
+        await db.delete(certifications).where(eq(certifications.id, auditPending.id)).catch(() => {});
+        if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+        else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+        logger.withRequest(req).error("Blockchain write failed, pending row removed, credit refunded", { error: blockchainErr?.message, fileHash });
+        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." });
+      }
+
+      // Update the pending row with confirmed blockchain data.
+      let certification: (typeof certifications)["$inferSelect"];
+      try {
+        [certification] = await db
+          .update(certifications)
+          .set({
+            transactionHash: result.transactionHash,
+            transactionUrl: result.transactionUrl,
+            blockchainStatus: "confirmed",
+            ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+          })
+          .where(eq(certifications.id, auditPending.id))
+          .returning();
+      } catch (dbErr: any) {
+        await db.delete(certifications).where(eq(certifications.id, auditPending.id)).catch(() => {});
+        if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+        else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+        logger.withRequest(req).error("DB update failed after audit blockchain write, pending row removed, credit refunded", { error: dbErr?.message, fileHash, txHash: result.transactionHash });
+        return res.status(502).json({ error: "DB_ERROR", message: "Failed to confirm certification record after blockchain write. Your credit has been refunded." });
       }
 
       logger.withRequest(req).info("Agent audit log certified", {
@@ -1062,6 +1099,21 @@ export function registerProofWriteRoutes(app: Express) {
         : [];
       const alreadyExistingSet = new Set(alreadyExistingRows.map((r) => r.fileHash));
       const newFileCount = batchFiles.filter((f) => !alreadyExistingSet.has(f.file_hash)).length;
+
+      // x402 pays a single flat fee per request and cannot express per-file pricing at request time.
+      // Enforce a hard cap of 1 new file per x402 payment to prevent 1-payment → N-blockchain-writes abuse.
+      if (authMethod === "x402" && newFileCount > 1) {
+        return res.status(402).json({
+          error: "X402_BATCH_LIMIT",
+          message: `x402 payment covers exactly 1 new certification but this batch contains ${newFileCount} new files. Submit files individually with separate x402 payments, or use an API key with prepaid credits for multi-file batches.`,
+          new_files: newFileCount,
+          limit: 1,
+          upgrade: {
+            prepaid_credits: { endpoint: `POST https://${req.get("host")}/api/credits/purchase` },
+            free_trial: { endpoint: `POST https://${req.get("host")}/api/agent/register`, free_certifications: 10 },
+          },
+        });
+      }
 
       if (newFileCount > 0 && !isAdminExempt) {
         if (trialInfo) {
