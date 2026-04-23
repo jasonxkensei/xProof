@@ -129,6 +129,7 @@ export const attestations = pgTable("attestations", {
   expiresAt: timestamp("expires_at"),
   status: varchar("status").default("active"),
   revokedAt: timestamp("revoked_at"),
+  expiryNotifiedAt: timestamp("expiry_notified_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

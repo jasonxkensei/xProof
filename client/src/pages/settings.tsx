@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Shield, ArrowLeft, ExternalLink, Trophy, Award, BadgeCheck, Trash2, Plus, TrendingUp, Zap, Flame, Star, KeyRound, CheckCircle2 } from "lucide-react";
+import { Shield, ArrowLeft, ExternalLink, Trophy, Award, BadgeCheck, Trash2, Plus, TrendingUp, Zap, Flame, Star, KeyRound, CheckCircle2, ChevronDown, LayoutDashboard } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -130,6 +130,7 @@ export default function Settings() {
   const qc = useQueryClient();
   const [showAttestForm, setShowAttestForm] = useState(false);
   const [trialApiKey, setTrialApiKey] = useState("");
+  const [showClaimForm, setShowClaimForm] = useState(false);
   const [claimResult, setClaimResult] = useState<{ success: boolean; message: string; transferred?: { certifications: number; api_keys: number }; trust_score?: { score: number; level: string } } | null>(null);
 
   const claimMutation = useMutation({
@@ -361,59 +362,98 @@ export default function Settings() {
         {/* Claim trial key */}
         <Card className="mb-6" data-testid="card-claim-trial">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-muted-foreground" />
-              Claim a trial API key
-            </CardTitle>
-            <CardDescription>
-              If you tested xproof with a trial key (from <code className="text-xs bg-muted px-1 py-0.5 rounded">POST /api/agent/register</code>), your proofs are on a separate temporary account. Paste your trial key here to transfer everything to your real wallet.
-            </CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <KeyRound className="h-5 w-5 text-muted-foreground" />
+                  Transfer a trial key
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Tested xproof with a trial key? Transfer all its proofs and credits to this wallet.
+                </CardDescription>
+              </div>
+              {!claimResult?.success && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowClaimForm((v) => !v)}
+                  data-testid="button-toggle-claim-form"
+                >
+                  {showClaimForm ? "Cancel" : "I have a trial key"}
+                  {!showClaimForm && <ChevronDown className="ml-1.5 h-3.5 w-3.5" />}
+                </Button>
+              )}
+            </div>
           </CardHeader>
-          <CardContent>
-            {claimResult?.success ? (
-              <div className="flex items-start gap-3 rounded-md border border-primary/20 bg-primary/5 p-4" data-testid="claim-success">
-                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">{claimResult.message}</p>
-                  {claimResult.trust_score && (
+
+          {(showClaimForm || claimResult?.success) && (
+            <CardContent>
+              {claimResult?.success ? (
+                <div className="flex items-start gap-3 rounded-md border border-primary/20 bg-primary/5 p-4" data-testid="claim-success">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">{claimResult.message}</p>
+                    {claimResult.transferred && (
+                      <p className="text-xs text-muted-foreground">
+                        Transferred:{" "}
+                        <span className="font-semibold text-foreground">{claimResult.transferred.certifications} proof(s)</span>
+                        {" "}and{" "}
+                        <span className="font-semibold text-foreground">{claimResult.transferred.api_keys} API key</span>.
+                      </p>
+                    )}
+                    {claimResult.trust_score && (
+                      <p className="text-xs text-muted-foreground">
+                        Trust Score updated to{" "}
+                        <span className="font-semibold text-foreground">{claimResult.trust_score.score} pts</span>{" "}
+                        ({claimResult.trust_score.level})
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button asChild size="sm" data-testid="button-view-dashboard-after-claim">
+                        <Link href="/dashboard">
+                          <LayoutDashboard className="mr-1.5 h-3.5 w-3.5" />
+                          View my proofs
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setClaimResult(null); setShowClaimForm(true); }}
+                        data-testid="button-claim-another"
+                      >
+                        Claim another key
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex-1 min-w-[250px] space-y-2">
+                    <Label htmlFor="trialApiKey">Trial API key</Label>
+                    <Input
+                      id="trialApiKey"
+                      data-testid="input-trial-api-key"
+                      placeholder="pm_abc123..."
+                      value={trialApiKey}
+                      onChange={(e) => setTrialApiKey(e.target.value)}
+                      className="font-mono text-sm"
+                    />
                     <p className="text-xs text-muted-foreground">
-                      Updated Trust Score: <span className="font-semibold text-foreground">{claimResult.trust_score.score} pts</span> ({claimResult.trust_score.level})
+                      Your trial key starts with <code className="bg-muted px-1 rounded">pm_</code>.
+                      Get one via <code className="bg-muted px-1 rounded">POST /api/agent/register</code>.
                     </p>
-                  )}
+                  </div>
                   <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => setClaimResult(null)}
-                    data-testid="button-claim-another"
+                    onClick={() => claimMutation.mutate(trialApiKey)}
+                    disabled={claimMutation.isPending || !trialApiKey.startsWith("pm_")}
+                    data-testid="button-claim-trial"
                   >
-                    Claim another key
+                    {claimMutation.isPending ? "Claiming..." : "Claim & transfer"}
                   </Button>
                 </div>
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="flex-1 min-w-[250px] space-y-2">
-                  <Label htmlFor="trialApiKey">Trial API key</Label>
-                  <Input
-                    id="trialApiKey"
-                    data-testid="input-trial-api-key"
-                    placeholder="pm_abc123..."
-                    value={trialApiKey}
-                    onChange={(e) => setTrialApiKey(e.target.value)}
-                    className="font-mono text-sm"
-                  />
-                </div>
-                <Button
-                  onClick={() => claimMutation.mutate(trialApiKey)}
-                  disabled={claimMutation.isPending || !trialApiKey.startsWith("pm_")}
-                  data-testid="button-claim-trial"
-                >
-                  {claimMutation.isPending ? "Claiming..." : "Claim & transfer"}
-                </Button>
-              </div>
-            )}
-          </CardContent>
+              )}
+            </CardContent>
+          )}
         </Card>
 
         {/* Agent profile */}
