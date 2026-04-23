@@ -30,38 +30,40 @@ Host-header-derived absolute URLs should only be treated as a production vulnera
 ## Scan Anchors
 
 - **Production entry points**: `server/index.ts`, `server/routes.ts`, `server/routes/*`
-- **Highest-risk files**: `server/routes/auth.ts`, `server/walletAuth.ts`, `server/replitAuth.ts`, `server/routes/helpers.ts`, `server/routes/proof-write.ts`, `server/routes/acp.ts`, `server/routes/credits.ts`, `server/credits.ts`, `server/routes/standard.ts`, `server/x402.ts`, `server/mcp.ts`, `server/webhook.ts`, `server/routes/admin.ts`, `server/routes/attestations.ts`, `server/routes/proof-read.ts`, `client/src/hooks/useWalletAuth.ts`, `client/src/components/wallet-login-modal.tsx`
-- **Public surfaces**: `server/routes/proof-read.ts`, `server/routes/attestations.ts`, embeddable trust-widget routes, discovery/content/docs routes, prerendered pages in `server/prerender.ts`
+- **Highest-risk files**: `server/routes/auth.ts`, `server/walletAuth.ts`, `server/replitAuth.ts`, `server/routes/helpers.ts`, `server/routes/proof-write.ts`, `server/routes/acp.ts`, `server/routes/credits.ts`, `server/credits.ts`, `server/routes/standard.ts`, `server/routes/certifications.ts`, `server/x402.ts`, `server/mcp.ts`, `server/webhook.ts`, `server/routes/admin.ts`, `server/routes/attestations.ts`, `server/routes/proof-read.ts`, `client/src/hooks/useWalletAuth.ts`, `client/src/components/wallet-login-modal.tsx`
+- **Public surfaces**: `server/routes/proof-read.ts`, `server/routes/trust.ts`, `server/routes/attestations.ts`, embeddable trust-widget routes, discovery/content/docs routes, prerendered pages in `server/prerender.ts`
 - **Usually dev-only**: `python-sdk/`, `npm-sdk/`, `xproof-examples/`, tests, local task files
 
 ## Threat Categories
 
 ### Spoofing
 
-xproof relies on wallet identity for browser sessions and on `pm_` keys for agent access. The system must only create wallet sessions from valid MultiversX Native Auth proofs and must never accept a claimed wallet address as sufficient evidence. Admin access must be derived from a trusted authenticated identity and must fail closed if configuration is missing. Webhook consumers must be able to distinguish genuine xproof callbacks from attacker-generated traffic.
+xproof relies on wallet identity for browser sessions and on `pm_` keys for agent access. The system must only create wallet sessions from valid MultiversX Native Auth proofs and must never accept a claimed wallet address as sufficient evidence. Admin access must be derived from a trusted authenticated identity and must fail closed. Webhook consumers must be able to distinguish genuine xproof callbacks from attacker-generated traffic. Standard-proof routes are also part of this identity boundary because they claim to validate who signed an agent action.
 
 Required guarantees:
 - Wallet sessions MUST be created only after cryptographic verification of a Native Auth token or equivalent signed proof.
 - Admin-only routes MUST require both authentication and a fail-closed authorization check.
 - Webhook authenticity MUST rely on a secret scoped to the callback relationship, not a shared application-wide secret.
+- Standard proof validation MUST cryptographically verify the claimed signature against the canonical payload before declaring a proof valid or anchoring it as a signed artifact.
 
 ### Tampering
 
 The main tampering risk is unauthorized proof creation or mutation of trust/business state without valid payment or quota consumption. Every path that records a certification or audit log must enforce the same entitlement checks, payment verification, and actor attribution. ACP confirmation must verify the exact transaction properties required by the checkout, not merely a generic success status. Shared fallback identities are dangerous because they can hide who actually caused state changes.
 
 Required guarantees:
-- Proof and audit creation MUST consume the correct quota or verify the required payment on every write-capable API and MCP path.
+- Proof and audit creation MUST consume the correct quota or verify the required payment on every write-capable API and MCP path, including legacy or convenience routes.
 - Credit and trial entitlement consumption MUST be atomic or reserved before durable writes and blockchain work begin.
 - Payment confirmation MUST verify recipient, amount, chain/context, and transaction success before creating a proof.
 - Payment intents and checkouts MUST be bound to the paying account before the on-chain payment occurs; post-hoc claim of another tenant's transaction MUST be impossible.
 - Certifications MUST be attributed to the actual authenticated account when an API key is used; shared system-user fallbacks MUST be limited to intentionally anonymous paid flows.
+- Single-item and batch attestation issuance MUST enforce the same issuer-qualification rules.
 
 ### Repudiation
 
 xproof's value proposition is a verifiable audit trail. If proofs, audits, or attestations can be created under the wrong identity or without a real payment event, the resulting ledger stops being trustworthy. The system must preserve a reliable mapping between the actor, the payment method, and the recorded artifact.
 
 Required guarantees:
-- Every persisted certification/audit MUST be traceable to the actual caller or payment flow that authorized it.
+- Every persisted certification, standard proof, and audit MUST be traceable to the actual caller or payment flow that authorized it.
 - Sensitive mutations such as admin actions, attestation revocations, key creation, and proof issuance MUST log the acting identity and outcome.
 
 ### Information Disclosure
@@ -70,7 +72,8 @@ Most proof data is intentionally public, but not every internal secret or owner 
 
 Required guarantees:
 - Public proof and trust APIs MUST only expose data intentionally designated as public.
-- Public hash lookups, trust lookups, and certificate downloads MUST respect both per-proof visibility (`certifications.isPublic`) and profile visibility (`users.isPublicProfile`) rules.
+- Public hash lookups, trust lookups, badges, partner lookups, and certificate/compliance downloads MUST respect both per-proof visibility (`certifications.isPublic`) and profile visibility (`users.isPublicProfile`) rules.
+- Public routes MUST not reveal a hidden wallet by resolving public certification metadata through partner or integration identifiers.
 - Session secrets, API keys, and signing secrets MUST never appear in client-facing responses or logs.
 - Example/demo code outside the production runtime SHOULD be documented as out of scope for production scans unless later wired into the deployed app.
 
@@ -80,8 +83,9 @@ Because xproof exposes public discovery/read APIs and expensive write paths that
 
 Required guarantees:
 - Public auth, search, read, and payment endpoints MUST remain rate-limited.
-- External verification and webhook calls MUST use bounded timeouts and bounded retries.
+- External verification and webhook calls MUST use bounded timeouts, bounded retries, and destination validation that applies to the final resolved target, not just the originally supplied hostname.
 - Write paths MUST not allow low-privilege users to force unlimited paid work or blockchain traffic.
+- Proof uniqueness or idempotency MUST be reserved before blockchain work begins so duplicate submissions cannot amplify signer or gas usage.
 
 ### Elevation of Privilege
 
@@ -90,4 +94,4 @@ The most serious project-specific EoP risks are broken wallet auth, fail-open ad
 Required guarantees:
 - Alternate auth or convenience endpoints MUST not grant broader access than the primary auth path.
 - Admin helpers MUST default to deny when configuration or session context is missing.
-- MCP, REST, and commerce flows MUST enforce the same authorization, accounting, attribution, and settlement fail-closed rules for equivalent operations.
+- MCP, REST, commerce, legacy, and standards flows MUST enforce the same authorization, accounting, attribution, and settlement fail-closed rules for equivalent operations.
