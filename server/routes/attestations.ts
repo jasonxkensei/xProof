@@ -300,6 +300,22 @@ export function registerAttestationsRoutes(app: Express) {
 
       const { attestations: items } = batchSchema.parse(req.body);
 
+      const issuerCertCheck = await db.execute(sql`
+        SELECT COUNT(*) AS cnt
+        FROM certifications c
+        JOIN users u ON u.id = c.user_id
+        WHERE u.wallet_address = ${issuerWallet}
+          AND c.blockchain_status = 'confirmed'
+      `);
+      const issuerConfirmedCerts = Number((issuerCertCheck.rows[0] as any)?.cnt || 0);
+      if (issuerConfirmedCerts < 3) {
+        return res.status(403).json({
+          message: "Minimum 3 confirmed on-chain certifications required to issue attestations.",
+          issuer_confirmed_certs: issuerConfirmedCerts,
+          required: 3,
+        });
+      }
+
       const results: any[] = [];
       const errors: any[] = [];
 
