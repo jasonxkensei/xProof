@@ -7,7 +7,7 @@ import { eq, desc, sql, and, count } from "drizzle-orm";
 import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
 import { getCertificationPriceEgld } from "../pricing";
-import { recordOnBlockchain, broadcastSignedTransaction } from "../blockchain";
+import { broadcastSignedTransaction } from "../blockchain";
 
 export function registerCertificationsRoutes(app: Express) {
   // Create certification (unlimited, free service)
@@ -50,86 +50,96 @@ export function registerCertificationsRoutes(app: Express) {
         });
       }
 
-      // Use transaction from frontend (Extension Wallet signature) or fallback to server mode
-      let transactionHash: string;
-      let transactionUrl: string;
-      let blockchainStatus: string = "confirmed";
-      let blockchainLatencyMs: number | null = null;
-      
-      if (data.transactionHash && data.transactionUrl) {
-        transactionHash = data.transactionHash;
-        transactionUrl = data.transactionUrl;
-        logger.withRequest(req).info("Using client-signed transaction", { transactionHash });
-
-        const { verifyTransactionOnChain } = await import("../verifyTransaction");
-        const { recordTransaction } = await import("../metrics");
-
-        const expectedReceiver = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS || "";
-        const ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
-        const isAdmin = ADMIN_WALLETS.includes(walletAddress.toLowerCase());
-
-        let expectedMinValue = "0";
-        if (!isAdmin) {
-          const { priceEgld } = await getCertificationPriceEgld();
-          expectedMinValue = priceEgld;
-        }
-
-        const verifyStart = Date.now();
-        const verificationResult = await verifyTransactionOnChain(transactionHash, expectedReceiver, expectedMinValue);
-
-        if (verificationResult.error === "pending" || verificationResult.error === "Transaction not found on blockchain") {
-          blockchainStatus = "pending";
-          logger.withRequest(req).info("Transaction pending on-chain, creating certification with pending status", { transactionHash });
-        } else if (!verificationResult.verified) {
-          logger.withRequest(req).warn("Payment verification failed", { transactionHash, error: verificationResult.error });
-          return res.status(402).json({ message: "Payment verification failed", error: verificationResult.error });
-        } else {
-          blockchainStatus = "confirmed";
-          blockchainLatencyMs = Date.now() - verifyStart;
-          recordTransaction(true, blockchainLatencyMs, "certification");
-        }
-      } else {
-        const result = await recordOnBlockchain(
-          data.fileHash,
-          data.fileName,
-          data.authorName
-        );
-        transactionHash = result.transactionHash;
-        transactionUrl = result.transactionUrl;
-        blockchainLatencyMs = result.latencyMs ?? null;
+      // A client-signed transaction is always required.
+      // Server-funded blockchain writes are not permitted on this route — any authenticated
+      // wallet can trigger them, which would allow free use of the operator's signing key.
+      if (!data.transactionHash || !data.transactionUrl) {
+        return res.status(402).json({ message: "Payment required. Please provide a valid transactionHash and transactionUrl from a signed MultiversX transaction." });
       }
 
-      // Create certification
-      const [certification] = await db
-        .insert(certifications)
-        .values({
-          userId: user.id!,
-          fileName: data.fileName,
-          fileHash: data.fileHash,
-          fileType: data.fileType || "unknown",
-          fileSize: data.fileSize || 0,
-          authorName: data.authorName,
-          authorSignature: data.authorSignature,
-          transactionHash,
-          transactionUrl,
-          blockchainStatus,
-          isPublic: true,
-          authMethod: "web",
-          ...(blockchainLatencyMs !== null ? { blockchainLatencyMs } : {}),
-        })
-        .returning();
+      // Prevent transaction replay: the same txHash cannot be reused to certify a different file.
+      const [existingTx] = await db
+        .select({ id: certifications.id })
+        .from(certifications)
+        .where(eq(certifications.transactionHash, data.transactionHash));
+      if (existingTx) {
+        return res.status(409).json({ message: "This transaction has already been used for a certification. Each transaction can only certify one file.", certificationId: existingTx.id });
+      }
 
-      if (blockchainStatus === "pending") {
-        const { scheduleVerificationRetry } = await import("../verifyTransaction");
-        const retryReceiver = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS || "";
-        const RETRY_ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
-        const retryIsAdmin = RETRY_ADMIN_WALLETS.includes(walletAddress.toLowerCase());
-        let retryMinValue = "0";
-        if (!retryIsAdmin) {
-          const { priceEgld } = await getCertificationPriceEgld();
-          retryMinValue = priceEgld;
-        }
-        scheduleVerificationRetry(certification.id, transactionHash, retryReceiver, retryMinValue);
+      let transactionHash: string = data.transactionHash;
+      let transactionUrl: string = data.transactionUrl;
+      let blockchainStatus: string = "confirmed";
+      let blockchainLatencyMs: number | null = null;
+
+      logger.withRequest(req).info("Using client-signed transaction", { transactionHash });
+
+      const { verifyTransactionOnChain } = await import("../verifyTransaction");
+      const { recordTransaction } = await import("../metrics");
+
+      const expectedReceiver = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS || "";
+      const ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
+      const isAdmin = ADMIN_WALLETS.includes(walletAddress.toLowerCase());
+
+      let expectedMinValue = "0";
+      if (!isAdmin) {
+        const { priceEgld } = await getCertificationPriceEgld();
+        expectedMinValue = priceEgld;
+      }
+
+      const verifyStart = Date.now();
+      const verificationResult = await verifyTransactionOnChain(transactionHash, expectedReceiver, expectedMinValue);
+
+      if (verificationResult.error === "pending" || verificationResult.error === "Transaction not found on blockchain") {
+        // Reject issuance for unconfirmed transactions. Accepting pending transactions as
+        // payment allows unpaid certification rows to be created before the transaction
+        // might fail on-chain, enabling trust-history inflation without real payment.
+        logger.withRequest(req).info("Transaction not yet confirmed on-chain, rejecting certification issuance", { transactionHash });
+        return res.status(402).json({ message: "Transaction is not yet confirmed on-chain. Please wait for the transaction to be confirmed and retry.", error: verificationResult.error || "pending" });
+      } else if (!verificationResult.verified) {
+        logger.withRequest(req).warn("Payment verification failed", { transactionHash, error: verificationResult.error });
+        return res.status(402).json({ message: "Payment verification failed", error: verificationResult.error });
+      } else {
+        blockchainStatus = "confirmed";
+        blockchainLatencyMs = Date.now() - verifyStart;
+        recordTransaction(true, blockchainLatencyMs, "certification");
+      }
+
+      // Bind payment to authenticated wallet: the transaction sender must match the session
+      // wallet. Without this check, a user could claim another user's valid payment.
+      // Admin wallets are exempt from sender binding.
+      const SENDER_ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
+      const isSenderAdmin = SENDER_ADMIN_WALLETS.includes(walletAddress.toLowerCase());
+      if (!isSenderAdmin && verificationResult.sender && verificationResult.sender.toLowerCase() !== walletAddress.toLowerCase()) {
+        logger.withRequest(req).warn("Transaction sender does not match authenticated wallet", { transactionHash, sender: verificationResult.sender, wallet: walletAddress });
+        return res.status(403).json({ message: "Transaction sender does not match your authenticated wallet address." });
+      }
+
+      // Create certification — if the DB unique index fires (concurrent replay of same tx),
+      // return a deterministic conflict error rather than an unhandled 500.
+      let certification: typeof certifications.$inferSelect;
+      try {
+        [certification] = await db
+          .insert(certifications)
+          .values({
+            userId: user.id!,
+            fileName: data.fileName,
+            fileHash: data.fileHash,
+            fileType: data.fileType || "unknown",
+            fileSize: data.fileSize || 0,
+            authorName: data.authorName,
+            authorSignature: data.authorSignature,
+            transactionHash,
+            transactionUrl,
+            blockchainStatus,
+            isPublic: true,
+            authMethod: "web",
+            ...(blockchainLatencyMs !== null ? { blockchainLatencyMs } : {}),
+          })
+          .returning();
+      } catch (insertErr: any) {
+        // Unique constraint on transactionHash or fileHash
+        logger.withRequest(req).warn("Certification insert conflict", { transactionHash, fileHash: data.fileHash, error: insertErr?.message });
+        return res.status(409).json({ message: "Certification already exists for this transaction or file hash." });
       }
 
       const certificateUrl = `/api/certificates/${certification.id}.pdf`;

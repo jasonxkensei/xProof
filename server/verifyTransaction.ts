@@ -14,6 +14,7 @@ export interface VerificationResult {
   error?: string;
   status?: string;
   receiver?: string;
+  sender?: string;
   value?: string;
 }
 
@@ -55,6 +56,7 @@ export async function verifyTransactionOnChain(
         verified: false,
         error: "pending",
         status: "pending",
+        sender: tx.sender,
         receiver: tx.receiver,
         value: tx.value,
       };
@@ -65,6 +67,7 @@ export async function verifyTransactionOnChain(
         verified: false,
         error: `Transaction status is "${tx.status}", expected "success"`,
         status: tx.status,
+        sender: tx.sender,
         receiver: tx.receiver,
         value: tx.value,
       };
@@ -75,6 +78,7 @@ export async function verifyTransactionOnChain(
         verified: false,
         error: `Transaction receiver mismatch: expected ${expectedReceiver}, got ${tx.receiver}`,
         status: tx.status,
+        sender: tx.sender,
         receiver: tx.receiver,
         value: tx.value,
       };
@@ -90,6 +94,7 @@ export async function verifyTransactionOnChain(
           verified: false,
           error: `Insufficient payment: expected at least ${toleranceValue.toString()} (with 2% tolerance on ${expectedValue.toString()}), got ${txValue.toString()}`,
           status: tx.status,
+          sender: tx.sender,
           receiver: tx.receiver,
           value: tx.value,
         };
@@ -100,6 +105,7 @@ export async function verifyTransactionOnChain(
       component: "verifyTransaction",
       txHash,
       status: tx.status,
+      sender: tx.sender,
       receiver: tx.receiver,
       value: tx.value,
     });
@@ -107,6 +113,7 @@ export async function verifyTransactionOnChain(
     return {
       verified: true,
       status: tx.status,
+      sender: tx.sender,
       receiver: tx.receiver,
       value: tx.value,
     };

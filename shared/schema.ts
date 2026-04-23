@@ -3,6 +3,7 @@ import {
   bigint,
   date,
   index,
+  uniqueIndex,
   jsonb,
   pgTable,
   serial,
@@ -84,7 +85,14 @@ export const certifications = pgTable("certifications", {
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // Partial unique index: a given on-chain transaction hash can only be used for one
+  // certification. NULL transaction_hash is excluded so pending rows (which have no tx yet)
+  // do not conflict with each other.
+  uniqueIndex("certifications_transaction_hash_unique")
+    .on(table.transactionHash)
+    .where(sql`transaction_hash IS NOT NULL`),
+]);
 
 export const certificationsRelations = relations(certifications, ({ one }) => ({
   user: one(users, {

@@ -106,27 +106,57 @@ export async function createMcpServer(ctx: McpContext) {
         // auth.userId is guaranteed non-null here because we checked it above.
         const certUserId = auth.userId;
 
-        let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
-        let certification: (typeof certifications)["$inferSelect"];
+        // Insert a pending reservation row BEFORE the blockchain write.
+        // The DB unique constraint on fileHash prevents concurrent MCP requests from
+        // both proceeding to expensive on-chain writes for the same hash.
+        let pendingCert: (typeof certifications)["$inferSelect"];
         try {
-          result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
-          [certification] = await db.insert(certifications).values({
+          [pendingCert] = await db.insert(certifications).values({
             userId: certUserId,
             fileName: filename,
             fileHash: file_hash,
             fileType: filename.split(".").pop() || "unknown",
             authorName: author_name || "AI Agent",
-            transactionHash: result.transactionHash,
-            transactionUrl: result.transactionUrl,
-            blockchainStatus: "confirmed",
+            blockchainStatus: "pending",
             isPublic: true,
             authMethod: "api_key",
           }).returning();
-        } catch (writeErr: any) {
-          // Refund credit so the user is not charged for a failed write.
+        } catch (insertErr: any) {
+          // Unique constraint violation — a concurrent request already claimed this hash.
           if (trialInfo && !mcpCreditInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
           else if (mcpCreditInfo) await refundCredit(mcpCreditInfo.userId).catch(() => {});
-          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "BLOCKCHAIN_ERROR", message: "Blockchain or DB write failed. Your credit has been refunded." }) }], isError: true };
+          const [dup] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
+          if (dup) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: dup.id, status: "certified", file_hash: dup.fileHash, filename: dup.fileName, verify_url: `${baseUrl}/proof/${dup.id}`, certificate_url: `${baseUrl}/api/certificates/${dup.id}.pdf`, blockchain: { network: "MultiversX", transaction_hash: dup.transactionHash, explorer_url: dup.transactionUrl }, timestamp: dup.createdAt?.toISOString(), message: "File already certified on MultiversX blockchain." }) }] };
+          }
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DUPLICATE_HASH", message: "File hash is already being certified by a concurrent request. Credit refunded." }) }], isError: true };
+        }
+
+        let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+        try {
+          result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
+        } catch (writeErr: any) {
+          // Blockchain write failed — remove the pending row and refund.
+          await db.delete(certifications).where(eq(certifications.id, pendingCert.id)).catch(() => {});
+          if (trialInfo && !mcpCreditInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+          else if (mcpCreditInfo) await refundCredit(mcpCreditInfo.userId).catch(() => {});
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." }) }], isError: true };
+        }
+
+        let certification: (typeof certifications)["$inferSelect"];
+        try {
+          [certification] = await db.update(certifications).set({
+            transactionHash: result.transactionHash,
+            transactionUrl: result.transactionUrl,
+            blockchainStatus: "confirmed",
+            ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+          }).where(eq(certifications.id, pendingCert.id)).returning();
+        } catch (updateErr: any) {
+          // DB update failed after blockchain write — clean up stale pending row and refund.
+          await db.delete(certifications).where(eq(certifications.id, pendingCert.id)).catch(() => {});
+          if (trialInfo && !mcpCreditInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+          else if (mcpCreditInfo) await refundCredit(mcpCreditInfo.userId).catch(() => {});
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DB_ERROR", message: "Failed to confirm certification after blockchain write. Your credit has been refunded." }) }], isError: true };
         }
 
         let webhookStatus = webhook_url ? "pending" : "not_requested";
@@ -241,27 +271,54 @@ export async function createMcpServer(ctx: McpContext) {
         if (who) metadata.who = who;
         if (reversibility_class) metadata.reversibility_class = reversibility_class;
 
-        let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
-        let certification: (typeof certifications)["$inferSelect"];
+        // Insert a pending reservation row BEFORE the blockchain write.
+        // The DB unique constraint on fileHash prevents concurrent requests from both
+        // proceeding to expensive on-chain writes for the same hash.
+        let cwcPendingCert: (typeof certifications)["$inferSelect"];
         try {
-          result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
-          [certification] = await db.insert(certifications).values({
+          [cwcPendingCert] = await db.insert(certifications).values({
             userId: cwcCertUserId,
             fileName: filename,
             fileHash: file_hash,
             fileType: filename.split(".").pop() || "unknown",
             authorName: author_name || "AI Agent",
-            transactionHash: result.transactionHash,
-            transactionUrl: result.transactionUrl,
-            blockchainStatus: "confirmed",
+            blockchainStatus: "pending",
             isPublic: true,
             authMethod: "api_key",
             metadata,
           }).returning();
-        } catch (writeErr: any) {
+        } catch (insertErr: any) {
+          // Unique constraint violation — a concurrent request already claimed this hash.
           if (cwcTrialInfo && !cwcCreditInfo) await refundTrialCredit(cwcTrialInfo.userId).catch(() => {});
           else if (cwcCreditInfo) await refundCredit(cwcCreditInfo.userId).catch(() => {});
-          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "BLOCKCHAIN_ERROR", message: "Blockchain or DB write failed. Your credit has been refunded." }) }], isError: true };
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DUPLICATE_HASH", message: "File hash is already being certified by a concurrent request. Credit refunded." }) }], isError: true };
+        }
+
+        let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+        try {
+          result = await recordOnBlockchain(file_hash, filename, author_name || "AI Agent");
+        } catch (writeErr: any) {
+          // Blockchain write failed — remove the pending row and refund.
+          await db.delete(certifications).where(eq(certifications.id, cwcPendingCert.id)).catch(() => {});
+          if (cwcTrialInfo && !cwcCreditInfo) await refundTrialCredit(cwcTrialInfo.userId).catch(() => {});
+          else if (cwcCreditInfo) await refundCredit(cwcCreditInfo.userId).catch(() => {});
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." }) }], isError: true };
+        }
+
+        let certification: (typeof certifications)["$inferSelect"];
+        try {
+          [certification] = await db.update(certifications).set({
+            transactionHash: result.transactionHash,
+            transactionUrl: result.transactionUrl,
+            blockchainStatus: "confirmed",
+            ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+          }).where(eq(certifications.id, cwcPendingCert.id)).returning();
+        } catch (updateErr: any) {
+          // DB update failed after blockchain write — clean up stale pending row and refund.
+          await db.delete(certifications).where(eq(certifications.id, cwcPendingCert.id)).catch(() => {});
+          if (cwcTrialInfo && !cwcCreditInfo) await refundTrialCredit(cwcTrialInfo.userId).catch(() => {});
+          else if (cwcCreditInfo) await refundCredit(cwcCreditInfo.userId).catch(() => {});
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DB_ERROR", message: "Failed to confirm certification after blockchain write. Your credit has been refunded." }) }], isError: true };
         }
 
         return {

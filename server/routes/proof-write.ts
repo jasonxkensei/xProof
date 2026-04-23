@@ -380,16 +380,6 @@ export function registerProofWriteRoutes(app: Express) {
         }
       }
 
-      let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
-      try {
-        result = await recordOnBlockchain(data.file_hash, data.filename, data.author_name || "AI Agent");
-      } catch (blockchainErr: any) {
-        // Refund credit so the user is not charged for a failed write.
-        if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
-        else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
-        logger.withRequest(req).error("Blockchain write failed, credit refunded", { error: blockchainErr?.message, fileHash: data.file_hash });
-        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." });
-      }
       const certUserId = trialInfo ? trialInfo.userId : (creditInfo ? creditInfo.userId : apiKeyUserId);
       let ownerUserId = certUserId;
 
@@ -419,9 +409,13 @@ export function registerProofWriteRoutes(app: Express) {
         ownerUserId = systemUser.id!;
       }
 
-      let certification: (typeof certifications)["$inferSelect"];
+      // Insert a pending reservation row BEFORE the blockchain write.
+      // The unique constraint on fileHash prevents concurrent requests from both proceeding
+      // to the expensive blockchain write for the same hash — whichever request loses the
+      // DB-level race gets a unique constraint error here instead of wasting a blockchain tx.
+      let pendingCertification: (typeof certifications)["$inferSelect"];
       try {
-        [certification] = await db
+        [pendingCertification] = await db
           .insert(certifications)
           .values({
             userId: ownerUserId,
@@ -429,22 +423,76 @@ export function registerProofWriteRoutes(app: Express) {
             fileHash: data.file_hash,
             fileType: data.filename.split(".").pop() || "unknown",
             authorName: data.author_name || "AI Agent",
-            transactionHash: result.transactionHash,
-            transactionUrl: result.transactionUrl,
-            blockchainStatus: "confirmed",
+            blockchainStatus: "pending",
             isPublic: true,
             authMethod,
-            ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
             ...(data.metadata ? { metadata: data.metadata } : {}),
           })
           .returning();
-      } catch (dbErr: any) {
-        // DB insert failed after a successful blockchain write — refund the credit.
-        // The on-chain record exists but we cannot surface it without a DB row.
+      } catch (insertErr: any) {
+        // Unique constraint violation — a concurrent request already claimed this fileHash.
+        // Refund the credit and return the existing (or in-progress) proof.
         if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
         else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
-        logger.withRequest(req).error("DB insert failed after blockchain write, credit refunded", { error: dbErr?.message, fileHash: data.file_hash, txHash: result.transactionHash });
-        return res.status(502).json({ error: "DB_ERROR", message: "Failed to record certification in database after blockchain write. Your credit has been refunded." });
+        const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, data.file_hash));
+        if (existing) {
+          logger.withRequest(req).info("Concurrent duplicate proof request detected, credit refunded", { fileHash: data.file_hash, certificationId: existing.id });
+          return res.status(200).json({
+            proof_id: existing.id,
+            status: existing.blockchainStatus === "confirmed" ? "certified" : existing.blockchainStatus,
+            file_hash: existing.fileHash,
+            filename: existing.fileName,
+            metadata: existing.metadata || null,
+            verify_url: `${baseUrl}/proof/${existing.id}`,
+            certificate_url: `${baseUrl}/api/certificates/${existing.id}.pdf`,
+            proof_json_url: `${baseUrl}/proof/${existing.id}.json`,
+            blockchain: {
+              network: "MultiversX",
+              transaction_hash: existing.transactionHash,
+              explorer_url: existing.transactionUrl,
+            },
+            timestamp: existing.createdAt?.toISOString() || new Date().toISOString(),
+            webhook_status: "not_applicable",
+            message: "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
+          });
+        }
+        logger.withRequest(req).error("Pending reservation insert failed unexpectedly", { error: insertErr?.message, fileHash: data.file_hash });
+        return res.status(502).json({ error: "DB_ERROR", message: "Failed to reserve certification slot. Your credit has been refunded." });
+      }
+
+      let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+      try {
+        result = await recordOnBlockchain(data.file_hash, data.filename, data.author_name || "AI Agent");
+      } catch (blockchainErr: any) {
+        // Blockchain write failed — remove the pending reservation and refund the credit.
+        await db.delete(certifications).where(eq(certifications.id, pendingCertification.id)).catch(() => {});
+        if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+        else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+        logger.withRequest(req).error("Blockchain write failed, pending row removed, credit refunded", { error: blockchainErr?.message, fileHash: data.file_hash });
+        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." });
+      }
+
+      // Update the pending row with confirmed blockchain data.
+      let certification: (typeof certifications)["$inferSelect"];
+      try {
+        [certification] = await db
+          .update(certifications)
+          .set({
+            transactionHash: result.transactionHash,
+            transactionUrl: result.transactionUrl,
+            blockchainStatus: "confirmed",
+            ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+          })
+          .where(eq(certifications.id, pendingCertification.id))
+          .returning();
+      } catch (updateErr: any) {
+        // DB update failed after a successful blockchain write — clean up the stale pending row
+        // and refund the credit so the user is not permanently charged for a broken record.
+        await db.delete(certifications).where(eq(certifications.id, pendingCertification.id)).catch(() => {});
+        if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+        else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+        logger.withRequest(req).error("DB update failed after blockchain write, pending row removed, credit refunded", { error: updateErr?.message, fileHash: data.file_hash, txHash: result.transactionHash });
+        return res.status(502).json({ error: "DB_ERROR", message: "Failed to confirm certification record after blockchain write. Your credit has been refunded." });
       }
 
       logger.withRequest(req).info("File certified", { fileHash: data.file_hash, certificationId: certification.id, txHash: result.transactionHash, authMethod, adminExempt: isAdminExempt });
@@ -991,18 +1039,29 @@ export function registerProofWriteRoutes(app: Express) {
         ownerUserId = systemUser.id!;
       }
 
+      // Deduplicate files by file_hash within this batch request.
+      // Without deduplication, a batch containing the same hash N times would trigger N
+      // blockchain transactions (one per occurrence) before the unique constraint fires on
+      // the second DB insert — wasting N-1 on-chain writes the caller does not need to keep.
+      const seenInBatch = new Set<string>();
+      const batchFiles = data.files.filter((f) => {
+        if (seenInBatch.has(f.file_hash)) return false;
+        seenInBatch.add(f.file_hash);
+        return true;
+      });
+
       // Pre-count new files and atomically consume credits upfront.
       // This prevents a single request from creating more proofs than the user's balance covers
       // (e.g. 1 credit used to certify 50 unique files), and prevents parallel batch requests
       // from racing through the same positive balance.
-      const allHashes = data.files.map((f) => f.file_hash);
+      const allHashes = batchFiles.map((f) => f.file_hash);
       const alreadyExistingRows = allHashes.length > 0
         ? await db.select({ fileHash: certifications.fileHash })
             .from(certifications)
             .where(inArray(certifications.fileHash, allHashes))
         : [];
       const alreadyExistingSet = new Set(alreadyExistingRows.map((r) => r.fileHash));
-      const newFileCount = data.files.filter((f) => !alreadyExistingSet.has(f.file_hash)).length;
+      const newFileCount = batchFiles.filter((f) => !alreadyExistingSet.has(f.file_hash)).length;
 
       if (newFileCount > 0 && !isAdminExempt) {
         if (trialInfo) {
@@ -1041,7 +1100,7 @@ export function registerProofWriteRoutes(app: Express) {
       // Generated lazily on first use so callers using account-level secrets aren't affected.
       let batchGeneratedWebhookSecret: string | null = null;
 
-      for (const file of data.files) {
+      for (const file of batchFiles) {
         // Use the pre-fetched existence set; for confirmed-existing files, fetch the full record
         if (alreadyExistingSet.has(file.file_hash)) {
           const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, file.file_hash));
@@ -1059,20 +1118,12 @@ export function registerProofWriteRoutes(app: Express) {
           }
         }
 
-        let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+        // Insert a pending reservation row BEFORE the blockchain write.
+        // This prevents parallel batch requests (or a concurrent single-proof request)
+        // from both proceeding to expensive on-chain writes for the same hash.
+        let batchPending: (typeof certifications)["$inferSelect"];
         try {
-          result = await recordOnBlockchain(file.file_hash, file.filename, data.author_name || "AI Agent");
-        } catch (batchBlockchainErr: any) {
-          // Blockchain write failed for this item — do not count it as created; refund at end of loop.
-          failedCount++;
-          results.push({ file_hash: file.file_hash, filename: file.filename, status: "failed", reason: "Blockchain write error" });
-          logger.withRequest(req).error("Batch: blockchain write failed for item", { fileHash: file.file_hash, error: batchBlockchainErr?.message });
-          continue;
-        }
-
-        let certification: (typeof certifications)["$inferSelect"];
-        try {
-          [certification] = await db
+          [batchPending] = await db
             .insert(certifications)
             .values({
               userId: ownerUserId!,
@@ -1080,20 +1131,60 @@ export function registerProofWriteRoutes(app: Express) {
               fileHash: file.file_hash,
               fileType: file.filename.split(".").pop() || "unknown",
               authorName: data.author_name || "AI Agent",
-              transactionHash: result.transactionHash,
-              transactionUrl: result.transactionUrl,
-              blockchainStatus: "confirmed",
+              blockchainStatus: "pending",
               isPublic: true,
               authMethod,
-              ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
               ...(file.metadata ? { metadata: file.metadata } : {}),
             })
             .returning();
-        } catch (dbErr: any) {
-          // DB insert failed after blockchain write — refund this slot.
+        } catch (reserveErr: any) {
+          // Unique constraint violation — another concurrent request already claimed this hash.
+          // The credit for this item was consumed upfront in newFileCount, so increment
+          // failedCount to ensure it is refunded at the end of the loop.
           failedCount++;
-          results.push({ file_hash: file.file_hash, filename: file.filename, status: "failed", reason: "DB insert error after blockchain write" });
-          logger.withRequest(req).error("Batch: DB insert failed after blockchain write", { fileHash: file.file_hash, error: dbErr?.message });
+          const [dup] = await db.select().from(certifications).where(eq(certifications.fileHash, file.file_hash));
+          if (dup) {
+            existingCount++;
+            results.push({ file_hash: file.file_hash, filename: file.filename, proof_id: dup.id, verify_url: `${baseUrl}/proof/${dup.id}`, badge_url: `${baseUrl}/badge/${dup.id}`, status: "existing" });
+          } else {
+            results.push({ file_hash: file.file_hash, filename: file.filename, status: "failed", reason: "Reservation conflict" });
+            logger.withRequest(req).error("Batch: pending reservation conflict for item", { fileHash: file.file_hash, error: reserveErr?.message });
+          }
+          continue;
+        }
+
+        let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+        try {
+          result = await recordOnBlockchain(file.file_hash, file.filename, data.author_name || "AI Agent");
+        } catch (batchBlockchainErr: any) {
+          // Blockchain write failed — remove the pending row; refund this slot at end of loop.
+          await db.delete(certifications).where(eq(certifications.id, batchPending.id)).catch(() => {});
+          failedCount++;
+          results.push({ file_hash: file.file_hash, filename: file.filename, status: "failed", reason: "Blockchain write error" });
+          logger.withRequest(req).error("Batch: blockchain write failed for item", { fileHash: file.file_hash, error: batchBlockchainErr?.message });
+          continue;
+        }
+
+        // Update the pending row with confirmed blockchain data.
+        let certification: (typeof certifications)["$inferSelect"];
+        try {
+          [certification] = await db
+            .update(certifications)
+            .set({
+              transactionHash: result.transactionHash,
+              transactionUrl: result.transactionUrl,
+              blockchainStatus: "confirmed",
+              ...(result.latencyMs != null ? { blockchainLatencyMs: result.latencyMs } : {}),
+            })
+            .where(eq(certifications.id, batchPending.id))
+            .returning();
+        } catch (dbErr: any) {
+          // Update failed after blockchain write — delete the stale pending row so the
+          // fileHash is not permanently locked, then refund this slot at end of loop.
+          await db.delete(certifications).where(eq(certifications.id, batchPending.id)).catch(() => {});
+          failedCount++;
+          results.push({ file_hash: file.file_hash, filename: file.filename, status: "failed", reason: "DB update error after blockchain write" });
+          logger.withRequest(req).error("Batch: DB update failed after blockchain write, pending row removed", { fileHash: file.file_hash, error: dbErr?.message });
           continue;
         }
 

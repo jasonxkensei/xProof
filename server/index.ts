@@ -299,6 +299,32 @@ app.use((req, res, next) => {
     } catch (err: any) {
       logger.error("agent_violations migration error", { component: "migration", error: err.message });
     }
+
+    // Ensure certifications.transaction_hash has a partial unique index (non-null only) so
+    // that each on-chain payment transaction can only be used to certify one file.
+    // Pending rows (transaction_hash IS NULL) are excluded from the constraint so they do
+    // not conflict with each other while the pending-reservation pattern is in use.
+    try {
+      // Before creating the unique index, resolve any pre-existing duplicate transaction
+      // hashes by nullifying the older copies (keeping the earliest certification per hash).
+      // This prevents the index creation from failing on existing data while preserving
+      // the canonical proof record for each transaction.
+      await pool.query(`
+        UPDATE certifications
+        SET transaction_hash = NULL
+        WHERE transaction_hash IS NOT NULL
+          AND id NOT IN (
+            SELECT DISTINCT ON (transaction_hash) id
+            FROM certifications
+            WHERE transaction_hash IS NOT NULL
+            ORDER BY transaction_hash, created_at ASC NULLS LAST
+          )
+      `);
+      await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS certifications_transaction_hash_unique ON certifications(transaction_hash) WHERE transaction_hash IS NOT NULL`);
+      logger.info("certifications transaction_hash unique index ready", { component: "migration" });
+    } catch (err: any) {
+      logger.error("certifications transaction_hash index migration error", { component: "migration", error: err.message });
+    }
   }
 
   server.listen({
