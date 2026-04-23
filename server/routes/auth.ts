@@ -106,7 +106,21 @@ export function registerAuthRoutes(app: Express) {
       const adminWallets = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim()).filter(Boolean);
       const isAdmin = adminWallets.includes(walletAddress || "");
       
-      res.json({ ...user, isAdmin });
+      res.json({
+        id: user.id,
+        walletAddress: user.walletAddress,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        companyName: user.companyName,
+        companyLogoUrl: user.companyLogoUrl,
+        subscriptionTier: user.subscriptionTier,
+        subscriptionStatus: user.subscriptionStatus,
+        isPublicProfile: user.isPublicProfile,
+        monthlyUsage: user.monthlyUsage,
+        monthlyLimit: user.monthlyLimit,
+        isAdmin,
+      });
     } catch (error) {
       logger.withRequest(req).error("Failed to fetch current user");
       res.status(500).json({ message: "Failed to fetch user" });

@@ -488,7 +488,7 @@ export function registerAdminRoutes(app: Express) {
   // DELETE /api/admin/cleanup/test-agents
   // Removes test agents created during development
   // ============================================
-  app.delete("/api/admin/cleanup/test-agents", requireAdmin, async (req, res) => {
+  app.delete("/api/admin/cleanup/test-agents", isWalletAuthenticated, requireAdmin, async (req, res) => {
     try {
       const deleted = await db.delete(users)
         .where(eq(users.companyName, "test-onboard-agent"))
