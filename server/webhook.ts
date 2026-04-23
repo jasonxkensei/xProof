@@ -188,6 +188,7 @@ export async function deliverWebhook(
         },
         body: payloadStr,
         signal: controller.signal,
+        redirect: "error",  // never follow redirects — prevents redirect-based SSRF
       });
 
       clearTimeout(timeout);
@@ -272,7 +273,17 @@ export function scheduleWebhookDelivery(
 }
 
 /**
- * Validate a webhook URL (basic security checks)
+ * Validate a webhook URL (security checks — blocks private/internal destinations).
+ *
+ * Checks performed (all string/structural, no DNS resolution):
+ *  - Must be HTTPS
+ *  - Hostname must not be a private/loopback IPv4 range or reserved name
+ *  - Hostname must not be an IPv6 loopback, link-local, or ULA literal
+ *  - Hostname must not be an IPv4-mapped IPv6 literal targeting a private range
+ *
+ * Note: DNS-rebinding cannot be prevented here because we do not resolve DNS.
+ * To prevent redirect-based SSRF the fetch callers MUST use `redirect: 'error'`
+ * so that any server-side redirect is refused before following.
  */
 export function isValidWebhookUrl(url: string): boolean {
   try {
@@ -281,6 +292,8 @@ export function isValidWebhookUrl(url: string): boolean {
       return false;
     }
     const hostname = parsed.hostname.toLowerCase();
+
+    // ── IPv4 loopback, private, APIPA, and reserved names ──────────────────
     if (
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||
@@ -288,11 +301,46 @@ export function isValidWebhookUrl(url: string): boolean {
       hostname.startsWith("10.") ||
       hostname.startsWith("192.168.") ||
       hostname.startsWith("172.") ||
-      hostname === "169.254.169.254" ||
-      hostname.endsWith(".internal")
+      hostname.startsWith("127.") ||       // full 127.0.0.0/8 loopback range
+      hostname.startsWith("169.254.") ||   // full APIPA / link-local range
+      hostname.endsWith(".internal") ||
+      hostname.endsWith(".local") ||        // mDNS / Bonjour names
+      hostname.endsWith(".localhost")       // RFC 6761 .localhost TLD
     ) {
       return false;
     }
+
+    // ── IPv6 literals ───────────────────────────────────────────────────────
+    // URL.hostname for IPv6 includes square brackets: "[::1]"
+    if (hostname.startsWith("[") && hostname.endsWith("]")) {
+      const ipv6 = hostname.slice(1, -1); // strip brackets
+      if (
+        ipv6 === "::1" ||              // loopback
+        ipv6 === "::" ||               // unspecified address
+        ipv6.startsWith("fc") ||       // Unique Local fc00::/7
+        ipv6.startsWith("fd") ||       // Unique Local fd00::/7
+        ipv6.startsWith("fe80") ||     // link-local fe80::/10
+        ipv6.startsWith("fe") ||       // broader fe::/7 (fe80–feff) link/site-local
+        ipv6.startsWith("::ffff:") ||  // IPv4-mapped — check mapped address below
+        ipv6.startsWith("64:ff9b:") || // IPv4-translated (RFC 6052)
+        ipv6.startsWith("2002:7f") ||  // 6to4 for 127.x (loopback)
+        ipv6.startsWith("2002:a") ||   // 6to4 for 10.x (RFC 1918)
+        ipv6.startsWith("2002:ac") ||  // 6to4 for 172.x (RFC 1918)
+        ipv6.startsWith("2002:c0a8")   // 6to4 for 192.168.x (RFC 1918)
+      ) {
+        return false;
+      }
+
+      // For ::ffff:<ipv4> (IPv4-mapped), validate the embedded IPv4 part too
+      if (ipv6.startsWith("::ffff:")) {
+        const embedded = ipv6.slice("::ffff:".length);
+        // Recursively validate the embedded IPv4 address
+        if (!isValidWebhookUrl(`https://${embedded}/`)) {
+          return false;
+        }
+      }
+    }
+
     return true;
   } catch {
     return false;

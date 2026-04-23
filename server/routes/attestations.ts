@@ -211,6 +211,7 @@ export function registerAttestationsRoutes(app: Express) {
             },
             body: payload,
             signal: AbortSignal.timeout(10000),
+            redirect: "error",  // never follow redirects — prevents redirect-based SSRF
           }).catch(() => {});
         } catch {}
       }
