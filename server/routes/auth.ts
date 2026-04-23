@@ -109,16 +109,9 @@ export function registerAuthRoutes(app: Express) {
       res.json({
         id: user.id,
         walletAddress: user.walletAddress,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        companyName: user.companyName,
-        companyLogoUrl: user.companyLogoUrl,
         subscriptionTier: user.subscriptionTier,
         subscriptionStatus: user.subscriptionStatus,
         isPublicProfile: user.isPublicProfile,
-        monthlyUsage: user.monthlyUsage,
-        monthlyLimit: user.monthlyLimit,
         isAdmin,
       });
     } catch (error) {
