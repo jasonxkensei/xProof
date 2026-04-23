@@ -372,6 +372,14 @@ export function registerAttestationsRoutes(app: Express) {
       const { wallet } = req.params;
       const days = Math.min(parseInt(req.query.days as string || "90"), 90);
 
+      const [userCheck] = await db
+        .select({ isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+      if (!userCheck || !userCheck.isPublicProfile) {
+        return res.status(404).json({ message: "Agent profile not found or not public" });
+      }
+
       const result = await db.execute(sql`
         SELECT score, level, cert_total, active_attestations, rank, snapshot_date
         FROM trust_score_snapshots
@@ -396,6 +404,14 @@ export function registerAttestationsRoutes(app: Express) {
       const { wallet } = req.params;
       const PDFDocument = (await import("pdfkit")).default;
 
+      const [agentUser] = await db
+        .select({ id: users.id, isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+      if (!agentUser || !agentUser.isPublicProfile) {
+        return res.status(404).json({ error: "Agent not found or not public" });
+      }
+
       const trust = await computeTrustScoreByWallet(wallet);
       if (!trust) {
         return res.status(404).json({ error: "Agent not found" });
@@ -407,8 +423,6 @@ export function registerAttestationsRoutes(app: Express) {
         WHERE subject_wallet = ${wallet} AND status = 'active'
         ORDER BY created_at DESC
       `);
-
-      const [agentUser] = await db.select({ id: users.id }).from(users).where(eq(users.walletAddress, wallet));
       const certs = agentUser ? await db.execute(sql`
         SELECT file_name, file_hash, blockchain_status AS status, created_at, transaction_hash
         FROM certifications

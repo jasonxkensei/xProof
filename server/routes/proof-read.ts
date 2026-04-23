@@ -439,6 +439,14 @@ export function registerProofReadRoutes(app: Express) {
         return res.status(400).json({ error: "Valid wallet address required" });
       }
 
+      const [userCheck] = await db
+        .select({ isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+      if (!userCheck || !userCheck.isPublicProfile) {
+        return res.status(404).json({ error: "Wallet not found on xProof", wallet, proof_layer: null, integrated: false });
+      }
+
       const trust = await computeTrustScoreByWallet(wallet);
       if (!trust) {
         return res.status(404).json({
@@ -509,8 +517,12 @@ export function registerProofReadRoutes(app: Express) {
         return res.status(400).json({ error: "Valid wallet address required" });
       }
 
-      const trust = await computeTrustScoreByWallet(wallet);
-      if (!trust) {
+      // Look up user and check public profile before exposing any trust/activity data
+      const [user] = await db
+        .select({ id: users.id, isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+      if (!user || !user.isPublicProfile) {
         return res.status(404).json({
           error: "Wallet not found on xProof",
           wallet,
@@ -519,10 +531,14 @@ export function registerProofReadRoutes(app: Express) {
         });
       }
 
-      // Look up user to query their certifications
-      const [user] = await db.select({ id: users.id }).from(users).where(eq(users.walletAddress, wallet));
-      if (!user) {
-        return res.status(404).json({ error: "User not found", wallet });
+      const trust = await computeTrustScoreByWallet(wallet);
+      if (!trust) {
+        return res.status(404).json({
+          error: "Wallet not found on xProof",
+          wallet,
+          capauth_compatible: false,
+          integration: null,
+        });
       }
 
       // Fetch all public certs with metadata for this user — filter for model/strategy hash in JS
@@ -722,13 +738,13 @@ export function registerProofReadRoutes(app: Express) {
       let xproofTrust: Awaited<ReturnType<typeof computeTrustScoreByWallet>> = null;
 
       if (xproofLinked) {
-        // Get wallet from first linked cert's user
+        // Get wallet from first linked cert's user — only expose if user has a public profile
         const userId = linkedCerts[0].userId;
         const [userRow] = await db
-          .select({ walletAddress: users.walletAddress })
+          .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
           .from(users)
           .where(eq(users.id, userId));
-        if (userRow?.walletAddress) {
+        if (userRow?.walletAddress && userRow.isPublicProfile) {
           xproofWallet = userRow.walletAddress;
           xproofTrust = await computeTrustScoreByWallet(xproofWallet);
         }
@@ -842,10 +858,10 @@ export function registerProofReadRoutes(app: Express) {
       if (xproofLinked) {
         const userId = linkedCerts[0].userId;
         const [userRow] = await db
-          .select({ walletAddress: users.walletAddress })
+          .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
           .from(users)
           .where(eq(users.id, userId));
-        if (userRow?.walletAddress) {
+        if (userRow?.walletAddress && userRow.isPublicProfile) {
           xproofWallet = userRow.walletAddress;
           xproofTrust = await computeTrustScoreByWallet(xproofWallet);
         }
@@ -908,6 +924,14 @@ export function registerProofReadRoutes(app: Express) {
       const { wallet } = req.params;
       if (!wallet || wallet.length < 10) {
         return res.status(400).json({ error: "Valid MultiversX wallet address required" });
+      }
+
+      const [userCheck] = await db
+        .select({ isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+      if (!userCheck || !userCheck.isPublicProfile) {
+        return res.status(404).json({ error: "Wallet not found on xProof", wallet, onboarding_complete: false });
       }
 
       const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
@@ -1056,47 +1080,49 @@ export function registerProofReadRoutes(app: Express) {
       } | null = null;
 
       if (lookupMode === "wallet") {
-        // Direct wallet lookup — pull character metadata from certs as well
+        // Direct wallet lookup — check public profile before exposing any trust/identity data
+        const [userRow] = await db
+          .select({ id: users.id, isPublicProfile: users.isPublicProfile })
+          .from(users)
+          .where(eq(users.walletAddress, identifier));
+
+        if (!userRow || !userRow.isPublicProfile) {
+          return res.status(404).json({ error: "Agent profile not found or not public", identifier });
+        }
+
         trust = await computeTrustScoreByWallet(identifier);
         if (trust) {
           linkedWallet = identifier;
           // Pull character info from certs belonging to this wallet
-          const [userRow] = await db
-            .select({ id: users.id })
-            .from(users)
-            .where(eq(users.walletAddress, identifier));
-
-          if (userRow) {
-            const elizaCerts = await db
-              .select({ metadata: certifications.metadata, createdAt: certifications.createdAt })
-              .from(certifications)
-              .where(
-                and(
-                  eq(certifications.userId, userRow.id),
-                  sql`${certifications.metadata}->>'eliza_agent_id' IS NOT NULL`
-                )
+          const elizaCerts = await db
+            .select({ metadata: certifications.metadata, createdAt: certifications.createdAt })
+            .from(certifications)
+            .where(
+              and(
+                eq(certifications.userId, userRow.id),
+                sql`${certifications.metadata}->>'eliza_agent_id' IS NOT NULL`
               )
-              .orderBy(certifications.createdAt);
+            )
+            .orderBy(certifications.createdAt);
 
-            // eliza_linked: true only when Eliza-tagged certs exist (not just wallet trust)
-            if (elizaCerts.length > 0) {
-              elizaLinked = true;
-              const agentIds = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_agent_id).filter(Boolean))];
-              const characterNames = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_character_name).filter(Boolean))];
-              const sessionIds = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_session_id).filter(Boolean))];
-              const actionTypes = [...new Set(elizaCerts.map(c => (c.metadata as any)?.action_type).filter(Boolean))];
-              const runtimes = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_runtime).filter(Boolean))];
-              characterStats = {
-                agent_id: agentIds[0] ?? null,
-                character_name: characterNames[0] ?? null,
-                runtime_version: runtimes[0] ?? null,
-                certified_sessions: sessionIds.length,
-                certified_action_types: actionTypes,
-                first_certified_at: elizaCerts[0]?.createdAt?.toISOString() ?? null,
-                last_certified_at: elizaCerts.at(-1)?.createdAt?.toISOString() ?? null,
-                total_certs: elizaCerts.length,
-              };
-            }
+          // eliza_linked: true only when Eliza-tagged certs exist (not just wallet trust)
+          if (elizaCerts.length > 0) {
+            elizaLinked = true;
+            const agentIds = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_agent_id).filter(Boolean))];
+            const characterNames = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_character_name).filter(Boolean))];
+            const sessionIds = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_session_id).filter(Boolean))];
+            const actionTypes = [...new Set(elizaCerts.map(c => (c.metadata as any)?.action_type).filter(Boolean))];
+            const runtimes = [...new Set(elizaCerts.map(c => (c.metadata as any)?.eliza_runtime).filter(Boolean))];
+            characterStats = {
+              agent_id: agentIds[0] ?? null,
+              character_name: characterNames[0] ?? null,
+              runtime_version: runtimes[0] ?? null,
+              certified_sessions: sessionIds.length,
+              certified_action_types: actionTypes,
+              first_certified_at: elizaCerts[0]?.createdAt?.toISOString() ?? null,
+              last_certified_at: elizaCerts.at(-1)?.createdAt?.toISOString() ?? null,
+              total_certs: elizaCerts.length,
+            };
           }
         }
       } else {
@@ -1118,14 +1144,14 @@ export function registerProofReadRoutes(app: Express) {
 
         if (linkedCerts.length > 0) {
           elizaLinked = true;
-          // Resolve wallet from userId
+          // Resolve wallet from userId — only expose if user has a public profile
           const userId = linkedCerts[0].userId;
           const [userRow] = await db
-            .select({ walletAddress: users.walletAddress })
+            .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
             .from(users)
             .where(eq(users.id, userId));
 
-          if (userRow?.walletAddress) {
+          if (userRow?.walletAddress && userRow.isPublicProfile) {
             linkedWallet = userRow.walletAddress;
             trust = await computeTrustScoreByWallet(linkedWallet);
           }
@@ -1243,43 +1269,46 @@ export function registerProofReadRoutes(app: Express) {
       } | null = null;
 
       if (lookupMode === "wallet") {
+        // Direct wallet lookup — check public profile before exposing any trust/identity data
+        const [userRow] = await db
+          .select({ id: users.id, isPublicProfile: users.isPublicProfile })
+          .from(users)
+          .where(eq(users.walletAddress, identifier));
+
+        if (!userRow || !userRow.isPublicProfile) {
+          return res.status(404).json({ error: "Agent profile not found or not public", identifier });
+        }
+
         trust = await computeTrustScoreByWallet(identifier);
         if (trust) {
           linkedWallet = identifier;
-          const [userRow] = await db
-            .select({ id: users.id })
-            .from(users)
-            .where(eq(users.walletAddress, identifier));
-
-          if (userRow) {
-            const xaiCerts = await db
-              .select({ metadata: certifications.metadata, createdAt: certifications.createdAt })
-              .from(certifications)
-              .where(
-                and(
-                  eq(certifications.userId, userRow.id),
-                  sql`${certifications.metadata}->>'xai_agent_id' IS NOT NULL`
-                )
+          const xaiCerts = await db
+            .select({ metadata: certifications.metadata, createdAt: certifications.createdAt })
+            .from(certifications)
+            .where(
+              and(
+                eq(certifications.userId, userRow.id),
+                sql`${certifications.metadata}->>'xai_agent_id' IS NOT NULL`
               )
-              .orderBy(certifications.createdAt);
+            )
+            .orderBy(certifications.createdAt);
 
-            if (xaiCerts.length > 0) {
-              xaiLinked = true;
-              const agentIds = [...new Set(xaiCerts.map(c => (c.metadata as any)?.xai_agent_id).filter(Boolean))];
-              const models = [...new Set(xaiCerts.map(c => (c.metadata as any)?.xai_model).filter(Boolean))];
-              const sessionIds = [...new Set(xaiCerts.map(c => (c.metadata as any)?.xai_session_id).filter(Boolean))];
-              const actionTypes = [...new Set(xaiCerts.map(c => (c.metadata as any)?.action_type).filter(Boolean))];
+          if (xaiCerts.length > 0) {
+            xaiLinked = true;
+            const agentIds = [...new Set(xaiCerts.map(c => (c.metadata as any)?.xai_agent_id).filter(Boolean))];
+            const models = [...new Set(xaiCerts.map(c => (c.metadata as any)?.xai_model).filter(Boolean))];
+            const sessionIds = [...new Set(xaiCerts.map(c => (c.metadata as any)?.xai_session_id).filter(Boolean))];
+            const actionTypes = [...new Set(xaiCerts.map(c => (c.metadata as any)?.action_type).filter(Boolean))];
 
-              agentStats = {
-                agent_id: agentIds[0] ?? null,
-                model: models[0] ?? null,
-                certified_sessions: sessionIds.length,
-                certified_action_types: actionTypes,
-                first_certified_at: xaiCerts[0]?.createdAt?.toISOString() ?? null,
-                last_certified_at: xaiCerts.at(-1)?.createdAt?.toISOString() ?? null,
-                total_certs: xaiCerts.length,
-              };
-            }
+            agentStats = {
+              agent_id: agentIds[0] ?? null,
+              model: models[0] ?? null,
+              certified_sessions: sessionIds.length,
+              certified_action_types: actionTypes,
+              first_certified_at: xaiCerts[0]?.createdAt?.toISOString() ?? null,
+              last_certified_at: xaiCerts.at(-1)?.createdAt?.toISOString() ?? null,
+              total_certs: xaiCerts.length,
+            };
           }
         }
       } else {
@@ -1302,11 +1331,11 @@ export function registerProofReadRoutes(app: Express) {
           xaiLinked = true;
           const userId = linkedCerts[0].userId;
           const [userRow] = await db
-            .select({ walletAddress: users.walletAddress })
+            .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
             .from(users)
             .where(eq(users.id, userId));
 
-          if (userRow?.walletAddress) {
+          if (userRow?.walletAddress && userRow.isPublicProfile) {
             linkedWallet = userRow.walletAddress;
             trust = await computeTrustScoreByWallet(linkedWallet);
           }
@@ -1418,10 +1447,10 @@ export function registerProofReadRoutes(app: Express) {
       if (mppLinked) {
         const userId = linkedCerts[0].userId;
         const [userRow] = await db
-          .select({ walletAddress: users.walletAddress })
+          .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
           .from(users)
           .where(eq(users.id, userId));
-        if (userRow?.walletAddress) {
+        if (userRow?.walletAddress && userRow.isPublicProfile) {
           xproofWallet = userRow.walletAddress;
           xproofTrust = await computeTrustScoreByWallet(xproofWallet);
         }

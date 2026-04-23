@@ -221,6 +221,15 @@ export function registerTrustRoutes(app: Express) {
   app.get("/api/agents/:wallet/violations", publicReadRateLimiter, async (req, res) => {
     try {
       const { wallet } = req.params;
+
+      const [userCheck] = await db
+        .select({ isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+      if (!userCheck || !userCheck.isPublicProfile) {
+        return res.status(404).json({ message: "Agent profile not found or not public" });
+      }
+
       const rows = await db.execute(sql`
         SELECT id, wallet_address, proof_id, type, status, reason, auto_confirmed, detected_at, confirmed_at, notes
         FROM agent_violations
@@ -441,6 +450,15 @@ export function registerTrustRoutes(app: Express) {
   app.get("/api/trust/:wallet", publicReadRateLimiter, async (req, res) => {
     try {
       const { wallet } = req.params;
+
+      const [userCheck] = await db
+        .select({ isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+      if (!userCheck || !userCheck.isPublicProfile) {
+        return res.status(404).json({ message: "Agent profile not found or not public" });
+      }
+
       const trust = await computeTrustScoreByWallet(wallet);
       if (!trust) {
         return res.status(404).json({ message: "Wallet not found" });
@@ -470,13 +488,24 @@ export function registerTrustRoutes(app: Express) {
   app.get("/badge/trust/:wallet.svg", async (req, res) => {
     try {
       const wallet = req.params.wallet;
+
+      const [userCheck] = await db
+        .select({ isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+      const privateFallback = `<svg xmlns="http://www.w3.org/2000/svg" width="130" height="24" role="img"><rect width="130" height="24" rx="5" fill="#1E1E1E"/><rect width="130" height="24" rx="5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="65" y="16" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11">xproof: Unknown</text></svg>`;
+      if (!userCheck || !userCheck.isPublicProfile) {
+        res.setHeader("Content-Type", "image/svg+xml");
+        res.setHeader("Cache-Control", "max-age=300");
+        return res.send(privateFallback);
+      }
+
       const trust = await computeTrustScoreByWallet(wallet);
 
       if (!trust) {
-        const fallback = `<svg xmlns="http://www.w3.org/2000/svg" width="130" height="24" role="img"><rect width="130" height="24" rx="5" fill="#1E1E1E"/><rect width="130" height="24" rx="5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="65" y="16" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11">xproof: Unknown</text></svg>`;
         res.setHeader("Content-Type", "image/svg+xml");
         res.setHeader("Cache-Control", "max-age=300");
-        return res.send(fallback);
+        return res.send(privateFallback);
       }
 
       const vCount = (trust.violations?.fault || 0) + (trust.violations?.breach || 0);
@@ -496,6 +525,15 @@ export function registerTrustRoutes(app: Express) {
   app.get("/badge/trust/:wallet/markdown", async (req, res) => {
     try {
       const wallet = req.params.wallet;
+
+      const [userCheck] = await db
+        .select({ isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+      if (!userCheck || !userCheck.isPublicProfile) {
+        return res.status(404).json({ message: "Agent profile not found or not public" });
+      }
+
       const baseUrl = `https://${req.get("host")}`;
       const badgeUrl = `${baseUrl}/badge/trust/${wallet}.svg`;
       const linkUrl = `${baseUrl}/agent/${wallet}`;
