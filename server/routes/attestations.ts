@@ -7,7 +7,7 @@ import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
 import { attestationIssuanceRateLimiter, publicSearchRateLimiter } from "../reliability";
 import { computeTrustScoreByWallet } from "../trust";
-import { isValidWebhookUrl } from "../webhook";
+import { isValidWebhookUrl, resolveToPublicOnly } from "../webhook";
 
 export function registerAttestationsRoutes(app: Express) {
   // ============================================
@@ -188,32 +188,36 @@ export function registerAttestationsRoutes(app: Express) {
 
       // Only dispatch if URL is still valid (guards pre-existing rows created before this fix)
       if (webhookUrl && isValidWebhookUrl(webhookUrl)) {
-        try {
-          const timestamp = Math.floor(Date.now() / 1000).toString();
-          const payload = JSON.stringify({
-            event: "attestation.revoked",
-            attestation_id: id,
-            issuer_wallet: issuerWallet,
-            revoked_at: new Date().toISOString(),
-          });
-          const crypto = await import("crypto");
-          const secret = process.env.SESSION_SECRET || "xproof-webhook-secret";
-          const signature = crypto.createHmac("sha256", secret).update(`${timestamp}.${payload}`).digest("hex");
-          fetch(webhookUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-xProof-Signature": signature,
-              "X-xProof-Timestamp": timestamp,
-              "X-xProof-Event": "attestation.revoked",
-              "X-xProof-Delivery": id,
-              "User-Agent": "xProof-Webhook/1.0",
-            },
-            body: payload,
-            signal: AbortSignal.timeout(10000),
-            redirect: "error",  // never follow redirects — prevents redirect-based SSRF
-          }).catch(() => {});
-        } catch {}
+        // DNS SSRF guard + redirect-block: fire-and-forget, but resolve DNS first
+        resolveToPublicOnly(webhookUrl).then(async (dnsClean) => {
+          if (!dnsClean) return; // hostname resolves to private/reserved IP — silent drop
+          try {
+            const timestamp = Math.floor(Date.now() / 1000).toString();
+            const payload = JSON.stringify({
+              event: "attestation.revoked",
+              attestation_id: id,
+              issuer_wallet: issuerWallet,
+              revoked_at: new Date().toISOString(),
+            });
+            const crypto = await import("crypto");
+            const secret = process.env.SESSION_SECRET || "xproof-webhook-secret";
+            const signature = crypto.createHmac("sha256", secret).update(`${timestamp}.${payload}`).digest("hex");
+            fetch(webhookUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-xProof-Signature": signature,
+                "X-xProof-Timestamp": timestamp,
+                "X-xProof-Event": "attestation.revoked",
+                "X-xProof-Delivery": id,
+                "User-Agent": "xProof-Webhook/1.0",
+              },
+              body: payload,
+              signal: AbortSignal.timeout(10000),
+              redirect: "error",  // never follow redirects — prevents redirect-based SSRF
+            }).catch(() => {});
+          } catch {}
+        }).catch(() => {});
       }
 
       logger.info("Attestation revoked", { issuer: issuerWallet, attestationId: id });

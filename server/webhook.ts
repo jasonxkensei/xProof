@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import dns from "dns";
 import { db } from "./db";
 import { certifications } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -172,6 +173,16 @@ export async function deliverWebhook(
       })
       .where(eq(certifications.id, certificationId));
 
+    // DNS SSRF guard: resolve hostname and confirm every IP is public before connecting
+    const dnsClean = await resolveToPublicOnly(webhookUrl);
+    if (!dnsClean) {
+      logger.warn("Webhook blocked: hostname resolves to private/reserved IP", {
+        component: "webhook", webhookUrl, certificationId,
+      });
+      await markWebhookFailed(certificationId);
+      return false;
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
 
@@ -273,17 +284,88 @@ export function scheduleWebhookDelivery(
 }
 
 /**
+ * Return true if the resolved IP address falls within a private, loopback, link-local,
+ * multicast, or otherwise forbidden range. Handles both IPv4 and IPv6.
+ * Fails closed (returns true = private) for unrecognised or malformed addresses.
+ */
+function isPrivateIp(ip: string): boolean {
+  // IPv6
+  if (ip.includes(":")) {
+    const lower = ip.toLowerCase();
+    return (
+      lower === "::1" ||             // loopback
+      lower === "::" ||              // unspecified
+      lower.startsWith("fc") ||      // Unique Local fc00::/7
+      lower.startsWith("fd") ||      // Unique Local fd00::/7
+      lower.startsWith("fe80") ||    // link-local fe80::/10
+      lower.startsWith("fe") ||      // broader fe::/7 (site-local)
+      lower.startsWith("ff") ||      // multicast ff00::/8
+      lower.startsWith("::ffff:") || // IPv4-mapped (e.g. ::ffff:10.0.0.1)
+      lower.startsWith("64:ff9b:")   // IPv4-translated (RFC 6052)
+    );
+  }
+  // IPv4 — numeric range check
+  const parts = ip.split(".");
+  if (parts.length !== 4) return true; // malformed — fail closed
+  const [a, b, , ] = parts.map(Number);
+  if (parts.some(p => !Number.isInteger(Number(p)) || Number(p) < 0 || Number(p) > 255)) return true;
+  return (
+    a === 0 ||                                         // 0.0.0.0/8
+    a === 10 ||                                        // 10.0.0.0/8 (RFC 1918)
+    a === 127 ||                                       // 127.0.0.0/8 loopback
+    a >= 224 ||                                        // multicast + reserved (224–255)
+    (a === 100 && b >= 64 && b <= 127) ||              // 100.64.0.0/10 CGNAT (RFC 6598)
+    (a === 169 && b === 254) ||                        // 169.254.0.0/16 APIPA
+    (a === 172 && b >= 16 && b <= 31) ||               // 172.16.0.0/12 (RFC 1918)
+    (a === 192 && b === 168)                           // 192.168.0.0/16 (RFC 1918)
+  );
+}
+
+/**
+ * Resolve the hostname from a webhook URL via DNS and confirm that every resolved
+ * address is public (non-private, non-loopback, non-link-local, non-reserved).
+ *
+ * IPv4/IPv6 literals are checked directly without a DNS round-trip.
+ * Returns false (= unsafe) on any resolution error — fail closed.
+ *
+ * This closes the DNS-based SSRF gap: a public-looking hostname that resolves to
+ * an internal IP will be blocked here even though isValidWebhookUrl() passes it.
+ */
+export async function resolveToPublicOnly(url: string): Promise<boolean> {
+  try {
+    const { hostname } = new URL(url);
+
+    // IPv6 literal — strip brackets, check directly
+    if (hostname.startsWith("[") && hostname.endsWith("]")) {
+      return !isPrivateIp(hostname.slice(1, -1));
+    }
+
+    // IPv4 literal — check directly
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) {
+      return !isPrivateIp(hostname);
+    }
+
+    // Hostname — resolve all A/AAAA records and check each IP
+    const addresses = await dns.promises.lookup(hostname, { family: 0, all: true });
+    if (!addresses || addresses.length === 0) return false; // no records — fail closed
+    return addresses.every(addr => !isPrivateIp(addr.address));
+  } catch {
+    return false; // resolution failure — fail closed
+  }
+}
+
+/**
  * Validate a webhook URL (security checks — blocks private/internal destinations).
  *
- * Checks performed (all string/structural, no DNS resolution):
+ * Checks performed (structural, no DNS resolution):
  *  - Must be HTTPS
  *  - Hostname must not be a private/loopback IPv4 range or reserved name
  *  - Hostname must not be an IPv6 loopback, link-local, or ULA literal
  *  - Hostname must not be an IPv4-mapped IPv6 literal targeting a private range
  *
- * Note: DNS-rebinding cannot be prevented here because we do not resolve DNS.
- * To prevent redirect-based SSRF the fetch callers MUST use `redirect: 'error'`
- * so that any server-side redirect is refused before following.
+ * Important: isValidWebhookUrl() only checks the hostname string, not the resolved IP.
+ * Always ALSO call resolveToPublicOnly() before dispatching an outbound fetch, and
+ * always pass redirect:'error' to the fetch so redirect pivoting is refused.
  */
 export function isValidWebhookUrl(url: string): boolean {
   try {
