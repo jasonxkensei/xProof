@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
+  date,
   index,
   jsonb,
   pgTable,
@@ -348,3 +350,22 @@ export const insertAgentViolationSchema = createInsertSchema(agentViolations).om
 });
 export type InsertAgentViolation = z.infer<typeof insertAgentViolationSchema>;
 export type AgentViolation = typeof agentViolations.$inferSelect;
+
+// Raw-SQL tables — registered here so drizzle-kit push does not try to drop them.
+// These tables are managed exclusively via raw SQL in server/nonce.ts and server/trust.ts.
+export const walletNonces = pgTable("wallet_nonces", {
+  address: text("address").primaryKey(),
+  nonce: bigint("nonce", { mode: "number" }).notNull().default(0),
+});
+
+export const trustScoreSnapshots = pgTable("trust_score_snapshots", {
+  id: serial("id").primaryKey(),
+  walletAddress: text("wallet_address").notNull(),
+  score: integer("score").notNull().default(0),
+  level: text("level").notNull().default("Newcomer"),
+  certTotal: integer("cert_total").notNull().default(0),
+  activeAttestations: integer("active_attestations").notNull().default(0),
+  snapshotDate: date("snapshot_date").notNull().default(sql`CURRENT_DATE`),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  rank: integer("rank"),
+});
