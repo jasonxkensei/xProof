@@ -1,22 +1,25 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { 
   Shield, 
   Wallet, 
   CheckCircle,
   Upload,
   ArrowRight,
-  Play,
   Blocks,
   CreditCard,
   ShoppingCart,
   Award,
   Bot,
   Cog,
-  BarChart3
+  BarChart3,
+  Copy,
+  Loader2,
+  Key
 } from "lucide-react";
 import { WalletLoginModal } from "@/components/wallet-login-modal";
 import {
@@ -32,6 +35,40 @@ export default function Landing() {
     queryKey: ["/api/pricing"],
   });
   const price = pricing ? `$${pricing.current_price_usd}` : "$0.05";
+
+  const [agentName, setAgentName] = useState("");
+  const [trialKey, setTrialKey] = useState<string | null>(null);
+  const [trialAgentName, setTrialAgentName] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+  const [trialError, setTrialError] = useState<string | null>(null);
+
+  const registerMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await fetch("/api/agent/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_name: name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Registration failed. Please try a different name.");
+      return data;
+    },
+    onSuccess: (data, name) => {
+      setTrialKey(data.api_key);
+      setTrialAgentName(name);
+      setTrialError(null);
+    },
+    onError: (err: Error) => {
+      setTrialError(err.message);
+    },
+  });
+
+  const handleCopyKey = () => {
+    if (!trialKey) return;
+    navigator.clipboard.writeText(trialKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleConnect = () => {
     setIsLoginModalOpen(true);
@@ -109,16 +146,121 @@ export default function Landing() {
               variant="outline" 
               size="lg" 
               className="text-base h-12 px-8"
-              data-testid="button-see-demo"
+              data-testid="button-free-trial-hero"
             >
-              <a href="#how-it-works">
-                <Play className="mr-2 h-4 w-4" />
-                See how it works
+              <a href="#free-trial">
+                <Bot className="mr-2 h-4 w-4" />
+                10 free proofs — no wallet
               </a>
             </Button>
           </div>
           
           <p className="mt-6 text-sm text-muted-foreground">{price} per proof • Unlimited</p>
+        </div>
+      </section>
+      {/* Free Trial — Interactive Registration */}
+      <section id="free-trial" className="border-y bg-muted/30 py-16 md:py-20">
+        <div className="container">
+          <div className="mx-auto max-w-2xl text-center">
+            <Badge variant="secondary" className="mb-4 px-3 py-1">
+              <Key className="mr-2 h-3.5 w-3.5" />
+              Free Trial — No wallet needed
+            </Badge>
+            <h2 className="mb-3 text-2xl md:text-3xl font-bold">
+              10 free proofs. Start in 30 seconds.
+            </h2>
+            <p className="mb-8 text-muted-foreground max-w-xl mx-auto">
+              Register your agent or project — get a <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">pm_</code> API key instantly. No wallet, no credit card.
+            </p>
+
+            {!trialKey ? (
+              <div className="max-w-md mx-auto">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Input
+                    placeholder="Agent name (e.g. my-agent)"
+                    value={agentName}
+                    onChange={(e) => setAgentName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && agentName.trim().length >= 2) {
+                        registerMutation.mutate(agentName.trim());
+                      }
+                    }}
+                    data-testid="input-trial-agent-name"
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={() => registerMutation.mutate(agentName.trim())}
+                    disabled={agentName.trim().length < 2 || registerMutation.isPending}
+                    data-testid="button-register-trial"
+                  >
+                    {registerMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Registering...
+                      </>
+                    ) : (
+                      <>
+                        Get my key
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {trialError && (
+                  <p className="mt-3 text-sm text-destructive text-left" data-testid="text-trial-error">
+                    {trialError}
+                  </p>
+                )}
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                  {["10 free proofs", "No wallet needed", "No credit card", "Claim to wallet anytime"].map((label) => (
+                    <Badge key={label} variant="outline" className="text-xs">
+                      {label}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="max-w-md mx-auto">
+                <div className="mb-3 flex items-center gap-2 rounded-md bg-primary/10 border border-primary/20 p-3 font-mono text-sm">
+                  <span className="flex-1 text-left truncate text-primary font-medium" data-testid="text-trial-key">{trialKey}</span>
+                  <Button size="icon" variant="ghost" onClick={handleCopyKey} data-testid="button-copy-trial-key">
+                    {copied ? <CheckCircle className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Your key is ready — 10 free proofs included for <strong>{trialAgentName}</strong>.
+                </p>
+                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] text-left overflow-x-auto" data-testid="code-trial-quickstart">
+                  <div className="text-[#8b949e] mb-2"># Anchor your first proof</div>
+                  <div>
+                    <span className="text-[#79c0ff]">curl</span>
+                    {" "}-X POST https://xproof.app/api/proof \
+                  </div>
+                  <div className="pl-4">
+                    -H <span className="text-[#a5d6ff]">"Authorization: Bearer {trialKey}"</span> \
+                  </div>
+                  <div className="pl-4">
+                    -H <span className="text-[#a5d6ff]">"Content-Type: application/json"</span> \
+                  </div>
+                  <div className="pl-4">
+                    -d <span className="text-[#a5d6ff]">'{"{"}"file_hash": "sha256...", "filename": "report.pdf"{"}"}'</span>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3 justify-center">
+                  <Button asChild variant="outline" size="sm" data-testid="button-trial-docs">
+                    <a href="/docs">
+                      Full API docs
+                      <ArrowRight className="ml-1 h-3 w-3" />
+                    </a>
+                  </Button>
+                  <Button size="sm" onClick={handleConnect} data-testid="button-trial-connect-wallet">
+                    <Wallet className="mr-2 h-3.5 w-3.5" />
+                    Connect wallet to manage
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </section>
       {/* Quick Start for Developers/Agents */}
@@ -461,96 +603,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* API Key Flow */}
-      <section id="api-key" className="py-20 md:py-28">
-        <div className="container">
-          <div className="mx-auto max-w-5xl">
-            <div className="mb-16 text-center">
-              <Badge variant="outline" className="mb-4">API Key · Prepaid</Badge>
-              <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-                For high-volume agents.<br className="hidden md:block" /> Register once, anchor forever.
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Get an API key with 10 free proofs. No wallet needed to start. Top up with USDC on Base or EGLD when ready.
-              </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              {/* Step 1 */}
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">1</div>
-                  <h3 className="font-semibold">Register your agent</h3>
-                </div>
-                <p className="text-sm text-muted-foreground pl-11">One POST, get an API key and 10 free proofs.</p>
-                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-apikey-step1">
-                  <div><span className="text-[#79c0ff]">POST</span> <span className="text-[#a5d6ff]">https://xproof.app/api/agent/register</span></div>
-                  <div className="text-[#8b949e] mt-2 mb-1">Content-Type: application/json</div>
-                  <div className="mt-1">{`{`}</div>
-                  <div className="pl-4"><span className="text-[#79c0ff]">"agent_name"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"my-agent"</span></div>
-                  <div>{`}`}</div>
-                  <div className="mt-2 text-[#3fb950]">HTTP 200 OK</div>
-                  <div className="mt-1">{`{`}</div>
-                  <div className="pl-4"><span className="text-[#79c0ff]">"api_key"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"pm_abc123..."</span><span className="text-[#e6edf3]">,</span></div>
-                  <div className="pl-4"><span className="text-[#79c0ff]">"trial_quota"</span><span className="text-[#e6edf3]">: </span><span className="text-[#ffa657]">10</span></div>
-                  <div>{`}`}</div>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">2</div>
-                  <h3 className="font-semibold">Anchor with your key</h3>
-                </div>
-                <p className="text-sm text-muted-foreground pl-11">Add your API key as a Bearer token.</p>
-                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-apikey-step2">
-                  <div><span className="text-[#79c0ff]">POST</span> <span className="text-[#a5d6ff]">https://xproof.app/api/proof</span></div>
-                  <div className="text-[#8b949e] mt-2">Authorization: Bearer <span className="text-[#e6edf3]">pm_abc123...</span></div>
-                  <div className="text-[#8b949e] mt-1 mb-1">Content-Type: application/json</div>
-                  <div className="mt-1">{`{`}</div>
-                  <div className="pl-4"><span className="text-[#79c0ff]">"file_hash"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"sha256..."</span><span className="text-[#e6edf3]">,</span></div>
-                  <div className="pl-4"><span className="text-[#79c0ff]">"filename"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"report.pdf"</span></div>
-                  <div>{`}`}</div>
-                </div>
-              </div>
-
-              {/* Step 3 */}
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">3</div>
-                  <h3 className="font-semibold">Get blockchain proof</h3>
-                </div>
-                <p className="text-sm text-muted-foreground pl-11">Same response, same on-chain anchoring.</p>
-                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto" data-testid="code-apikey-step3">
-                  <div className="text-[#3fb950]">HTTP 200 OK</div>
-                  <div className="mt-1">{`{`}</div>
-                  <div className="pl-4"><span className="text-[#79c0ff]">"proof_id"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"prf_..."</span><span className="text-[#e6edf3]">,</span></div>
-                  <div className="pl-4"><span className="text-[#79c0ff]">"tx_hash"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"0xab..."</span><span className="text-[#e6edf3]">,</span></div>
-                  <div className="pl-4"><span className="text-[#79c0ff]">"verify_url"</span><span className="text-[#e6edf3]">: </span><span className="text-[#a5d6ff]">"xproof.app/..."</span><span className="text-[#e6edf3]">,</span></div>
-                  <div className="pl-4"><span className="text-[#79c0ff]">"trial_remaining"</span><span className="text-[#e6edf3]">: </span><span className="text-[#ffa657]">9</span></div>
-                  <div>{`}`}</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              {["10 free proofs", "No wallet needed", "pm_ API key", "Top up anytime", "USDC or EGLD"].map((label) => (
-                <Badge key={label} variant="outline" className="text-xs font-mono" data-testid={`badge-apikey-${label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}>{label}</Badge>
-              ))}
-            </div>
-
-            <div className="mt-8 text-center">
-              <Button asChild variant="outline" data-testid="button-apikey-docs">
-                <a href="/docs">
-                  Full API documentation
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </a>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* FAQ */}
       <section id="faq" className="py-20 md:py-28">
@@ -643,15 +695,29 @@ export default function Landing() {
             <p className="mb-8 text-lg text-muted-foreground">
               Verifiable proofs for developers, agents, and enterprises. {price} per proof.
             </p>
-            <Button 
-              size="lg" 
-              className="text-base h-12 px-8"
-              onClick={handleConnect}
-              data-testid="button-final-cta"
-            >
-              <Shield className="mr-2 h-5 w-5" />
-              Get started
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button
+                asChild
+                size="lg"
+                className="text-base h-12 px-8"
+                data-testid="button-final-cta-trial"
+              >
+                <a href="#free-trial">
+                  <Key className="mr-2 h-5 w-5" />
+                  Start free — no wallet
+                </a>
+              </Button>
+              <Button 
+                size="lg" 
+                variant="outline"
+                className="text-base h-12 px-8"
+                onClick={handleConnect}
+                data-testid="button-final-cta"
+              >
+                <Shield className="mr-2 h-5 w-5" />
+                Connect wallet
+              </Button>
+            </div>
           </div>
         </div>
       </section>
