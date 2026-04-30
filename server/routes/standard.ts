@@ -375,7 +375,7 @@ export function registerStandardRoutes(app: Express) {
           authMethod,
           metadata: standardMetadata,
           isPublic: true,
-          transactionHash: "pending",
+          transactionHash: null,
           transactionUrl: null,
         }).returning();
       } catch (reserveErr: any) {
