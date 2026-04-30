@@ -71,8 +71,13 @@ export function registerAttestationsRoutes(app: Express) {
         return res.status(409).json({ message: "An active attestation for this domain/standard already exists from you for this agent." });
       }
 
+      const crypto = await import("crypto");
+      const webhookSecret = data.webhookUrl
+        ? crypto.randomBytes(32).toString("hex")
+        : null;
+
       const result = await db.execute(sql`
-        INSERT INTO attestations (subject_wallet, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, status, webhook_url)
+        INSERT INTO attestations (subject_wallet, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, status, webhook_url, webhook_secret)
         VALUES (
           ${data.subjectWallet},
           ${issuerWallet},
@@ -83,13 +88,18 @@ export function registerAttestationsRoutes(app: Express) {
           ${data.description ?? null},
           ${data.expiresAt ? new Date(data.expiresAt) : null},
           'active',
-          ${data.webhookUrl ?? null}
+          ${data.webhookUrl ?? null},
+          ${webhookSecret}
         )
-        RETURNING *
+        RETURNING id, subject_wallet, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, status, created_at
       `);
 
+      const row = (result.rows as any[])[0];
       logger.info("Attestation issued", { issuer: issuerWallet, subject: data.subjectWallet, domain: data.domain, standard: data.standard });
-      res.status(201).json((result.rows as any[])[0]);
+      res.status(201).json({
+        ...row,
+        ...(webhookSecret ? { webhook_secret: webhookSecret } : {}),
+      });
     } catch (err: any) {
       if (err.name === "ZodError") {
         return res.status(400).json({ message: "Validation error", errors: err.errors });
@@ -202,16 +212,18 @@ export function registerAttestationsRoutes(app: Express) {
       }
 
       const fullRow = await db.execute(sql`
-        SELECT webhook_url FROM attestations WHERE id = ${id} LIMIT 1
+        SELECT webhook_url, webhook_secret FROM attestations WHERE id = ${id} LIMIT 1
       `);
       const webhookUrl = (fullRow.rows as any[])[0]?.webhook_url;
+      const webhookSecret = (fullRow.rows as any[])[0]?.webhook_secret;
 
       await db.execute(sql`
         UPDATE attestations SET status = 'revoked', revoked_at = NOW() WHERE id = ${id}
       `);
 
-      // Only dispatch if URL is still valid (guards pre-existing rows created before this fix)
-      if (webhookUrl && isValidWebhookUrl(webhookUrl)) {
+      // Only dispatch if URL is still valid and a per-attestation secret exists (guards
+      // pre-existing rows that have no scoped secret stored).
+      if (webhookUrl && webhookSecret && isValidWebhookUrl(webhookUrl)) {
         // DNS SSRF guard + redirect-block: fire-and-forget, but resolve DNS first
         resolveToPublicOnly(webhookUrl).then(async (dnsClean) => {
           if (!dnsClean) return; // hostname resolves to private/reserved IP — silent drop
@@ -224,8 +236,7 @@ export function registerAttestationsRoutes(app: Express) {
               revoked_at: new Date().toISOString(),
             });
             const crypto = await import("crypto");
-            const secret = process.env.SESSION_SECRET || "xproof-webhook-secret";
-            const signature = crypto.createHmac("sha256", secret).update(`${timestamp}.${payload}`).digest("hex");
+            const signature = crypto.createHmac("sha256", webhookSecret).update(`${timestamp}.${payload}`).digest("hex");
             fetch(webhookUrl, {
               method: "POST",
               headers: {
@@ -422,7 +433,7 @@ export function registerAttestationsRoutes(app: Express) {
       }
 
       const result = await db.execute(sql`
-        SELECT score, level, cert_total, active_attestations, rank, snapshot_date
+        SELECT score, level, cert_total, rank, snapshot_date
         FROM trust_score_snapshots
         WHERE wallet_address = ${wallet}
           AND snapshot_date >= CURRENT_DATE - (${days} || ' days')::interval
@@ -459,10 +470,13 @@ export function registerAttestationsRoutes(app: Express) {
       }
 
       const attestations = await db.execute(sql`
-        SELECT domain, standard, title, issuer_name, created_at, expires_at
-        FROM attestations
-        WHERE subject_wallet = ${wallet} AND status = 'active'
-        ORDER BY created_at DESC
+        SELECT a.domain, a.standard, a.title, a.issuer_name, a.created_at, a.expires_at
+        FROM attestations a
+        LEFT JOIN users issuer_u ON issuer_u.wallet_address = a.issuer_wallet
+        WHERE a.subject_wallet = ${wallet}
+          AND a.status = 'active'
+          AND (issuer_u.id IS NULL OR issuer_u.is_public_profile = true)
+        ORDER BY a.created_at DESC
       `);
       const certs = agentUser ? await db.execute(sql`
         SELECT file_name, file_hash, blockchain_status AS status, created_at, transaction_hash

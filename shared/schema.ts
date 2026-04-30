@@ -130,6 +130,8 @@ export const attestations = pgTable("attestations", {
   status: varchar("status").default("active"),
   revokedAt: timestamp("revoked_at"),
   expiryNotifiedAt: timestamp("expiry_notified_at"),
+  webhookUrl: text("webhook_url"),
+  webhookSecret: varchar("webhook_secret", { length: 128 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
