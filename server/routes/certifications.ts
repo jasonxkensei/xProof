@@ -427,12 +427,15 @@ export function registerCertificationsRoutes(app: Express) {
         }
 
         const broadcastVerification = await verifyTransactionOnChain(txHash, expectedReceiver, broadcastExpectedMinValue);
-        let broadcastBlockchainStatus = "pending";
-        if (broadcastVerification.verified) {
-          broadcastBlockchainStatus = "confirmed";
-        } else if (broadcastVerification.error !== "pending" && broadcastVerification.error !== "Transaction not found on blockchain") {
-          logger.withRequest(req).warn("Broadcast payment verification failed", { txHash, error: broadcastVerification.error });
-          return res.status(402).json({ message: "Payment verification failed", error: broadcastVerification.error });
+        if (!broadcastVerification.verified) {
+          const isPending = broadcastVerification.error === "pending" || broadcastVerification.error === "Transaction not found on blockchain";
+          logger.withRequest(req).warn("Broadcast payment verification did not confirm — refusing to create certification", { txHash, error: broadcastVerification.error, isPending });
+          return res.status(402).json({
+            message: isPending
+              ? "Transaction has not been confirmed on-chain yet. Please wait for the transaction to confirm before submitting."
+              : "Payment verification failed",
+            error: broadcastVerification.error,
+          });
         }
 
         const [certification] = await db
@@ -447,16 +450,11 @@ export function registerCertificationsRoutes(app: Express) {
             authorSignature: validatedData.authorSignature,
             transactionHash: txHash,
             transactionUrl: explorerUrl,
-            blockchainStatus: broadcastBlockchainStatus,
+            blockchainStatus: "confirmed",
             isPublic: true,
             authMethod: "web",
           })
           .returning();
-
-        if (broadcastBlockchainStatus === "pending") {
-          const { scheduleVerificationRetry } = await import("../verifyTransaction");
-          scheduleVerificationRetry(certification.id, txHash, expectedReceiver, broadcastExpectedMinValue);
-        }
 
         res.json({
           success: true,

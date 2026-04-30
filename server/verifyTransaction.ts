@@ -179,12 +179,9 @@ export function scheduleVerificationRetry(
     }
 
     if (attempt >= MAX_RETRIES) {
-      const isStillIndexing = result.error === "pending" || result.error === "Transaction not found on blockchain";
-      const finalStatus = isStillIndexing ? "pending" : "failed";
+      const finalStatus = "failed";
       const latencyMs = Date.now() - startTime;
-      if (finalStatus === "failed") {
-        recordTransaction(false, latencyMs, "certification");
-      }
+      recordTransaction(false, latencyMs, "certification");
       await db
         .update(certifications)
         .set({ blockchainStatus: finalStatus })
