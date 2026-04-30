@@ -273,6 +273,34 @@ export function registerStandardRoutes(app: Express) {
         });
       }
 
+      // Check for an existing certification BEFORE any billing or blockchain work.
+      // This makes the endpoint idempotent: re-submitting the same proof returns the
+      // existing anchor at no cost rather than triggering a new blockchain transaction.
+      const baseUrl = `https://${req.get("host")}`;
+      const [existingCert] = await db
+        .select()
+        .from(certifications)
+        .where(eq(certifications.fileHash, canonicalHash))
+        .limit(1);
+      if (existingCert) {
+        logger.withRequest(req).info("Standard anchor: proof already anchored, returning existing", { canonicalHash, certId: existingCert.id });
+        return res.status(200).json({
+          proof_id: existingCert.id,
+          canonical_hash: canonicalHash,
+          chain_anchor: {
+            chain: "multiversx",
+            network: "mainnet",
+            tx_hash: existingCert.transactionHash,
+            explorer_url: existingCert.transactionUrl,
+            status: existingCert.blockchainStatus,
+          },
+          proof_url: `${baseUrl}/proof/${existingCert.id}`,
+          standard_version: "1.0",
+          auth_method: authMethod,
+          message: "Proof already anchored. Returning existing anchor (no charge).",
+        });
+      }
+
       const fileName = `standard_proof_${proof.agent_id.slice(0, 20)}_${Date.now()}`;
       const authorName = proof.agent_id;
 
@@ -296,33 +324,7 @@ export function registerStandardRoutes(app: Express) {
         }
       }
 
-      let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
-      try {
-        result = await recordOnBlockchain(canonicalHash, fileName, authorName);
-      } catch (blockchainErr: any) {
-        // Refund credit so the user is not charged for a failed write.
-        if (!standardIsAdminExempt && authMethod === "api_key") {
-          if (standardTrialInfo) await refundTrialCredit(standardTrialInfo.userId).catch(() => {});
-          else if (standardCreditInfo) await refundCredit(standardCreditInfo.userId).catch(() => {});
-        }
-        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." });
-      }
-      const standardMetadata = {
-        standard_version: proof.version,
-        standard_proof: true,
-        agent_id: proof.agent_id,
-        public_key: proof.public_key,
-        instruction_hash: proof.instruction_hash,
-        action_hash: proof.action_hash,
-        signature: proof.signature,
-        signature_verified: true,
-        ...(proof.action_type && { action_type: proof.action_type }),
-        ...(proof.post_id && { post_id: proof.post_id }),
-        ...(proof.target_author && { target_author: proof.target_author }),
-        ...(proof.session_id && { session_id: proof.session_id }),
-        ...(proof.metadata || {}),
-      };
-
+      // Resolve the userId before the pending reservation insert.
       let userId = apiKeyUserId;
       if (!userId) {
         const [systemUser] = await db
@@ -341,32 +343,104 @@ export function registerStandardRoutes(app: Express) {
         }
       }
 
-      const blockchainStatus = result.transactionHash.startsWith("sim_") ? "pending" : "confirmed";
+      const standardMetadata = {
+        standard_version: proof.version,
+        standard_proof: true,
+        agent_id: proof.agent_id,
+        public_key: proof.public_key,
+        instruction_hash: proof.instruction_hash,
+        action_hash: proof.action_hash,
+        signature: proof.signature,
+        signature_verified: true,
+        ...(proof.action_type && { action_type: proof.action_type }),
+        ...(proof.post_id && { post_id: proof.post_id }),
+        ...(proof.target_author && { target_author: proof.target_author }),
+        ...(proof.session_id && { session_id: proof.session_id }),
+        ...(proof.metadata || {}),
+      };
 
-      let cert: (typeof certifications)["$inferSelect"];
+      // Insert a pending reservation row BEFORE the blockchain write.
+      // The unique constraint on fileHash prevents a concurrent request for the same
+      // canonicalHash from also reaching the expensive blockchain write — the loser
+      // gets a unique-constraint error here and its credit is refunded immediately.
+      let pendingCert: (typeof certifications)["$inferSelect"];
       try {
-        [cert] = await db.insert(certifications).values({
+        [pendingCert] = await db.insert(certifications).values({
           userId,
           fileName,
           fileHash: canonicalHash,
           fileType: "application/x-agent-proof-standard",
           authorName,
-          transactionHash: result.transactionHash,
-          transactionUrl: result.transactionUrl,
-          blockchainStatus,
+          blockchainStatus: "pending",
           authMethod,
           metadata: standardMetadata,
           isPublic: true,
+          transactionHash: "pending",
+          transactionUrl: null,
         }).returning();
+      } catch (reserveErr: any) {
+        // Unique constraint violation — a concurrent request already claimed this hash.
+        if (!standardIsAdminExempt && authMethod === "api_key") {
+          if (standardTrialInfo) await refundTrialCredit(standardTrialInfo.userId).catch(() => {});
+          else if (standardCreditInfo) await refundCredit(standardCreditInfo.userId).catch(() => {});
+        }
+        const [raceCert] = await db.select().from(certifications).where(eq(certifications.fileHash, canonicalHash)).limit(1);
+        if (raceCert) {
+          return res.status(200).json({
+            proof_id: raceCert.id,
+            canonical_hash: canonicalHash,
+            chain_anchor: {
+              chain: "multiversx",
+              network: "mainnet",
+              tx_hash: raceCert.transactionHash,
+              explorer_url: raceCert.transactionUrl,
+              status: raceCert.blockchainStatus,
+            },
+            proof_url: `${baseUrl}/proof/${raceCert.id}`,
+            standard_version: "1.0",
+            auth_method: authMethod,
+            message: "Proof already anchored (concurrent request). Returning existing anchor (no charge).",
+          });
+        }
+        return res.status(409).json({ error: "DUPLICATE_PROOF", message: "This proof has already been anchored. Your credit has been refunded." });
+      }
+
+      let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
+      try {
+        result = await recordOnBlockchain(canonicalHash, fileName, authorName);
+      } catch (blockchainErr: any) {
+        // Blockchain write failed — remove the pending reservation and refund credit.
+        await db.delete(certifications).where(eq(certifications.id, pendingCert.id)).catch(() => {});
+        if (!standardIsAdminExempt && authMethod === "api_key") {
+          if (standardTrialInfo) await refundTrialCredit(standardTrialInfo.userId).catch(() => {});
+          else if (standardCreditInfo) await refundCredit(standardCreditInfo.userId).catch(() => {});
+        }
+        return res.status(502).json({ error: "BLOCKCHAIN_ERROR", message: "Blockchain write failed. Your credit has been refunded." });
+      }
+
+      const blockchainStatus = result.transactionHash.startsWith("sim_") ? "pending" : "confirmed";
+
+      // Update the pending row with the real transaction details.
+      let cert: (typeof certifications)["$inferSelect"];
+      try {
+        [cert] = await db.update(certifications)
+          .set({
+            transactionHash: result.transactionHash,
+            transactionUrl: result.transactionUrl,
+            blockchainStatus,
+          })
+          .where(eq(certifications.id, pendingCert.id))
+          .returning();
       } catch (dbErr: any) {
+        // Update failed after blockchain write — remove the stale pending row so the
+        // fileHash is not permanently locked, then refund.
+        await db.delete(certifications).where(eq(certifications.id, pendingCert.id)).catch(() => {});
         if (!standardIsAdminExempt && authMethod === "api_key") {
           if (standardTrialInfo) await refundTrialCredit(standardTrialInfo.userId).catch(() => {});
           else if (standardCreditInfo) await refundCredit(standardCreditInfo.userId).catch(() => {});
         }
         return res.status(502).json({ error: "DB_ERROR", message: "Failed to record certification in database after blockchain write. Your credit has been refunded." });
       }
-
-      const baseUrl = `https://${req.get("host")}`;
 
       return res.status(201).json({
         proof_id: cert.id,
