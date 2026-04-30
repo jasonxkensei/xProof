@@ -360,6 +360,14 @@ export async function createMcpServer(ctx: McpContext) {
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "NOT_FOUND", message: "Proof not found" }) }], isError: true };
         }
 
+        if (!cert.userId) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "NOT_FOUND", message: "Proof not found" }) }], isError: true };
+        }
+        const [owner] = await db.select({ isPublicProfile: users.isPublicProfile }).from(users).where(eq(users.id, cert.userId));
+        if (!owner?.isPublicProfile) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "NOT_FOUND", message: "Proof not found" }) }], isError: true };
+        }
+
         return {
           content: [{
             type: "text" as const,
@@ -394,6 +402,14 @@ export async function createMcpServer(ctx: McpContext) {
       try {
         const [cert] = await db.select().from(certifications).where(eq(certifications.id, proof_id));
         if (!cert || !cert.isPublic) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "NOT_FOUND", message: "Proof not found" }) }], isError: true };
+        }
+
+        if (!cert.userId) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "NOT_FOUND", message: "Proof not found" }) }], isError: true };
+        }
+        const [owner] = await db.select({ isPublicProfile: users.isPublicProfile }).from(users).where(eq(users.id, cert.userId));
+        if (!owner?.isPublicProfile) {
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "NOT_FOUND", message: "Proof not found" }) }], isError: true };
         }
 
@@ -710,13 +726,28 @@ export async function createMcpServer(ctx: McpContext) {
     async (params) => {
       try {
         const now = new Date();
+        // Enforce the same two-part visibility rule as the REST layer:
+        // 1. The subject wallet must belong to a public profile.
+        // 2. Only attestations from issuers with public profiles are returned.
+        const subjectCheck = await db
+          .select({ isPublicProfile: users.isPublicProfile })
+          .from(users)
+          .where(eq(users.walletAddress, params.wallet));
+        if (!subjectCheck[0]?.isPublicProfile) {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ error: "NOT_FOUND", message: "Agent profile not found or not public" }) }],
+            isError: true,
+          };
+        }
+
         const result = await db.execute(sql`
-          SELECT id, issuer_wallet, issuer_name, domain, standard, title, description, expires_at, created_at
-          FROM attestations
-          WHERE subject_wallet = ${params.wallet}
-            AND status = 'active'
-            AND (expires_at IS NULL OR expires_at > ${now})
-          ORDER BY created_at DESC
+          SELECT a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.created_at
+          FROM attestations a
+          INNER JOIN users issuer_u ON issuer_u.wallet_address = a.issuer_wallet AND issuer_u.is_public_profile = true
+          WHERE a.subject_wallet = ${params.wallet}
+            AND a.status = 'active'
+            AND (a.expires_at IS NULL OR a.expires_at > ${now})
+          ORDER BY a.created_at DESC
         `);
         const attestations = (result as any).rows ?? [];
         const counted = Math.min(3, attestations.length);

@@ -903,6 +903,14 @@ This genesis certification demonstrates:
         });
       }
 
+      if (!certification.userId) {
+        return res.status(404).json({ error: "not_found", message: "Proof not found" });
+      }
+      const [proofOwner] = await db.select({ isPublicProfile: users.isPublicProfile }).from(users).where(eq(users.id, certification.userId));
+      if (!proofOwner?.isPublicProfile) {
+        return res.status(404).json({ error: "not_found", message: "Proof not found" });
+      }
+
       const baseUrl = `https://${req.get('host')}`;
       const chainId = process.env.MULTIVERSX_CHAIN_ID || "1";
       const txHash = certification.transactionHash || null;
@@ -965,7 +973,13 @@ This genesis certification demonstrates:
       let statusColorDark: string;
       let dotColor: string;
 
-      if (!cert || cert.isPublic === false) {
+      let ownerIsPublic = false;
+      if (cert && cert.isPublic !== false && cert.userId) {
+        const [badgeOwner] = await db.select({ isPublicProfile: users.isPublicProfile }).from(users).where(eq(users.id, cert.userId));
+        ownerIsPublic = badgeOwner?.isPublicProfile === true;
+      }
+
+      if (!cert || cert.isPublic === false || !ownerIsPublic) {
         statusText = "Not Found";
         statusColor = "#3B3B3B";
         statusColorDark = "#2A2A2A";
@@ -1043,6 +1057,18 @@ This genesis certification demonstrates:
         .from(certifications)
         .where(eq(certifications.id, certId));
 
+      if (!cert || !cert.isPublic) {
+        return res.status(404).setHeader("Content-Type", "text/plain; charset=utf-8").send("Proof not found");
+      }
+
+      if (!cert.userId) {
+        return res.status(404).setHeader("Content-Type", "text/plain; charset=utf-8").send("Proof not found");
+      }
+      const [mdOwner] = await db.select({ isPublicProfile: users.isPublicProfile }).from(users).where(eq(users.id, cert.userId));
+      if (!mdOwner?.isPublicProfile) {
+        return res.status(404).setHeader("Content-Type", "text/plain; charset=utf-8").send("Proof not found");
+      }
+
       let linkUrl: string;
       if (cert?.transactionUrl && cert.blockchainStatus === "confirmed") {
         linkUrl = cert.transactionUrl;
@@ -1070,6 +1096,16 @@ This genesis certification demonstrates:
         .where(eq(certifications.id, id));
 
       if (!certification || !certification.isPublic) {
+        res.status(404).setHeader('Content-Type', 'text/markdown; charset=utf-8');
+        return res.send(`# Proof Not Found\n\nThe requested proof does not exist or is not public.`);
+      }
+
+      if (!certification.userId) {
+        res.status(404).setHeader('Content-Type', 'text/markdown; charset=utf-8');
+        return res.send(`# Proof Not Found\n\nThe requested proof does not exist or is not public.`);
+      }
+      const [mdProofOwner] = await db.select({ isPublicProfile: users.isPublicProfile }).from(users).where(eq(users.id, certification.userId));
+      if (!mdProofOwner?.isPublicProfile) {
         res.status(404).setHeader('Content-Type', 'text/markdown; charset=utf-8');
         return res.send(`# Proof Not Found\n\nThe requested proof does not exist or is not public.`);
       }

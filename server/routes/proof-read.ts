@@ -1118,6 +1118,7 @@ export function registerProofReadRoutes(app: Express) {
             .where(
               and(
                 eq(certifications.userId, userRow.id),
+                eq(certifications.isPublic, true),
                 sql`${certifications.metadata}->>'eliza_agent_id' IS NOT NULL`
               )
             )
@@ -1308,6 +1309,7 @@ export function registerProofReadRoutes(app: Express) {
             .where(
               and(
                 eq(certifications.userId, userRow.id),
+                eq(certifications.isPublic, true),
                 sql`${certifications.metadata}->>'xai_agent_id' IS NOT NULL`
               )
             )
