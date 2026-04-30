@@ -97,7 +97,7 @@ export function registerTrustRoutes(app: Express) {
         return res.status(400).json({ message: "At least one of domain or standard query param is required" });
       }
 
-      let whereClause = `a.status = 'active' AND (a.expires_at IS NULL OR a.expires_at > NOW()) AND u.is_public_profile = true AND (issuer_u.id IS NULL OR issuer_u.is_public_profile = true)`;
+      let whereClause = `a.status = 'active' AND (a.expires_at IS NULL OR a.expires_at > NOW()) AND u.is_public_profile = true AND issuer_u.is_public_profile = true`;
       const params: any[] = [];
 
       if (domain) {
@@ -346,7 +346,7 @@ export function registerTrustRoutes(app: Express) {
           WHERE a.subject_wallet = ${user.walletAddress}
             AND a.status = 'active'
             AND (a.expires_at IS NULL OR a.expires_at > ${now})
-            AND (u.id IS NULL OR u.is_public_profile = true)
+            AND u.is_public_profile = true
           GROUP BY a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at
           ORDER BY a.created_at DESC
         `),

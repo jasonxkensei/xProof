@@ -138,7 +138,7 @@ export function registerAttestationsRoutes(app: Express) {
         SELECT is_public_profile FROM users WHERE wallet_address = ${wallet} LIMIT 1
       `);
       const subjectUser = (subjectCheck.rows as any[])[0];
-      if (subjectUser && !subjectUser.is_public_profile) {
+      if (!subjectUser || !subjectUser.is_public_profile) {
         return res.status(404).json({ error: "Wallet not found or not public" });
       }
 
@@ -146,11 +146,11 @@ export function registerAttestationsRoutes(app: Express) {
       const result = await db.execute(sql`
         SELECT a.id, a.subject_wallet, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at
         FROM attestations a
-        LEFT JOIN users issuer_u ON issuer_u.wallet_address = a.issuer_wallet
+        INNER JOIN users issuer_u ON issuer_u.wallet_address = a.issuer_wallet
         WHERE a.subject_wallet = ${wallet}
           AND a.status = 'active'
           AND (a.expires_at IS NULL OR a.expires_at > ${now})
-          AND (issuer_u.id IS NULL OR issuer_u.is_public_profile = true)
+          AND issuer_u.is_public_profile = true
         ORDER BY a.created_at DESC
       `);
       res.json(result.rows);
@@ -180,7 +180,7 @@ export function registerAttestationsRoutes(app: Express) {
       ]);
       const subjectUser = (subjectCheck.rows as any[])[0];
       const issuerUser = (issuerCheck.rows as any[])[0];
-      if ((subjectUser && !subjectUser.is_public_profile) || (issuerUser && !issuerUser.is_public_profile)) {
+      if (!subjectUser || !subjectUser.is_public_profile || !issuerUser || !issuerUser.is_public_profile) {
         return res.status(404).json({ error: "Attestation not found" });
       }
 
@@ -288,7 +288,7 @@ export function registerAttestationsRoutes(app: Express) {
         SELECT is_public_profile FROM users WHERE wallet_address = ${wallet} LIMIT 1
       `);
       const issuerUser = (issuerCheck.rows as any[])[0];
-      if (issuerUser && !issuerUser.is_public_profile) {
+      if (!issuerUser || !issuerUser.is_public_profile) {
         return res.status(404).json({ error: "Wallet not found or not public" });
       }
 
@@ -301,17 +301,17 @@ export function registerAttestationsRoutes(app: Express) {
           MIN(a.created_at) AS first_issued_at,
           MAX(a.created_at) AS last_issued_at
         FROM attestations a
-        LEFT JOIN users subject_u ON subject_u.wallet_address = a.subject_wallet
+        INNER JOIN users subject_u ON subject_u.wallet_address = a.subject_wallet
         WHERE a.issuer_wallet = ${wallet}
-          AND (subject_u.id IS NULL OR subject_u.is_public_profile = true)
+          AND subject_u.is_public_profile = true
       `);
 
       const issued = await db.execute(sql`
         SELECT a.id, a.subject_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.revoked_at, a.created_at
         FROM attestations a
-        LEFT JOIN users subject_u ON subject_u.wallet_address = a.subject_wallet
+        INNER JOIN users subject_u ON subject_u.wallet_address = a.subject_wallet
         WHERE a.issuer_wallet = ${wallet}
-          AND (subject_u.id IS NULL OR subject_u.is_public_profile = true)
+          AND subject_u.is_public_profile = true
         ORDER BY a.created_at DESC
         LIMIT 100
       `);
@@ -472,10 +472,10 @@ export function registerAttestationsRoutes(app: Express) {
       const attestations = await db.execute(sql`
         SELECT a.domain, a.standard, a.title, a.issuer_name, a.created_at, a.expires_at
         FROM attestations a
-        LEFT JOIN users issuer_u ON issuer_u.wallet_address = a.issuer_wallet
+        INNER JOIN users issuer_u ON issuer_u.wallet_address = a.issuer_wallet
         WHERE a.subject_wallet = ${wallet}
           AND a.status = 'active'
-          AND (issuer_u.id IS NULL OR issuer_u.is_public_profile = true)
+          AND issuer_u.is_public_profile = true
         ORDER BY a.created_at DESC
       `);
       const certs = agentUser ? await db.execute(sql`

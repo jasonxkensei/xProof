@@ -22,9 +22,14 @@ export function registerProofReadRoutes(app: Express) {
         .from(certifications)
         .where(and(eq(certifications.fileHash, hash.toLowerCase()), eq(certifications.isPublic, true)));
 
-      // Only reveal existence and ID for public proofs — treat non-public as not found
-      // to avoid leaking proof IDs and anchoring timestamps for private certifications.
+      // Only reveal existence and ID for public proofs whose owner also has a public profile.
       if (existing) {
+        if (!existing.userId) return res.json({ exists: false });
+        const [owner] = await db
+          .select({ isPublicProfile: users.isPublicProfile })
+          .from(users)
+          .where(eq(users.id, existing.userId));
+        if (!owner?.isPublicProfile) return res.json({ exists: false });
         return res.json({
           exists: true,
           proof_id: existing.id,
@@ -53,16 +58,18 @@ export function registerProofReadRoutes(app: Express) {
         return res.status(404).json({ message: "Proof not found" });
       }
 
-      let ownerWallet: string | null = null;
-      if (certification.userId) {
-        const [owner] = await db
-          .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
-          .from(users)
-          .where(eq(users.id, certification.userId));
-        if (owner?.isPublicProfile) {
-          ownerWallet = owner.walletAddress;
-        }
+      // Require the owning user to have a public profile — isPublic alone is insufficient.
+      if (!certification.userId) {
+        return res.status(404).json({ message: "Proof not found" });
       }
+      const [owner] = await db
+        .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.id, certification.userId));
+      if (!owner?.isPublicProfile) {
+        return res.status(404).json({ message: "Proof not found" });
+      }
+      const ownerWallet = owner.walletAddress;
 
       // Return only explicitly public fields — never spread the full DB row.
       // Internal fields (userId, webhookUrl, webhookStatus, webhookAttempts,
@@ -106,14 +113,18 @@ export function registerProofReadRoutes(app: Express) {
         return res.status(404).json({ error: "No proof found for this hash" });
       }
 
-      let ownerWallet: string | null = null;
-      if (cert.userId) {
-        const [owner] = await db
-          .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
-          .from(users)
-          .where(eq(users.id, cert.userId));
-        if (owner?.isPublicProfile) ownerWallet = owner.walletAddress;
+      // Require the owning user to have a public profile.
+      if (!cert.userId) {
+        return res.status(404).json({ error: "No proof found for this hash" });
       }
+      const [hashOwner] = await db
+        .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.id, cert.userId));
+      if (!hashOwner?.isPublicProfile) {
+        return res.status(404).json({ error: "No proof found for this hash" });
+      }
+      const ownerWallet = hashOwner.walletAddress;
 
       res.json({
         proof_id: cert.id,
@@ -157,7 +168,8 @@ export function registerProofReadRoutes(app: Express) {
         .from(certifications)
         .where(and(
           sql`${certifications.metadata}->>'decision_id' = ${decisionId}`,
-          eq(certifications.isPublic, true)
+          eq(certifications.isPublic, true),
+          sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
         ))
         .orderBy(certifications.createdAt);
 
@@ -251,7 +263,8 @@ export function registerProofReadRoutes(app: Express) {
         .from(certifications)
         .where(and(
           sql`${certifications.metadata}->>'decision_id' = ${decisionId}`,
-          eq(certifications.isPublic, true)
+          eq(certifications.isPublic, true),
+          sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
         ))
         .orderBy(certifications.createdAt);
 
@@ -313,7 +326,8 @@ export function registerProofReadRoutes(app: Express) {
         .from(certifications)
         .where(and(
           sql`${certifications.metadata}->>'decision_id' = ${decisionId}`,
-          eq(certifications.isPublic, true)
+          eq(certifications.isPublic, true),
+          sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
         ))
         .orderBy(certifications.createdAt);
 
@@ -386,20 +400,21 @@ export function registerProofReadRoutes(app: Express) {
         return res.status(404).json({ error: "No proof found for this hash", verified: false, score: 0 });
       }
 
-      let agentTrust: any = null;
-      let agentWallet: string | null = null;
-      if (cert.userId) {
-        const [owner] = await db
-          .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
-          .from(users)
-          .where(eq(users.id, cert.userId));
-        // Only disclose wallet address when the owner has opted into a public profile —
-        // consistent with the guard in /api/proof/:id (line 60) and /api/proof/hash/:hash (line 113).
-        if (owner?.walletAddress && owner.isPublicProfile) {
-          agentWallet = owner.walletAddress;
-          agentTrust = await computeTrustScoreByWallet(owner.walletAddress);
-        }
+      // Require the owning user to have a public profile — isPublic alone is insufficient.
+      if (!cert.userId) {
+        return res.status(404).json({ error: "No proof found for this hash", verified: false, score: 0 });
       }
+      const [artifactOwner] = await db
+        .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.id, cert.userId));
+      if (!artifactOwner?.isPublicProfile) {
+        return res.status(404).json({ error: "No proof found for this hash", verified: false, score: 0 });
+      }
+
+      let agentTrust: any = null;
+      const agentWallet = artifactOwner.walletAddress;
+      agentTrust = await computeTrustScoreByWallet(agentWallet);
 
       const verified = cert.blockchainStatus === "confirmed";
       const agentVerified = agentTrust ? agentTrust.score >= 100 : false;
@@ -716,6 +731,7 @@ export function registerProofReadRoutes(app: Express) {
       }
 
       // ── 2. Find linked xProof certs by metadata.sigil_public_key
+      // Only expose linkage when the owning user has opted into a public profile.
       const linkedCerts = await db
         .select({
           id: certifications.id,
@@ -728,7 +744,8 @@ export function registerProofReadRoutes(app: Express) {
         .where(
           and(
             eq(certifications.isPublic, true),
-            sql`${certifications.metadata}->>'sigil_public_key' = ${public_key}`
+            sql`${certifications.metadata}->>'sigil_public_key' = ${public_key}`,
+            sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
           )
         )
         .orderBy(certifications.createdAt);
@@ -738,7 +755,6 @@ export function registerProofReadRoutes(app: Express) {
       let xproofTrust: Awaited<ReturnType<typeof computeTrustScoreByWallet>> = null;
 
       if (xproofLinked) {
-        // Get wallet from first linked cert's user — only expose if user has a public profile
         const userId = linkedCerts[0].userId;
         const [userRow] = await db
           .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
@@ -833,7 +849,8 @@ export function registerProofReadRoutes(app: Express) {
       const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
       const normalizedAddress = address.toLowerCase();
 
-      // Lookup xProof certs linked to this BNB address via metadata.bnb_wallet
+      // Lookup xProof certs linked to this BNB address via metadata.bnb_wallet.
+      // Only expose linkage when the owning user has opted into a public profile.
       const linkedCerts = await db
         .select({
           id: certifications.id,
@@ -846,7 +863,8 @@ export function registerProofReadRoutes(app: Express) {
         .where(
           and(
             eq(certifications.isPublic, true),
-            sql`LOWER(${certifications.metadata}->>'bnb_wallet') = ${normalizedAddress}`
+            sql`LOWER(${certifications.metadata}->>'bnb_wallet') = ${normalizedAddress}`,
+            sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
           )
         )
         .orderBy(certifications.createdAt);
@@ -1126,7 +1144,8 @@ export function registerProofReadRoutes(app: Express) {
           }
         }
       } else {
-        // UUID lookup — find certs with metadata.eliza_agent_id = identifier
+        // UUID lookup — find certs with metadata.eliza_agent_id = identifier.
+        // Only expose linkage when the owning user has opted into a public profile.
         const linkedCerts = await db
           .select({
             userId: certifications.userId,
@@ -1137,7 +1156,8 @@ export function registerProofReadRoutes(app: Express) {
           .where(
             and(
               eq(certifications.isPublic, true),
-              sql`LOWER(${certifications.metadata}->>'eliza_agent_id') = ${identifier.toLowerCase()}`
+              sql`LOWER(${certifications.metadata}->>'eliza_agent_id') = ${identifier.toLowerCase()}`,
+              sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
             )
           )
           .orderBy(certifications.createdAt);
@@ -1312,6 +1332,7 @@ export function registerProofReadRoutes(app: Express) {
           }
         }
       } else {
+        // Only expose linkage when the owning user has opted into a public profile.
         const linkedCerts = await db
           .select({
             userId: certifications.userId,
@@ -1322,7 +1343,8 @@ export function registerProofReadRoutes(app: Express) {
           .where(
             and(
               eq(certifications.isPublic, true),
-              sql`LOWER(${certifications.metadata}->>'xai_agent_id') = ${identifier.toLowerCase()}`
+              sql`LOWER(${certifications.metadata}->>'xai_agent_id') = ${identifier.toLowerCase()}`,
+              sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
             )
           )
           .orderBy(certifications.createdAt);
@@ -1423,6 +1445,7 @@ export function registerProofReadRoutes(app: Express) {
 
       const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
 
+      // Only expose linkage when the owning user has opted into a public profile.
       const linkedCerts = await db
         .select({
           id: certifications.id,
@@ -1435,7 +1458,8 @@ export function registerProofReadRoutes(app: Express) {
         .where(
           and(
             eq(certifications.isPublic, true),
-            sql`${certifications.metadata}->>'mpp_payment_intent_id' = ${payment_intent_id}`
+            sql`${certifications.metadata}->>'mpp_payment_intent_id' = ${payment_intent_id}`,
+            sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
           )
         )
         .orderBy(certifications.createdAt);
@@ -1552,7 +1576,8 @@ export function registerProofReadRoutes(app: Express) {
         .from(certifications)
         .where(and(
           inArray(certifications.id, ids),
-          eq(certifications.isPublic, true)
+          eq(certifications.isPublic, true),
+          sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
         ));
 
       const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
@@ -1600,14 +1625,14 @@ export function registerProofReadRoutes(app: Express) {
         return res.status(402).json({ message: "Certificate not yet available — payment is still pending blockchain confirmation" });
       }
 
-      // Get user to determine subscription tier
+      // Get user to determine subscription tier and enforce public profile requirement.
       const [user] = await db
         .select()
         .from(users)
         .where(eq(users.id, certification.userId));
 
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
+      if (!user || !user.isPublicProfile) {
+        return res.status(404).json({ message: "Certificate not found" });
       }
 
       // Generate PDF (free service - standard branding)

@@ -185,7 +185,7 @@ async function computeAttestationBonus(walletAddress: string): Promise<{ bonus: 
       WHERE a.subject_wallet = ${walletAddress}
         AND a.status = 'active'
         AND (a.expires_at IS NULL OR a.expires_at > ${now})
-        AND (u.id IS NULL OR u.is_public_profile = true)
+        AND u.is_public_profile = true
       GROUP BY a.issuer_wallet
       ORDER BY issuer_confirmed_certs DESC
     `);
