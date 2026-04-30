@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { hashFile } from "@/lib/hashFile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,9 @@ import {
   BarChart3,
   Copy,
   Loader2,
-  Key
+  Key,
+  File,
+  ExternalLink
 } from "lucide-react";
 import { WalletLoginModal } from "@/components/wallet-login-modal";
 import {
@@ -73,6 +76,56 @@ export default function Landing() {
   const handleConnect = () => {
     setIsLoginModalOpen(true);
   };
+
+  // — Live proof widget state —
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofHash, setProofHash] = useState<string>("");
+  const [isHashing, setIsHashing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [proofResult, setProofResult] = useState<{
+    proof_id?: string | number;
+    verify_url?: string;
+    blockchain?: { transaction_hash?: string; explorer_url?: string };
+    trial?: { remaining?: number };
+  } | null>(null);
+  const [proofError, setProofError] = useState<string | null>(null);
+
+  const handleFileSelect = async (file: File) => {
+    setProofFile(file);
+    setProofResult(null);
+    setProofError(null);
+    setIsHashing(true);
+    try {
+      const h = await hashFile(file);
+      setProofHash(h);
+    } finally {
+      setIsHashing(false);
+    }
+  };
+
+  const submitProofMutation = useMutation({
+    mutationFn: async ({ hash, filename }: { hash: string; filename: string }) => {
+      const res = await fetch("/api/proof", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${trialKey}`,
+        },
+        body: JSON.stringify({ file_hash: hash, filename }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || "Proof submission failed. Please try again.");
+      return data;
+    },
+    onSuccess: (data) => {
+      setProofResult(data);
+      setProofError(null);
+    },
+    onError: (err: Error) => {
+      setProofError(err.message);
+    },
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -220,33 +273,148 @@ export default function Landing() {
                 </div>
               </div>
             ) : (
-              <div className="max-w-md mx-auto">
-                <div className="mb-3 flex items-center gap-2 rounded-md bg-primary/10 border border-primary/20 p-3 font-mono text-sm">
+              <div className="max-w-lg mx-auto">
+                {/* Key display */}
+                <div className="mb-2 flex items-center gap-2 rounded-md bg-primary/10 border border-primary/20 p-3 font-mono text-sm">
                   <span className="flex-1 text-left truncate text-primary font-medium" data-testid="text-trial-key">{trialKey}</span>
                   <Button size="icon" variant="ghost" onClick={handleCopyKey} data-testid="button-copy-trial-key">
                     {copied ? <CheckCircle className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Your key is ready — 10 free proofs included for <strong>{trialAgentName}</strong>.
+                <p className="text-sm text-muted-foreground mb-5">
+                  Your key is ready — 10 free proofs for <strong>{trialAgentName}</strong>. Try one right now:
                 </p>
-                <div className="rounded-md bg-[#0d1117] p-4 font-mono text-xs text-[#e6edf3] text-left overflow-x-auto" data-testid="code-trial-quickstart">
-                  <div className="text-[#8b949e] mb-2"># Anchor your first proof</div>
-                  <div>
-                    <span className="text-[#79c0ff]">curl</span>
-                    {" "}-X POST https://xproof.app/api/proof \
+
+                {/* Live proof widget */}
+                {!proofResult ? (
+                  <>
+                    {/* Drop zone */}
+                    <div
+                      data-testid="dropzone-proof"
+                      className={`border-2 border-dashed rounded-md p-7 text-center cursor-pointer transition-colors select-none ${isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-primary/40"}`}
+                      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                      onDragLeave={() => setIsDragging(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDragging(false);
+                        const f = e.dataTransfer.files[0];
+                        if (f) handleFileSelect(f);
+                      }}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        data-testid="input-proof-file"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleFileSelect(f);
+                        }}
+                      />
+                      {!proofFile ? (
+                        <>
+                          <Upload className="h-7 w-7 text-muted-foreground/50 mx-auto mb-3" />
+                          <p className="text-sm font-medium text-muted-foreground">Drag any file here, or click to select</p>
+                          <p className="text-xs text-muted-foreground/60 mt-1">Your file never leaves your device — only its fingerprint is sent</p>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-3 justify-center">
+                          <File className="h-6 w-6 text-primary shrink-0" />
+                          <div className="text-left min-w-0">
+                            <p className="text-sm font-medium truncate max-w-xs">{proofFile.name}</p>
+                            {isHashing ? (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Computing fingerprint…
+                              </p>
+                            ) : (
+                              <p className="text-xs text-muted-foreground font-mono mt-0.5">{proofHash.slice(0, 20)}…</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Anchor button */}
+                    {proofFile && !isHashing && (
+                      <Button
+                        className="w-full mt-3"
+                        onClick={() => submitProofMutation.mutate({ hash: proofHash, filename: proofFile.name })}
+                        disabled={submitProofMutation.isPending}
+                        data-testid="button-anchor-proof"
+                      >
+                        {submitProofMutation.isPending ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Anchoring to blockchain…</>
+                        ) : (
+                          <><Shield className="mr-2 h-4 w-4" />Anchor this proof</>
+                        )}
+                      </Button>
+                    )}
+
+                    {proofError && (
+                      <p className="mt-2 text-sm text-destructive text-left" data-testid="text-proof-error">{proofError}</p>
+                    )}
+                  </>
+                ) : (
+                  /* Success state */
+                  <div className="rounded-md bg-primary/10 border border-primary/20 p-5 text-left" data-testid="card-proof-result">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle className="h-5 w-5 text-primary shrink-0" />
+                      <p className="text-sm font-semibold text-primary">Proof anchored on MultiversX!</p>
+                    </div>
+                    <div className="space-y-1 mb-4">
+                      <p className="text-xs text-muted-foreground">
+                        File: <span className="font-medium text-foreground">{proofFile?.name}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        SHA-256: {proofHash.slice(0, 24)}…
+                      </p>
+                      {proofResult.proof_id && (
+                        <p className="text-xs text-muted-foreground">
+                          Proof ID: <span className="font-mono">{proofResult.proof_id}</span>
+                        </p>
+                      )}
+                      {proofResult.blockchain?.transaction_hash && (
+                        <p className="text-xs text-muted-foreground font-mono">
+                          Tx: {proofResult.blockchain.transaction_hash.slice(0, 20)}…
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        data-testid="button-view-proof"
+                      >
+                        <a
+                          href={proofResult.verify_url || `/proof/${proofResult.proof_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="mr-1.5 h-3 w-3" />
+                          View proof
+                        </a>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => { setProofFile(null); setProofHash(""); setProofResult(null); setProofError(null); }}
+                        data-testid="button-proof-another"
+                      >
+                        Anchor another file
+                      </Button>
+                      {proofResult.trial?.remaining !== undefined && (
+                        <Badge variant="outline" className="text-xs ml-auto">
+                          {proofResult.trial.remaining} proof{proofResult.trial.remaining !== 1 ? "s" : ""} remaining
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                  <div className="pl-4">
-                    -H <span className="text-[#a5d6ff]">"Authorization: Bearer {trialKey}"</span> \
-                  </div>
-                  <div className="pl-4">
-                    -H <span className="text-[#a5d6ff]">"Content-Type: application/json"</span> \
-                  </div>
-                  <div className="pl-4">
-                    -d <span className="text-[#a5d6ff]">'{"{"}"file_hash": "sha256...", "filename": "report.pdf"{"}"}'</span>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3 justify-center">
+                )}
+
+                <div className="mt-5 flex flex-wrap gap-3 justify-center">
                   <Button asChild variant="outline" size="sm" data-testid="button-trial-docs">
                     <a href="/docs">
                       Full API docs
