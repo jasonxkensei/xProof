@@ -97,3 +97,9 @@ Required guarantees:
 - Alternate auth or convenience endpoints MUST not grant broader access than the primary auth path.
 - Admin helpers MUST default to deny when configuration or session context is missing.
 - MCP, REST, commerce, legacy, and standards flows MUST enforce the same authorization, accounting, attribution, and settlement fail-closed rules for equivalent operations.
+
+## Scan Notes — 2026-04-30
+
+- Reviewed production webhook call sites for the fallback secret in `server/webhook.ts`. Treat this as a lead, not a finding, unless a reachable production path is shown to call `scheduleWebhookDelivery` without a scoped webhook secret. The reviewed production proof and MCP flows generated or supplied per-relationship secrets before scheduling delivery.
+- Do not re-propose duplicate-attestation inflation from the same issuer without new evidence. Trust-score bonus and `activeAttestations` in `server/trust.ts` are grouped by `issuer_wallet`, so repeated attestations from one issuer do not stack into extra public trust weight.
+- Trust-route admin actions in `server/routes/trust.ts` do not use `requireAdmin`, but the reviewed paths still enforced `isWalletAuthenticated` plus `isAdminWallet(req.walletAddress)`. Keep this as a review anchor only if wallet-session integrity changes.
