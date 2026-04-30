@@ -16,6 +16,8 @@ export interface VerificationResult {
   receiver?: string;
   sender?: string;
   value?: string;
+  /** Raw base64-encoded transaction data field as returned by the MultiversX API. */
+  data?: string;
 }
 
 export async function verifyTransactionOnChain(
@@ -116,6 +118,7 @@ export async function verifyTransactionOnChain(
       sender: tx.sender,
       receiver: tx.receiver,
       value: tx.value,
+      data: tx.data,
     };
   } catch (error: any) {
     logger.error("Transaction verification error", {

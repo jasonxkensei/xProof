@@ -104,6 +104,26 @@ export function registerCertificationsRoutes(app: Express) {
         recordTransaction(true, blockchainLatencyMs, "certification");
       }
 
+      // Verify that the on-chain transaction data field binds the payment to the certified
+      // file hash. Without this check an attacker could reuse any valid payment transaction
+      // (sent with an unrelated or empty payload) to obtain a "cryptographically-certified"
+      // proof for an arbitrary fileHash. Admin wallets are exempt.
+      if (!isAdmin) {
+        const rawTxData = verificationResult.data;
+        const decodedTxData = rawTxData ? Buffer.from(rawTxData, "base64").toString("utf8") : "";
+        const expectedPrefix = `certify:${data.fileHash}`;
+        if (!decodedTxData.startsWith(expectedPrefix)) {
+          logger.withRequest(req).warn("Transaction data field does not bind to certified file hash", {
+            transactionHash,
+            fileHash: data.fileHash,
+            decodedPrefix: decodedTxData.slice(0, 80),
+          });
+          return res.status(402).json({
+            message: "Transaction data field does not match the certified file hash. The on-chain transaction must contain the certify payload for this file.",
+          });
+        }
+      }
+
       // Bind payment to authenticated wallet: the transaction sender must match the session
       // wallet. Without this check, a user could claim another user's valid payment.
       // Admin wallets are exempt from sender binding.
@@ -355,12 +375,50 @@ export function registerCertificationsRoutes(app: Express) {
           });
         }
 
+        const BROADCAST_ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
+        const isBroadcastAdmin = BROADCAST_ADMIN_WALLETS.includes(walletAddress.toLowerCase());
+
+        // Bind broadcast to the authenticated wallet BEFORE spending gas:
+        // the signedTransaction.sender must match the session wallet. Without this
+        // check an attacker who obtains another user's signed transaction blob can
+        // submit it here and claim ownership of the resulting proof.
+        if (!isBroadcastAdmin) {
+          const txSender: string = (signedTransaction?.sender || "").toLowerCase();
+          if (txSender && txSender !== walletAddress.toLowerCase()) {
+            logger.withRequest(req).warn("Broadcast: tx sender does not match authenticated wallet", {
+              txSender,
+              wallet: walletAddress,
+            });
+            return res.status(403).json({
+              message: "Transaction sender does not match your authenticated wallet address.",
+            });
+          }
+        }
+
+        // Verify the transaction data field binds the payment to the certified file hash
+        // BEFORE broadcasting — we have the raw signed transaction and can decode its data
+        // field without a blockchain round-trip. Without this check an attacker can craft a
+        // certify-payload-less payment and obtain a "cryptographically-certified" proof for
+        // an arbitrary fileHash. Admin wallets are exempt.
+        if (!isBroadcastAdmin) {
+          const rawSignedData: string = signedTransaction?.data || "";
+          const decodedSignedData = rawSignedData ? Buffer.from(rawSignedData, "base64").toString("utf8") : "";
+          const expectedPrefix = `certify:${validatedData.fileHash}`;
+          if (!decodedSignedData.startsWith(expectedPrefix)) {
+            logger.withRequest(req).warn("Broadcast: tx data field does not bind to certified file hash", {
+              fileHash: validatedData.fileHash,
+              decodedPrefix: decodedSignedData.slice(0, 80),
+            });
+            return res.status(402).json({
+              message: "Transaction data field does not match the certified file hash. The signed transaction must contain the certify payload for this file.",
+            });
+          }
+        }
+
         const { txHash, explorerUrl } = await broadcastSignedTransaction(signedTransaction);
 
         const { verifyTransactionOnChain } = await import("../verifyTransaction");
         const expectedReceiver = process.env.MULTIVERSX_RECEIVER_ADDRESS || process.env.XPROOF_WALLET_ADDRESS || process.env.MULTIVERSX_SENDER_ADDRESS || "";
-        const BROADCAST_ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
-        const isBroadcastAdmin = BROADCAST_ADMIN_WALLETS.includes(walletAddress.toLowerCase());
 
         let broadcastExpectedMinValue = "0";
         if (!isBroadcastAdmin) {
