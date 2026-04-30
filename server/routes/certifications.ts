@@ -105,14 +105,20 @@ export function registerCertificationsRoutes(app: Express) {
       }
 
       // Verify that the on-chain transaction data field binds the payment to the certified
-      // file hash. Without this check an attacker could reuse any valid payment transaction
+      // file hash. Client-signed transactions (XPortal) use the canonical format:
+      //   xproof:certify:<fileHash>|filename:<name>|author:<author>
+      // Without this check an attacker could reuse any valid payment transaction
       // (sent with an unrelated or empty payload) to obtain a "cryptographically-certified"
       // proof for an arbitrary fileHash. Admin wallets are exempt.
       if (!isAdmin) {
         const rawTxData = verificationResult.data;
         const decodedTxData = rawTxData ? Buffer.from(rawTxData, "base64").toString("utf8") : "";
-        const expectedPrefix = `certify:${data.fileHash}`;
-        if (!decodedTxData.startsWith(expectedPrefix)) {
+        // Accept both the client-signed format (xproof:certify:) and server-signed format (certify:)
+        const clientPrefix = `xproof:certify:${data.fileHash}`;
+        const serverPrefix = `certify:${data.fileHash}`;
+        const boundaryOk = (s: string, prefix: string) =>
+          s.startsWith(prefix) && (s.length === prefix.length || s[prefix.length] === "|");
+        if (!boundaryOk(decodedTxData, clientPrefix) && !boundaryOk(decodedTxData, serverPrefix)) {
           logger.withRequest(req).warn("Transaction data field does not bind to certified file hash", {
             transactionHash,
             fileHash: data.fileHash,
@@ -397,14 +403,18 @@ export function registerCertificationsRoutes(app: Express) {
 
         // Verify the transaction data field binds the payment to the certified file hash
         // BEFORE broadcasting — we have the raw signed transaction and can decode its data
-        // field without a blockchain round-trip. Without this check an attacker can craft a
-        // certify-payload-less payment and obtain a "cryptographically-certified" proof for
-        // an arbitrary fileHash. Admin wallets are exempt.
+        // field without a blockchain round-trip. Client-signed transactions (XPortal) use:
+        //   xproof:certify:<fileHash>|filename:<name>|author:<author>
+        // Without this check an attacker can craft a certify-payload-less payment and obtain
+        // a "cryptographically-certified" proof for an arbitrary fileHash. Admin wallets exempt.
         if (!isBroadcastAdmin) {
           const rawSignedData: string = signedTransaction?.data || "";
           const decodedSignedData = rawSignedData ? Buffer.from(rawSignedData, "base64").toString("utf8") : "";
-          const expectedPrefix = `certify:${validatedData.fileHash}`;
-          if (!decodedSignedData.startsWith(expectedPrefix)) {
+          const clientPrefixB = `xproof:certify:${validatedData.fileHash}`;
+          const serverPrefixB = `certify:${validatedData.fileHash}`;
+          const boundaryOkB = (s: string, prefix: string) =>
+            s.startsWith(prefix) && (s.length === prefix.length || s[prefix.length] === "|");
+          if (!boundaryOkB(decodedSignedData, clientPrefixB) && !boundaryOkB(decodedSignedData, serverPrefixB)) {
             logger.withRequest(req).warn("Broadcast: tx data field does not bind to certified file hash", {
               fileHash: validatedData.fileHash,
               decodedPrefix: decodedSignedData.slice(0, 80),
@@ -436,6 +446,22 @@ export function registerCertificationsRoutes(app: Express) {
               : "Payment verification failed",
             error: broadcastVerification.error,
           });
+        }
+
+        // Post-broadcast sender binding: validate the on-chain sender returned by the indexer
+        // matches the authenticated wallet. This is a second layer of protection in case
+        // signedTransaction.sender was absent or spoofed before broadcast. Non-admin only.
+        if (!isBroadcastAdmin && broadcastVerification.sender) {
+          if (broadcastVerification.sender.toLowerCase() !== walletAddress.toLowerCase()) {
+            logger.withRequest(req).warn("Broadcast: on-chain sender does not match authenticated wallet", {
+              txHash,
+              onChainSender: broadcastVerification.sender,
+              wallet: walletAddress,
+            });
+            return res.status(403).json({
+              message: "Transaction sender does not match your authenticated wallet address.",
+            });
+          }
         }
 
         const [certification] = await db
