@@ -135,8 +135,10 @@ export function registerCertificationsRoutes(app: Express) {
       // Admin wallets are exempt from sender binding.
       const SENDER_ADMIN_WALLETS = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim().toLowerCase()).filter(Boolean);
       const isSenderAdmin = SENDER_ADMIN_WALLETS.includes(walletAddress.toLowerCase());
-      if (!isSenderAdmin && verificationResult.sender && verificationResult.sender.toLowerCase() !== walletAddress.toLowerCase()) {
-        logger.withRequest(req).warn("Transaction sender does not match authenticated wallet", { transactionHash, sender: verificationResult.sender, wallet: walletAddress });
+      // Fail-closed: if sender is absent in the verification result, reject — absence of
+      // sender cannot be treated as a pass because the indexer may not have indexed the tx yet.
+      if (!isSenderAdmin && (!verificationResult.sender || verificationResult.sender.toLowerCase() !== walletAddress.toLowerCase())) {
+        logger.withRequest(req).warn("Transaction sender does not match authenticated wallet", { transactionHash, sender: verificationResult.sender ?? "(absent)", wallet: walletAddress });
         return res.status(403).json({ message: "Transaction sender does not match your authenticated wallet address." });
       }
 
@@ -449,13 +451,14 @@ export function registerCertificationsRoutes(app: Express) {
         }
 
         // Post-broadcast sender binding: validate the on-chain sender returned by the indexer
-        // matches the authenticated wallet. This is a second layer of protection in case
-        // signedTransaction.sender was absent or spoofed before broadcast. Non-admin only.
-        if (!isBroadcastAdmin && broadcastVerification.sender) {
-          if (broadcastVerification.sender.toLowerCase() !== walletAddress.toLowerCase()) {
+        // matches the authenticated wallet. Fail-closed: if sender is absent in a verified
+        // result, reject — a missing sender is not a pass. This is a second layer on top of
+        // the pre-broadcast signedTransaction.sender check. Non-admin only.
+        if (!isBroadcastAdmin) {
+          if (!broadcastVerification.sender || broadcastVerification.sender.toLowerCase() !== walletAddress.toLowerCase()) {
             logger.withRequest(req).warn("Broadcast: on-chain sender does not match authenticated wallet", {
               txHash,
-              onChainSender: broadcastVerification.sender,
+              onChainSender: broadcastVerification.sender ?? "(absent)",
               wallet: walletAddress,
             });
             return res.status(403).json({
