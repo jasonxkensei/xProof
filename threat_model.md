@@ -30,7 +30,7 @@ Host-header-derived absolute URLs should only be treated as a production vulnera
 ## Scan Anchors
 
 - **Production entry points**: `server/index.ts`, `server/routes.ts`, `server/routes/*`
-- **Highest-risk files**: `server/routes/auth.ts`, `server/walletAuth.ts`, `server/replitAuth.ts`, `server/routes/helpers.ts`, `server/routes/proof-write.ts`, `server/routes/acp.ts`, `server/routes/credits.ts`, `server/credits.ts`, `server/routes/standard.ts`, `server/routes/certifications.ts`, `server/x402.ts`, `server/mcp.ts`, `server/webhook.ts`, `server/routes/admin.ts`, `server/routes/attestations.ts`, `server/routes/proof-read.ts`, `server/routes/trust.ts`, `server/trust.ts`, `server/audit-trail.ts`, `client/src/hooks/useWalletAuth.ts`, `client/src/components/wallet-login-modal.tsx`
+- **Highest-risk files**: `server/routes/auth.ts`, `server/walletAuth.ts`, `server/replitAuth.ts`, `server/routes/helpers.ts`, `server/routes/proof-write.ts`, `server/routes/acp.ts`, `server/routes/credits.ts`, `server/credits.ts`, `server/routes/standard.ts`, `server/routes/certifications.ts`, `server/verifyTransaction.ts`, `server/x402.ts`, `server/mcp.ts`, `server/webhook.ts`, `server/routes/admin.ts`, `server/routes/attestations.ts`, `server/routes/proof-read.ts`, `server/routes/trust.ts`, `server/trust.ts`, `server/audit-trail.ts`, `server/logger.ts`, `client/src/hooks/useWalletAuth.ts`, `client/src/components/wallet-login-modal.tsx`
 - **Public surfaces**: `server/routes/proof-read.ts`, `server/routes/trust.ts`, `server/routes/attestations.ts`, `server/trust.ts`, `server/audit-trail.ts`, embeddable trust-widget routes, discovery/content/docs routes, prerendered pages in `server/prerender.ts`
 - **Usually dev-only**: `python-sdk/`, `npm-sdk/`, `xproof-examples/`, tests, local task files
 
@@ -73,8 +73,10 @@ Most proof data is intentionally public, but not every internal secret or owner 
 Required guarantees:
 - Public proof and trust APIs MUST only expose data intentionally designated as public.
 - Public hash lookups, trust lookups, badges, partner lookups, and certificate/compliance downloads MUST respect both per-proof visibility (`certifications.isPublic`) and profile visibility (`users.isPublicProfile`) rules.
+- Public read paths MUST fail closed when the related `users` row is missing; absence of a profile record is not evidence of consent to publish.
 - Public routes MUST not reveal a hidden wallet by resolving public certification metadata through partner or integration identifiers.
 - Session secrets, API keys, and signing secrets MUST never appear in client-facing responses or logs.
+- Generic response-logging middleware MUST NOT serialize whole `/api` response bodies, because some success responses intentionally contain one-time secrets such as API keys, webhook secrets, or intent tokens.
 - Example/demo code outside the production runtime SHOULD be documented as out of scope for production scans unless later wired into the deployed app.
 
 ### Denial of Service
