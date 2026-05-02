@@ -30,7 +30,10 @@ export function registerMcpRoutesRoutes(app: Express) {
 
       const xPaymentHeader = req.headers["x-payment"] as string | undefined;
       const host = req.get('host') || '';
-      const mcpServer = await createMcpServer({ baseUrl, auth, xPaymentHeader, host });
+      // Forward the caller's IP so register_free_trial can enforce the same
+      // per-IP hourly trial-issuance quota as POST /api/agent/register.
+      const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
+      const mcpServer = await createMcpServer({ baseUrl, auth, xPaymentHeader, host, clientIp });
 
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,

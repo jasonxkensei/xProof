@@ -3,20 +3,31 @@ import { z } from "zod";
 import crypto from "crypto";
 import { db } from "./db";
 import { certifications, apiKeys, users } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import { recordOnBlockchain } from "./blockchain";
 import { getCertificationPriceUsd } from "./pricing";
 import { logger } from "./logger";
 import { auditLogSchema } from "./auditSchema";
 import { reconstructAuditTrail } from "./audit-trail";
 import { isX402Configured, verifyX402PaymentRaw, getInvestigatePaymentRequirements } from "./x402";
-import { getTrialUser, getUserCreditBalance, consumeTrialCredit, consumeCredit, atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit, isAdminWallet, getApiKeyOwnerWallet } from "./routes/helpers";
+import {
+  getTrialUser, getUserCreditBalance, consumeTrialCredit, consumeCredit,
+  atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit,
+  isAdminWallet, getApiKeyOwnerWallet,
+  TRIAL_QUOTA, registerRateLimitMap, REGISTER_RATE_LIMIT_MAX, REGISTER_RATE_LIMIT_WINDOW_MS,
+} from "./routes/helpers";
 
 interface McpContext {
   baseUrl: string;
   auth: { valid: boolean; keyHash?: string; apiKeyId?: number; userId?: string };
   xPaymentHeader?: string;
   host: string;
+  // Raw client IP (typically from x-forwarded-for or req.ip). Used by
+  // register_free_trial to enforce the same per-IP trial registration quota
+  // as the REST POST /api/agent/register path. Default "unknown" makes the
+  // rate-limit bucket collapse to a single shared bucket if upstream forgets
+  // to plumb it — fail closed rather than open.
+  clientIp: string;
 }
 
 export async function createMcpServer(ctx: McpContext) {
@@ -27,7 +38,7 @@ export async function createMcpServer(ctx: McpContext) {
     version: "1.3.0",
   });
 
-  const { baseUrl, auth, xPaymentHeader, host } = ctx;
+  const { baseUrl, auth, xPaymentHeader, host, clientIp } = ctx;
 
   server.tool(
     "certify_file",
@@ -877,23 +888,92 @@ export async function createMcpServer(ctx: McpContext) {
 
   server.tool(
     "register_free_trial",
-    "Get a free API key instantly — 10 free blockchain certifications included, no wallet or payment needed. Call this FIRST if you do not have an API key. Returns a pm_ key to use in the Authorization header for all other tools.",
+    `Get a free API key instantly — ${TRIAL_QUOTA} free blockchain certifications included, no wallet or payment needed. Call this FIRST if you do not have an API key. Returns a pm_ key to use in the Authorization header for all other tools. Limited to ${REGISTER_RATE_LIMIT_MAX} registrations per hour per IP and the agent_name must not already exist on a real wallet.`,
     {
       agent_name: z.string().min(1).max(100).describe("A unique name for your agent (e.g. 'my-trading-bot', 'research-agent-v2')."),
     },
     async ({ agent_name }) => {
       try {
+        // Mirror the REST POST /api/agent/register controls so attackers can't
+        // bypass trial-issuance limits by going through the MCP transport.
+        // (1) Per-IP rate limit using the same shared bucket as the REST path.
+        const ipHashShort = crypto.createHash("sha256").update(clientIp).digest("hex").slice(0, 16);
+        const now = Date.now();
+        const entry = registerRateLimitMap.get(ipHashShort);
+        if (entry && now < entry.resetAt && entry.count >= REGISTER_RATE_LIMIT_MAX) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({
+                error: "RATE_LIMIT_EXCEEDED",
+                message: `Maximum ${REGISTER_RATE_LIMIT_MAX} trial registrations per hour per IP. Try again later.`,
+                retry_after: Math.ceil((entry.resetAt - now) / 1000),
+              }),
+            }],
+            isError: true,
+          };
+        }
+
+        // (2) Duplicate-name check against real (non-trial) wallets, so attackers
+        // can't squat or impersonate established agent identities by minting a
+        // trial under the same name.
+        const nameLower = agent_name.toLowerCase();
+        const existingByUser = await db.select({ id: users.id })
+          .from(users)
+          .where(and(
+            sql`(LOWER(${users.companyName}) = ${nameLower} OR LOWER(${users.agentName}) = ${nameLower})`,
+            eq(users.isTrial, false),
+          ))
+          .limit(1);
+        const existingByKey = existingByUser.length === 0
+          ? await db.select({ id: apiKeys.id })
+              .from(apiKeys)
+              .innerJoin(users, eq(apiKeys.userId, users.id))
+              .where(and(
+                sql`LOWER(${apiKeys.name}) = ${nameLower}`,
+                eq(users.isTrial, false),
+                eq(apiKeys.isActive, true),
+              ))
+              .limit(1)
+          : [];
+        if (existingByUser.length > 0 || existingByKey.length > 0) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({
+                error: "DUPLICATE_AGENT_NAME",
+                message: `An agent named "${agent_name}" already exists on a real wallet. Registration blocked to prevent duplicates.`,
+                resolution: `Choose a unique name (e.g. "${agent_name}-v2" or "${agent_name}-${crypto.randomBytes(3).toString("hex")}").`,
+              }),
+            }],
+            isError: true,
+          };
+        }
+
+        // Only commit a rate-limit slot once we know we're going to proceed,
+        // so DUPLICATE_AGENT_NAME / validation failures don't burn the caller's
+        // hourly quota. This matches the spirit of the REST counter even if
+        // the REST path commits slightly earlier.
+        if (!entry || now >= entry.resetAt) {
+          registerRateLimitMap.set(ipHashShort, { count: 1, resetAt: now + REGISTER_RATE_LIMIT_WINDOW_MS });
+        } else {
+          entry.count++;
+        }
+
         const trialWallet = `erd1trial${crypto.randomBytes(24).toString("hex")}`;
+        const registrationIpHash = crypto.createHash("sha256").update(clientIp).digest("hex");
+
         const [trialUser] = await db.insert(users).values({
           walletAddress: trialWallet,
           subscriptionTier: "free",
           subscriptionStatus: "active",
           isTrial: true,
-          trialQuota: 10,
+          trialQuota: TRIAL_QUOTA,
           trialUsed: 0,
           agentName: agent_name,
           companyName: agent_name,
           isPublicProfile: true,
+          registrationIpHash,
         }).returning();
 
         const rawKey = `pm_${crypto.randomBytes(32).toString("hex")}`;
@@ -908,7 +988,11 @@ export async function createMcpServer(ctx: McpContext) {
           isActive: true,
         });
 
-        logger.info("Trial registered via MCP register_free_trial", { agentName: agent_name, userId: trialUser.id });
+        logger.info("Trial registered via MCP register_free_trial", {
+          agentName: agent_name,
+          userId: trialUser.id,
+          ipHash: ipHashShort,
+        });
 
         return {
           content: [{
@@ -916,8 +1000,8 @@ export async function createMcpServer(ctx: McpContext) {
             text: JSON.stringify({
               api_key: rawKey,
               agent_name,
-              message: "Your API key is ready. 10 free blockchain certifications included.",
-              trial: { quota: 10, remaining: 10 },
+              message: `Your API key is ready. ${TRIAL_QUOTA} free blockchain certifications included.`,
+              trial: { quota: TRIAL_QUOTA, remaining: TRIAL_QUOTA },
               next_step: "Use this key as the Bearer token in the Authorization header, then call certify_file to anchor your first proof.",
               usage: { Authorization: `Bearer ${rawKey}` },
               certify_endpoint: `${baseUrl}/api/proof`,
