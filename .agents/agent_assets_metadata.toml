@@ -6,3 +6,9 @@ id = "R6NawBePX8WEQ-20A29PB"
 uri = "file://xproof-v140-clawhub-upload.zip"
 type = "unspecified"
 title = "xProof v1.4.0 — fichiers propres pour drag-drop Clawhub"
+
+[[outputs]]
+id = "mUo_jH9jFr_TnVZ9hZu9a"
+uri = "file://xproof-v150-clawhub-upload.zip"
+type = "unspecified"
+title = "xProof v1.5.0 — doc complète + Section 0 Free Trial (drag-drop Clawhub)"

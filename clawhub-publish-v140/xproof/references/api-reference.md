@@ -1,81 +1,59 @@
-# xProof API Reference
+# xProof API Reference (Quick Index)
 
-Base URL: `https://xproof.app`
+Complete OpenAPI 3.1 spec is available at: `GET https://xproof.app/api/acp/openapi.json`
 
-## Authentication
+## Onboarding (No Account)
 
-API key via Authorization header: `Authorization: Bearer pm_xxx`
+| Method | Path | Auth | Purpose |
+|:---|:---|:---|:---|
+| `POST` | `/api/agent/register` | None | Get a `pm_` key + 10 free proofs |
+| `GET`  | `/api/agent/status` | Bearer | Credits remaining, last proof, agent metadata |
 
-Get your key at https://xproof.app (connect wallet > API Keys section).
+## Certification
 
-Alternative: x402 payment protocol (no API key needed). Send request without auth, receive 402 with payment requirements, sign USDC payment on Base, resend with `X-PAYMENT` header.
+| Method | Path | Auth | Purpose |
+|:---|:---|:---|:---|
+| `POST` | `/api/proof` | Bearer or x402 | Anchor a single file hash on MultiversX |
+| `POST` | `/api/batch` | Bearer or x402 | Anchor up to 50 files in one call |
+| `POST` | `/api/audit` | Bearer | Anchor an agent decision (audit log standard) |
 
-## Endpoints
+## Verification (Public)
 
-### POST /api/proof
+| Method | Path | Purpose |
+|:---|:---|:---|
+| `GET` | `/api/proof/:id` | JSON document for a proof UUID |
+| `GET` | `/api/proof/hash/:hash` | JSON document for a file hash |
+| `GET` | `/proof/:id` | Human-readable proof page (HTML) |
+| `GET` | `/proof/:id.json` | Same data as `/api/proof/:id` |
+| `GET` | `/api/certificates/:id.pdf` | Downloadable PDF certificate with QR |
+| `GET` | `/badge/:id` | SVG status badge (shields.io style) |
+| `GET` | `/audit/:id` | Human-readable audit log page |
 
-Certify a single file.
+## Trust & Standards
 
-**Request:**
-```json
-{
-  "file_hash": "64-char SHA-256 hex string",
-  "filename": "document.pdf",
-  "author_name": "optional",
-  "webhook_url": "https://optional-webhook-url.com"
-}
-```
+| Method | Path | Purpose |
+|:---|:---|:---|
+| `GET` | `/api/standard` | Agent Proof Standard specification |
+| `POST` | `/api/standard/validate` | Validate a proof document against the standard |
+| `GET` | `/api/artifact/trust/:hash` | Aggregate trust score for an artifact |
+| `GET` | `/api/v1/skills/xproof/file?path=...` | Read a published Clawhub skill file |
 
-**Response (200):**
-```json
-{
-  "proof_id": "uuid",
-  "verify_url": "https://xproof.app/proof/uuid",
-  "blockchain": {
-    "transaction_hash": "hex...",
-    "explorer_url": "https://explorer.multiversx.com/transactions/hex..."
-  }
-}
-```
+## MCP
 
-### POST /api/batch
+| Method | Path | Purpose |
+|:---|:---|:---|
+| `POST` | `/mcp` | JSON-RPC 2.0 endpoint (requires `Accept: application/json, text/event-stream`) |
+| `GET`  | `/mcp` | MCP capability discovery |
 
-Certify up to 50 files in one call.
+## Discovery
 
-**Request:**
-```json
-{
-  "files": [
-    {"file_hash": "...", "filename": "file1.pdf"},
-    {"file_hash": "...", "filename": "file2.zip"}
-  ],
-  "author_name": "optional",
-  "webhook_url": "https://optional-webhook-url.com"
-}
-```
-
-### GET /proof/{id}.json
-
-Get proof details in JSON format.
-
-### GET /proof/{id}.md
-
-Get proof details in Markdown format (LLM-friendly).
-
-### GET /badge/{id}
-
-Dynamic SVG badge showing certification status.
-
-### GET /api/acp/products
-
-Discover available services and pricing. No auth required.
-
-### POST /mcp
-
-MCP server endpoint. JSON-RPC 2.0 over Streamable HTTP.
-
-Available tools: `certify_file`, `verify_proof`, `get_proof`, `discover_services`.
-
-## Pricing
-
-$0.05 per certification.
+| Method | Path | Purpose |
+|:---|:---|:---|
+| `GET` | `/api/acp/openapi.json` | OpenAPI 3.1 spec (full REST surface) |
+| `GET` | `/api/acp/health` | Health check |
+| `GET` | `/.well-known/agent.json` | Agent Protocol manifest |
+| `GET` | `/.well-known/mcp.json` | MCP server manifest |
+| `GET` | `/.well-known/agent-audit-schema.json` | Audit log canonical schema |
+| `GET` | `/ai-plugin.json` | OpenAI ChatGPT plugin manifest |
+| `GET` | `/llms.txt` | LLM-friendly summary |
+| `GET` | `/llms-full.txt` | Complete LLM reference |

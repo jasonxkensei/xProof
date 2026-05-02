@@ -1,7 +1,7 @@
 ---
 name: xproof
-version: 3.0.0
-description: Proof and accountability layer for AI agents. Anchor verifiable proofs on MultiversX, enforce audit logging, detect violations on Base. REST API, MCP, x402. No proof = no action.
+version: 3.1.0
+description: Proof and accountability layer for AI agents. Anchor verifiable proofs on MultiversX, enforce audit logging, detect violations on Base. REST API, MCP, x402. Free trial with no wallet required. No proof = no action.
 homepage: https://xproof.app
 metadata: {"xproof":{"category":"proof,security,compliance,accountability","api_base":"https://xproof.app"}}
 ---
@@ -16,7 +16,79 @@ This skill enables your agent to **anchor verifiable proofs on the MultiversX bl
 
 **Why violations?** Trust requires accountability. xProof detects anomalies (gaps, burst patterns) and records violations on Base via smart contracts. Operators can subscribe to violation events and enforce policies automatically.
 
-## Quick Install
+---
+
+## 0. Quick Start -- Free Trial (No Wallet, No Card, 30 seconds)
+
+**Get a `pm_` API key instantly with 10 free certifications.** No wallet, no credit card, no signup form. The fastest way for an autonomous agent to start anchoring proofs.
+
+### REST (one curl)
+
+```bash
+# Step 1 — Register your agent (no auth required)
+curl -X POST https://xproof.app/api/agent/register \
+  -H "Content-Type: application/json" \
+  -d '{"agent_name": "my-agent"}'
+# Response: { "api_key": "pm_...", "trial": { "remaining": 10 }, ... }
+
+# Step 2 — Anchor your first proof (use the api_key from step 1)
+curl -X POST https://xproof.app/api/proof \
+  -H "Authorization: Bearer pm_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"file_hash": "<sha256_hex>", "filename": "report.pdf", "author_name": "my-agent"}'
+# Response: { "proof_id": "uuid", "verify_url": "...", "transaction_hash": "..." }
+
+# Step 3 — Verify publicly (anyone, no auth)
+curl https://xproof.app/api/proof/<proof_id>
+
+# Step 4 — Check remaining credits + last proof
+curl -H "Authorization: Bearer pm_your_key" https://xproof.app/api/agent/status
+# Response: { "credits_remaining": 9, "last_proof": {...}, ... }
+```
+
+### MCP (Clawhub install)
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+  "name":"register_free_trial",
+  "arguments":{"agent_name":"my-agent"}
+}}
+```
+
+The `register_free_trial` MCP tool requires **no authentication** -- it's the only MCP tool that can be called without an `Authorization` header. It returns the same `pm_` key as the REST endpoint.
+
+### TypeScript SDK
+
+```typescript
+import { XProofClient, hashString } from "@xproof/xproof";
+
+const client = await XProofClient.register("my-agent");  // 10 free certs, key stored
+const proof = await client.certifyHash(hashString(JSON.stringify(decision)), "decision.json", "my-agent");
+console.log(proof.verifyUrl);
+```
+
+### Python SDK
+
+```python
+from xproof import XProofClient
+
+client = XProofClient.register("my-agent")  # 10 free certs
+proof = client.certify_hash(sha256_hex, "decision.json", "my-agent")
+```
+
+### After the trial
+
+When the 10 free proofs are consumed, the agent automatically transitions to per-proof billing. Three options, no friction:
+
+| Option | Best for | Setup |
+|:---|:---|:---|
+| **Same `pm_` key + wallet top-up** | Existing trial agents | Connect wallet at https://xproof.app, deposit EGLD/USDC |
+| **x402 USDC on Base** | Autonomous agents, no account | Pay $0.05/proof per request via 402 challenge (see Section 1.3) |
+| **Existing API key (paid)** | Multi-agent fleets | Generate at xproof.app > Settings > API Keys |
+
+---
+
+## Quick Install (Skill files)
 
 ```bash
 mkdir -p .agent/skills/xproof/references
@@ -26,7 +98,7 @@ curl -sL https://raw.githubusercontent.com/jasonxkensei/xproof-openclaw-skill/ma
   > .agent/skills/xproof/SKILL.md
 
 # Reference Manuals
-for f in certification x402 mcp; do
+for f in certification x402 mcp api-reference; do
   curl -sL "https://raw.githubusercontent.com/jasonxkensei/xproof-openclaw-skill/main/xproof/references/${f}.md" \
     > ".agent/skills/xproof/references/${f}.md"
 done
@@ -38,12 +110,26 @@ done
 - **ALWAYS** add `.env` to your `.gitignore`.
 - API keys are prefixed `pm_` -- treat them like passwords.
 - x402 mode requires no API key (payment replaces authentication).
+- Free trial keys are unprivileged but still personal -- one trial per agent identity.
 
 ---
 
 ## Configuration
 
-### Option A: API Key Authentication
+### Option A: Free Trial (No Account, No Wallet)
+
+```bash
+# No env vars needed before first call. Get a key in one curl:
+curl -X POST https://xproof.app/api/agent/register \
+  -H "Content-Type: application/json" \
+  -d '{"agent_name": "my-agent"}'
+# Then store the returned api_key:
+export XPROOF_API_KEY="pm_..."
+```
+
+10 free proofs. Best for trying out the skill, prototyping, and CI flows.
+
+### Option B: API Key Authentication (Paid)
 
 ```bash
 # ---- xProof ---------------------------------------------------------------
@@ -51,41 +137,47 @@ XPROOF_API_KEY="pm_..."                          # Your API key (from xproof.app
 XPROOF_BASE_URL="https://xproof.app"             # Production endpoint
 ```
 
-Get an API key at [xproof.app](https://xproof.app) (connect wallet, go to Settings > API Keys).
+Get a paid API key at [xproof.app](https://xproof.app) (connect wallet, go to Settings > API Keys). Same `pm_` prefix, no quota.
 
-### Option B: x402 Payment Protocol (No Account Required)
+### Option C: x402 Payment Protocol (No Account Required)
 
-No configuration needed. Pay $0.05 per proof in USDC on Base (eip155:8453) directly in the HTTP request. The 402 response header tells your agent exactly what to pay.
+No configuration needed. Pay $0.05 per proof in USDC on Base (eip155:8453) directly in the HTTP request. The 402 response header tells your agent exactly what to pay. Best for fully autonomous agents that already hold USDC on Base.
 
 ---
 
 ## 1. Core Skills Catalog
 
 ### 1.1 Proof Anchoring (REST API)
-[Full Reference](references/certification.md)
+[Full Reference](references/certification.md) | [API Reference](references/api-reference.md)
 
-| Skill | Endpoint | Description |
-|:---|:---|:---|
-| `certify_file` | `POST /api/proof` | Anchor a file hash on MultiversX as immutable proof |
-| `batch_certify` | `POST /api/batch` | Anchor up to 50 files in one call |
-| `audit_agent_session` | `POST /api/audit` | Anchor agent decision on-chain BEFORE executing critical action |
-| `verify_proof` | `GET /api/proof/:id` | Verify an existing proof |
-| `get_certificate` | `GET /api/certificates/:id.pdf` | Download PDF certificate with QR code |
-| `get_badge` | `GET /badge/:id` | Dynamic SVG badge (shields.io style) |
-| `get_proof_page` | `GET /proof/:id` | Human-readable proof page |
-| `get_proof_json` | `GET /proof/:id.json` | Structured proof document (JSON) |
-| `get_audit_page` | `GET /audit/:id` | Human-readable audit log page |
+| Skill | Endpoint | Auth | Description |
+|:---|:---|:---|:---|
+| `register_free_trial` | `POST /api/agent/register` | None | Get a `pm_` key + 10 free proofs (no wallet) |
+| `agent_status` | `GET /api/agent/status` | Bearer | Credits remaining, last proof, agent metadata |
+| `certify_file` | `POST /api/proof` | Bearer or x402 | Anchor a file hash on MultiversX as immutable proof |
+| `batch_certify` | `POST /api/batch` | Bearer or x402 | Anchor up to 50 files in one call |
+| `audit_agent_session` | `POST /api/audit` | Bearer | Anchor agent decision on-chain BEFORE executing critical action |
+| `verify_proof` | `GET /api/proof/:id` | None | Verify an existing proof |
+| `get_certificate` | `GET /api/certificates/:id.pdf` | None | Download PDF certificate with QR code |
+| `get_badge` | `GET /badge/:id` | None | Dynamic SVG badge (shields.io style) |
+| `get_proof_page` | `GET /proof/:id` | None | Human-readable proof page |
+| `get_proof_json` | `GET /proof/:id.json` | None | Structured proof document (JSON) |
+| `get_audit_page` | `GET /audit/:id` | None | Human-readable audit log page |
 
 ### 1.2 Proof Anchoring (MCP -- JSON-RPC 2.0)
 [Full Reference](references/mcp.md)
 
-| Tool | Description |
-|:---|:---|
-| `certify_file` | Create blockchain proof -- SHA-256 hash, filename, optional author/webhook |
-| `verify_proof` | Verify existing proof by UUID |
-| `get_proof` | Retrieve proof in JSON or Markdown format |
-| `discover_services` | List capabilities, pricing, and usage guidance |
-| `audit_agent_session` | Anchor agent decision on-chain BEFORE executing critical action |
+| Tool | Auth | Description |
+|:---|:---|:---|
+| `register_free_trial` | **None** | Get a free `pm_` key + 10 proofs without an account or wallet |
+| `certify_file` | Bearer | Create blockchain proof -- SHA-256 hash, filename, optional author/webhook |
+| `certify_with_confidence` | Bearer | Certify with confidence score, model name, and reasoning trace |
+| `verify_proof` | None | Verify existing proof by UUID |
+| `get_proof` | None | Retrieve proof in JSON or Markdown format |
+| `discover_services` | None | List capabilities, pricing, and usage guidance |
+| `audit_agent_session` | Bearer | Anchor agent decision on-chain BEFORE executing critical action |
+| `check_attestations` | None | Check domain-specific attestations for an agent wallet on Base |
+| `investigate_proof` | None | Reconstruct the full 4W audit trail for a contested agent action |
 
 ### 1.3 Payment (x402)
 [Full Reference](references/x402.md)
@@ -110,15 +202,27 @@ x402 is not a separate skill -- it is a payment method. When you call `POST /api
 
 ### Step-by-Step
 
-1. **Hash locally** -- compute SHA-256 of your file (client-side; the file never leaves your machine)
-2. **Send metadata** -- POST the hash + filename to `/api/proof` (with API key or x402 payment)
-3. **Receive proof** -- xProof records the hash on MultiversX mainnet (6-second finality)
-4. **Verify anytime** -- anyone can verify via proof URL, JSON endpoint, or blockchain explorer
-5. **Embed proof** -- use the SVG badge, PDF certificate, or proof URL in your deliverables
+1. **Register (optional, free)** -- if you don't have a key yet, `POST /api/agent/register` for an instant `pm_` trial key (10 proofs, no wallet)
+2. **Hash locally** -- compute SHA-256 of your file (client-side; the file never leaves your machine)
+3. **Send metadata** -- POST the hash + filename to `/api/proof` (with API key or x402 payment)
+4. **Receive proof** -- xProof records the hash on MultiversX mainnet (6-second finality)
+5. **Verify anytime** -- anyone can verify via proof URL, JSON endpoint, or blockchain explorer
+6. **Embed proof** -- use the SVG badge, PDF certificate, or proof URL in your deliverables
 
 ---
 
 ## 3. Authentication Methods
+
+### Free Trial (No Wallet, No Card)
+
+```bash
+# Get a pm_ key instantly with 10 free proofs
+curl -X POST https://xproof.app/api/agent/register \
+  -H "Content-Type: application/json" \
+  -d '{"agent_name": "my-agent"}'
+```
+
+The returned `api_key` works exactly like a paid key for all `Bearer pm_...` endpoints.
 
 ### API Key (Bearer Token)
 
@@ -151,10 +255,13 @@ curl -X POST https://xproof.app/api/proof \
 
 ### MCP (JSON-RPC 2.0)
 
+**Important:** MCP requires the `Accept: application/json, text/event-stream` header on every call.
+
 ```bash
 curl -X POST https://xproof.app/mcp \
   -H "Authorization: Bearer pm_your_key_here" \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
@@ -168,6 +275,8 @@ curl -X POST https://xproof.app/mcp \
     }
   }'
 ```
+
+The MCP tool `register_free_trial` is the only one that does **not** require the `Authorization` header -- use it to bootstrap a key on first run.
 
 ---
 
@@ -188,6 +297,8 @@ curl -X POST https://xproof.app/api/batch \
     "author_name": "MyAgent"
   }'
 ```
+
+Each file in the batch consumes one credit (trial users) or one billable unit (paid users).
 
 ---
 
@@ -384,7 +495,7 @@ xProof implements the open Agent Proof Standard -- a composable, chain-agnostic 
 
 Full specification: [AGENT_PROOF_STANDARD.md](https://github.com/jasonxkensei/xProof/blob/main/AGENT_PROOF_STANDARD.md)
 
-Standard API: `GET /api/standard` | `GET /api/standard/validate` (POST)
+Standard API: `GET /api/standard` | `POST /api/standard/validate`
 
 ---
 
@@ -401,31 +512,50 @@ Standard API: `GET /api/standard` | `GET /api/standard/validate` (POST)
 | `POST /mcp` | MCP JSON-RPC 2.0 endpoint |
 | `GET /mcp` | MCP capability discovery |
 | `GET /api/standard` | Agent Proof Standard specification |
+| `GET /api/acp/openapi.json` | OpenAPI 3.1 spec for the full REST surface |
 
 ---
 
 ## 12. Command Cheatsheet
 
 ```bash
-# Anchor a single file proof
-sha256sum myfile.pdf | awk '{print $1}'
-# Then POST the hash to /api/proof
+# Get a free pm_ key (no wallet, no card)
+curl -X POST https://xproof.app/api/agent/register \
+  -H "Content-Type: application/json" \
+  -d '{"agent_name": "my-agent"}'
 
-# Anchor via MCP
+# Hash a file locally
+sha256sum myfile.pdf | awk '{print $1}'
+
+# Anchor a single file proof
+curl -X POST https://xproof.app/api/proof \
+  -H "Authorization: Bearer pm_..." \
+  -d '{"file_hash":"...","filename":"myfile.pdf","author_name":"my-agent"}'
+
+# Anchor via MCP (note the Accept header)
 curl -X POST https://xproof.app/mcp \
   -H "Authorization: Bearer pm_..." \
+  -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"certify_file","arguments":{"file_hash":"...","filename":"myfile.pdf"}}}'
 
-# Verify a proof
+# Verify a proof (no auth)
 curl https://xproof.app/api/proof/<proof_id>
+
+# Check agent status (credits + last proof)
+curl -H "Authorization: Bearer pm_..." https://xproof.app/api/agent/status
 
 # Get badge (embed in README)
 ![xProof](https://xproof.app/badge/<proof_id>)
 
-# Batch anchor
+# Batch anchor up to 50 files
 curl -X POST https://xproof.app/api/batch \
   -H "Authorization: Bearer pm_..." \
   -d '{"files":[{"file_hash":"...","filename":"a.txt"},{"file_hash":"...","filename":"b.txt"}]}'
+
+# Audit a critical action (block on failure)
+curl -X POST https://xproof.app/api/audit \
+  -H "Authorization: Bearer pm_..." \
+  -d '{"agent_id":"my-agent","session_id":"<uuid>","action_type":"trade","action_description":"...","inputs_hash":"...","risk_level":"high","decision":"approved"}'
 
 # Health check
 curl https://xproof.app/api/acp/health
