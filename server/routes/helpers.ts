@@ -8,6 +8,42 @@ import { sql } from "drizzle-orm";
 
 export const TRIAL_QUOTA = 10;
 
+/**
+ * Extract the real client IP from the request.
+ *
+ * SECURITY: We deliberately do NOT use `req.ip` here. With
+ * `app.set('trust proxy', 1)` (server/index.ts), Express's `req.ip` returns
+ * the LEFTMOST entry of `X-Forwarded-For` when the chain has a single hop —
+ * and that leftmost entry is fully attacker-controlled. An attacker can send
+ * `X-Forwarded-For: 203.0.113.99` directly and cause `req.ip = 203.0.113.99`,
+ * defeating any per-IP abuse control (the previous behaviour at
+ * /api/agent/register let a single source rotate XFF values to bypass the
+ * 10-trial-per-hour cap and mint unlimited free `pm_` API keys).
+ *
+ * Production semantics: Replit's edge proxy ALWAYS appends the real client
+ * address as the rightmost entry of `X-Forwarded-For`. Taking the rightmost
+ * entry therefore yields the proxy-attested client IP regardless of any
+ * spoofed values the attacker prepended.
+ *
+ * Dev semantics: when no proxy is in front (direct curl to localhost) and
+ * no `X-Forwarded-For` header is present, we fall back to the socket address.
+ */
+export function getClientIp(req: express.Request): string {
+  const xff = req.headers["x-forwarded-for"];
+  if (xff) {
+    const chain = xff
+      .toString()
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (chain.length > 0) {
+      // Rightmost = appended by the trusted edge proxy in production.
+      return chain[chain.length - 1];
+    }
+  }
+  return req.socket?.remoteAddress || "unknown";
+}
+
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_MAX = 100;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;

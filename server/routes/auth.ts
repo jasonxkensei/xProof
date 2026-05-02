@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { db } from "../db";
 import { logger } from "../logger";
 import { users } from "@shared/schema";
+import { getClientIp } from "./helpers";
 import { eq } from "drizzle-orm";
 import { isWalletAuthenticated, createWalletSession, destroyWalletSession } from "../walletAuth";
 import { authRateLimiter } from "../reliability";
@@ -53,8 +54,12 @@ export function registerAuthRoutes(app: Express) {
       let [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
 
       if (!user) {
-        // Create new user with free tier
-        const regIp = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
+        // Create new user with free tier.
+        // SECURITY: see getClientIp() in helpers.ts — uses the rightmost
+        // X-Forwarded-For entry (proxy-attested) instead of trusting the
+        // attacker-controlled leftmost entry that Express's `req.ip`
+        // returns under `trust proxy: 1`.
+        const regIp = getClientIp(req);
         const regIpHash = crypto.createHash("sha256").update(regIp).digest("hex");
         [user] = await db
           .insert(users)

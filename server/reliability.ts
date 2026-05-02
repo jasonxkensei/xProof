@@ -6,12 +6,24 @@ import { isMX8004Configured } from "./mx8004";
 import { isMultiversXConfigured } from "./blockchain";
 import { execSync } from "child_process";
 import { logger } from "./logger";
+import { getClientIp } from "./routes/helpers";
+
+// SECURITY: All IP-based rate limiters MUST key on getClientIp() rather than
+// the express-rate-limit default (which uses `req.ip`). Under
+// `app.set('trust proxy', 1)` (server/index.ts) Express's `req.ip` returns
+// the LEFTMOST entry of `X-Forwarded-For` when the chain is single-hop, and
+// that entry is fully attacker-controlled — letting a single source defeat
+// any per-IP cap by rotating XFF values. getClientIp() returns the rightmost
+// XFF entry instead, which Replit's edge proxy appends with the real client
+// address. See server/routes/helpers.ts for the full rationale.
+const ipKeyGenerator = (req: Request) => getClientIp(req);
 
 export const globalRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
   message: { error: "TOO_MANY_REQUESTS", message: "Too many requests, please try again later" },
   skip: (req) => {
     return req.path === "/api/acp/health";
@@ -23,6 +35,7 @@ export const healthRateLimiter = rateLimit({
   max: 15,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
   message: { error: "TOO_MANY_REQUESTS", message: "Too many health check requests, please try again later" },
 });
 
@@ -31,6 +44,7 @@ export const authRateLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
   message: { error: "TOO_MANY_REQUESTS", message: "Too many authentication attempts, please try again later" },
 });
 
@@ -39,6 +53,7 @@ export const paymentRateLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
   message: { error: "TOO_MANY_REQUESTS", message: "Too many payment requests, please try again later" },
 });
 
@@ -47,6 +62,7 @@ export const apiKeyCreationRateLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
   message: { error: "TOO_MANY_REQUESTS", message: "Too many API key operations, please try again later" },
 });
 
@@ -65,6 +81,7 @@ export const publicReadRateLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
   message: { error: "TOO_MANY_REQUESTS", message: "Too many requests, please try again later" },
 });
 
@@ -73,6 +90,7 @@ export const publicSearchRateLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
   message: { error: "TOO_MANY_REQUESTS", message: "Too many search requests, please try again later" },
 });
 
@@ -81,6 +99,7 @@ export const publicCompareRateLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
   message: { error: "TOO_MANY_REQUESTS", message: "Too many comparison requests, please try again later" },
 });
 

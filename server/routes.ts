@@ -16,7 +16,7 @@ import { registerCreditsRoutes } from "./routes/credits";
 import { registerAgentsRoutes } from "./routes/agents";
 import { registerProofWriteRoutes } from "./routes/proof-write";
 import { registerAcpRoutes } from "./routes/acp";
-import { validateApiKey } from "./routes/helpers";
+import { validateApiKey, getClientIp } from "./routes/helpers";
 import { registerContentRoutes } from "./routes/content";
 import { registerMx8004Routes } from "./routes/mx8004";
 import { registerMcpRoutesRoutes } from "./routes/mcp-routes";
@@ -65,7 +65,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const path = req.path;
     if (SKIP_VISIT_PATHS.test(path) || SKIP_VISIT_EXT.test(path) || SCAN_PATHS.test(path)) return;
 
-    const ip = req.ip || req.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
+    // SECURITY: see getClientIp() in routes/helpers.ts. Visit tracking uses
+    // the same proxy-attested IP as registrationIpHash so admin queries can
+    // correlate trial-abuse audits across visits and registrations.
+    const ip = getClientIp(req);
     const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
     if (EXCLUDED_IP_HASHES.has(ipHash)) return;
     const dedupeKey = `${ipHash}:${path}`;

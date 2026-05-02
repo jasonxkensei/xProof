@@ -10,7 +10,7 @@ import { getAlertConfig } from "../txAlerts";
 import { getMetrics } from "../metrics";
 import { getPricingInfo } from "../pricing";
 import { getTxQueueStats } from "../txQueue";
-import { requireAdmin, EXCLUDED_IP_HASHES } from "./helpers";
+import { requireAdmin, EXCLUDED_IP_HASHES, getClientIp } from "./helpers";
 
 export function registerAdminRoutes(app: Express) {
   app.get("/api/stats", async (req: any, res) => {
@@ -252,7 +252,10 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.get("/api/admin/my-ip-hash", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
-    const ip = req.ip || req.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
+    // Match the IP-hashing convention used at registration/visit time
+    // (see getClientIp() in helpers.ts): rightmost X-Forwarded-For entry
+    // appended by the trusted edge proxy.
+    const ip = getClientIp(req);
     const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
     const excluded = EXCLUDED_IP_HASHES.has(ipHash);
     const [visitCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(visits).where(eq(visits.ipHash, ipHash));

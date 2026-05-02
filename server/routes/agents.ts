@@ -8,7 +8,7 @@ import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
 import { paymentRateLimiter } from "../reliability";
 import { computeTrustScoreByWallet } from "../trust";
-import { TRIAL_QUOTA, registerRateLimitMap, REGISTER_RATE_LIMIT_MAX, REGISTER_RATE_LIMIT_WINDOW_MS } from "./helpers";
+import { TRIAL_QUOTA, registerRateLimitMap, REGISTER_RATE_LIMIT_MAX, REGISTER_RATE_LIMIT_WINDOW_MS, getClientIp } from "./helpers";
 
 // ============================================
 // Builds the machine-actionable quick_start guide
@@ -332,7 +332,12 @@ export function registerAgentsRoutes(app: Express) {
 
   app.post("/api/agent/register", paymentRateLimiter, async (req, res) => {
     try {
-      const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
+      // SECURITY: see getClientIp() — uses the rightmost entry of
+      // X-Forwarded-For, which Replit's edge proxy appends with the real
+      // client address. This closes the previous bypass where a caller
+      // could rotate `X-Forwarded-For: 203.0.113.<n>` values to defeat
+      // REGISTER_RATE_LIMIT_MAX and mint unlimited trial API keys.
+      const ip = getClientIp(req);
       const ipHash = crypto.createHash("sha256").update(ip).digest("hex").slice(0, 16);
 
       const now = Date.now();
@@ -384,8 +389,10 @@ export function registerAgentsRoutes(app: Express) {
       }
 
       const trialWallet = `erd1trial${crypto.randomBytes(24).toString("hex")}`;
-      const registrationIpFull = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.ip || "unknown";
-      const registrationIpHash = crypto.createHash("sha256").update(registrationIpFull).digest("hex");
+      // Persist the same proxy-normalized IP hash we used for rate-limiting,
+      // so abuse audits and per-IP forensic queries stay consistent and are
+      // not skewed by spoofed XFF entries (see SECURITY note above).
+      const registrationIpHash = crypto.createHash("sha256").update(ip).digest("hex");
 
       // Generate a per-account webhook secret derived from the key — stable and unique
       const webhookSecretSeed = crypto.randomBytes(16).toString("hex");
