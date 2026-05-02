@@ -327,6 +327,12 @@ export function registerStandardRoutes(app: Express) {
       // Resolve the userId before the pending reservation insert.
       let userId = apiKeyUserId;
       if (!userId) {
+        // API keys always carry a non-null userId (schema enforces NOT NULL). If we somehow
+        // reached here with an API-key auth but no userId, reject instead of misattributing
+        // the certification to the shared system account and bypassing billing.
+        if (authMethod === "api_key") {
+          return res.status(401).json({ error: "UNAUTHORIZED", message: "API key has no associated account. Please re-register." });
+        }
         const [systemUser] = await db
           .select({ id: users.id })
           .from(users)
