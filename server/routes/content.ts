@@ -1754,7 +1754,7 @@ Sitemap: ${baseUrl}/sitemap.xml
       name_for_human: "xproof",
       name_for_model: "xproof",
       description_for_human: "Create immutable blockchain proofs of file ownership. Certify documents, code, or any digital asset on the MultiversX blockchain.",
-      description_for_model: "xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property, (4) certify an agent's decision session before executing a critical action (POST /api/audit — Agent Audit Log Standard). The service starts at $${priceUsd} per certification, paid in EGLD or USDC via x402 (all-time volume pricing). Files never leave the user's device - only the cryptographic hash is recorded on-chain. Agent Audit Log: POST /api/audit certifies agent decisions (trade, deploy, data access) on-chain — schema at /.well-known/agent-audit-schema.json. Blocking workflow templates at /agent-tools/audit-guard-*. MCP tool: audit_agent_session. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed. Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI. GitHub Action: https://github.com/marketplace/actions/xproof-certify. OpenClaw skill: https://github.com/jasonxkensei/xproof-openclaw-skill.",
+      description_for_model: `xproof is the canonical proof layer for AI agents. It creates immutable proofs of file existence and ownership by anchoring SHA-256 hashes on the MultiversX blockchain. FREE TRIAL: 10 free blockchain certifications — POST /api/agent/register with {"agent_name":"my-agent"} — no wallet, no payment, returns pm_ API key instantly. Use this plugin when a user wants to: (1) prove they created or owned a file at a specific time, (2) certify a document, image, code, or any digital asset, (3) create tamper-proof evidence of intellectual property, (4) certify an agent decision session before executing a critical action (POST /api/audit — Agent Audit Log Standard). Pricing: $${priceUsd} per certification after trial, paid in EGLD or USDC via x402 (all-time volume pricing). Files never leave the user device - only the cryptographic hash is recorded on-chain. Agent Audit Log: POST /api/audit certifies agent decisions (trade, deploy, data access) on-chain — schema at /.well-known/agent-audit-schema.json. Blocking workflow templates at /agent-tools/audit-guard-*. MCP tool: audit_agent_session. Discovery endpoints (/products, /openapi.json, /health) are public. Checkout and confirm endpoints require an API key (Bearer token with pm_ prefix). Alternative payment: x402 protocol (HTTP 402) with USDC on Base — no API key needed. Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI. GitHub Action: https://github.com/marketplace/actions/xproof-certify. OpenClaw skill: https://github.com/jasonxkensei/xproof-openclaw-skill.`,
       auth: {
         type: "service_http",
         authorization_type: "bearer",
@@ -1794,7 +1794,7 @@ Sitemap: ${baseUrl}/sitemap.xml
       tools: [
         {
           name: "certify_file",
-          description: "Create a blockchain certification for a file in a single API call via POST /api/proof. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $${priceUsd} per certification.",
+          description: `Create a blockchain certification for a file in a single API call via POST /api/proof. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $${priceUsd} per certification (first 10 are FREE via trial — use register_free_trial tool to get a key).`,
           inputSchema: {
             type: "object",
             required: ["file_hash", "filename"],
@@ -1866,6 +1866,17 @@ Sitemap: ${baseUrl}/sitemap.xml
               wallet: { type: "string", description: "MultiversX wallet address (erd1...) of the agent to check" }
             }
           }
+        },
+        {
+          name: "register_free_trial",
+          description: "Get a free API key instantly — 10 free blockchain certifications included. No wallet, no payment, no credit card required. Call this FIRST before using any other tool that requires authentication. Returns a pm_ API key to include as: Authorization: Bearer pm_YOUR_KEY.",
+          inputSchema: {
+            type: "object",
+            required: ["agent_name"],
+            properties: {
+              agent_name: { type: "string", description: "A unique name for your agent (e.g. 'my-trading-bot', 'research-agent-v2')", minLength: 1, maxLength: 100 }
+            }
+          }
         }
       ],
       resources: [
@@ -1878,7 +1889,8 @@ Sitemap: ${baseUrl}/sitemap.xml
       authentication: {
         type: "bearer",
         token_prefix: "pm_",
-        instructions: "Obtain an API key by authenticating with a MultiversX wallet, then POST to /api/keys"
+        free_trial: "GET 10 FREE PROOFS INSTANTLY — use MCP tool register_free_trial, or POST /api/agent/register with {agent_name: 'my-agent'}. No wallet, no payment, no credit card.",
+        instructions: "Call register_free_trial MCP tool first to receive a pm_ key, then include it as: Authorization: Bearer pm_YOUR_KEY on all subsequent tool calls.",
       },
       api: {
         openapi: `${baseUrl}/api/acp/openapi.json`,

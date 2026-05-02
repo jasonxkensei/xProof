@@ -910,6 +910,160 @@ export function registerAcpRoutes(app: Express) {
             },
           },
         },
+        "/api/agent/register": {
+          post: {
+            summary: "Register a free trial agent",
+            description: "Get a free API key instantly — 10 blockchain certifications included. No wallet, no payment, no credit card required. This is the recommended first step for AI agents integrating with xproof.",
+            security: [],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["agent_name"],
+                    properties: {
+                      agent_name: { type: "string", minLength: 1, maxLength: 100, description: "A unique name for your agent", example: "my-trading-bot" },
+                      webhook_url: { type: "string", format: "uri", description: "Optional HTTPS webhook URL to receive certification notifications", example: "https://your-agent.example.com/webhooks/xproof" },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {
+              "201": {
+                description: "Trial registration successful — API key returned immediately",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        api_key: { type: "string", description: "pm_ prefixed API key — use as Bearer token in Authorization header", example: "pm_abc123..." },
+                        agent_name: { type: "string" },
+                        trial: {
+                          type: "object",
+                          properties: {
+                            quota: { type: "integer", example: 10 },
+                            remaining: { type: "integer", example: 10 },
+                            reset: { type: "string", description: "Trial does not reset — quota is lifetime" },
+                          },
+                        },
+                        certify_endpoint: { type: "string", format: "uri", description: "Use this URL to certify files: POST /api/proof with Authorization: Bearer pm_YOUR_KEY" },
+                        message: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+              "400": { description: "Invalid request (agent_name missing or malformed)" },
+              "409": { description: "Agent name already registered" },
+              "429": { description: "Too many registrations from this IP" },
+            },
+          },
+        },
+        "/api/agent/status": {
+          get: {
+            summary: "Check agent trial status",
+            description: "Returns the remaining trial quota and usage statistics for the authenticated agent.",
+            responses: {
+              "200": {
+                description: "Agent status",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        agent_name: { type: "string" },
+                        is_trial: { type: "boolean" },
+                        trial_quota: { type: "integer", example: 10 },
+                        trial_used: { type: "integer", example: 3 },
+                        trial_remaining: { type: "integer", example: 7 },
+                        credit_balance: { type: "integer", description: "Prepaid credit balance (post-trial)" },
+                      },
+                    },
+                  },
+                },
+              },
+              "401": { description: "API key required" },
+            },
+          },
+        },
+        "/api/batch": {
+          post: {
+            summary: "Batch certify multiple files",
+            description: "Certify up to 50 files in a single request. Each file is recorded individually on MultiversX blockchain. Consumes one credit per file. Returns an array of proof results.",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["files"],
+                    properties: {
+                      files: {
+                        type: "array",
+                        maxItems: 50,
+                        description: "Array of files to certify",
+                        items: {
+                          type: "object",
+                          required: ["file_hash", "filename"],
+                          properties: {
+                            file_hash: { type: "string", description: "SHA-256 hash (64 hex chars)", example: "a1b2c3d4e5f678901234567890123456789012345678901234567890123456ab" },
+                            filename: { type: "string", example: "report.pdf" },
+                            author_name: { type: "string", example: "AI Agent" },
+                            metadata: { type: "object", description: "Optional key-value metadata (searchable)", additionalProperties: true },
+                          },
+                        },
+                      },
+                      webhook_url: { type: "string", format: "uri", description: "Optional HTTPS URL to receive notifications for each certified file" },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {
+              "207": {
+                description: "Multi-status — array of results, one per file. Each result has its own status code.",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        results: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              filename: { type: "string" },
+                              file_hash: { type: "string" },
+                              status: { type: "string", enum: ["certified", "already_certified", "error"] },
+                              proof_id: { type: "string", format: "uuid" },
+                              verify_url: { type: "string", format: "uri" },
+                              blockchain: { type: "object", properties: { transaction_hash: { type: "string" }, explorer_url: { type: "string", format: "uri" } } },
+                            },
+                          },
+                        },
+                        summary: {
+                          type: "object",
+                          properties: {
+                            total: { type: "integer" },
+                            certified: { type: "integer" },
+                            already_certified: { type: "integer" },
+                            errors: { type: "integer" },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              "400": { description: "Invalid request (too many files, missing fields)" },
+              "401": { description: "API key required" },
+              "402": { description: "Payment required — trial exhausted or no credits (x402 protocol response body includes payment instructions)" },
+              "429": { description: "Rate limit exceeded" },
+            },
+          },
+        },
       },
     };
 

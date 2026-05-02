@@ -397,6 +397,7 @@ export function registerAgentsRoutes(app: Express) {
         isTrial: true,
         trialQuota: TRIAL_QUOTA,
         trialUsed: 0,
+        agentName: data.agent_name,
         companyName: data.agent_name,
         registrationIpHash,
         ...(data.webhook_url ? { webhookUrl: data.webhook_url, webhookSecret: webhookSecretSeed } : {}),

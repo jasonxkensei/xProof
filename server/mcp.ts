@@ -841,6 +841,63 @@ export async function createMcpServer(ctx: McpContext) {
     }
   );
 
+  server.tool(
+    "register_free_trial",
+    "Get a free API key instantly — 10 free blockchain certifications included, no wallet or payment needed. Call this FIRST if you do not have an API key. Returns a pm_ key to use in the Authorization header for all other tools.",
+    {
+      agent_name: z.string().min(1).max(100).describe("A unique name for your agent (e.g. 'my-trading-bot', 'research-agent-v2')."),
+    },
+    async ({ agent_name }) => {
+      try {
+        const trialWallet = `erd1trial${crypto.randomBytes(24).toString("hex")}`;
+        const [trialUser] = await db.insert(users).values({
+          walletAddress: trialWallet,
+          subscriptionTier: "free",
+          subscriptionStatus: "active",
+          isTrial: true,
+          trialQuota: 10,
+          trialUsed: 0,
+          agentName: agent_name,
+          companyName: agent_name,
+        }).returning();
+
+        const rawKey = `pm_${crypto.randomBytes(32).toString("hex")}`;
+        const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+        const keyPrefix = rawKey.slice(0, 10);
+
+        await db.insert(apiKeys).values({
+          keyHash,
+          keyPrefix,
+          userId: trialUser.id,
+          name: `Trial: ${agent_name}`,
+          isActive: true,
+        });
+
+        logger.info("Trial registered via MCP register_free_trial", { agentName: agent_name, userId: trialUser.id });
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              api_key: rawKey,
+              agent_name,
+              message: "Your API key is ready. 10 free blockchain certifications included.",
+              trial: { quota: 10, remaining: 10 },
+              next_step: "Use this key as the Bearer token in the Authorization header, then call certify_file to anchor your first proof.",
+              usage: { Authorization: `Bearer ${rawKey}` },
+              certify_endpoint: `${baseUrl}/api/proof`,
+            }),
+          }],
+        };
+      } catch (error: any) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "REGISTRATION_FAILED", message: error.message }) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
   server.resource(
     "specification",
     "xproof://specification",
