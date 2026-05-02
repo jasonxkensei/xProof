@@ -207,6 +207,8 @@ export function registerTrustRoutes(app: Express) {
         return res.status(400).json({ error: "proof_id query parameter is required" });
       }
 
+      // Public, unauthenticated read path: must NOT trigger governance writes.
+      // reconstructAuditTrail defaults to recordViolations=false; we omit the flag explicitly here.
       const result = await reconstructAuditTrail(wallet, proofId);
       res.json(result);
     } catch (err: any) {
@@ -231,8 +233,10 @@ export function registerTrustRoutes(app: Express) {
         return res.status(404).json({ message: "Agent profile not found or not public" });
       }
 
+      // notes is intentionally excluded — it holds internal admin/moderation context
+      // (populated via /api/admin/violations/:id/{confirm,reject}) and must not be public.
       const rows = await db.execute(sql`
-        SELECT id, wallet_address, proof_id, type, status, reason, auto_confirmed, detected_at, confirmed_at, notes
+        SELECT id, wallet_address, proof_id, type, status, reason, auto_confirmed, detected_at, confirmed_at
         FROM agent_violations
         WHERE wallet_address = ${wallet}
         ORDER BY detected_at DESC

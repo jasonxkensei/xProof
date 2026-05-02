@@ -823,7 +823,9 @@ export async function createMcpServer(ctx: McpContext) {
           }
         }
 
-        const result = await reconstructAuditTrail(wallet, proof_id);
+        // investigate_proof is a paid (x402 / API key) governance action: explicitly opt in
+        // to recording violations. Public unauthenticated read paths leave this disabled.
+        const result = await reconstructAuditTrail(wallet, proof_id, { recordViolations: true });
 
         return {
           content: [{

@@ -680,8 +680,16 @@ export function prerenderMiddleware() {
         const proofId = proofMatch[1];
         try {
           const [cert] = await db.select().from(certifications).where(eq(certifications.id, proofId));
-          if (cert && cert.isPublic) {
-            return res.status(200).set("Content-Type", "text/html").send(renderProofPage(baseUrl, cert));
+          // Mirror the canonical privacy gate from server/routes/proof-read.ts:48-93:
+          // both certifications.isPublic AND owning users.isPublicProfile must be true.
+          if (cert && cert.isPublic && cert.userId) {
+            const [owner] = await db
+              .select({ isPublicProfile: users.isPublicProfile })
+              .from(users)
+              .where(eq(users.id, cert.userId));
+            if (owner?.isPublicProfile) {
+              return res.status(200).set("Content-Type", "text/html").send(renderProofPage(baseUrl, cert));
+            }
           }
         } catch (e) {
           logger.error("Error fetching proof", { component: "prerender" });

@@ -99,7 +99,6 @@ interface ViolationRecord {
   auto_confirmed: boolean;
   detected_at: string;
   confirmed_at: string | null;
-  notes: string | null;
 }
 
 const TRUST_LEVEL_STYLES: Record<string, { badge: string }> = {

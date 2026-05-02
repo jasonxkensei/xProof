@@ -40,7 +40,22 @@ function formatProofEntry(proof: any, role: string, wallet?: string) {
   };
 }
 
-export async function reconstructAuditTrail(wallet: string, proofId: string) {
+export interface ReconstructAuditTrailOptions {
+  /**
+   * Whether to invoke detectAndRecordViolations as a side effect.
+   * Default false: callers must explicitly opt in to performing governance writes
+   * (creating or auto-confirming agent_violations rows). Public, unauthenticated
+   * read paths must leave this false to prevent anonymous trust-score manipulation.
+   */
+  recordViolations?: boolean;
+}
+
+export async function reconstructAuditTrail(
+  wallet: string,
+  proofId: string,
+  options: ReconstructAuditTrailOptions = {},
+) {
+  const { recordViolations = false } = options;
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!proofId || !uuidRegex.test(proofId)) {
     throw { status: 400, error: "Invalid proof_id format — expected UUID" } as AuditTrailError;
@@ -294,9 +309,11 @@ export async function reconstructAuditTrail(wallet: string, proofId: string) {
     violationsCreated: 0,
   };
 
-  const vCount = await detectAndRecordViolations(wallet, proofId, verification, timeline);
-  result.violations_created = vCount;
-  result.violationsCreated = vCount;
+  if (recordViolations) {
+    const vCount = await detectAndRecordViolations(wallet, proofId, verification, timeline);
+    result.violations_created = vCount;
+    result.violationsCreated = vCount;
+  }
 
   return result;
 }
