@@ -62,7 +62,8 @@ export async function getEgldUsdPrice(): Promise<number> {
 
   try {
     const response = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=elrond-erd-2&vs_currencies=usd"
+      "https://api.coingecko.com/api/v3/simple/price?ids=elrond-erd-2&vs_currencies=usd",
+      { signal: AbortSignal.timeout(5000) }
     );
     
     if (!response.ok) {

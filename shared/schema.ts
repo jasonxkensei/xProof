@@ -229,7 +229,7 @@ export interface ACPCheckoutResponse {
 // ACP Confirmation Request - agent confirms transaction was executed
 export const acpConfirmRequestSchema = z.object({
   checkout_id: z.string(),
-  tx_hash: z.string().min(1, "Transaction hash is required"),
+  tx_hash: z.string().min(64, "Transaction hash must be 64 hex characters").max(64, "Transaction hash must be 64 hex characters").regex(/^[0-9a-fA-F]+$/, "Transaction hash must contain only hex characters"),
 });
 
 export type ACPConfirmRequest = z.infer<typeof acpConfirmRequestSchema>;

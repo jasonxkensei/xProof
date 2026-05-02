@@ -520,7 +520,7 @@ export function registerAcpRoutes(app: Express) {
       let txStatus = "pending";
 
       try {
-        const txResponse = await fetch(`${apiUrl}/transactions/${data.tx_hash}`);
+        const txResponse = await fetch(`${apiUrl}/transactions/${data.tx_hash}`, { signal: AbortSignal.timeout(10000) });
         if (txResponse.ok) {
           const txData = await txResponse.json();
           txStatus = txData.status;
