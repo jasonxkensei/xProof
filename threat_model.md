@@ -118,3 +118,11 @@ Required guarantees:
 - MCP trial-registration tools are production write-enablement surfaces even when they do not directly anchor proofs. They must enforce the same registration throttling, duplicate controls, and abuse controls as REST trial registration because returned `pm_` keys carry free certification quota.
 - Health and liveness endpoints are production DoS surfaces when they perform live database queries or outbound blockchain gateway checks. Treat unthrottled expensive health checks as in scope even when the endpoint is intended for platform monitoring.
 - The 2026-05-02 auth/admin review found wallet session creation tied to MultiversX Native Auth validation, disabled legacy wallet spoofing endpoints, wallet-owned API key management, and fail-closed admin authorization. Keep these as review anchors if the auth/session implementation changes.
+
+## Scan Notes — 2026-05-02 Production Security Scan
+
+- Production deployment configuration that contributes runtime environment variables, including `.replit` `[userenv.shared]`, is in scope when it contains authorization secrets or administrative controls used by `server/` code.
+- Do not manually trust the leftmost raw `X-Forwarded-For` value for quota, trial, abuse, or audit decisions; use the proxy-normalized Express client IP or a trusted platform-provided client identity.
+- Proof-write input bounds must be enforced at field and downstream sink level, not only by the generic Express JSON body limit, because filenames/authors are serialized into server-paid blockchain transaction payloads.
+- Public report/discovery routes such as leaderboards and PDFs need bounded queries, caching, and route-specific throttling when they perform trust scoring or document generation for anonymous callers.
+- Secret-bearing callback URLs must be redacted before logging; webhook destination validation mitigates SSRF but does not make the full URL safe for logs.
