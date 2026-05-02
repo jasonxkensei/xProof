@@ -103,6 +103,14 @@ export const publicCompareRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many comparison requests, please try again later" },
 });
 
+export const publicPdfRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
+});
+
 let commitSha = "unknown";
 try {
   commitSha = execSync("git rev-parse --short HEAD 2>/dev/null").toString().trim() || "unknown";

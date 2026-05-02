@@ -336,9 +336,11 @@ export interface LeaderboardResult {
   totalPages: number;
 }
 
-export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<LeaderboardResult> {
-  const page = Math.max(1, filters.page || 1);
-  const limit = Math.min(100, Math.max(1, filters.limit || 50));
+const LEADERBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
+let leaderboardCache: { allEntries: LeaderboardEntry[]; cachedAt: number } | null = null;
+let leaderboardInflight: Promise<LeaderboardEntry[]> | null = null;
+
+async function computeAllLeaderboardEntries(): Promise<LeaderboardEntry[]> {
   const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const rows = await db.execute(sql`
@@ -376,7 +378,7 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
     computeViolationPenaltyBatch(walletAddresses),
   ]);
 
-  let entries = allRows.map((row) => {
+  const entries: LeaderboardEntry[] = allRows.map((row) => {
     const confirmed = Number(row.cert_total || 0);
     const last30d = Number(row.cert_last_30d || 0);
     const firstAt = row.first_cert_at ? new Date(row.first_cert_at) : null;
@@ -419,6 +421,29 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
 
   entries.sort((a, b) => b.trustScore - a.trustScore);
   entries.forEach((e, i) => { e.rank = i + 1; });
+
+  leaderboardCache = { allEntries: entries, cachedAt: Date.now() };
+  return entries;
+}
+
+export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<LeaderboardResult> {
+  const page = Math.max(1, filters.page || 1);
+  const limit = Math.min(100, Math.max(1, filters.limit || 50));
+
+  let allEntries: LeaderboardEntry[];
+
+  if (leaderboardCache && Date.now() - leaderboardCache.cachedAt < LEADERBOARD_CACHE_TTL_MS) {
+    allEntries = leaderboardCache.allEntries;
+  } else {
+    if (!leaderboardInflight) {
+      leaderboardInflight = computeAllLeaderboardEntries().finally(() => {
+        leaderboardInflight = null;
+      });
+    }
+    allEntries = await leaderboardInflight;
+  }
+
+  let entries = [...allEntries];
 
   if (filters.category) {
     entries = entries.filter((e) => e.agentCategory === filters.category);

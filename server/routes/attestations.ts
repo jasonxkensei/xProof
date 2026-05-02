@@ -5,7 +5,7 @@ import { certifications, users, attestations } from "@shared/schema";
 import { eq, desc, sql, and, gte, count } from "drizzle-orm";
 import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
-import { attestationIssuanceRateLimiter, publicSearchRateLimiter } from "../reliability";
+import { attestationIssuanceRateLimiter, publicSearchRateLimiter, publicPdfRateLimiter } from "../reliability";
 import { computeTrustScoreByWallet } from "../trust";
 import { isValidWebhookUrl, safeWebhookFetch } from "../webhook";
 
@@ -457,10 +457,22 @@ export function registerAttestationsRoutes(app: Express) {
     }
   });
 
+  const PDF_CACHE_TTL_MS = 5 * 60 * 1000;
+  const pdfCache = new Map<string, { buf: Buffer; generatedAt: number }>();
+
   // GET /agent/:wallet/compliance.pdf — compliance report PDF
-  app.get("/agent/:wallet/compliance.pdf", async (req, res) => {
+  app.get("/agent/:wallet/compliance.pdf", publicPdfRateLimiter, async (req, res) => {
     try {
       const { wallet } = req.params;
+
+      const cached = pdfCache.get(wallet);
+      if (cached && Date.now() - cached.generatedAt < PDF_CACHE_TTL_MS) {
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="xproof-compliance-${wallet.slice(0, 10)}.pdf"`);
+        res.setHeader("Cache-Control", "public, max-age=300");
+        return res.send(cached.buf);
+      }
+
       const PDFDocument = (await import("pdfkit")).default;
 
       const [agentUser] = await db
@@ -476,7 +488,7 @@ export function registerAttestationsRoutes(app: Express) {
         return res.status(404).json({ error: "Agent not found" });
       }
 
-      const attestations = await db.execute(sql`
+      const attestationsResult = await db.execute(sql`
         SELECT a.domain, a.standard, a.title, a.issuer_name, a.created_at, a.expires_at
         FROM attestations a
         INNER JOIN users issuer_u ON issuer_u.wallet_address = a.issuer_wallet
@@ -484,8 +496,9 @@ export function registerAttestationsRoutes(app: Express) {
           AND a.status = 'active'
           AND issuer_u.is_public_profile = true
         ORDER BY a.created_at DESC
+        LIMIT 100
       `);
-      const certs = agentUser ? await db.execute(sql`
+      const certs = await db.execute(sql`
         SELECT file_name, file_hash, blockchain_status AS status, created_at, transaction_hash
         FROM certifications
         WHERE user_id = ${agentUser.id}
@@ -493,12 +506,11 @@ export function registerAttestationsRoutes(app: Express) {
           AND created_at >= NOW() - INTERVAL '90 days'
         ORDER BY created_at DESC
         LIMIT 50
-      `) : { rows: [] };
+      `);
 
       const doc = new PDFDocument({ margin: 50, size: "A4" });
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="xproof-compliance-${wallet.slice(0, 10)}.pdf"`);
-      doc.pipe(res);
+      const chunks: Buffer[] = [];
+      doc.on("data", (chunk: Buffer) => chunks.push(chunk));
 
       const green = "#10b981";
       const gray = "#6b7280";
@@ -518,7 +530,7 @@ export function registerAttestationsRoutes(app: Express) {
       doc.text(`Streak: ${trust.streakWeeks} consecutive weeks`);
       doc.moveDown(1.5);
 
-      const attRows = attestations.rows as any[];
+      const attRows = attestationsResult.rows as any[];
       doc.fontSize(13).fillColor(dark).text("Active Attestations", { underline: true });
       doc.moveDown(0.3);
       if (attRows.length === 0) {
@@ -550,7 +562,16 @@ export function registerAttestationsRoutes(app: Express) {
 
       doc.moveDown(2);
       doc.fontSize(9).fillColor(gray).text(`Verified on MultiversX blockchain. Full audit trail: https://xproof.app/agent/${wallet}`, { align: "center" });
-      doc.end();
+
+      await new Promise<void>((resolve) => { doc.on("end", resolve); doc.end(); });
+      const pdfBuf = Buffer.concat(chunks);
+
+      pdfCache.set(wallet, { buf: pdfBuf, generatedAt: Date.now() });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="xproof-compliance-${wallet.slice(0, 10)}.pdf"`);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.send(pdfBuf);
     } catch (err: any) {
       logger.error("PDF generation error", { error: err.message });
       if (!res.headersSent) res.status(500).json({ error: err.message });
