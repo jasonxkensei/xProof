@@ -3,6 +3,20 @@ import { db } from "./db";
 import { txQueue } from "@shared/schema";
 import { eq, and, gte, count, sql } from "drizzle-orm";
 
+/**
+ * Return a redacted representation of a webhook URL safe for structured logs.
+ * Only the origin (scheme + host + port) is retained; path, query string,
+ * credentials, and fragment are stripped to prevent secret leakage.
+ */
+function redactWebhookUrl(url: string): string {
+  try {
+    const { origin } = new URL(url);
+    return `${origin}/[redacted]`;
+  } catch {
+    return "[invalid-url]";
+  }
+}
+
 interface AlertConfig {
   failureThreshold: number;
   cooldownMinutes: number;
@@ -167,7 +181,7 @@ async function sendAlertWebhook(payload: AlertPayload): Promise<void> {
       logger.error("Alert webhook delivery failed", {
         component: "tx-alerts",
         status: response.status,
-        url: config.webhookUrl,
+        url: redactWebhookUrl(config.webhookUrl!),
       });
     }
   } catch (err: any) {

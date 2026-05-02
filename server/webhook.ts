@@ -28,6 +28,21 @@ import { logger } from "./logger";
 const MAX_WEBHOOK_ATTEMPTS = 3;
 const WEBHOOK_TIMEOUT_MS = 10000; // 10 seconds
 
+/**
+ * Return a redacted representation of a webhook URL safe for structured logs.
+ * Only the origin (scheme + host + port) is retained; the path, query string,
+ * credentials (userinfo), and fragment are all stripped so that bearer tokens
+ * embedded in URLs never reach log aggregation systems.
+ */
+function redactWebhookUrl(url: string): string {
+  try {
+    const { origin } = new URL(url);
+    return `${origin}/[redacted]`;
+  } catch {
+    return "[invalid-url]";
+  }
+}
+
 interface WebhookPayload {
   event: "proof.certified";
   proof_id: string;
@@ -195,10 +210,10 @@ export async function deliverWebhook(
           .set({ webhookStatus: "delivered" })
           .where(eq(certifications.id, certificationId));
 
-        logger.info("Webhook delivered", { component: "webhook", webhookUrl, certificationId, status: result.status });
+        logger.info("Webhook delivered", { component: "webhook", webhookUrl: redactWebhookUrl(webhookUrl), certificationId, status: result.status });
         return true;
       } else {
-        logger.warn("Webhook delivery failed", { component: "webhook", webhookUrl, status: result.status });
+        logger.warn("Webhook delivery failed", { component: "webhook", webhookUrl: redactWebhookUrl(webhookUrl), status: result.status });
         await markWebhookFailed(certificationId);
         return false;
       }
@@ -207,7 +222,7 @@ export async function deliverWebhook(
       // TLS failures, and connection errors. All of these are treated as
       // delivery failures so they enter the retry/backoff path normally.
       const reason = fetchError?.code || fetchError?.message || "unknown";
-      logger.warn("Webhook network error", { component: "webhook", webhookUrl, error: reason });
+      logger.warn("Webhook network error", { component: "webhook", webhookUrl: redactWebhookUrl(webhookUrl), error: reason });
       await markWebhookFailed(certificationId);
       return false;
     }
