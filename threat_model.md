@@ -109,3 +109,9 @@ Required guarantees:
 - Treat `server/prerender.ts` as a first-class public disclosure surface, not just SEO infrastructure. Any visibility hardening added to `/api/proof/:id` or related JSON/Markdown endpoints must be mirrored in prerendered HTML routes.
 - Public GET routes that look like read/report endpoints must stay side-effect free. If a public read path can insert, confirm, or otherwise mutate `agent_violations` or other governance tables, treat that as a production integrity issue even when the underlying evidence is public.
 - For outbound webhook validation, hostname preflight checks are not enough. Final-destination IP policy must apply to the actual socket used by the request, because DNS rebinding can change the resolved address between validation and connect time.
+
+## Scan Notes — 2026-05-02 Payment Boundary Review
+
+- ACP checkout creation must prove control of any `payer_wallet` before storing it as `expectedSender`; sender checks at confirmation time do not prevent another tenant from pre-binding a victim wallet during checkout creation.
+- Wallet-backed MultiversX payment verification must enforce the exact quoted price unless a discount is explicit, advertised, and recorded. Hidden tolerance in entitlement checks is a payment-validation issue.
+- HoundDog critical hits in SDK examples and `xproof-examples/` remain out of production scope under this threat model unless those examples are wired into the deployed Express runtime.
