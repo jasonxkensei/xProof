@@ -325,6 +325,44 @@ app.use((req, res, next) => {
     }
   }
 
+  // Background sweeper: release ACP certification reservations whose checkout sessions
+  // have expired without being confirmed.  Runs every 5 minutes so that a hash is never
+  // permanently locked by an abandoned checkout for more than ~5 minutes beyond expiry.
+  async function sweepExpiredAcpReservations() {
+    try {
+      // Atomically expire the checkout row and delete the certification reservation in a
+      // single CTE so both changes are applied as one transaction.  Only targets rows where:
+      //   • the checkout is still marked "pending" (not confirmed/expired/failed)
+      //   • the checkout's expiry timestamp has passed
+      //   • the checkout has a linked certificationId (new-style checkouts only)
+      //   • the linked certification is still pending with no on-chain tx
+      const result = await pool.query(`
+        WITH expired_checkouts AS (
+          UPDATE acp_checkouts
+          SET status = 'expired'
+          WHERE status = 'pending'
+            AND expires_at < NOW() - INTERVAL '2 minutes'
+            AND certification_id IS NOT NULL
+          RETURNING certification_id, id
+        )
+        DELETE FROM certifications c
+        USING expired_checkouts ec
+        WHERE c.id = ec.certification_id
+          AND c.blockchain_status = 'pending'
+          AND c.transaction_hash IS NULL
+        RETURNING c.id, ec.id AS checkout_id
+      `);
+      if (result.rowCount && result.rowCount > 0) {
+        logger.info("Swept expired ACP checkout reservations", {
+          component: "acp-sweeper",
+          released: result.rowCount,
+        });
+      }
+    } catch (err: any) {
+      logger.error("ACP reservation sweeper error", { component: "acp-sweeper", error: err.message });
+    }
+  }
+
   server.listen({
     port,
     host: "0.0.0.0",
@@ -337,6 +375,8 @@ app.use((req, res, next) => {
     purgeStaleSnapshotAttestationCounts();
     runDailyMaintenance();
     setInterval(runDailyMaintenance, 24 * 60 * 60 * 1000);
+    sweepExpiredAcpReservations();
+    setInterval(sweepExpiredAcpReservations, 5 * 60 * 1000);
   });
 
   setupGracefulShutdown(server);

@@ -71,19 +71,22 @@ export async function createMcpServer(ctx: McpContext) {
 
         const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
         if (existing) {
+          const isAcpReservation = existing.authMethod === "acp" && existing.blockchainStatus === "pending" && !existing.transactionHash;
           return {
             content: [{
               type: "text" as const,
               text: JSON.stringify({
                 proof_id: existing.id,
-                status: "certified",
+                status: existing.blockchainStatus === "confirmed" ? "certified" : existing.blockchainStatus,
                 file_hash: existing.fileHash,
                 filename: existing.fileName,
                 verify_url: `${baseUrl}/proof/${existing.id}`,
                 certificate_url: `${baseUrl}/api/certificates/${existing.id}.pdf`,
                 blockchain: { network: "MultiversX", transaction_hash: existing.transactionHash, explorer_url: existing.transactionUrl },
                 timestamp: existing.createdAt?.toISOString(),
-                message: "File already certified on MultiversX blockchain.",
+                message: isAcpReservation
+                  ? "This file hash is reserved by a pending ACP checkout payment. Certification will be attributed to that payer once confirmed."
+                  : "File already certified on MultiversX blockchain.",
               }),
             }],
           };
@@ -122,12 +125,20 @@ export async function createMcpServer(ctx: McpContext) {
             authMethod: "api_key",
           }).returning();
         } catch (insertErr: any) {
-          // Unique constraint violation — a concurrent request already claimed this hash.
+          // Only treat unique-constraint violations (Postgres 23505) as duplicate-hash signals.
+          // Re-throw other DB errors so they surface as operational failures, not false duplicates.
+          const isUniqueViolation =
+            insertErr?.code === "23505" ||
+            (insertErr?.message && (insertErr.message as string).includes("unique constraint"));
           if (trialInfo && !mcpCreditInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
           else if (mcpCreditInfo) await refundCredit(mcpCreditInfo.userId).catch(() => {});
+          if (!isUniqueViolation) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DB_ERROR", message: "Failed to reserve certification slot. Your credit has been refunded." }) }], isError: true };
+          }
           const [dup] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
           if (dup) {
-            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: dup.id, status: "certified", file_hash: dup.fileHash, filename: dup.fileName, verify_url: `${baseUrl}/proof/${dup.id}`, certificate_url: `${baseUrl}/api/certificates/${dup.id}.pdf`, blockchain: { network: "MultiversX", transaction_hash: dup.transactionHash, explorer_url: dup.transactionUrl }, timestamp: dup.createdAt?.toISOString(), message: "File already certified on MultiversX blockchain." }) }] };
+            const dupIsAcpReservation = dup.authMethod === "acp" && dup.blockchainStatus === "pending" && !dup.transactionHash;
+            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: dup.id, status: dup.blockchainStatus === "confirmed" ? "certified" : dup.blockchainStatus, file_hash: dup.fileHash, filename: dup.fileName, verify_url: `${baseUrl}/proof/${dup.id}`, certificate_url: `${baseUrl}/api/certificates/${dup.id}.pdf`, blockchain: { network: "MultiversX", transaction_hash: dup.transactionHash, explorer_url: dup.transactionUrl }, timestamp: dup.createdAt?.toISOString(), message: dupIsAcpReservation ? "This file hash is reserved by a pending ACP checkout payment. Certification will be attributed to that payer once confirmed." : "File already certified on MultiversX blockchain." }) }] };
           }
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DUPLICATE_HASH", message: "File hash is already being certified by a concurrent request. Credit refunded." }) }], isError: true };
         }
@@ -288,9 +299,22 @@ export async function createMcpServer(ctx: McpContext) {
             metadata,
           }).returning();
         } catch (insertErr: any) {
-          // Unique constraint violation — a concurrent request already claimed this hash.
+          // Only treat unique-constraint violations (Postgres 23505) as duplicate-hash signals.
+          // Re-throw other DB errors so they surface as operational failures, not false duplicates.
+          const cwcIsUniqueViolation =
+            insertErr?.code === "23505" ||
+            (insertErr?.message && (insertErr.message as string).includes("unique constraint"));
           if (cwcTrialInfo && !cwcCreditInfo) await refundTrialCredit(cwcTrialInfo.userId).catch(() => {});
           else if (cwcCreditInfo) await refundCredit(cwcCreditInfo.userId).catch(() => {});
+          if (!cwcIsUniqueViolation) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DB_ERROR", message: "Failed to reserve certification slot. Your credit has been refunded." }) }], isError: true };
+          }
+          // Look up the blocking row to give an informative response (e.g. ACP reservation vs confirmed).
+          const [cwcDup] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
+          if (cwcDup) {
+            const cwcDupIsAcpReservation = cwcDup.authMethod === "acp" && cwcDup.blockchainStatus === "pending" && !cwcDup.transactionHash;
+            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: cwcDup.id, status: cwcDup.blockchainStatus === "confirmed" ? "certified" : cwcDup.blockchainStatus, file_hash: cwcDup.fileHash, filename: cwcDup.fileName, verify_url: `${baseUrl}/proof/${cwcDup.id}`, blockchain: { network: "MultiversX", transaction_hash: cwcDup.transactionHash, explorer_url: cwcDup.transactionUrl }, timestamp: cwcDup.createdAt?.toISOString(), message: cwcDupIsAcpReservation ? "This file hash is reserved by a pending ACP checkout payment. Certification will be attributed to that payer once confirmed." : "File already certified on MultiversX blockchain." }) }] };
+          }
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DUPLICATE_HASH", message: "File hash is already being certified by a concurrent request. Credit refunded." }) }], isError: true };
         }
 
@@ -665,14 +689,22 @@ export async function createMcpServer(ctx: McpContext) {
             metadata: params,
           }).returning();
         } catch (reserveErr: any) {
-          // Unique constraint — concurrent request already claimed this hash.
+          // Only treat unique-constraint violations (Postgres 23505) as duplicate-hash signals.
+          // Re-throw other DB errors so they surface as operational failures, not false duplicates.
+          const auditIsUniqueViolation =
+            reserveErr?.code === "23505" ||
+            (reserveErr?.message && (reserveErr.message as string).includes("unique constraint"));
           if (auditTrialInfo && !auditCreditInfo) await refundTrialCredit(auditTrialInfo.userId).catch(() => {});
           else if (auditCreditInfo) await refundCredit(auditCreditInfo.userId).catch(() => {});
-          const [dup] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
-          if (dup) {
-            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: dup.id, audit_url: `${baseUrl}/audit/${dup.id}`, proof_url: `${baseUrl}/proof/${dup.id}`, message: "This exact audit session was already certified. Returning existing proof — no credit consumed." }) }] };
+          if (!auditIsUniqueViolation) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DB_ERROR", message: "Failed to reserve certification slot. Your credit has been refunded." }) }], isError: true };
           }
-          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DB_ERROR", message: "Failed to reserve certification slot. Your credit has been refunded." }) }], isError: true };
+          const [auditDup] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
+          if (auditDup) {
+            const auditDupIsAcpReservation = auditDup.authMethod === "acp" && auditDup.blockchainStatus === "pending" && !auditDup.transactionHash;
+            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: auditDup.id, audit_url: `${baseUrl}/audit/${auditDup.id}`, proof_url: `${baseUrl}/proof/${auditDup.id}`, blockchain: { network: "MultiversX", transaction_hash: auditDup.transactionHash, explorer_url: auditDup.transactionUrl }, timestamp: auditDup.createdAt?.toISOString(), message: auditDupIsAcpReservation ? "This file hash is reserved by a pending ACP checkout payment. Certification will be attributed to that payer once confirmed." : "This exact audit session was already certified. Returning existing proof — no credit consumed." }) }] };
+          }
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DUPLICATE_HASH", message: "File hash is already being certified by a concurrent request. Credit refunded." }) }], isError: true };
         }
 
         let result: Awaited<ReturnType<typeof recordOnBlockchain>>;

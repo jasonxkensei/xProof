@@ -71,23 +71,31 @@ export function registerAcpRoutes(app: Express) {
         });
       }
 
-      // Check if hash already certified
+      // Fast-path reject for hashes that are definitively already certified (confirmed, with a
+      // real on-chain tx). Pending ACP reservation rows are intentionally NOT rejected here —
+      // the advisory-locked transaction below will verify whether the reservation is still
+      // attached to an active checkout and either reuse it or clear the stale row.
       const [existing] = await db
         .select()
         .from(certifications)
         .where(eq(certifications.fileHash, data.inputs.file_hash));
 
       if (existing) {
-        return res.status(409).json({
-          error: "ALREADY_CERTIFIED",
-          message: "This file hash has already been certified",
-          existing_certification: {
-            id: existing.id,
-            certified_at: existing.createdAt,
-            proof_url: `/proof/${existing.id}`,
-            tx_hash: existing.transactionHash,
-          },
-        });
+        const isAcpReservation = existing.authMethod === "acp" && existing.blockchainStatus === "pending" && !existing.transactionHash;
+        if (!isAcpReservation) {
+          return res.status(409).json({
+            error: "ALREADY_CERTIFIED",
+            message: "This file hash has already been certified",
+            existing_certification: {
+              id: existing.id,
+              certified_at: existing.createdAt,
+              proof_url: `/proof/${existing.id}`,
+              tx_hash: existing.transactionHash,
+            },
+          });
+        }
+        // For ACP reservations: fall through to the advisory-locked transaction which will
+        // check the linked checkout status and clean up stale state if needed.
       }
 
       // Check if the API key owner is an admin wallet
@@ -100,6 +108,27 @@ export function registerAcpRoutes(app: Express) {
           acpAdminExempt = true;
           logger.withRequest(req).info("Admin wallet exempt from ACP payment", { walletAddress: ownerWallet });
         }
+      }
+
+      // Resolve the userId that will own the certification reservation.
+      // This must be done before the transaction so we can insert the certification row inside it.
+      let checkoutOwnerUserId: string | null = requestingUserId;
+      if (!checkoutOwnerUserId) {
+        let [systemUser] = await db
+          .select()
+          .from(users)
+          .where(eq(users.walletAddress, "erd1acp00000000000000000000000000000000000000000000000000000agent"));
+        if (!systemUser) {
+          [systemUser] = await db
+            .insert(users)
+            .values({
+              walletAddress: "erd1acp00000000000000000000000000000000000000000000000000000agent",
+              subscriptionTier: "business",
+              subscriptionStatus: "active",
+            })
+            .returning();
+        }
+        checkoutOwnerUserId = systemUser.id!;
       }
 
       // Get current EGLD price and calculate payment
@@ -149,13 +178,66 @@ export function registerAcpRoutes(app: Express) {
       // for the same file hash within a single PostgreSQL transaction, eliminating the
       // read-before-write race window that a naive application-level check would leave open.
       // The lock is released automatically when the transaction commits or rolls back.
+      //
+      // Front-running defence: we also insert a pending certification reservation row inside
+      // this transaction. The unique constraint on certifications.fileHash means any concurrent
+      // /api/proof, /api/batch, or MCP certify_* call that tries to claim the same hash will
+      // hit a constraint error and be blocked — even after the checkout transaction commits.
+      // The reservation is upgraded to a confirmed certification in /api/acp/confirm.
       let checkout: typeof acpCheckouts.$inferSelect;
       try {
         checkout = await db.transaction(async (tx) => {
           await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${data.inputs.file_hash}))`);
 
           const nowTx = new Date();
-          const [pendingCheckout] = await tx
+
+          // Under the advisory lock, re-check the certifications table for this fileHash.
+          // This covers the race between the upfront fast-path check and the lock acquisition.
+          const [existingCert] = await tx
+            .select()
+            .from(certifications)
+            .where(eq(certifications.fileHash, data.inputs.file_hash));
+
+          if (existingCert) {
+            const isAcpReservation = existingCert.authMethod === "acp" && existingCert.blockchainStatus === "pending" && !existingCert.transactionHash;
+
+            if (!isAcpReservation) {
+              // Confirmed or non-ACP pending cert — permanently block.
+              throw Object.assign(new Error("ALREADY_CERTIFIED"), { code: "ALREADY_CERTIFIED" });
+            }
+
+            // ACP reservation: find the linked checkout to determine if it's still active.
+            const [linkedCheckout] = await tx
+              .select({ id: acpCheckouts.id, status: acpCheckouts.status, expiresAt: acpCheckouts.expiresAt, userId: acpCheckouts.userId })
+              .from(acpCheckouts)
+              .where(eq(acpCheckouts.certificationId, existingCert.id));
+
+            const isStale = !linkedCheckout
+              || linkedCheckout.status !== "pending"
+              || linkedCheckout.expiresAt <= nowTx;
+
+            if (!isStale) {
+              // Active checkout still holds the reservation — treat as duplicate.
+              throw Object.assign(new Error("DUPLICATE_PENDING_CHECKOUT"), { code: "DUPLICATE_PENDING_CHECKOUT" });
+            }
+
+            // Stale reservation: clean it up so this checkout can claim the slot.
+            if (linkedCheckout && linkedCheckout.status === "pending") {
+              await tx.update(acpCheckouts)
+                .set({ status: "expired" })
+                .where(eq(acpCheckouts.id, linkedCheckout.id));
+            }
+            await tx.delete(certifications).where(eq(certifications.id, existingCert.id));
+            logger.withRequest(req).info("Stale ACP reservation cleared at checkout", {
+              certId: existingCert.id,
+              checkoutId: linkedCheckout?.id,
+              fileHash: data.inputs.file_hash.slice(0, 16),
+            });
+          }
+
+          // Legacy dedup guard: for any pending checkouts that predate the reservation
+          // mechanism (no certificationId link), block concurrent checkout attempts.
+          const [pendingLegacyCheckout] = await tx
             .select({ id: acpCheckouts.id, userId: acpCheckouts.userId })
             .from(acpCheckouts)
             .where(
@@ -163,11 +245,44 @@ export function registerAcpRoutes(app: Express) {
                 eq(acpCheckouts.fileHash, data.inputs.file_hash),
                 eq(acpCheckouts.status, "pending"),
                 gt(acpCheckouts.expiresAt, nowTx),
+                sql`${acpCheckouts.certificationId} IS NULL`,
               )
             );
 
-          if (pendingCheckout && pendingCheckout.userId !== requestingUserId) {
+          if (pendingLegacyCheckout && pendingLegacyCheckout.userId !== requestingUserId) {
             throw Object.assign(new Error("DUPLICATE_PENDING_CHECKOUT"), { code: "DUPLICATE_PENDING_CHECKOUT" });
+          }
+
+          // Insert a pending certification reservation to block other routes from claiming
+          // this fileHash while the ACP checkout is open. The unique constraint on
+          // certifications.fileHash ensures this is atomic with respect to concurrent
+          // non-ACP certification attempts.
+          let reservationId: string;
+          try {
+            const [reservation] = await tx
+              .insert(certifications)
+              .values({
+                userId: checkoutOwnerUserId!,
+                fileName: data.inputs.filename,
+                fileHash: data.inputs.file_hash,
+                fileType: data.inputs.filename.split(".").pop() || "unknown",
+                authorName: data.inputs.author_name || "AI Agent",
+                blockchainStatus: "pending",
+                isPublic: true,
+                authMethod: "acp",
+                ...(data.inputs.metadata ? { metadata: data.inputs.metadata } : {}),
+              })
+              .returning({ id: certifications.id });
+            reservationId = reservation.id;
+          } catch (certInsertErr: any) {
+            // Only treat unique-constraint violations (Postgres code 23505) as a duplicate-hash
+            // signal. Re-throw any other DB error so it surfaces as a 500 rather than being
+            // silently swallowed as a false "already reserved" response.
+            const isUniqueViolation =
+              certInsertErr?.code === "23505" ||
+              (certInsertErr?.message && (certInsertErr.message as string).includes("unique constraint"));
+            if (!isUniqueViolation) throw certInsertErr;
+            throw Object.assign(new Error("HASH_ALREADY_RESERVED"), { code: "HASH_ALREADY_RESERVED" });
           }
 
           const [newCheckout] = await tx
@@ -189,15 +304,28 @@ export function registerAcpRoutes(app: Express) {
               expectedValue,
               expectedData: dataField,
               expiresAt,
+              certificationId: reservationId,
             })
             .returning();
           return newCheckout;
         });
       } catch (txErr: any) {
+        if (txErr.code === "ALREADY_CERTIFIED") {
+          return res.status(409).json({
+            error: "ALREADY_CERTIFIED",
+            message: "This file hash has already been certified",
+          });
+        }
         if (txErr.code === "DUPLICATE_PENDING_CHECKOUT") {
           return res.status(409).json({
             error: "DUPLICATE_PENDING_CHECKOUT",
             message: "A pending checkout already exists for this file hash. Each file can have at most one pending ACP checkout at a time. Wait for the existing checkout to expire or complete before creating a new one.",
+          });
+        }
+        if (txErr.code === "HASH_ALREADY_RESERVED") {
+          return res.status(409).json({
+            error: "ALREADY_CERTIFIED",
+            message: "This file hash is already being certified through another payment path. It cannot be reserved for ACP checkout.",
           });
         }
         throw txErr;
@@ -266,6 +394,20 @@ export function registerAcpRoutes(app: Express) {
           .update(acpCheckouts)
           .set({ status: "expired" })
           .where(eq(acpCheckouts.id, checkout.id));
+
+        // Release the certification reservation so the fileHash slot is no longer blocked.
+        if (checkout.certificationId) {
+          await db
+            .delete(certifications)
+            .where(
+              and(
+                eq(certifications.id, checkout.certificationId),
+                eq(certifications.blockchainStatus, "pending"),
+                sql`${certifications.transactionHash} IS NULL`,
+              )
+            )
+            .catch(() => {});
+        }
 
         return res.status(410).json({
           error: "CHECKOUT_EXPIRED",
@@ -455,22 +597,99 @@ export function registerAcpRoutes(app: Express) {
         acpOwnerId = systemUser.id!;
       }
 
-      // Create certification record
-      const [certification] = await db
-        .insert(certifications)
-        .values({
-          userId: acpOwnerId,
-          fileName: checkout.fileName,
-          fileHash: checkout.fileHash,
-          fileType: checkout.fileName.split(".").pop() || "unknown",
-          authorName: checkout.authorName || "AI Agent",
-          transactionHash: data.tx_hash,
-          transactionUrl: `${explorerUrl}/transactions/${data.tx_hash}`,
-          blockchainStatus: txVerified ? "confirmed" : "pending",
-          isPublic: true,
-          authMethod: "acp",
-        })
-        .returning();
+      // Upgrade the pending certification reservation to a confirmed record.
+      // If this checkout was created with the front-running fix in place it will have a
+      // certificationId pointing to the reservation row we inserted at checkout time — UPDATE
+      // that row rather than INSERT so we never lose the exclusive hold on the fileHash slot.
+      // Fall back to INSERT only for legacy checkouts that predate the reservation mechanism.
+      let certification: typeof certifications.$inferSelect;
+      if (checkout.certificationId) {
+        // Only update rows that are still in the expected reservation state
+        // (pending, no on-chain tx). This guards against rare state corruption
+        // or double-confirm races without touching already-confirmed records.
+        const [updated] = await db
+          .update(certifications)
+          .set({
+            userId: acpOwnerId,
+            transactionHash: data.tx_hash,
+            transactionUrl: `${explorerUrl}/transactions/${data.tx_hash}`,
+            blockchainStatus: "confirmed",
+            authMethod: "acp",
+          })
+          .where(
+            and(
+              eq(certifications.id, checkout.certificationId),
+              eq(certifications.fileHash, checkout.fileHash),
+              eq(certifications.blockchainStatus, "pending"),
+              sql`${certifications.transactionHash} IS NULL`,
+            )
+          )
+          .returning();
+        if (!updated) {
+          // The reservation row was not in the expected state — it may have been
+          // already confirmed (double-confirm) or cleaned up by the expiry sweeper.
+          // Check for an already-confirmed row and return it idempotently if found.
+          const [existing] = await db
+            .select()
+            .from(certifications)
+            .where(eq(certifications.id, checkout.certificationId));
+          if (existing && existing.blockchainStatus === "confirmed") {
+            logger.withRequest(req).info("ACP confirm: reservation already confirmed (idempotent)", { checkoutId: checkout.id, certificationId: checkout.certificationId });
+            certification = existing;
+          } else {
+            logger.withRequest(req).error("ACP confirm: reservation row not in pending state", { checkoutId: checkout.id, certificationId: checkout.certificationId, existing: existing?.blockchainStatus });
+            return res.status(500).json({
+              error: "CONFIRMATION_FAILED",
+              message: "Certification reservation could not be found or is in an unexpected state. Please contact support.",
+            });
+          }
+        } else {
+          certification = updated;
+        }
+      } else {
+        // Legacy path: checkout predates the reservation mechanism — INSERT the certification row.
+        // This can still fail if a concurrent non-ACP route claimed the fileHash, in which case
+        // we surface a clear error rather than silently failing with a 500.
+        try {
+          const [inserted] = await db
+            .insert(certifications)
+            .values({
+              userId: acpOwnerId,
+              fileName: checkout.fileName,
+              fileHash: checkout.fileHash,
+              fileType: checkout.fileName.split(".").pop() || "unknown",
+              authorName: checkout.authorName || "AI Agent",
+              transactionHash: data.tx_hash,
+              transactionUrl: `${explorerUrl}/transactions/${data.tx_hash}`,
+              blockchainStatus: "confirmed",
+              isPublic: true,
+              authMethod: "acp",
+            })
+            .returning();
+          certification = inserted;
+        } catch (insertErr: any) {
+          // Only treat unique-constraint violations (Postgres 23505) as duplicate-hash conflicts.
+          // Re-throw other DB errors so they surface as 500, not a false duplicate response.
+          const legacyIsUniqueViolation =
+            insertErr?.code === "23505" ||
+            (insertErr?.message && (insertErr.message as string).includes("unique constraint"));
+          if (!legacyIsUniqueViolation) throw insertErr;
+          const [conflicting] = await db
+            .select({ id: certifications.id, authMethod: certifications.authMethod })
+            .from(certifications)
+            .where(eq(certifications.fileHash, checkout.fileHash));
+          logger.withRequest(req).error("ACP confirm: fileHash already claimed by another route (legacy checkout)", {
+            checkoutId: checkout.id,
+            conflictingId: conflicting?.id,
+            conflictingMethod: conflicting?.authMethod,
+          });
+          return res.status(409).json({
+            error: "HASH_ALREADY_CERTIFIED",
+            message: "This file hash was certified through another payment path before this ACP checkout could be confirmed. The canonical proof was attributed to the earlier certifier.",
+            conflicting_certification_id: conflicting?.id,
+          });
+        }
+      }
 
       // Update checkout status
       await db

@@ -348,10 +348,12 @@ export function registerProofWriteRoutes(app: Express) {
         .where(eq(certifications.fileHash, data.file_hash));
 
       if (existing) {
-        logger.withRequest(req).info("File already certified", { fileHash: data.file_hash, certificationId: existing.id });
+        const isAcpReservation = existing.authMethod === "acp" && existing.blockchainStatus === "pending" && !existing.transactionHash;
+        const derivedStatus = existing.blockchainStatus === "confirmed" ? "certified" : existing.blockchainStatus;
+        logger.withRequest(req).info(isAcpReservation ? "File reserved by pending ACP checkout, blocking proof route" : "File already certified", { fileHash: data.file_hash, certificationId: existing.id });
         return res.status(200).json({
           proof_id: existing.id,
-          status: "certified",
+          status: derivedStatus,
           file_hash: existing.fileHash,
           filename: existing.fileName,
           metadata: existing.metadata || null,
@@ -365,7 +367,9 @@ export function registerProofWriteRoutes(app: Express) {
           },
           timestamp: existing.createdAt?.toISOString() || new Date().toISOString(),
           webhook_status: "not_applicable",
-          message: "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
+          message: isAcpReservation
+            ? "This file hash is reserved by a pending ACP checkout payment. Certification will be attributed to that payer once confirmed."
+            : "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
         });
       }
 
