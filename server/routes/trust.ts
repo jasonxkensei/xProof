@@ -492,7 +492,7 @@ export function registerTrustRoutes(app: Express) {
   });
 
   // GET /badge/trust/:wallet.svg — dynamic trust badge for READMEs
-  app.get("/badge/trust/:wallet.svg", async (req, res) => {
+  app.get("/badge/trust/:wallet.svg", publicReadRateLimiter, async (req, res) => {
     try {
       const wallet = req.params.wallet;
 
@@ -529,7 +529,7 @@ export function registerTrustRoutes(app: Express) {
   });
 
   // GET /badge/trust/:wallet/markdown — markdown snippet for trust badge
-  app.get("/badge/trust/:wallet/markdown", async (req, res) => {
+  app.get("/badge/trust/:wallet/markdown", publicReadRateLimiter, async (req, res) => {
     try {
       const wallet = req.params.wallet;
 

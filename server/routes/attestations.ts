@@ -465,6 +465,19 @@ export function registerAttestationsRoutes(app: Express) {
     try {
       const { wallet } = req.params;
 
+      // Re-validate visibility BEFORE serving any cached copy. A profile that was
+      // public when the PDF was generated may have been switched to private since;
+      // serving the stale cached buffer would leak wallet, attestations, and
+      // recent proof metadata for up to PDF_CACHE_TTL_MS after opt-out.
+      const [agentUser] = await db
+        .select({ id: users.id, isPublicProfile: users.isPublicProfile })
+        .from(users)
+        .where(eq(users.walletAddress, wallet));
+      if (!agentUser || !agentUser.isPublicProfile) {
+        pdfCache.delete(wallet);
+        return res.status(404).json({ error: "Agent not found or not public" });
+      }
+
       const cached = pdfCache.get(wallet);
       if (cached && Date.now() - cached.generatedAt < PDF_CACHE_TTL_MS) {
         res.setHeader("Content-Type", "application/pdf");
@@ -474,14 +487,6 @@ export function registerAttestationsRoutes(app: Express) {
       }
 
       const PDFDocument = (await import("pdfkit")).default;
-
-      const [agentUser] = await db
-        .select({ id: users.id, isPublicProfile: users.isPublicProfile })
-        .from(users)
-        .where(eq(users.walletAddress, wallet));
-      if (!agentUser || !agentUser.isPublicProfile) {
-        return res.status(404).json({ error: "Agent not found or not public" });
-      }
 
       const trust = await computeTrustScoreByWallet(wallet);
       if (!trust) {

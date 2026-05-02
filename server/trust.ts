@@ -286,13 +286,45 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
   };
 }
 
+// Per-wallet TTL cache + inflight coalescing for trust score computation.
+// computeTrustScore() runs ~6 aggregate/join queries; without coalescing, public
+// unauthenticated paths (badges, prerender SSR for /agent/:wallet) can be used
+// to amplify a single attacker request into many DB queries. The cache + single
+// flight pattern caps cost at one computation per wallet per TTL window.
+const TRUST_CACHE_TTL_MS = 30_000;
+const trustCache = new Map<string, { value: TrustScore | null; cachedAt: number }>();
+const trustInflight = new Map<string, Promise<TrustScore | null>>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of trustCache) {
+    if (now - v.cachedAt >= TRUST_CACHE_TTL_MS) trustCache.delete(k);
+  }
+}, TRUST_CACHE_TTL_MS).unref();
+
 export async function computeTrustScoreByWallet(walletAddress: string): Promise<TrustScore | null> {
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.walletAddress, walletAddress));
-  if (!user) return null;
-  return computeTrustScore(user.id);
+  const cached = trustCache.get(walletAddress);
+  if (cached && Date.now() - cached.cachedAt < TRUST_CACHE_TTL_MS) {
+    return cached.value;
+  }
+  const inflight = trustInflight.get(walletAddress);
+  if (inflight) return inflight;
+
+  const promise = (async () => {
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.walletAddress, walletAddress));
+    const value = user ? await computeTrustScore(user.id) : null;
+    trustCache.set(walletAddress, { value, cachedAt: Date.now() });
+    return value;
+  })();
+  trustInflight.set(walletAddress, promise);
+  try {
+    return await promise;
+  } finally {
+    trustInflight.delete(walletAddress);
+  }
 }
 
 export interface LeaderboardEntry {
