@@ -202,19 +202,13 @@ export const REGISTER_RATE_LIMIT_MAX = 10;
 export const REGISTER_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 
 export function requireAdmin(req: any, res: express.Response, next: express.NextFunction) {
-  const adminSecret = process.env.ADMIN_SECRET;
-  if (adminSecret && req.headers["x-admin-secret"] === adminSecret) {
-    return next();
-  }
   const adminWallets = (process.env.ADMIN_WALLETS || "").split(",").map(w => w.trim()).filter(Boolean);
-  // Fail closed: if no admin configuration is present, deny all access.
-  // Previously this fell through to next() when ADMIN_WALLETS was unset, allowing
-  // any authenticated (or unauthenticated) caller to reach admin-only endpoints.
+  // Fail closed: if no admin wallet list is configured, deny all access.
   if (adminWallets.length === 0) {
     return res.status(403).json({ error: "Forbidden: admin access required" });
   }
   const userWallet = req.session?.walletAddress;
-  if (!adminWallets.includes(userWallet)) {
+  if (!userWallet || !adminWallets.includes(userWallet)) {
     return res.status(403).json({ error: "Forbidden: admin access required" });
   }
   next();
