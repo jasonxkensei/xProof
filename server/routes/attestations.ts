@@ -575,7 +575,11 @@ export function registerAttestationsRoutes(app: Express) {
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="xproof-compliance-${wallet.slice(0, 10)}.pdf"`);
-      res.setHeader("Cache-Control", "public, max-age=300");
+      // Must be "private" — compliance PDFs contain wallet addresses, attestation
+      // metadata, and certification hashes. "public" would allow HTTP proxies and
+      // CDNs to cache and re-serve these reports to other clients, bypassing the
+      // per-request isPublicProfile re-validation that guards the cached path above.
+      res.setHeader("Cache-Control", "private, max-age=300");
       res.send(pdfBuf);
     } catch (err: any) {
       logger.error("PDF generation error", { error: err.message });

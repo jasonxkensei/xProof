@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { getCertificationPriceUsd } from "./pricing";
 import { getLeaderboard, computeTrustScoreByWallet, getTrustLevel } from "./trust";
+import { publicReadRateLimiter } from "./reliability";
 
 const CRAWLER_USER_AGENTS = [
   "ChatGPT", "GPTBot", "Googlebot", "Bingbot", "Twitterbot",
@@ -633,6 +634,26 @@ export function prerenderMiddleware() {
     if (shouldSkip(path)) {
       return next();
     }
+
+    // Rate-limit crawler/non-browser requests before executing expensive SSR
+    // rendering. Browser traffic already bypasses this middleware (isCrawler
+    // returned false above). Without this guard, unauthenticated HTTP clients
+    // (curl, python-requests, etc.) can flood public agent profile paths and
+    // drive repeated DB queries for user lookups and trust score computation
+    // even though the trust score itself is cached per-wallet.
+    //
+    // We listen for both the next() callback and res finish/close events so
+    // the Promise always resolves — express-rate-limit sends a 429 response
+    // directly when the limit is exceeded and does NOT call next(), which
+    // would otherwise leave the Promise unresolved and leak a hung handler.
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const settle = () => { if (!done) { done = true; resolve(); } };
+      res.once("finish", settle);
+      res.once("close", settle);
+      publicReadRateLimiter(req, res, settle);
+    });
+    if (res.headersSent) return;
 
     const baseUrl = `${req.protocol}://${req.get("host")}`;
 
