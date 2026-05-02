@@ -69,6 +69,21 @@ async function submitTransaction(tx: Transaction): Promise<{
 const MAX_ONCHAIN_PAYLOAD_BYTES = 512;
 
 /**
+ * Typed error thrown by recordOnBlockchain when a hard validation rule fails
+ * (payload too large, etc). Carrying a structured `code` lets upstream HTTP
+ * handlers distinguish caller-induced rejections (400) from genuine chain
+ * failures (502) without string-matching on the message.
+ */
+export class BlockchainValidationError extends Error {
+  readonly code: "PAYLOAD_TOO_LARGE";
+  constructor(code: "PAYLOAD_TOO_LARGE", message: string) {
+    super(message);
+    this.name = "BlockchainValidationError";
+    this.code = code;
+  }
+}
+
+/**
  * Record a file hash on the MultiversX blockchain
  * Creates a transaction with format: "certify:<hash>|filename:<name>|author:<author>"
  */
@@ -101,11 +116,10 @@ export async function recordOnBlockchain(
     // runs BEFORE claimNextNonce() and any signing work so an attacker with
     // a bypass at the schema layer cannot waste nonces or outbound calls.
     if (dataPayload.length > MAX_ONCHAIN_PAYLOAD_BYTES) {
-      const err: any = new Error(
+      throw new BlockchainValidationError(
+        "PAYLOAD_TOO_LARGE",
         `On-chain data payload exceeds ${MAX_ONCHAIN_PAYLOAD_BYTES} bytes (got ${dataPayload.length}). Shorten filename or author_name.`
       );
-      err.code = "PAYLOAD_TOO_LARGE";
-      throw err;
     }
 
     const nonce = await claimNextNonce(SENDER_ADDRESS!);
@@ -150,13 +164,21 @@ export async function recordOnBlockchain(
       transactionUrl: `${explorerBaseUrl}/transactions/${result.txHash}`,
       latencyMs,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    // Preserve typed validation errors (e.g. PAYLOAD_TOO_LARGE) so upstream
+    // HTTP handlers can map them to 400 instead of a generic 502 chain
+    // failure. Do not record a chain-failure metric for these — they were
+    // rejected before any chain interaction.
+    if (error instanceof BlockchainValidationError) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
     recordTransaction(false, Date.now() - txStart, "certification");
-    logger.error("MultiversX transaction error", { component: "blockchain", error: error instanceof Error ? error.message : String(error) });
-    if (SENDER_ADDRESS && /nonce/i.test(error.message)) {
+    logger.error("MultiversX transaction error", { component: "blockchain", error: message });
+    if (SENDER_ADDRESS && /nonce/i.test(message)) {
       resyncNonceFromChain(SENDER_ADDRESS).catch(() => {});
     }
-    throw new Error(`Failed to record on blockchain: ${error.message}`);
+    throw new Error(`Failed to record on blockchain: ${message}`);
   }
 }
 
