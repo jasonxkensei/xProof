@@ -4,6 +4,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { prerenderMiddleware } from "./prerender";
 import { 
   globalRateLimiter, 
+  healthRateLimiter,
   healthCheck, 
   requestTimeout, 
   setupGracefulShutdown, 
@@ -52,8 +53,8 @@ app.use((req, res, next) => {
 
 app.use(express.urlencoded({ extended: false }));
 
-app.get("/health", healthCheck);
-app.get("/api/health", healthCheck);
+app.get("/health", healthRateLimiter, healthCheck);
+app.get("/api/health", healthRateLimiter, healthCheck);
 
 app.use("/api", globalRateLimiter);
 app.use("/api", requestTimeout(30000));

@@ -14,8 +14,16 @@ export const globalRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "TOO_MANY_REQUESTS", message: "Too many requests, please try again later" },
   skip: (req) => {
-    return req.path === "/health" || req.path === "/api/health" || req.path === "/api/acp/health";
+    return req.path === "/api/acp/health";
   },
+});
+
+export const healthRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many health check requests, please try again later" },
 });
 
 export const authRateLimiter = rateLimit({
@@ -83,7 +91,14 @@ try {
 
 const deployTimestamp = new Date().toISOString();
 
+const HEALTH_CACHE_TTL_MS = 10_000;
+let healthCache: { body: object; status: number; cachedAt: number } | null = null;
+
 export async function healthCheck(_req: Request, res: Response) {
+  if (healthCache && Date.now() - healthCache.cachedAt < HEALTH_CACHE_TTL_MS) {
+    return res.status(healthCache.status).json(healthCache.body);
+  }
+
   const checks: Record<string, { status: string; latency_ms?: number; error?: string; details?: any }> = {};
 
   const dbStart = Date.now();
@@ -134,7 +149,8 @@ export async function healthCheck(_req: Request, res: Response) {
     ? Math.round((metrics.transactions.total_failed / (metrics.transactions.total_success + metrics.transactions.total_failed)) * 10000) / 100
     : 0;
 
-  res.status(overallStatus === "healthy" ? 200 : 503).json({
+  const httpStatus = overallStatus === "healthy" ? 200 : 503;
+  const body = {
     status: overallStatus,
     service: "xproof",
     version: "1.0.0",
@@ -151,7 +167,11 @@ export async function healthCheck(_req: Request, res: Response) {
     },
     transactions: metrics.transactions,
     mx8004_queue: metrics.mx8004,
-  });
+  };
+
+  healthCache = { body, status: httpStatus, cachedAt: Date.now() };
+
+  res.status(httpStatus).json(body);
 }
 
 export function requestTimeout(timeoutMs: number = 30000) {
