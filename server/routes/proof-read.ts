@@ -1664,7 +1664,7 @@ export function registerProofReadRoutes(app: Express) {
       if (cached && Date.now() - cached.generatedAt < CERT_PDF_CACHE_TTL_MS) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="certificate-${certId}.pdf"`);
-        res.setHeader("Cache-Control", "public, max-age=300");
+        res.setHeader("Cache-Control", "private, no-store");
         return res.send(cached.buf);
       }
 
@@ -1681,7 +1681,7 @@ export function registerProofReadRoutes(app: Express) {
       // Set headers for PDF download
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="certificate-${certification.id}.pdf"`);
-      res.setHeader("Cache-Control", "public, max-age=300");
+      res.setHeader("Cache-Control", "private, no-store");
       res.send(pdfBuffer);
     } catch (error) {
       logger.withRequest(req).error("Failed to generate certificate");

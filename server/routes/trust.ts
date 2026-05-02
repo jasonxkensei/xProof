@@ -503,7 +503,7 @@ export function registerTrustRoutes(app: Express) {
       const privateFallback = `<svg xmlns="http://www.w3.org/2000/svg" width="130" height="24" role="img"><rect width="130" height="24" rx="5" fill="#1E1E1E"/><rect width="130" height="24" rx="5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/><text x="65" y="16" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11">xproof: Unknown</text></svg>`;
       if (!userCheck || !userCheck.isPublicProfile) {
         res.setHeader("Content-Type", "image/svg+xml");
-        res.setHeader("Cache-Control", "max-age=300");
+        res.setHeader("Cache-Control", "private, no-store");
         return res.send(privateFallback);
       }
 
@@ -511,14 +511,14 @@ export function registerTrustRoutes(app: Express) {
 
       if (!trust) {
         res.setHeader("Content-Type", "image/svg+xml");
-        res.setHeader("Cache-Control", "max-age=300");
+        res.setHeader("Cache-Control", "private, no-store");
         return res.send(privateFallback);
       }
 
       const vCount = (trust.violations?.fault || 0) + (trust.violations?.breach || 0);
       const svg = generateTrustBadgeSvg(trust.level, trust.score, trust.activeAttestations ?? 0, vCount);
       res.setHeader("Content-Type", "image/svg+xml");
-      res.setHeader("Cache-Control", "max-age=300");
+      res.setHeader("Cache-Control", "private, no-store");
       res.send(svg);
     } catch (error) {
       logger.withRequest(req).error("Failed to generate trust badge");

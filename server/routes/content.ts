@@ -1,6 +1,7 @@
 import { type Express } from "express";
 import { db } from "../db";
 import { logger } from "../logger";
+import { publicReadRateLimiter } from "../reliability";
 import { certifications, users, attestations, apiKeys } from "@shared/schema";
 import { eq, count, sql } from "drizzle-orm";
 import { getCertificationPriceUsd } from "../pricing";
@@ -887,7 +888,7 @@ This genesis certification demonstrates:
   });
 
   // /proof/:id.json - Proof in structured JSON
-  app.get("/proof/:id.json", async (req, res) => {
+  app.get("/proof/:id.json", publicReadRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -959,7 +960,7 @@ This genesis certification demonstrates:
   });
 
   // /badge/:id - Dynamic SVG badge for GitHub READMEs
-  app.get("/badge/:id", async (req, res) => {
+  app.get("/badge/:id", publicReadRateLimiter, async (req, res) => {
     try {
       const certId = req.params.id;
 
@@ -1036,7 +1037,7 @@ This genesis certification demonstrates:
 </svg>`;
 
       res.setHeader("Content-Type", "image/svg+xml");
-      res.setHeader("Cache-Control", "max-age=300");
+      res.setHeader("Cache-Control", "private, no-store");
       res.send(svg);
     } catch (error) {
       logger.withRequest(req).error("Failed to generate badge");
@@ -1046,7 +1047,7 @@ This genesis certification demonstrates:
     }
   });
 
-  app.get("/badge/:id/markdown", async (req, res) => {
+  app.get("/badge/:id/markdown", publicReadRateLimiter, async (req, res) => {
     try {
       const certId = req.params.id;
       const baseUrl = `https://${req.get("host")}`;
@@ -1086,7 +1087,7 @@ This genesis certification demonstrates:
   });
 
   // /proof/:id.md - Proof in markdown for LLMs
-  app.get("/proof/:id.md", async (req, res) => {
+  app.get("/proof/:id.md", publicReadRateLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       
