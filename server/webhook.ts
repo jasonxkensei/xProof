@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import dns from "dns";
+import https from "https";
 import { db } from "./db";
 import { certifications } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -173,21 +174,8 @@ export async function deliverWebhook(
       })
       .where(eq(certifications.id, certificationId));
 
-    // DNS SSRF guard: resolve hostname and confirm every IP is public before connecting
-    const dnsClean = await resolveToPublicOnly(webhookUrl);
-    if (!dnsClean) {
-      logger.warn("Webhook blocked: hostname resolves to private/reserved IP", {
-        component: "webhook", webhookUrl, certificationId,
-      });
-      await markWebhookFailed(certificationId);
-      return false;
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
-
     try {
-      const response = await fetch(webhookUrl, {
+      const result = await safeWebhookFetch(webhookUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -198,28 +186,28 @@ export async function deliverWebhook(
           "User-Agent": "xProof-Webhook/1.0",
         },
         body: payloadStr,
-        signal: controller.signal,
-        redirect: "error",  // never follow redirects — prevents redirect-based SSRF
+        timeoutMs: WEBHOOK_TIMEOUT_MS,
       });
 
-      clearTimeout(timeout);
-
-      if (response.ok || (response.status >= 200 && response.status < 300)) {
+      if (result.ok) {
         await db
           .update(certifications)
           .set({ webhookStatus: "delivered" })
           .where(eq(certifications.id, certificationId));
-        
-        logger.info("Webhook delivered", { component: "webhook", webhookUrl, certificationId, status: response.status });
+
+        logger.info("Webhook delivered", { component: "webhook", webhookUrl, certificationId, status: result.status });
         return true;
       } else {
-        logger.warn("Webhook delivery failed", { component: "webhook", webhookUrl, status: response.status });
+        logger.warn("Webhook delivery failed", { component: "webhook", webhookUrl, status: result.status });
         await markWebhookFailed(certificationId);
         return false;
       }
     } catch (fetchError: any) {
-      clearTimeout(timeout);
-      logger.warn("Webhook network error", { component: "webhook", webhookUrl, error: fetchError.message });
+      // safeWebhookFetch throws for SSRF rejections, redirect attempts, timeouts,
+      // TLS failures, and connection errors. All of these are treated as
+      // delivery failures so they enter the retry/backoff path normally.
+      const reason = fetchError?.code || fetchError?.message || "unknown";
+      logger.warn("Webhook network error", { component: "webhook", webhookUrl, error: reason });
       await markWebhookFailed(certificationId);
       return false;
     }
@@ -328,8 +316,12 @@ function isPrivateIp(ip: string): boolean {
  * IPv4/IPv6 literals are checked directly without a DNS round-trip.
  * Returns false (= unsafe) on any resolution error — fail closed.
  *
- * This closes the DNS-based SSRF gap: a public-looking hostname that resolves to
- * an internal IP will be blocked here even though isValidWebhookUrl() passes it.
+ * NOTE: This function only validates DNS results — it does NOT pin the resolved
+ * IP to the outbound socket, so on its own it leaves a DNS-rebinding window
+ * between the lookup and the actual `fetch()` call. All outbound webhook
+ * delivery must go through `safeWebhookFetch()`, which both validates AND
+ * pins the resolved IP at the socket layer. This export is retained for
+ * backwards compatibility with tests and external code paths.
  */
 export async function resolveToPublicOnly(url: string): Promise<boolean> {
   try {
@@ -354,6 +346,176 @@ export async function resolveToPublicOnly(url: string): Promise<boolean> {
   }
 }
 
+export interface SafeWebhookFetchInit {
+  method: "POST" | "PUT" | "PATCH";
+  headers: Record<string, string>;
+  body: string;
+  timeoutMs: number;
+}
+
+export interface SafeWebhookFetchResult {
+  status: number;
+  ok: boolean;
+}
+
+/**
+ * Resolve `hostname` once and return a single (address, family) pair that has
+ * already been validated as public. Throws on resolution failure or when ANY
+ * returned record points at a private/reserved range.
+ *
+ * The single pinned address is what callers must use for the actual outbound
+ * connection; this is what closes the DNS-rebinding gap that `resolveToPublicOnly`
+ * by itself cannot close.
+ */
+async function resolveAndPin(rawUrl: string): Promise<{ url: URL; address: string; family: 4 | 6 }> {
+  const url = new URL(rawUrl);
+  if (url.protocol !== "https:") {
+    throw new Error("Webhook URL must use HTTPS");
+  }
+
+  const hostname = url.hostname;
+  const bareHost = hostname.startsWith("[") && hostname.endsWith("]")
+    ? hostname.slice(1, -1)
+    : hostname;
+
+  // IPv4 literal
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(bareHost)) {
+    if (isPrivateIp(bareHost)) throw new Error("Destination IP is private/reserved");
+    return { url, address: bareHost, family: 4 };
+  }
+
+  // IPv6 literal
+  if (bareHost.includes(":")) {
+    if (isPrivateIp(bareHost)) throw new Error("Destination IP is private/reserved");
+    return { url, address: bareHost, family: 6 };
+  }
+
+  // Hostname — resolve all A/AAAA records, fail closed if ANY are private,
+  // pin the first remaining address.
+  let addresses: { address: string; family: number }[];
+  try {
+    addresses = await dns.promises.lookup(bareHost, { family: 0, all: true });
+  } catch {
+    throw new Error("DNS resolution failed");
+  }
+  if (!addresses || addresses.length === 0) {
+    throw new Error("DNS returned no addresses");
+  }
+  if (!addresses.every((a) => !isPrivateIp(a.address))) {
+    throw new Error("Hostname resolves to a private/reserved IP");
+  }
+
+  const chosen = addresses[0];
+  const family: 4 | 6 = chosen.family === 6 ? 6 : 4;
+  return { url, address: chosen.address, family };
+}
+
+/**
+ * SSRF-resistant outbound HTTPS request for webhook delivery.
+ *
+ * Why this exists: a previous design called `resolveToPublicOnly()` to
+ * validate the hostname's DNS records, then immediately handed the original
+ * hostname to `fetch()`, which performed its OWN DNS lookup at connect time.
+ * That two-lookup pattern is vulnerable to DNS rebinding — between the two
+ * resolutions, an attacker-controlled DNS authority can flip the hostname
+ * from a public IP (which passed validation) to a private/internal IP (which
+ * the actual TCP connection then targets), letting an authenticated caller
+ * make xproof POST signed payloads to internal services.
+ *
+ * `safeWebhookFetch` closes that gap by:
+ *   1. Resolving the hostname EXACTLY ONCE via `resolveAndPin()`, validating
+ *      every returned record is a public IP.
+ *   2. Pinning the chosen IP at the socket layer via the `lookup` option on
+ *      `https.request`, which forces the kernel-level connect() to use the
+ *      pre-validated address instead of issuing a fresh DNS query.
+ *   3. Setting `servername` (TLS SNI) and the `Host` header to the original
+ *      hostname so virtual-hosted destinations and TLS certificate validation
+ *      keep working normally.
+ *   4. Refusing redirects (3xx → throw) so a redirect cannot pivot the
+ *      connection to a different host.
+ *   5. Enforcing a hard wall-clock timeout via AbortSignal.
+ *
+ * Throws on: non-HTTPS URLs, DNS failure, private/reserved resolutions,
+ * timeouts, redirects, TLS failures, and any underlying socket error.
+ */
+export async function safeWebhookFetch(
+  rawUrl: string,
+  init: SafeWebhookFetchInit
+): Promise<SafeWebhookFetchResult> {
+  const { url, address: pinnedAddress, family: pinnedFamily } = await resolveAndPin(rawUrl);
+
+  const bareHost = url.hostname.startsWith("[") && url.hostname.endsWith("]")
+    ? url.hostname.slice(1, -1)
+    : url.hostname;
+  const port = url.port ? Number(url.port) : 443;
+
+  // Per-request, non-keepalive agent. Avoids any chance that a pooled socket
+  // from a different code path bypasses our pinned `lookup`.
+  const agent = new https.Agent({ keepAlive: false });
+
+  return await new Promise<SafeWebhookFetchResult>((resolve, reject) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), init.timeoutMs);
+
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { agent.destroy(); } catch { /* ignore */ }
+      fn();
+    };
+
+    const headers: Record<string, string> = { ...init.headers };
+    headers.Host = url.host;
+
+    const req = https.request({
+      method: init.method,
+      hostname: bareHost,
+      port,
+      path: (url.pathname || "/") + (url.search || ""),
+      headers,
+      agent,
+      servername: bareHost,
+      signal: controller.signal,
+      // Pin the pre-validated IP at connect time. Ignoring the requested
+      // hostname here is the whole point: it prevents the OS resolver from
+      // rebinding to a private address between validation and the actual
+      // TCP/TLS handshake.
+      lookup: (_hostname, _options, cb) => {
+        cb(null, pinnedAddress, pinnedFamily);
+      },
+    });
+
+    req.on("response", (res) => {
+      const status = res.statusCode || 0;
+      // Refuse redirects — matches the previous redirect:'error' behaviour
+      // and prevents a 3xx-based pivot to an unvetted host.
+      if (status >= 300 && status < 400) {
+        try { res.destroy(); } catch { /* ignore */ }
+        try { req.destroy(); } catch { /* ignore */ }
+        finish(() => reject(new Error(`Webhook redirect refused (status ${status})`)));
+        return;
+      }
+      // Drain the response body so the socket can close cleanly.
+      res.resume();
+      res.on("end", () => {
+        finish(() => resolve({ status, ok: status >= 200 && status < 300 }));
+      });
+      res.on("error", (err) => {
+        finish(() => reject(err));
+      });
+    });
+
+    req.on("error", (err) => {
+      finish(() => reject(err));
+    });
+
+    req.write(init.body);
+    req.end();
+  });
+}
+
 /**
  * Validate a webhook URL (security checks — blocks private/internal destinations).
  *
@@ -364,8 +526,10 @@ export async function resolveToPublicOnly(url: string): Promise<boolean> {
  *  - Hostname must not be an IPv4-mapped IPv6 literal targeting a private range
  *
  * Important: isValidWebhookUrl() only checks the hostname string, not the resolved IP.
- * Always ALSO call resolveToPublicOnly() before dispatching an outbound fetch, and
- * always pass redirect:'error' to the fetch so redirect pivoting is refused.
+ * It is NOT sufficient on its own to defeat SSRF — a hostname that passes this
+ * check can still resolve to an internal IP at connect time (DNS rebinding).
+ * All outbound webhook delivery MUST go through safeWebhookFetch(), which
+ * validates the resolved IP and pins it at the socket layer in one step.
  */
 export function isValidWebhookUrl(url: string): boolean {
   try {

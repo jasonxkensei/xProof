@@ -7,7 +7,7 @@ import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
 import { attestationIssuanceRateLimiter, publicSearchRateLimiter } from "../reliability";
 import { computeTrustScoreByWallet } from "../trust";
-import { isValidWebhookUrl, resolveToPublicOnly } from "../webhook";
+import { isValidWebhookUrl, safeWebhookFetch } from "../webhook";
 
 export function registerAttestationsRoutes(app: Express) {
   // ============================================
@@ -224,9 +224,11 @@ export function registerAttestationsRoutes(app: Express) {
       // Only dispatch if URL is still valid and a per-attestation secret exists (guards
       // pre-existing rows that have no scoped secret stored).
       if (webhookUrl && webhookSecret && isValidWebhookUrl(webhookUrl)) {
-        // DNS SSRF guard + redirect-block: fire-and-forget, but resolve DNS first
-        resolveToPublicOnly(webhookUrl).then(async (dnsClean) => {
-          if (!dnsClean) return; // hostname resolves to private/reserved IP — silent drop
+        // Fire-and-forget delivery via safeWebhookFetch — resolves the hostname
+        // once, validates the IP is public, and pins that IP at the socket layer
+        // so a DNS-rebinding pivot between validation and connect cannot smuggle
+        // the request to an internal address.
+        (async () => {
           try {
             const timestamp = Math.floor(Date.now() / 1000).toString();
             const payload = JSON.stringify({
@@ -236,8 +238,11 @@ export function registerAttestationsRoutes(app: Express) {
               revoked_at: new Date().toISOString(),
             });
             const crypto = await import("crypto");
-            const signature = crypto.createHmac("sha256", webhookSecret).update(`${timestamp}.${payload}`).digest("hex");
-            fetch(webhookUrl, {
+            const signature = crypto
+              .createHmac("sha256", webhookSecret)
+              .update(`${timestamp}.${payload}`)
+              .digest("hex");
+            await safeWebhookFetch(webhookUrl, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -248,11 +253,13 @@ export function registerAttestationsRoutes(app: Express) {
                 "User-Agent": "xProof-Webhook/1.0",
               },
               body: payload,
-              signal: AbortSignal.timeout(10000),
-              redirect: "error",  // never follow redirects — prevents redirect-based SSRF
-            }).catch(() => {});
-          } catch {}
-        }).catch(() => {});
+              timeoutMs: 10000,
+            });
+          } catch {
+            // Silent drop on SSRF/timeout/network failure — revocation has
+            // already been persisted, the webhook is best-effort.
+          }
+        })();
       }
 
       logger.info("Attestation revoked", { issuer: issuerWallet, attestationId: id });
