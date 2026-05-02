@@ -1781,8 +1781,8 @@ Sitemap: ${baseUrl}/sitemap.xml
     res.json({
       schema_version: "1.0",
       name: "xproof",
-      version: "1.2.0",
-      description: "xproof — the canonical proof layer for AI agents. Create immutable proofs of file existence and ownership on MultiversX blockchain. Live MCP server available at POST /mcp (JSON-RPC 2.0 over Streamable HTTP).",
+      version: "1.5.0",
+      description: "xproof — the canonical proof layer for AI agents. Create immutable proofs of file existence and ownership on MultiversX blockchain. Live MCP server available at POST /mcp (JSON-RPC 2.0 over Streamable HTTP). Free trial: 10 free certifications via register_free_trial tool, no wallet, no card.",
       homepage: baseUrl,
       endpoint: `${baseUrl}/mcp`,
       transport: "streamable-http",
@@ -1804,6 +1804,25 @@ Sitemap: ${baseUrl}/sitemap.xml
               author_name: { type: "string", description: "Name of the certifier", default: "AI Agent" },
               webhook_url: { type: "string", format: "uri", description: "Optional HTTPS URL to receive a POST notification when the proof is confirmed on-chain. Payload is signed with HMAC-SHA256 (X-xProof-Signature header)." },
               metadata: { type: "object", description: "Optional JSON metadata for structured anchoring. Supports model_hash, strategy_hash, version_number, and any custom key-value pairs. All fields are searchable via GET /api/proofs/search.", properties: { model_hash: { type: "string" }, strategy_hash: { type: "string" }, version_number: { type: "string" } }, additionalProperties: true }
+            }
+          }
+        },
+        {
+          name: "certify_with_confidence",
+          description: `Create a staged blockchain certification with a confidence score. Use this when your decision builds progressively — certify at 60% (initial assessment), 80% (pre-commitment), and 100% (final decision). Each stage shares the same decision_id, creating an on-chain audit trail of the decision process. Governance: set reversibility_class='irreversible' for actions that cannot be undone — xproof will flag a policy violation if confidence_level < 0.95. Cost: $${priceUsd} per certification.`,
+          inputSchema: {
+            type: "object",
+            required: ["file_hash", "filename", "decision_id", "confidence_level", "threshold_stage"],
+            properties: {
+              file_hash: { type: "string", pattern: "^[a-fA-F0-9]{64}$", description: "SHA-256 hash of the decision or output file (64 hex characters)" },
+              filename: { type: "string", description: "Original filename with extension (e.g. decision.json)" },
+              decision_id: { type: "string", description: "Shared UUID linking all confidence stages for the same decision. Generate once and reuse across all stages." },
+              confidence_level: { type: "number", minimum: 0, maximum: 1, description: "Confidence score from 0.0 to 1.0. Typical values: 0.6 (initial), 0.8 (pre-commitment), 1.0 (final)." },
+              threshold_stage: { type: "string", enum: ["initial", "partial", "pre-commitment", "final"], description: "Named stage of the decision: initial (first assessment), partial (gathering info), pre-commitment (almost certain), final (committed)." },
+              author_name: { type: "string", description: "Name of the certifying agent", default: "AI Agent" },
+              why: { type: "string", description: "Reason or instruction hash driving this decision" },
+              who: { type: "string", description: "Agent identity (wallet address, name, or agent ID)" },
+              reversibility_class: { type: "string", enum: ["reversible", "costly", "irreversible"], description: "Governance: how reversible is this action? When 'irreversible', confidence_level must be >= 0.95 or xproof flags a policy violation." }
             }
           }
         },
@@ -1864,6 +1883,18 @@ Sitemap: ${baseUrl}/sitemap.xml
             required: ["wallet"],
             properties: {
               wallet: { type: "string", description: "MultiversX wallet address (erd1...) of the agent to check" }
+            }
+          }
+        },
+        {
+          name: "investigate_proof",
+          description: "Reconstruct the full 4W audit trail for a contested agent action. Returns WHO (agent identity + SIGIL), WHAT (SHA-256 hash on-chain), WHEN (MultiversX block timestamp), WHY (decision chain anchored before acting). Includes verification summary with intent_preceded_execution flag, chronological timeline of WHY/WHAT proofs, and session heartbeat anchor. Requires x402 payment ($0.05 USDC on Base via X-PAYMENT header) or API key authentication.",
+          inputSchema: {
+            type: "object",
+            required: ["proof_id", "wallet"],
+            properties: {
+              proof_id: { type: "string", pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", description: "UUID of any proof in the action pair — WHY (reasoning), WHAT (action), or heartbeat session proof" },
+              wallet: { type: "string", description: "Agent wallet address (erd1...) that owns the proof" }
             }
           }
         },
