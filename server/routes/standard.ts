@@ -78,18 +78,96 @@ export function registerStandardRoutes(app: Express) {
     }
   }
 
+  /**
+   * Deterministically serialize a JSON-compatible value so it can be hashed
+   * into the canonical string. Object keys are sorted recursively to guarantee
+   * the same value always produces the same bytes regardless of key order.
+   */
+  function stableStringify(value: unknown): string {
+    if (value === null || typeof value !== "object") return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
+  }
+
+  /**
+   * Canonical string used for signature verification. When any of the optional
+   * accountability fields (action_type, post_id, target_author, session_id,
+   * metadata) is present, they MUST be cryptographically bound by the signer
+   * so they cannot be tampered with after the signature was produced. We bind
+   * them by appending a deterministic suffix to the base canonical. A proof
+   * that does not include any optional field is signed exactly as before
+   * (backward compatible with the v1.0 spec). A proof that DOES include any
+   * optional field must be signed over the extended canonical or it will be
+   * rejected.
+   */
+  function hasAccountabilityFields(proof: {
+    action_type?: string;
+    post_id?: string;
+    target_author?: string;
+    session_id?: string;
+    metadata?: Record<string, unknown>;
+  }): boolean {
+    return (
+      proof.action_type !== undefined ||
+      proof.post_id !== undefined ||
+      proof.target_author !== undefined ||
+      proof.session_id !== undefined ||
+      proof.metadata !== undefined
+    );
+  }
+
+  function buildCanonical(proof: {
+    version: string;
+    agent_id: string;
+    instruction_hash: string;
+    action_hash: string;
+    timestamp: string;
+    action_type?: string;
+    post_id?: string;
+    target_author?: string;
+    session_id?: string;
+    metadata?: Record<string, unknown>;
+  }): string {
+    const base = `${proof.version}|${proof.agent_id}|${proof.instruction_hash}|${proof.action_hash}|${proof.timestamp}`;
+    if (!hasAccountabilityFields(proof)) return base;
+    const metadataHash =
+      proof.metadata !== undefined
+        ? crypto.createHash("sha256").update(stableStringify(proof.metadata)).digest("hex")
+        : "";
+    return [
+      base,
+      proof.action_type ?? "",
+      proof.post_id ?? "",
+      proof.target_author ?? "",
+      proof.session_id ?? "",
+      metadataHash,
+    ].join("|");
+  }
+
+  // Canonical strings are pipe-delimited. To keep canonical encoding injective
+  // and prevent delimiter-injection attacks where two different field tuples
+  // could collide on the same canonical string, all string fields that appear
+  // in the canonical reject `|` and ASCII control characters (including \r\n).
+  const NO_DELIM_REGEX = /^[^|\x00-\x1f\x7f]*$/;
+  const noDelim = (label: string) =>
+    z
+      .string()
+      .regex(NO_DELIM_REGEX, `${label} must not contain '|' or control characters (canonical delimiter)`);
+
   const standardProofSchema = z.object({
     version: z.literal("1.0"),
-    agent_id: z.string().min(1, "agent_id is required"),
+    agent_id: noDelim("agent_id").min(1, "agent_id is required"),
     public_key: z.string().regex(PUBLIC_KEY_REGEX, "Must be ed25519: or ecdsa: followed by hex-encoded public key bytes"),
     instruction_hash: z.string().regex(SHA256_REGEX, "Must be sha256: followed by 64 hex chars"),
     action_hash: z.string().regex(SHA256_REGEX, "Must be sha256: followed by 64 hex chars"),
     timestamp: z.string().refine((ts) => !isNaN(Date.parse(ts)), "Must be a valid ISO 8601 timestamp"),
     signature: z.string().regex(HEX_SIG_REGEX, "Must be hex: followed by at least 128 hex chars"),
-    action_type: z.string().optional(),
-    post_id: z.string().optional(),
-    target_author: z.string().optional(),
-    session_id: z.string().optional(),
+    action_type: noDelim("action_type").optional(),
+    post_id: noDelim("post_id").optional(),
+    target_author: noDelim("target_author").optional(),
+    session_id: noDelim("session_id").optional(),
     chain_anchor: z.object({
       chain: z.string(),
       network: z.string().optional(),
@@ -124,11 +202,28 @@ export function registerStandardRoutes(app: Express) {
         });
       }
 
-      const canonical = `${proof.version}|${proof.agent_id}|${proof.instruction_hash}|${proof.action_hash}|${proof.timestamp}`;
+      const canonical = buildCanonical(proof);
       const canonicalHash = crypto.createHash("sha256").update(canonical).digest("hex");
 
       const signatureValid = verifyStandardSignature(proof.public_key, proof.signature, canonical);
       if (!signatureValid) {
+        // Diagnostic: if the signature would have verified against the base canonical
+        // (without the optional accountability fields), the caller signed the proof
+        // before adding/modifying those fields — they are not bound by the signature
+        // and the proof must be rejected to prevent metadata tampering.
+        if (hasAccountabilityFields(proof)) {
+          const baseCanonical = `${proof.version}|${proof.agent_id}|${proof.instruction_hash}|${proof.action_hash}|${proof.timestamp}`;
+          if (verifyStandardSignature(proof.public_key, proof.signature, baseCanonical)) {
+            return res.json({
+              valid: false,
+              errors: {
+                signature:
+                  "Optional accountability fields (action_type, post_id, target_author, session_id, metadata) are present but not bound by the signature. Re-sign over the extended canonical that includes these fields.",
+              },
+              standard_version: "1.0",
+            });
+          }
+        }
         return res.json({
           valid: false,
           errors: { signature: "Signature verification failed: the signature does not match the canonical payload under the supplied public key" },
@@ -262,11 +357,21 @@ export function registerStandardRoutes(app: Express) {
         });
       }
 
-      const canonical = `${proof.version}|${proof.agent_id}|${proof.instruction_hash}|${proof.action_hash}|${proof.timestamp}`;
+      const canonical = buildCanonical(proof);
       const canonicalHash = crypto.createHash("sha256").update(canonical).digest("hex");
 
       const signatureValid = verifyStandardSignature(proof.public_key, proof.signature, canonical);
       if (!signatureValid) {
+        if (hasAccountabilityFields(proof)) {
+          const baseCanonical = `${proof.version}|${proof.agent_id}|${proof.instruction_hash}|${proof.action_hash}|${proof.timestamp}`;
+          if (verifyStandardSignature(proof.public_key, proof.signature, baseCanonical)) {
+            return res.status(400).json({
+              error: "UNSIGNED_ACCOUNTABILITY_FIELDS",
+              message:
+                "Optional accountability fields (action_type, post_id, target_author, session_id, metadata) are present but not bound by the signature. Re-sign over the extended canonical that includes these fields. Anchoring rejected.",
+            });
+          }
+        }
         return res.status(400).json({
           error: "INVALID_SIGNATURE",
           message: "Signature verification failed: the signature does not match the canonical payload under the supplied public key. Anchoring rejected.",
@@ -484,7 +589,9 @@ export function registerStandardRoutes(app: Express) {
         optional: ["action_type", "post_id", "target_author", "session_id", "chain_anchor", "metadata"],
       },
       signature_scheme: {
-        canonical: "version|agent_id|instruction_hash|action_hash|timestamp",
+        canonical_base: "version|agent_id|instruction_hash|action_hash|timestamp",
+        canonical_extended: "version|agent_id|instruction_hash|action_hash|timestamp|action_type|post_id|target_author|session_id|sha256(stable_json(metadata))",
+        canonical_rule: "Use the extended canonical when ANY optional accountability field (action_type, post_id, target_author, session_id, metadata) is present, including an empty metadata object; otherwise use the base canonical. Absent optional string fields serialize as empty strings; absent metadata serializes as an empty string; present metadata is hashed using a deterministic JSON form (recursively sorted keys). agent_id and the optional accountability strings must not contain '|' or ASCII control characters so canonical encoding is injective.",
         algorithms: ["Ed25519", "ECDSA (secp256k1)"],
         public_key_format: "ed25519:<32-byte-hex> or ecdsa:<33-or-65-byte-hex>",
         signature_format: "hex:<hex-encoded-signature>",
