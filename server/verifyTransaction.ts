@@ -90,11 +90,10 @@ export async function verifyTransactionOnChain(
     const expectedValue = BigInt(expectedMinValue || "0");
 
     if (expectedValue > BigInt(0)) {
-      const toleranceValue = (expectedValue * BigInt(98)) / BigInt(100);
-      if (txValue < toleranceValue) {
+      if (txValue < expectedValue) {
         return {
           verified: false,
-          error: `Insufficient payment: expected at least ${toleranceValue.toString()} (with 2% tolerance on ${expectedValue.toString()}), got ${txValue.toString()}`,
+          error: `Insufficient payment: expected ${expectedValue.toString()}, got ${txValue.toString()}`,
           status: tx.status,
           sender: tx.sender,
           receiver: tx.receiver,

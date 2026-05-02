@@ -161,6 +161,13 @@ export interface ACPProduct {
   };
   inputs: Record<string, string>;
   outputs: Record<string, string>;
+  checkout_requirements?: {
+    payer_wallet: string;
+    payer_wallet_signature: string;
+    message_format: string;
+    message_format_example: string;
+    signing_algorithm: string;
+  };
 }
 
 // ACP Checkout Request - what an agent sends to start certification
@@ -180,6 +187,10 @@ export const acpCheckoutRequestSchema = z.object({
   // Required for non-admin checkouts to cryptographically bind the payment sender
   // to this checkout and prevent tx hijacking by a competing actor.
   payer_wallet: z.string().optional(),
+  // Ed25519 signature (hex) proving the caller controls payer_wallet.
+  // Sign the deterministic message "xproof-acp-checkout:<product_id>:<file_hash>:<payer_wallet>"
+  // with the private key corresponding to payer_wallet's public key.
+  payer_wallet_signature: z.string().optional(),
 });
 
 export type ACPCheckoutRequest = z.infer<typeof acpCheckoutRequestSchema>;

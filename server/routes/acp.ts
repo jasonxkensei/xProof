@@ -10,6 +10,7 @@ import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing"
 import { recordOnBlockchain } from "../blockchain";
 import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
 import { isAdminWallet, getApiKeyOwnerWallet, getNetworkLabel, buildCanonicalId, validateApiKey } from "./helpers";
+import { Address } from "@multiversx/sdk-core";
 
 export function registerAcpRoutes(app: Express) {
   // ============================================
@@ -45,6 +46,13 @@ export function registerAcpRoutes(app: Express) {
           proof_url: "Public verification page URL",
           tx_hash: "MultiversX transaction hash",
           blockchain_explorer_url: "Link to view transaction on explorer",
+        },
+        checkout_requirements: {
+          payer_wallet: "Required (non-admin). The MultiversX wallet address (erd1...) that will send the EGLD payment.",
+          payer_wallet_signature: "Required (non-admin). Hex-encoded Ed25519 signature proving you control payer_wallet. Must be 64 bytes (128 hex chars).",
+          message_format: "xproof-acp-checkout:<product_id>:<file_hash>:<payer_wallet>",
+          message_format_example: "xproof-acp-checkout:xproof-certification:<sha256_file_hash>:<erd1...>",
+          signing_algorithm: "Ed25519 raw signature (no MultiversX prefix) over UTF-8 message bytes using the private key corresponding to payer_wallet's public key. Sign then hex-encode the 64-byte signature.",
         },
       },
     ];
@@ -161,15 +169,75 @@ export function registerAcpRoutes(app: Express) {
       // Require payer_wallet for non-admin checkouts to bind the expected transaction sender.
       // This prevents a third party from observing a pending checkout for a file they control
       // and then using the legitimate payer's tx_hash to confirm it.
+      // Ownership proof: caller must also supply a valid Ed25519 signature over the deterministic
+      // message "xproof-acp-checkout:<product_id>:<file_hash>:<payer_wallet>" signed by the
+      // private key corresponding to payer_wallet's public key. This mirrors the EIP-191 ownership
+      // proof used by the Base credit-purchase flow (server/routes/credits.ts:73-103).
       let payerWallet: string | null = null;
       if (!acpAdminExempt) {
         const raw = (data.payer_wallet || "").trim();
         if (!raw.startsWith("erd1") || raw.length < 60) {
+          const ownershipMessage = `xproof-acp-checkout:${data.product_id}:${data.inputs.file_hash}:<payer_wallet>`;
           return res.status(400).json({
             error: "PAYER_WALLET_REQUIRED",
-            message: "Provide the MultiversX wallet address (erd1...) that will send the EGLD payment as payer_wallet. This binds the checkout to the expected payment sender and prevents tx hijacking.",
+            message: "Provide the MultiversX wallet address (erd1...) that will send the EGLD payment as payer_wallet, along with payer_wallet_signature proving you control it.",
+            message_to_sign: ownershipMessage.replace("<payer_wallet>", "<your_erd1_address>"),
+            message_format: "xproof-acp-checkout:<product_id>:<file_hash>:<payer_wallet>",
           });
         }
+
+        // Require a signature proving the caller controls payer_wallet.
+        // Without this, any API-key holder could claim any victim's wallet address and either
+        // block them from creating their own checkout (DoS) or pre-populate the expectedSender
+        // binding so a victim's future payment gets attributed to the attacker's checkout.
+        const ownershipMessage = `xproof-acp-checkout:${data.product_id}:${data.inputs.file_hash}:${raw}`;
+        if (!data.payer_wallet_signature) {
+          return res.status(400).json({
+            error: "SIGNATURE_REQUIRED",
+            message: `Provide an Ed25519 signature of "${ownershipMessage}" signed by the private key of payer_wallet to prove wallet ownership, as payer_wallet_signature (hex-encoded).`,
+            message_to_sign: ownershipMessage,
+          });
+        }
+
+        // Validate signature format: must be 128 hex chars (64 bytes = Ed25519 sig) optionally prefixed with 0x
+        const sigHexRaw = data.payer_wallet_signature.replace(/^0x/i, "");
+        if (!/^[0-9a-fA-F]{128}$/.test(sigHexRaw)) {
+          return res.status(400).json({
+            error: "INVALID_SIGNATURE_FORMAT",
+            message: "payer_wallet_signature must be a hex-encoded 64-byte Ed25519 signature (128 hex characters, optionally prefixed with 0x).",
+            message_to_sign: ownershipMessage,
+          });
+        }
+
+        try {
+          // Decode the erd1 bech32 address to the raw 32-byte Ed25519 public key
+          const addr = Address.newFromBech32(raw);
+          const pubKeyBytes = addr.getPublicKey();
+
+          // Build SPKI DER-wrapped public key for Node.js crypto.verify
+          // Ed25519 SPKI header: 302a300506032b6570032100 (12 bytes) + 32-byte key
+          const ED25519_SPKI_HEADER = Buffer.from("302a300506032b6570032100", "hex");
+          const derKey = Buffer.concat([ED25519_SPKI_HEADER, Buffer.from(pubKeyBytes)]);
+          const keyObject = crypto.createPublicKey({ key: derKey, format: "der", type: "spki" });
+
+          const messageBuffer = Buffer.from(ownershipMessage, "utf8");
+          const sigBuffer = Buffer.from(sigHexRaw, "hex");
+
+          const valid = crypto.verify(null, messageBuffer, keyObject, sigBuffer);
+          if (!valid) {
+            return res.status(403).json({
+              error: "INVALID_SIGNATURE",
+              message: `Signature does not prove ownership of ${raw}. Sign "${ownershipMessage}" with the private key of payer_wallet and provide the hex-encoded result as payer_wallet_signature.`,
+              message_to_sign: ownershipMessage,
+            });
+          }
+        } catch (sigErr: any) {
+          return res.status(400).json({
+            error: "INVALID_SIGNATURE",
+            message: `Could not verify payer_wallet signature: ${sigErr?.message}. Sign "${`xproof-acp-checkout:${data.product_id}:${data.inputs.file_hash}:${raw}`}" with the Ed25519 private key of payer_wallet and provide the hex-encoded 64-byte result as payer_wallet_signature.`,
+          });
+        }
+
         payerWallet = raw;
       }
 
