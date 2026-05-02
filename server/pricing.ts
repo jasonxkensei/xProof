@@ -21,32 +21,17 @@ async function getTotalCertificationCount(): Promise<number> {
   }
 
   try {
-    // SECURITY: only count rows that represent a paid/confirmed certification.
-    // The ACP checkout flow inserts a "reservation" row in `certifications`
-    // with authMethod='acp', blockchainStatus='pending' and no transactionHash
-    // BEFORE any MultiversX payment is observed (see server/routes/acp.ts).
-    // Counting those here would let an attacker holding any valid API key
-    // call /api/acp/checkout repeatedly with unique fake file hashes to push
-    // the total over a tier boundary (100k → $0.025, 1M → $0.01) and lower
-    // the price quoted to subsequent paying customers and the price the
-    // server enforces against incoming x402 / wallet / ACP payments.
-    // We exclude unpaid ACP reservations explicitly: a row is "paid" iff it
-    // is NOT (authMethod='acp' AND blockchainStatus='pending' AND
-    // transactionHash IS NULL). Once /api/acp/confirm attaches a
-    // transactionHash and flips blockchainStatus to 'confirmed' (or even
-    // 'failed' after on-chain broadcast), the row counts again.
+    // Exclude unpaid ACP checkout reservations so an attacker cannot inflate
+    // the count past a pricing tier by spamming /api/acp/checkout.
+    const isUnpaidAcpReservation = and(
+      eq(certifications.authMethod, "acp"),
+      eq(certifications.blockchainStatus, "pending"),
+      isNull(certifications.transactionHash),
+    );
     const result = await db
       .select({ value: count() })
       .from(certifications)
-      .where(
-        not(
-          and(
-            eq(certifications.authMethod, "acp"),
-            eq(certifications.blockchainStatus, "pending"),
-            isNull(certifications.transactionHash),
-          )!,
-        ),
-      );
+      .where(not(isUnpaidAcpReservation));
     const totalCount = result[0]?.value ?? 0;
     cachedTotalCount = { count: totalCount, timestamp: Date.now() };
     return totalCount;
