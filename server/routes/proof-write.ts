@@ -21,7 +21,7 @@ export function registerProofWriteRoutes(app: Express) {
   // ============================================
   app.get("/api/proofs/search", publicSearchRateLimiter, async (req, res) => {
     try {
-      const { model_hash, strategy_hash, version_number, key, value, wallet, limit: limitStr, offset: offsetStr } = req.query;
+      const { model_hash, strategy_hash, key, value, wallet, limit: limitStr, offset: offsetStr } = req.query;
       const limit = Math.min(parseInt(limitStr as string) || 20, 100);
       const offset = Math.max(parseInt(offsetStr as string) || 0, 0);
 
@@ -48,7 +48,6 @@ export function registerProofWriteRoutes(app: Express) {
       if (
         isOversized(model_hash, SEARCH_VALUE_MAX) ||
         isOversized(strategy_hash, SEARCH_VALUE_MAX) ||
-        isOversized(version_number, SEARCH_VALUE_MAX) ||
         isOversized(value, SEARCH_VALUE_MAX) ||
         isOversized(wallet, 128)
       ) {
@@ -72,22 +71,50 @@ export function registerProofWriteRoutes(app: Express) {
       if (strategy_hash) {
         sqlConditions.push(sql`${certifications.metadata}->>'strategy_hash' = ${String(strategy_hash)}`);
       }
-      if (version_number) {
-        sqlConditions.push(sql`${certifications.metadata}->>'version_number' = ${String(version_number)}`);
-      }
+      // Static per-key SQL branches: emit a literal `metadata->>'key' = $1`
+      // expression for each whitelisted key so PostgreSQL's planner can match
+      // the corresponding partial expression index. A dynamic
+      // `metadata->>${key}` form is parameterized on the key itself and may
+      // fall back to a sequential scan even when an index exists.
       if (key && value) {
-        sqlConditions.push(sql`${certifications.metadata}->>${ String(key)} = ${String(value)}`);
+        const v = String(value);
+        switch (key as string) {
+          case "decision_id":
+            sqlConditions.push(sql`${certifications.metadata}->>'decision_id' = ${v}`);
+            break;
+          case "sigil_public_key":
+            sqlConditions.push(sql`${certifications.metadata}->>'sigil_public_key' = ${v}`);
+            break;
+          case "bnb_wallet":
+            sqlConditions.push(sql`LOWER(${certifications.metadata}->>'bnb_wallet') = ${v.toLowerCase()}`);
+            break;
+          case "eliza_agent_id":
+            sqlConditions.push(sql`LOWER(${certifications.metadata}->>'eliza_agent_id') = ${v.toLowerCase()}`);
+            break;
+          case "xai_agent_id":
+            sqlConditions.push(sql`LOWER(${certifications.metadata}->>'xai_agent_id') = ${v.toLowerCase()}`);
+            break;
+          case "mpp_payment_intent_id":
+            sqlConditions.push(sql`${certifications.metadata}->>'mpp_payment_intent_id' = ${v}`);
+            break;
+          case "model_hash":
+            sqlConditions.push(sql`${certifications.metadata}->>'model_hash' = ${v}`);
+            break;
+          case "strategy_hash":
+            sqlConditions.push(sql`${certifications.metadata}->>'strategy_hash' = ${v}`);
+            break;
+        }
       }
       if (wallet) {
         sqlConditions.push(eq(users.walletAddress, String(wallet)));
       }
 
-      const hasMetadataFilter = !!(model_hash || strategy_hash || version_number || (key && value));
+      const hasMetadataFilter = !!(model_hash || strategy_hash || (key && value));
 
       if (sqlConditions.length === 0) {
         return res.status(400).json({
           error: "MISSING_FILTER",
-          message: "Provide at least one search parameter: model_hash, strategy_hash, version_number, key+value, or wallet",
+          message: "Provide at least one search parameter: model_hash, strategy_hash, key+value, or wallet",
         });
       }
 
