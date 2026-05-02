@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "R6NawBePX8WEQ-20A29PB"
+uri = "file://xproof-v140-clawhub-upload.zip"
+type = "unspecified"
+title = "xProof v1.4.0 — fichiers propres pour drag-drop Clawhub"
