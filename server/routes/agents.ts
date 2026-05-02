@@ -399,6 +399,7 @@ export function registerAgentsRoutes(app: Express) {
         trialUsed: 0,
         agentName: data.agent_name,
         companyName: data.agent_name,
+        isPublicProfile: true,
         registrationIpHash,
         ...(data.webhook_url ? { webhookUrl: data.webhook_url, webhookSecret: webhookSecretSeed } : {}),
       }).returning();
@@ -612,6 +613,19 @@ export function registerAgentsRoutes(app: Express) {
 
       const agentNameForCapabilities = user.companyName || user.agentName || "agent";
 
+      const lastProofFormatted = lastProof
+        ? {
+            id: lastProof.id,
+            filename: lastProof.fileName,
+            file_hash: lastProof.fileHash,
+            blockchain_status: lastProof.blockchainStatus,
+            transaction_hash: lastProof.transactionHash,
+            anchored_at: lastProof.createdAt?.toISOString(),
+            verify_url: `${baseUrl}/proof/${lastProof.id}`,
+            retrieve_json: `${baseUrl}/api/proof/${lastProof.id}`,
+          }
+        : null;
+
       return res.json({
         status: "active",
         agent: {
@@ -620,6 +634,7 @@ export function registerAgentsRoutes(app: Express) {
           account_type: user.isTrial ? "trial" : "full",
           wallet: user.isTrial ? null : user.walletAddress,
         },
+        credits_remaining: totalRemaining,
         credits: {
           ...(user.isTrial
             ? {
@@ -633,20 +648,10 @@ export function registerAgentsRoutes(app: Express) {
           paid: creditBalance,
           total_remaining: totalRemaining,
         },
+        last_proof: lastProofFormatted,
         proofs: {
           total: (await db.select({ count: sql<number>`count(*)` }).from(certifications).where(eq(certifications.userId, user.id)))[0]?.count ?? 0,
-          last_proof: lastProof
-            ? {
-                id: lastProof.id,
-                filename: lastProof.fileName,
-                file_hash: lastProof.fileHash,
-                blockchain_status: lastProof.blockchainStatus,
-                transaction_hash: lastProof.transactionHash,
-                anchored_at: lastProof.createdAt?.toISOString(),
-                verify_url: `${baseUrl}/proof/${lastProof.id}`,
-                retrieve_json: `${baseUrl}/api/proof/${lastProof.id}`,
-              }
-            : null,
+          last_proof: lastProofFormatted,
         },
         webhook: user.webhookUrl
           ? {

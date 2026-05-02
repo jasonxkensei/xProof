@@ -859,6 +859,7 @@ export async function createMcpServer(ctx: McpContext) {
           trialUsed: 0,
           agentName: agent_name,
           companyName: agent_name,
+          isPublicProfile: true,
         }).returning();
 
         const rawKey = `pm_${crypto.randomBytes(32).toString("hex")}`;
