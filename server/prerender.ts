@@ -575,6 +575,7 @@ async function renderLeaderboardPage(baseUrl: string): Promise<string> {
 
 async function renderAgentProfilePage(baseUrl: string, walletAddress: string): Promise<string | null> {
   try {
+    if (walletAddress.startsWith("erd1trial")) return null;
     const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
     if (!user || !user.isPublicProfile) return null;
     const trust = await computeTrustScoreByWallet(walletAddress);

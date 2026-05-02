@@ -401,7 +401,9 @@ async function computeAllLeaderboardEntries(): Promise<LeaderboardEntry[]> {
     FROM users u
     LEFT JOIN certifications c ON c.user_id = u.id
     WHERE u.is_public_profile = true
+      AND u.wallet_address NOT LIKE 'erd1trial%'
     GROUP BY u.id, u.wallet_address, u.agent_name, u.agent_category, u.agent_description, u.agent_website
+    HAVING COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) > 0
   `);
 
   const allRows = rows.rows as any[];
