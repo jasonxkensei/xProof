@@ -103,3 +103,9 @@ Required guarantees:
 - Reviewed production webhook call sites for the fallback secret in `server/webhook.ts`. Treat this as a lead, not a finding, unless a reachable production path is shown to call `scheduleWebhookDelivery` without a scoped webhook secret. The reviewed production proof and MCP flows generated or supplied per-relationship secrets before scheduling delivery.
 - Do not re-propose duplicate-attestation inflation from the same issuer without new evidence. Trust-score bonus and `activeAttestations` in `server/trust.ts` are grouped by `issuer_wallet`, so repeated attestations from one issuer do not stack into extra public trust weight.
 - Trust-route admin actions in `server/routes/trust.ts` do not use `requireAdmin`, but the reviewed paths still enforced `isWalletAuthenticated` plus `isAdminWallet(req.walletAddress)`. Keep this as a review anchor only if wallet-session integrity changes.
+
+## Scan Notes — 2026-05-02
+
+- Treat `server/prerender.ts` as a first-class public disclosure surface, not just SEO infrastructure. Any visibility hardening added to `/api/proof/:id` or related JSON/Markdown endpoints must be mirrored in prerendered HTML routes.
+- Public GET routes that look like read/report endpoints must stay side-effect free. If a public read path can insert, confirm, or otherwise mutate `agent_violations` or other governance tables, treat that as a production integrity issue even when the underlying evidence is public.
+- For outbound webhook validation, hostname preflight checks are not enough. Final-destination IP policy must apply to the actual socket used by the request, because DNS rebinding can change the resolved address between validation and connect time.
