@@ -454,20 +454,37 @@ export function registerStandardRoutes(app: Express) {
         }
       }
 
+      // Strip reserved keys from caller-supplied metadata before merging so that
+      // a client-crafted metadata.proof_timestamp (or any other reserved field) can
+      // never overwrite the cryptographically-validated top-level proof fields.
+      const RESERVED_METADATA_KEYS = new Set([
+        "proof_timestamp", "standard_version", "standard_proof",
+        "agent_id", "public_key", "instruction_hash", "action_hash",
+        "signature", "signature_verified",
+        "action_type", "post_id", "target_author", "session_id",
+      ]);
+      const sanitizedMetadata = Object.fromEntries(
+        Object.entries(proof.metadata || {}).filter(([k]) => !RESERVED_METADATA_KEYS.has(k)),
+      );
+
       const standardMetadata = {
+        // Caller-supplied extras come first so that every reserved key below
+        // unconditionally overwrites any collision from sanitizedMetadata.
+        ...sanitizedMetadata,
+        // Reserved — always sourced from validated top-level proof fields.
         standard_version: proof.version,
         standard_proof: true,
         agent_id: proof.agent_id,
         public_key: proof.public_key,
         instruction_hash: proof.instruction_hash,
         action_hash: proof.action_hash,
+        proof_timestamp: proof.timestamp,
         signature: proof.signature,
         signature_verified: true,
         ...(proof.action_type && { action_type: proof.action_type }),
         ...(proof.post_id && { post_id: proof.post_id }),
         ...(proof.target_author && { target_author: proof.target_author }),
         ...(proof.session_id && { session_id: proof.session_id }),
-        ...(proof.metadata || {}),
       };
 
       // Insert a pending reservation row BEFORE the blockchain write.

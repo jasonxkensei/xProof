@@ -10,6 +10,18 @@ export interface AuditTrailError {
   error: string;
 }
 
+// ISO 8601 strict sanity check: validates numeric ranges for month, day, hour, minute, second
+// to prevent malformed strings that could pass a loose regex but fail a DB ::timestamptz cast.
+const ISO_TS_REGEX = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\d/;
+
+function safeProofTimestamp(m: Record<string, any>): string | null {
+  const raw = m.proof_timestamp;
+  if (typeof raw === "string" && ISO_TS_REGEX.test(raw) && !isNaN(Date.parse(raw))) {
+    return raw;
+  }
+  return null;
+}
+
 function formatProofEntry(proof: any, role: string, wallet?: string) {
   const m = (proof.metadata || {}) as Record<string, any>;
   return {
@@ -21,7 +33,7 @@ function formatProofEntry(proof: any, role: string, wallet?: string) {
     blockchain_status: proof.blockchainStatus,
     transaction_hash: proof.transactionHash,
     transaction_url: proof.transactionUrl,
-    certified_at: proof.createdAt,
+    certified_at: safeProofTimestamp(m) || proof.createdAt,
     verify_url: `https://xproof.app/proof/${proof.id}`,
     incident_url: wallet ? `https://xproof.app/incident/${wallet}/${proof.id}` : null,
     explorer_url: proof.transactionUrl,
@@ -116,6 +128,7 @@ export async function reconstructAuditTrail(
       const baseType = actionType!.replace(/_reasoning$/, "");
       timeline.push(formatProofEntry(contestedProof, "WHY", wallet));
 
+      const contestedSignedTs = safeProofTimestamp(meta) || contestedProof.createdAt;
       const pairResults = await db.execute(sql`
         SELECT * FROM certifications
         WHERE user_id = ${user.id}
@@ -128,8 +141,16 @@ export async function reconstructAuditTrail(
             OR metadata->>'target_author' = ${targetAuthor}::text
             OR metadata->>'targetAuthor' = ${targetAuthor}::text
           )
-          AND created_at > ${contestedProof.createdAt}
-        ORDER BY created_at ASC
+          AND CASE
+                WHEN metadata->>'proof_timestamp' ~ E'^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d'
+                THEN (metadata->>'proof_timestamp')::timestamptz
+                ELSE created_at
+              END > ${contestedSignedTs}::timestamptz
+        ORDER BY CASE
+                   WHEN metadata->>'proof_timestamp' ~ E'^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d'
+                   THEN (metadata->>'proof_timestamp')::timestamptz
+                   ELSE created_at
+                 END ASC
         LIMIT 1
       `);
       if (pairResults.rows.length > 0) {
@@ -140,6 +161,7 @@ export async function reconstructAuditTrail(
     } else if (isAction && postId) {
       const reasoningType = actionType + "_reasoning";
 
+      const contestedSignedTs = safeProofTimestamp(meta) || contestedProof.createdAt;
       const pairResults = await db.execute(sql`
         SELECT * FROM certifications
         WHERE user_id = ${user.id}
@@ -153,8 +175,16 @@ export async function reconstructAuditTrail(
             OR metadata->>'target_author' = ${targetAuthor}::text
             OR metadata->>'targetAuthor' = ${targetAuthor}::text
           )
-          AND created_at < ${contestedProof.createdAt}
-        ORDER BY created_at DESC
+          AND CASE
+                WHEN metadata->>'proof_timestamp' ~ E'^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d'
+                THEN (metadata->>'proof_timestamp')::timestamptz
+                ELSE created_at
+              END < ${contestedSignedTs}::timestamptz
+        ORDER BY CASE
+                   WHEN metadata->>'proof_timestamp' ~ E'^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d'
+                   THEN (metadata->>'proof_timestamp')::timestamptz
+                   ELSE created_at
+                 END DESC
         LIMIT 1
       `);
       if (pairResults.rows.length > 0) {
