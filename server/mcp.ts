@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import crypto from "crypto";
 import { db } from "./db";
-import { certifications, apiKeys, users } from "@shared/schema";
+import { certifications, apiKeys, users, MAX_ONCHAIN_FILENAME_LEN, MAX_ONCHAIN_AUTHOR_LEN } from "@shared/schema";
 import { eq, sql, and } from "drizzle-orm";
 import { recordOnBlockchain } from "./blockchain";
 import { getCertificationPriceUsd } from "./pricing";
@@ -38,8 +38,10 @@ export async function createMcpServer(ctx: McpContext) {
     `Create a blockchain certification for a file. Records the SHA-256 hash on MultiversX blockchain as immutable proof of existence and ownership. Cost: $${currentPriceUsd} per certification, paid in EGLD.`,
     {
       file_hash: z.string().length(64).regex(/^[a-fA-F0-9]+$/).describe("SHA-256 hash of the file (64 hex characters)"),
-      filename: z.string().min(1).describe("Original filename with extension"),
-      author_name: z.string().optional().describe("Name of the certifier (default: AI Agent)"),
+      // filename and author_name end up embedded in the on-chain MultiversX
+      // data field; bounding them here caps the server-paid gas cost.
+      filename: z.string().min(1).max(MAX_ONCHAIN_FILENAME_LEN).describe(`Original filename with extension (max ${MAX_ONCHAIN_FILENAME_LEN} chars)`),
+      author_name: z.string().max(MAX_ONCHAIN_AUTHOR_LEN).optional().describe(`Name of the certifier (default: AI Agent, max ${MAX_ONCHAIN_AUTHOR_LEN} chars)`),
       webhook_url: z.string().url().refine((url) => url.startsWith("https://"), { message: "Must use HTTPS" }).optional().describe("Optional HTTPS URL for on-chain confirmation callback"),
     },
     async ({ file_hash, filename, author_name, webhook_url }) => {
@@ -221,11 +223,11 @@ export async function createMcpServer(ctx: McpContext) {
     `Create a staged blockchain certification with a confidence score. Use this when your decision builds progressively — certify at 60% (initial assessment), 80% (pre-commitment), and 100% (final decision). Each stage shares the same decision_id, creating an on-chain audit trail of the decision process. Governance: set reversibility_class='irreversible' for actions that cannot be undone — xproof will flag a policy violation if confidence_level < 0.95. Cost: $${currentPriceUsd} per certification.`,
     {
       file_hash: z.string().length(64).regex(/^[a-fA-F0-9]+$/).describe("SHA-256 hash of the decision or output file (64 hex characters)"),
-      filename: z.string().min(1).describe("Original filename with extension (e.g. decision.json)"),
+      filename: z.string().min(1).max(MAX_ONCHAIN_FILENAME_LEN).describe(`Original filename with extension (e.g. decision.json, max ${MAX_ONCHAIN_FILENAME_LEN} chars)`),
       decision_id: z.string().min(1).describe("Shared UUID linking all confidence stages for the same decision. Generate once and reuse across all stages."),
       confidence_level: z.number().min(0).max(1).describe("Confidence score from 0.0 to 1.0. Typical values: 0.6 (initial), 0.8 (pre-commitment), 1.0 (final)."),
       threshold_stage: z.enum(["initial", "partial", "pre-commitment", "final"]).describe("Named stage of the decision: initial (first assessment), partial (gathering info), pre-commitment (almost certain), final (committed)."),
-      author_name: z.string().optional().describe("Name of the certifying agent (default: AI Agent)"),
+      author_name: z.string().max(MAX_ONCHAIN_AUTHOR_LEN).optional().describe(`Name of the certifying agent (default: AI Agent, max ${MAX_ONCHAIN_AUTHOR_LEN} chars)`),
       why: z.string().optional().describe("Reason or instruction hash driving this decision"),
       who: z.string().optional().describe("Agent identity (wallet address, name, or agent ID)"),
       reversibility_class: z.enum(["reversible", "costly", "irreversible"]).optional().describe("Governance: how reversible is this action? 'reversible' = can be undone, 'costly' = reversible but expensive, 'irreversible' = cannot be undone (on-chain settlement, data deletion, sent email). When 'irreversible', confidence_level must be >= 0.95 or xproof flags a policy violation."),

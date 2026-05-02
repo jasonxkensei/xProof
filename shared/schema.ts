@@ -170,13 +170,23 @@ export interface ACPProduct {
   };
 }
 
+// Max user-controlled string lengths that are embedded in the on-chain
+// transaction data field. These bound the server-paid gas (BigInt(50_000 +
+// dataPayload.length * 1500)) so a single trial-key holder cannot force the
+// service to sign and broadcast oversized MultiversX transactions. See the
+// matching cap in server/blockchain.ts:recordOnBlockchain — that one is the
+// authoritative defense-in-depth that holds even if a future caller bypasses
+// schema validation.
+export const MAX_ONCHAIN_FILENAME_LEN = 255;   // POSIX NAME_MAX
+export const MAX_ONCHAIN_AUTHOR_LEN = 128;
+
 // ACP Checkout Request - what an agent sends to start certification
 export const acpCheckoutRequestSchema = z.object({
   product_id: z.string(),
   inputs: z.object({
     file_hash: z.string().min(1, "SHA-256 hash is required"),
-    filename: z.string().min(1, "Filename is required"),
-    author_name: z.string().optional(),
+    filename: z.string().min(1, "Filename is required").max(MAX_ONCHAIN_FILENAME_LEN, `Filename must be at most ${MAX_ONCHAIN_FILENAME_LEN} characters`),
+    author_name: z.string().max(MAX_ONCHAIN_AUTHOR_LEN, `author_name must be at most ${MAX_ONCHAIN_AUTHOR_LEN} characters`).optional(),
     metadata: z.record(z.any()).optional(),
   }),
   buyer: z.object({

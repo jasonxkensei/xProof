@@ -53,6 +53,22 @@ async function submitTransaction(tx: Transaction): Promise<{
 }
 
 /**
+ * Hard cap on the on-chain data payload size (UTF-8 bytes) and the resulting
+ * gas limit. The server pays the MultiversX gas for every certification, and
+ * gas scales linearly with `dataPayload.length` (BigInt(50_000 + len * 1500)).
+ *
+ * Without this cap, a single trial-quota call could ride a ~100 KB JSON body
+ * (express.json() default) through schema validation and force the service
+ * to sign and broadcast an oversized transaction. Schema-level bounds in
+ * shared/schema.ts (filename ≤ 255, author ≤ 128) plus the fixed `certify:`,
+ * `|filename:`, `|author:` framing already keep us well under 512 bytes for
+ * legitimate input. This is the authoritative defense-in-depth: even if a
+ * future caller skips the schema, oversized payloads are rejected here
+ * BEFORE any nonce claim, signing work, or gateway call.
+ */
+const MAX_ONCHAIN_PAYLOAD_BYTES = 512;
+
+/**
  * Record a file hash on the MultiversX blockchain
  * Creates a transaction with format: "certify:<hash>|filename:<name>|author:<author>"
  */
@@ -79,6 +95,18 @@ export async function recordOnBlockchain(
   try {
     const payloadText = `certify:${fileHash}${filename ? `|filename:${filename}` : ""}${author ? `|author:${author}` : ""}`;
     const dataPayload = Buffer.from(payloadText);
+
+    // Defense-in-depth: refuse to sign/broadcast a transaction whose data
+    // payload would amplify our gas cost beyond the documented bound. This
+    // runs BEFORE claimNextNonce() and any signing work so an attacker with
+    // a bypass at the schema layer cannot waste nonces or outbound calls.
+    if (dataPayload.length > MAX_ONCHAIN_PAYLOAD_BYTES) {
+      const err: any = new Error(
+        `On-chain data payload exceeds ${MAX_ONCHAIN_PAYLOAD_BYTES} bytes (got ${dataPayload.length}). Shorten filename or author_name.`
+      );
+      err.code = "PAYLOAD_TOO_LARGE";
+      throw err;
+    }
 
     const nonce = await claimNextNonce(SENDER_ADDRESS!);
 
