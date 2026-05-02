@@ -21,6 +21,8 @@ export function isMultiversXConfigured(): boolean {
 }
 
 // Submit signed transaction to MultiversX gateway
+const RPC_TIMEOUT_MS = 15_000;
+
 async function submitTransaction(tx: Transaction): Promise<{
   txHash: string;
 }> {
@@ -30,6 +32,7 @@ async function submitTransaction(tx: Transaction): Promise<{
       "Content-Type": "application/json",
     },
     body: JSON.stringify(tx.toSendable()),
+    signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -196,6 +199,7 @@ export async function broadcastSignedTransaction(signedTx: any): Promise<{
         "Content-Type": "application/json",
       },
       body: JSON.stringify(signedTx),
+      signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -238,7 +242,9 @@ export async function verifyTransaction(txHash: string): Promise<{
   data?: any;
 }> {
   try {
-    const response = await fetch(`${API_URL}/transactions/${txHash}?withResults=true`);
+    const response = await fetch(`${API_URL}/transactions/${txHash}?withResults=true`, {
+      signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+    });
     
     if (!response.ok) {
       return { success: false };

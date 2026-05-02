@@ -57,6 +57,7 @@ async function signAndSubmit(tx: Transaction): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(tx.toSendable()),
+    signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -100,6 +101,8 @@ async function buildScCall(
   });
 }
 
+const RPC_TIMEOUT_MS = 15_000;
+
 async function vmQuery(
   contractAddress: string,
   funcName: string,
@@ -113,6 +116,7 @@ async function vmQuery(
       funcName,
       args,
     }),
+    signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
   });
 
   if (!response.ok) throw new Error(`VM query error: ${response.statusText}`);

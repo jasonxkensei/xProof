@@ -48,22 +48,73 @@ async function updatePayload(taskId: string, updates: Record<string, any>): Prom
     .where(eq(txQueue.id, taskId));
 }
 
-async function processNextTask(): Promise<void> {
+async function recoverStaleTasks(): Promise<void> {
   try {
-    const now = new Date();
-
-    const [task] = await db
+    const staleThreshold = new Date(Date.now() - 10 * 60 * 1000);
+    const recovered = await db
       .update(txQueue)
-      .set({ status: "processing", startedAt: now })
+      .set({ status: "pending", nextRetryAt: new Date() })
       .where(
         and(
-          eq(txQueue.status, "pending"),
-          or(isNull(txQueue.nextRetryAt), lte(txQueue.nextRetryAt, now))
+          eq(txQueue.status, "processing"),
+          lte(txQueue.startedAt, staleThreshold)
         )
       )
-      .returning();
+      .returning({ id: txQueue.id, jobId: txQueue.jobId });
+    if (recovered.length > 0) {
+      logger.warn("Recovered stale processing tasks", { component: "tx-queue", count: recovered.length, jobIds: recovered.map(r => r.jobId) });
+    }
+  } catch (err: any) {
+    logger.error("Stale task recovery error", { component: "tx-queue", error: err.message });
+  }
+}
 
-    if (!task) return;
+async function processNextTask(): Promise<void> {
+  try {
+    await recoverStaleTasks();
+
+    const now = new Date();
+
+    const rows = await db.execute(sql`
+      UPDATE tx_queue
+      SET status = 'processing', started_at = ${now}
+      WHERE id = (
+        SELECT id FROM tx_queue
+        WHERE status = 'pending'
+          AND (next_retry_at IS NULL OR next_retry_at <= ${now})
+        ORDER BY created_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `);
+
+    const rawRow = rows.rows[0] as {
+      id: string;
+      job_type: string;
+      job_id: string;
+      payload: any;
+      status: string;
+      attempts: number;
+      max_attempts: number;
+      last_error: string | null;
+      next_retry_at: Date | null;
+      started_at: Date | null;
+      completed_at: Date | null;
+      created_at: Date;
+    } | undefined;
+
+    if (!rawRow) return;
+
+    const task = {
+      id: rawRow.id,
+      jobType: rawRow.job_type,
+      jobId: rawRow.job_id,
+      payload: rawRow.payload,
+      status: rawRow.status,
+      attempts: Number(rawRow.attempts),
+      maxAttempts: Number(rawRow.max_attempts),
+    };
 
     const taskRequestId = (task.payload as any)?.requestId;
     logger.info("Processing task", { component: "tx-queue", jobType: task.jobType, jobId: task.jobId, attempt: task.attempts + 1, maxAttempts: task.maxAttempts, requestId: taskRequestId });

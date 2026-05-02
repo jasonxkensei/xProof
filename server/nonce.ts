@@ -4,8 +4,12 @@ import { logger } from "./logger";
 
 const API_URL = process.env.MULTIVERSX_API_URL || "https://api.multiversx.com";
 
+const RPC_TIMEOUT_MS = 15_000;
+
 async function fetchChainNonce(address: string): Promise<bigint> {
-  const response = await fetch(`${API_URL}/accounts/${address}`);
+  const response = await fetch(`${API_URL}/accounts/${address}`, {
+    signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch nonce from chain: ${response.statusText}`);
   }
