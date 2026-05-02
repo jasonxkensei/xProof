@@ -859,6 +859,81 @@ export async function createMcpServer(ctx: McpContext) {
               isError: true,
             };
           }
+        } else {
+          // API key authenticated: enforce trial quota and prepaid-credit requirements.
+          // investigate_proof mutates governance state (creates/confirms agent_violations rows)
+          // and must consume a credit just like the proof-writing tools.
+          if (!auth.userId) {
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "API key has no associated account. Please re-register.", incident_report_url: `${baseUrl}/incident/${wallet}/${proof_id}` }) }],
+              isError: true,
+            };
+          }
+
+          const invTrialInfo = await getTrialUser({ userId: auth.userId });
+          let invCreditInfo: { userId: string; balance: number } | null = null;
+
+          if (invTrialInfo && invTrialInfo.remaining <= 0) {
+            const balance = await getUserCreditBalance(auth.userId);
+            if (balance <= 0) {
+              return {
+                content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to use the investigation tool.", incident_report_url: `${baseUrl}/incident/${wallet}/${proof_id}` }) }],
+                isError: true,
+              };
+            }
+            invCreditInfo = { userId: auth.userId, balance };
+          } else if (!invTrialInfo) {
+            // Non-trial account: require prepaid credits unless admin-exempt
+            const ownerWallet = await getApiKeyOwnerWallet({ userId: auth.userId });
+            if (!ownerWallet || !isAdminWallet(ownerWallet)) {
+              const balance = await getUserCreditBalance(auth.userId);
+              if (balance <= 0) {
+                return {
+                  content: [{ type: "text" as const, text: JSON.stringify({ error: "PAYMENT_REQUIRED", message: "No credits available. Purchase prepaid credits to use the investigation tool.", incident_report_url: `${baseUrl}/incident/${wallet}/${proof_id}` }) }],
+                  isError: true,
+                };
+              }
+              invCreditInfo = { userId: auth.userId, balance };
+            }
+          }
+
+          // Atomically consume credit BEFORE the governance write to prevent race conditions.
+          if (invTrialInfo && !invCreditInfo) {
+            const consumed = await atomicConsumeTrialCredit(invTrialInfo.userId);
+            if (!consumed) {
+              return {
+                content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to use the investigation tool.", incident_report_url: `${baseUrl}/incident/${wallet}/${proof_id}` }) }],
+                isError: true,
+              };
+            }
+          } else if (invCreditInfo) {
+            const consumed = await atomicConsumeCredit(invCreditInfo.userId);
+            if (!consumed) {
+              return {
+                content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue.", incident_report_url: `${baseUrl}/incident/${wallet}/${proof_id}` }) }],
+                isError: true,
+              };
+            }
+          }
+
+          // investigate_proof is a paid (x402 / API key) governance action: explicitly opt in
+          // to recording violations. Public unauthenticated read paths leave this disabled.
+          let result: Awaited<ReturnType<typeof reconstructAuditTrail>>;
+          try {
+            result = await reconstructAuditTrail(wallet, proof_id, { recordViolations: true });
+          } catch (trailErr: any) {
+            // Refund the credit if the investigation itself fails (e.g. proof not found).
+            if (invTrialInfo && !invCreditInfo) await refundTrialCredit(invTrialInfo.userId).catch(() => {});
+            else if (invCreditInfo) await refundCredit(invCreditInfo.userId).catch(() => {});
+            throw trailErr;
+          }
+
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify(result),
+            }],
+          };
         }
 
         // investigate_proof is a paid (x402 / API key) governance action: explicitly opt in
