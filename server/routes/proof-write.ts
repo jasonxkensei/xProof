@@ -25,6 +25,45 @@ export function registerProofWriteRoutes(app: Express) {
       const limit = Math.min(parseInt(limitStr as string) || 20, 100);
       const offset = Math.max(parseInt(offsetStr as string) || 0, 0);
 
+      // Bound search inputs so attackers cannot drive arbitrarily long JSONB
+      // extraction predicates against the certifications table. Identifiers
+      // longer than these caps cannot match real metadata fields.
+      const SEARCH_VALUE_MAX = 256;
+      // Allowlist of metadata keys that may be queried via the generic
+      // key/value parameter. Restricted to fields that have backing JSONB
+      // expression indexes (see server/index.ts migrations) so an attacker
+      // cannot force a sequential scan by varying arbitrary keys.
+      const SEARCHABLE_KEYS = new Set([
+        "decision_id",
+        "sigil_public_key",
+        "bnb_wallet",
+        "eliza_agent_id",
+        "xai_agent_id",
+        "mpp_payment_intent_id",
+        "model_hash",
+        "strategy_hash",
+      ]);
+      const isOversized = (v: unknown, cap: number) =>
+        typeof v === "string" && v.length > cap;
+      if (
+        isOversized(model_hash, SEARCH_VALUE_MAX) ||
+        isOversized(strategy_hash, SEARCH_VALUE_MAX) ||
+        isOversized(version_number, SEARCH_VALUE_MAX) ||
+        isOversized(value, SEARCH_VALUE_MAX) ||
+        isOversized(wallet, 128)
+      ) {
+        return res.status(400).json({
+          error: "INVALID_PARAM",
+          message: `Search values must be at most ${SEARCH_VALUE_MAX} characters`,
+        });
+      }
+      if (key !== undefined && (typeof key !== "string" || !SEARCHABLE_KEYS.has(key))) {
+        return res.status(400).json({
+          error: "INVALID_PARAM",
+          message: `key must be one of: ${Array.from(SEARCHABLE_KEYS).join(", ")}`,
+        });
+      }
+
       const sqlConditions: SQL[] = [];
 
       if (model_hash) {
@@ -61,13 +100,20 @@ export function registerProofWriteRoutes(app: Express) {
 
       const whereClause = and(...sqlConditions);
 
+      // Bounded count: an unbounded count(*) over arbitrary metadata predicates
+      // would still scan every matching row even when only a page is returned.
+      // Cap at COUNT_CAP and report `total_capped` so callers know the count was
+      // truncated for cost-control rather than reflecting the true total.
+      const COUNT_CAP = 1000;
+      // LIMIT COUNT_CAP+1 so we can distinguish "exactly COUNT_CAP rows match"
+      // from "more than COUNT_CAP rows match" — only the latter is truncated.
       const countResult = await db
         .select({ total: sql<number>`count(*)::int` })
-        .from(certifications)
-        .leftJoin(users, eq(certifications.userId, users.id))
-        .where(whereClause!);
+        .from(sql`(SELECT 1 FROM ${certifications} LEFT JOIN ${users} ON ${certifications.userId} = ${users.id} WHERE ${whereClause!} LIMIT ${COUNT_CAP + 1}) AS capped`);
 
-      const total = countResult[0]?.total || 0;
+      const totalRaw = countResult[0]?.total || 0;
+      const totalCapped = totalRaw > COUNT_CAP;
+      const total = totalCapped ? COUNT_CAP : totalRaw;
 
       const rows = await db
         .select({
@@ -102,6 +148,7 @@ export function registerProofWriteRoutes(app: Express) {
           created_at: r.created_at || r.createdAt,
         })),
         total,
+        total_capped: totalCapped,
         limit,
         offset,
       });

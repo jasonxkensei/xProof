@@ -9,6 +9,23 @@ import { generateCertificatePDF } from "../certificateGenerator";
 import { computeDrift, DRIFT_MONITORED_FIELDS } from "./helpers";
 import { IRREVERSIBLE_CONFIDENCE_THRESHOLD, buildTimingBreakdown } from "../auditSchema";
 
+// Hard cap on rows materialized by any public metadata-keyed lookup. Public
+// integration endpoints filter `certifications.metadata` with JSONB extraction
+// and then iterate the full result set to build transition histories or stats.
+// Bounding the row count prevents a single request from exhausting database CPU
+// or application memory for an identifier that has accumulated many proofs.
+const MAX_METADATA_LOOKUP_ROWS = 500;
+
+// Identifier format/length validators for public metadata lookup routes. These
+// reject inputs that cannot match a real identifier so attackers cannot trigger
+// scans with arbitrarily long or structurally invalid strings.
+const DECISION_ID_REGEX = /^[A-Za-z0-9._:\-]{1,128}$/;
+const SIGIL_PUBKEY_REGEX = /^[A-Za-z0-9_\-]{10,128}$/;
+const ELIZA_UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MX_WALLET_REGEX = /^erd1[0-9a-z]{50,70}$/;
+const PARTNER_AGENT_ID_REGEX = /^[A-Za-z0-9._:\-]{5,128}$/;
+const PAYMENT_INTENT_REGEX = /^[A-Za-z0-9_\-]{5,128}$/;
+
 export function registerProofReadRoutes(app: Express) {
   app.get("/api/proof/check", async (req, res) => {
     try {
@@ -149,8 +166,8 @@ export function registerProofReadRoutes(app: Express) {
   app.get("/api/confidence-trail/:decisionId", publicReadRateLimiter, async (req, res) => {
     try {
       const { decisionId } = req.params;
-      if (!decisionId || decisionId.trim().length === 0) {
-        return res.status(400).json({ error: "decision_id is required" });
+      if (!decisionId || !DECISION_ID_REGEX.test(decisionId)) {
+        return res.status(400).json({ error: "decision_id must match [A-Za-z0-9._:-]{1,128}" });
       }
 
       const results = await db
@@ -171,7 +188,9 @@ export function registerProofReadRoutes(app: Express) {
           eq(certifications.isPublic, true),
           sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
         ))
-        .orderBy(certifications.createdAt);
+        .orderBy(desc(certifications.createdAt))
+        .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
       if (results.length === 0) {
         return res.status(404).json({
@@ -250,8 +269,8 @@ export function registerProofReadRoutes(app: Express) {
   app.get("/api/proofs/policy-check", publicReadRateLimiter, async (req, res) => {
     try {
       const decisionId = req.query.decision_id as string | undefined;
-      if (!decisionId || decisionId.trim().length === 0) {
-        return res.status(400).json({ error: "decision_id query parameter is required" });
+      if (!decisionId || !DECISION_ID_REGEX.test(decisionId)) {
+        return res.status(400).json({ error: "decision_id must match [A-Za-z0-9._:-]{1,128}" });
       }
 
       const results = await db
@@ -266,7 +285,9 @@ export function registerProofReadRoutes(app: Express) {
           eq(certifications.isPublic, true),
           sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
         ))
-        .orderBy(certifications.createdAt);
+        .orderBy(desc(certifications.createdAt))
+        .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
       if (results.length === 0) {
         return res.status(404).json({
@@ -313,8 +334,8 @@ export function registerProofReadRoutes(app: Express) {
   app.get("/api/context-drift/:decisionId", publicReadRateLimiter, async (req, res) => {
     try {
       const { decisionId } = req.params;
-      if (!decisionId || decisionId.trim().length === 0) {
-        return res.status(400).json({ error: "decision_id is required" });
+      if (!decisionId || !DECISION_ID_REGEX.test(decisionId)) {
+        return res.status(400).json({ error: "decision_id must match [A-Za-z0-9._:-]{1,128}" });
       }
 
       const results = await db
@@ -329,7 +350,9 @@ export function registerProofReadRoutes(app: Express) {
           eq(certifications.isPublic, true),
           sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
         ))
-        .orderBy(certifications.createdAt);
+        .orderBy(desc(certifications.createdAt))
+        .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
       if (results.length === 0) {
         return res.status(404).json({
@@ -528,8 +551,8 @@ export function registerProofReadRoutes(app: Express) {
   app.get("/api/skworld/:wallet", publicReadRateLimiter, async (req, res) => {
     try {
       const { wallet } = req.params;
-      if (!wallet || wallet.length < 10) {
-        return res.status(400).json({ error: "Valid wallet address required" });
+      if (!wallet || !MX_WALLET_REGEX.test(wallet)) {
+        return res.status(400).json({ error: "Valid MultiversX wallet address required (erd1...)" });
       }
 
       // Look up user and check public profile before exposing any trust/activity data
@@ -573,7 +596,9 @@ export function registerProofReadRoutes(app: Express) {
             sql`${certifications.metadata} IS NOT NULL`
           )
         )
-        .orderBy(certifications.createdAt);
+        .orderBy(desc(certifications.createdAt))
+        .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
       // Build architectural transition timeline — each unique model_hash or strategy_hash = a new identity epoch
       const modelHashes: string[] = [];
@@ -612,7 +637,9 @@ export function registerProofReadRoutes(app: Express) {
             eq(certifications.isPublic, true),
             sql`${certifications.createdAt} > ${thirtyDaysAgo.toISOString()}`
           )
-        );
+        )
+        .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
       const proofDaysLast30 = new Set(
         recentProofs.map(p => p.createdAt?.toISOString().slice(0, 10) ?? "")
@@ -698,8 +725,8 @@ export function registerProofReadRoutes(app: Express) {
   app.get("/api/sigil/:public_key", publicReadRateLimiter, async (req, res) => {
     try {
       const { public_key } = req.params;
-      if (!public_key || public_key.length < 10) {
-        return res.status(400).json({ error: "Valid SIGIL public key required" });
+      if (!public_key || !SIGIL_PUBKEY_REGEX.test(public_key)) {
+        return res.status(400).json({ error: "Valid SIGIL public key required (10-128 chars, alphanumeric/_-)" });
       }
 
       const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
@@ -748,7 +775,9 @@ export function registerProofReadRoutes(app: Express) {
             sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
           )
         )
-        .orderBy(certifications.createdAt);
+        .orderBy(desc(certifications.createdAt))
+        .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
       const xproofLinked = linkedCerts.length > 0;
       let xproofWallet: string | null = null;
@@ -867,7 +896,9 @@ export function registerProofReadRoutes(app: Express) {
             sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
           )
         )
-        .orderBy(certifications.createdAt);
+        .orderBy(desc(certifications.createdAt))
+        .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
       const xproofLinked = linkedCerts.length > 0;
       let xproofWallet: string | null = null;
@@ -1055,9 +1086,9 @@ export function registerProofReadRoutes(app: Express) {
   app.get("/api/eliza/:identifier", publicReadRateLimiter, async (req, res) => {
     try {
       const { identifier } = req.params;
-      if (!identifier || identifier.length < 5) {
+      if (!identifier || identifier.length > 128) {
         return res.status(400).json({
-          error: "Valid identifier required: ElizaOS character UUID or MultiversX wallet address",
+          error: "Valid identifier required: ElizaOS character UUID or MultiversX wallet address (max 128 chars)",
           examples: {
             character_uuid: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             mx_wallet: "erd1abc...",
@@ -1066,10 +1097,8 @@ export function registerProofReadRoutes(app: Express) {
       }
 
       const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const isUuid = uuidRegex.test(identifier);
-      // Canonical MultiversX wallet format: starts with "erd1" and is at least 58 chars
-      const isWallet = /^erd1[0-9a-z]{50,}$/.test(identifier);
+      const isUuid = ELIZA_UUID_REGEX.test(identifier);
+      const isWallet = MX_WALLET_REGEX.test(identifier);
       const lookupMode: "character_id" | "wallet" | "unknown" = isUuid
         ? "character_id"
         : isWallet
@@ -1122,7 +1151,9 @@ export function registerProofReadRoutes(app: Express) {
                 sql`${certifications.metadata}->>'eliza_agent_id' IS NOT NULL`
               )
             )
-            .orderBy(certifications.createdAt);
+            .orderBy(desc(certifications.createdAt))
+            .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
           // eliza_linked: true only when Eliza-tagged certs exist (not just wallet trust)
           if (elizaCerts.length > 0) {
@@ -1161,7 +1192,9 @@ export function registerProofReadRoutes(app: Express) {
               sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
             )
           )
-          .orderBy(certifications.createdAt);
+          .orderBy(desc(certifications.createdAt))
+          .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
         if (linkedCerts.length > 0) {
           elizaLinked = true;
@@ -1262,9 +1295,11 @@ export function registerProofReadRoutes(app: Express) {
   app.get("/api/xai/:identifier", publicReadRateLimiter, async (req, res) => {
     try {
       const { identifier } = req.params;
-      if (!identifier || identifier.length < 5) {
+      const isWallet = MX_WALLET_REGEX.test(identifier);
+      const isAgentId = PARTNER_AGENT_ID_REGEX.test(identifier);
+      if (!identifier || (!isWallet && !isAgentId)) {
         return res.status(400).json({
-          error: "Valid identifier required: xAI agent ID or MultiversX wallet address",
+          error: "Valid identifier required: xAI agent ID ([A-Za-z0-9._:-]{5,128}) or MultiversX wallet address (erd1...)",
           examples: {
             agent_id: "grok-agent-001",
             mx_wallet: "erd1abc...",
@@ -1273,7 +1308,6 @@ export function registerProofReadRoutes(app: Express) {
       }
 
       const baseUrl = process.env.REPLIT_DEPLOYMENT ? "https://xproof.app" : `${req.protocol}://${req.get("host")}`;
-      const isWallet = /^erd1[0-9a-z]{50,}$/.test(identifier);
       const lookupMode: "agent_id" | "wallet" = isWallet ? "wallet" : "agent_id";
 
       let xaiLinked = false;
@@ -1313,7 +1347,9 @@ export function registerProofReadRoutes(app: Express) {
                 sql`${certifications.metadata}->>'xai_agent_id' IS NOT NULL`
               )
             )
-            .orderBy(certifications.createdAt);
+            .orderBy(desc(certifications.createdAt))
+            .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
           if (xaiCerts.length > 0) {
             xaiLinked = true;
@@ -1349,7 +1385,9 @@ export function registerProofReadRoutes(app: Express) {
               sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
             )
           )
-          .orderBy(certifications.createdAt);
+          .orderBy(desc(certifications.createdAt))
+          .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
         if (linkedCerts.length > 0) {
           xaiLinked = true;
@@ -1438,9 +1476,9 @@ export function registerProofReadRoutes(app: Express) {
   app.get("/api/mpp/:payment_intent_id", publicReadRateLimiter, async (req, res) => {
     try {
       const { payment_intent_id } = req.params;
-      if (!payment_intent_id || payment_intent_id.length < 5) {
+      if (!payment_intent_id || !PAYMENT_INTENT_REGEX.test(payment_intent_id)) {
         return res.status(400).json({
-          error: "Valid payment intent ID required (Stripe pi_xxx or equivalent)",
+          error: "Valid payment intent ID required ([A-Za-z0-9_-]{5,128}, e.g. Stripe pi_xxx)",
           example: "pi_3abc123def456",
         });
       }
@@ -1464,7 +1502,9 @@ export function registerProofReadRoutes(app: Express) {
             sql`${certifications.userId} IN (SELECT id FROM users WHERE is_public_profile = true)`
           )
         )
-        .orderBy(certifications.createdAt);
+        .orderBy(desc(certifications.createdAt))
+        .limit(MAX_METADATA_LOOKUP_ROWS)
+        .then(rows => rows.reverse());
 
       const mppLinked = linkedCerts.length > 0;
       let xproofWallet: string | null = null;

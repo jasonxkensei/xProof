@@ -311,6 +311,27 @@ app.use((req, res, next) => {
     } catch (err: any) {
       logger.error("certifications transaction_hash index migration error", { component: "migration", error: err.message });
     }
+
+    // Expression indexes for public metadata-keyed lookup endpoints. These
+    // back the JSONB `->>` predicates used by /api/confidence-trail,
+    // /api/context-drift, /api/proofs/policy-check, /api/sigil, /api/bnb,
+    // /api/eliza, /api/xai, /api/mpp, /api/skworld, and /api/proofs/search.
+    // Without these, attackers can drive sequential scans over the full
+    // certifications table by varying the lookup identifier. Partial indexes
+    // (WHERE clause) keep them tiny since most certs do not carry these tags.
+    try {
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_cert_meta_decision_id ON certifications ((metadata->>'decision_id')) WHERE metadata ? 'decision_id'`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_cert_meta_sigil_pubkey ON certifications ((metadata->>'sigil_public_key')) WHERE metadata ? 'sigil_public_key'`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_cert_meta_bnb_wallet ON certifications ((LOWER(metadata->>'bnb_wallet'))) WHERE metadata ? 'bnb_wallet'`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_cert_meta_eliza_agent_id ON certifications ((LOWER(metadata->>'eliza_agent_id'))) WHERE metadata ? 'eliza_agent_id'`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_cert_meta_xai_agent_id ON certifications ((LOWER(metadata->>'xai_agent_id'))) WHERE metadata ? 'xai_agent_id'`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_cert_meta_mpp_pi ON certifications ((metadata->>'mpp_payment_intent_id')) WHERE metadata ? 'mpp_payment_intent_id'`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_cert_meta_model_hash ON certifications ((metadata->>'model_hash')) WHERE metadata ? 'model_hash'`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_cert_meta_strategy_hash ON certifications ((metadata->>'strategy_hash')) WHERE metadata ? 'strategy_hash'`);
+      logger.info("certifications metadata expression indexes ready", { component: "migration" });
+    } catch (err: any) {
+      logger.error("certifications metadata index migration error", { component: "migration", error: err.message });
+    }
   }
 
   async function purgeStaleSnapshotAttestationCounts() {
