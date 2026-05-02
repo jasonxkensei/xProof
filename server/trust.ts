@@ -292,8 +292,17 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
 // to amplify a single attacker request into many DB queries. The cache + single
 // flight pattern caps cost at one computation per wallet per TTL window.
 const TRUST_CACHE_TTL_MS = 30_000;
+const TRUST_CACHE_MAX_ENTRIES = 5000;
 const trustCache = new Map<string, { value: TrustScore | null; cachedAt: number }>();
 const trustInflight = new Map<string, Promise<TrustScore | null>>();
+
+function setTrustCache(key: string, value: TrustScore | null) {
+  if (trustCache.size >= TRUST_CACHE_MAX_ENTRIES) {
+    const oldestKey = trustCache.keys().next().value;
+    if (oldestKey !== undefined) trustCache.delete(oldestKey);
+  }
+  trustCache.set(key, { value, cachedAt: Date.now() });
+}
 
 setInterval(() => {
   const now = Date.now();
@@ -316,7 +325,7 @@ export async function computeTrustScoreByWallet(walletAddress: string): Promise<
       .from(users)
       .where(eq(users.walletAddress, walletAddress));
     const value = user ? await computeTrustScore(user.id) : null;
-    trustCache.set(walletAddress, { value, cachedAt: Date.now() });
+    setTrustCache(walletAddress, value);
     return value;
   })();
   trustInflight.set(walletAddress, promise);

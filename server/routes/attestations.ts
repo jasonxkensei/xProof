@@ -482,7 +482,7 @@ export function registerAttestationsRoutes(app: Express) {
       if (cached && Date.now() - cached.generatedAt < PDF_CACHE_TTL_MS) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="xproof-compliance-${wallet.slice(0, 10)}.pdf"`);
-        res.setHeader("Cache-Control", "public, max-age=300");
+        res.setHeader("Cache-Control", "private, max-age=300");
         return res.send(cached.buf);
       }
 
