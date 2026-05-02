@@ -108,6 +108,7 @@ export const publicPdfRateLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
   message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
 });
 

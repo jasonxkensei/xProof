@@ -4,7 +4,7 @@ import { logger } from "../logger";
 import { certifications, users } from "@shared/schema";
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import { computeTrustScoreByWallet } from "../trust";
-import { publicReadRateLimiter } from "../reliability";
+import { publicReadRateLimiter, publicPdfRateLimiter } from "../reliability";
 import { generateCertificatePDF } from "../certificateGenerator";
 import { computeDrift, DRIFT_MONITORED_FIELDS } from "./helpers";
 import { IRREVERSIBLE_CONFIDENCE_THRESHOLD, buildTimingBreakdown } from "../auditSchema";
@@ -1602,11 +1602,31 @@ export function registerProofReadRoutes(app: Express) {
     }
   });
 
+  // Per-certificate PDF cache — avoids regenerating expensive PDFKit documents on
+  // every public request. Cache entries expire after 5 minutes, matching the
+  // compliance report cache in attestations.ts.
+  const CERT_PDF_CACHE_TTL_MS = 5 * 60 * 1000;
+  const certPdfCache = new Map<string, { buf: Buffer; generatedAt: number }>();
+
+  // Periodic eviction: remove expired entries every 5 minutes to prevent
+  // unbounded map growth over long uptime with many unique cert requests.
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of certPdfCache) {
+      if (now - entry.generatedAt >= CERT_PDF_CACHE_TTL_MS) {
+        certPdfCache.delete(key);
+      }
+    }
+  }, CERT_PDF_CACHE_TTL_MS).unref();
+
   // Download certificate
-  app.get("/api/certificates/:id.pdf", async (req, res) => {
+  app.get("/api/certificates/:id.pdf", publicPdfRateLimiter, async (req, res) => {
     try {
       const certId = req.params.id;
-      
+
+      // Always verify current public visibility before serving the PDF — even
+      // from cache — so a certificate or user profile that was made non-public
+      // after generation cannot be retrieved until the next DB check.
       const [certification] = await db
         .select()
         .from(certifications)
@@ -1620,6 +1640,7 @@ export function registerProofReadRoutes(app: Express) {
       // the PDF embeds filename, SHA-256 hash, author name, and blockchain details
       // that the owner may not have chosen to disclose.
       if (!certification.isPublic) {
+        certPdfCache.delete(certId);
         return res.status(404).json({ message: "Certificate not found" });
       }
 
@@ -1634,7 +1655,17 @@ export function registerProofReadRoutes(app: Express) {
         .where(eq(users.id, certification.userId));
 
       if (!user || !user.isPublicProfile) {
+        certPdfCache.delete(certId);
         return res.status(404).json({ message: "Certificate not found" });
+      }
+
+      // Return cached PDF if still fresh — visibility has already been re-confirmed above.
+      const cached = certPdfCache.get(certId);
+      if (cached && Date.now() - cached.generatedAt < CERT_PDF_CACHE_TTL_MS) {
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="certificate-${certId}.pdf"`);
+        res.setHeader("Cache-Control", "public, max-age=300");
+        return res.send(cached.buf);
       }
 
       // Generate PDF (free service - standard branding)
@@ -1645,9 +1676,12 @@ export function registerProofReadRoutes(app: Express) {
         companyLogoUrl: undefined,
       });
 
+      certPdfCache.set(certId, { buf: pdfBuffer, generatedAt: Date.now() });
+
       // Set headers for PDF download
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="certificate-${certification.id}.pdf"`);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="certificate-${certification.id}.pdf"`);
+      res.setHeader("Cache-Control", "public, max-age=300");
       res.send(pdfBuffer);
     } catch (error) {
       logger.withRequest(req).error("Failed to generate certificate");
