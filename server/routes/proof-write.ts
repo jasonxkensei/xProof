@@ -796,8 +796,23 @@ export function registerProofWriteRoutes(app: Express) {
       // Parse + validate audit log
       const data = auditLogSchema.parse(req.body);
 
-      // Compute canonical hash (sorted keys, deterministic)
-      const canonicalJson = JSON.stringify(data, Object.keys(data).sort());
+      // Compute canonical hash (sorted keys at every nesting level, deterministic).
+      // Using a replacer function rather than a key-array so nested object
+      // properties (e.g. inputs_manifest.fields/sources/hash_method and all
+      // context fields) are included in the serialised output and therefore
+      // bound to the certified hash.  A key-array replacer only allowlists
+      // top-level keys, which caused nested objects to be serialised as {}.
+      const canonicalReplacer = (_key: string, value: unknown): unknown => {
+        if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+          const sorted: Record<string, unknown> = {};
+          for (const k of Object.keys(value as object).sort()) {
+            sorted[k] = (value as Record<string, unknown>)[k];
+          }
+          return sorted;
+        }
+        return value;
+      };
+      const canonicalJson = JSON.stringify(data, canonicalReplacer);
       const fileHash = crypto.createHash("sha256").update(canonicalJson).digest("hex");
       const fileName = `audit-log-${data.session_id}.json`;
 
