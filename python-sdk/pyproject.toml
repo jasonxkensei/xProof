@@ -44,7 +44,7 @@ dev = [
     "pre-commit>=3.0",
 ]
 llamaindex = [
-    "llama-index-core>=0.13.0",
+    "llama-index-core>=0.14.20",
 ]
 autogen = [
     "pyautogen>=0.2.0",
