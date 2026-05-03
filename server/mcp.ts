@@ -13,7 +13,7 @@ import { isX402Configured, verifyX402PaymentRaw, getInvestigatePaymentRequiremen
 import {
   getTrialUser, getUserCreditBalance, consumeTrialCredit, consumeCredit,
   atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit,
-  isAdminWallet, getApiKeyOwnerWallet,
+  isAdminWallet, getApiKeyOwnerWallet, tryDisplaceAcpReservation,
 } from "./routes/helpers";
 
 interface McpContext {
@@ -78,24 +78,56 @@ export async function createMcpServer(ctx: McpContext) {
         const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
         if (existing) {
           const isAcpReservation = existing.authMethod === "acp" && existing.blockchainStatus === "pending" && !existing.transactionHash;
-          return {
-            content: [{
-              type: "text" as const,
-              text: JSON.stringify({
-                proof_id: existing.id,
-                status: existing.blockchainStatus === "confirmed" ? "certified" : existing.blockchainStatus,
-                file_hash: existing.fileHash,
-                filename: existing.fileName,
-                verify_url: `${baseUrl}/proof/${existing.id}`,
-                certificate_url: `${baseUrl}/api/certificates/${existing.id}.pdf`,
-                blockchain: { network: "MultiversX", transaction_hash: existing.transactionHash, explorer_url: existing.transactionUrl },
-                timestamp: existing.createdAt?.toISOString(),
-                message: isAcpReservation
-                  ? "This file hash is reserved by a pending ACP checkout payment. Certification will be attributed to that payer once confirmed."
-                  : "File already certified on MultiversX blockchain.",
-              }),
-            }],
-          };
+          if (isAcpReservation) {
+            // Displace the unpaid ACP reservation so this paid MCP caller can certify.
+            const dispResult = await tryDisplaceAcpReservation(file_hash);
+            if (dispResult !== "displaced") {
+              // Race: re-fetch and validate before returning.
+              const [nowExisting] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
+              if (nowExisting) {
+                const nowIsAcp = nowExisting.authMethod === "acp" && nowExisting.blockchainStatus === "pending" && !nowExisting.transactionHash;
+                if (nowIsAcp) {
+                  // Still an ACP reservation — make a second displacement attempt, then ask caller to retry.
+                  await tryDisplaceAcpReservation(file_hash).catch(() => {});
+                  return { content: [{ type: "text" as const, text: JSON.stringify({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this hash. It has been cleared — please retry your request." }) }], isError: true };
+                }
+                return {
+                  content: [{
+                    type: "text" as const,
+                    text: JSON.stringify({
+                      proof_id: nowExisting.id,
+                      status: nowExisting.blockchainStatus === "confirmed" ? "certified" : nowExisting.blockchainStatus,
+                      file_hash: nowExisting.fileHash,
+                      filename: nowExisting.fileName,
+                      verify_url: `${baseUrl}/proof/${nowExisting.id}`,
+                      certificate_url: `${baseUrl}/api/certificates/${nowExisting.id}.pdf`,
+                      blockchain: { network: "MultiversX", transaction_hash: nowExisting.transactionHash, explorer_url: nowExisting.transactionUrl },
+                      timestamp: nowExisting.createdAt?.toISOString(),
+                      message: "File already certified on MultiversX blockchain.",
+                    }),
+                  }],
+                };
+              }
+            }
+            // displaced or no_row: fall through to certify below.
+          } else {
+            return {
+              content: [{
+                type: "text" as const,
+                text: JSON.stringify({
+                  proof_id: existing.id,
+                  status: existing.blockchainStatus === "confirmed" ? "certified" : existing.blockchainStatus,
+                  file_hash: existing.fileHash,
+                  filename: existing.fileName,
+                  verify_url: `${baseUrl}/proof/${existing.id}`,
+                  certificate_url: `${baseUrl}/api/certificates/${existing.id}.pdf`,
+                  blockchain: { network: "MultiversX", transaction_hash: existing.transactionHash, explorer_url: existing.transactionUrl },
+                  timestamp: existing.createdAt?.toISOString(),
+                  message: "File already certified on MultiversX blockchain.",
+                }),
+              }],
+            };
+          }
         }
 
         // Atomically consume credit BEFORE the blockchain write to prevent parallel-request race conditions.
@@ -144,7 +176,12 @@ export async function createMcpServer(ctx: McpContext) {
           const [dup] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
           if (dup) {
             const dupIsAcpReservation = dup.authMethod === "acp" && dup.blockchainStatus === "pending" && !dup.transactionHash;
-            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: dup.id, status: dup.blockchainStatus === "confirmed" ? "certified" : dup.blockchainStatus, file_hash: dup.fileHash, filename: dup.fileName, verify_url: `${baseUrl}/proof/${dup.id}`, certificate_url: `${baseUrl}/api/certificates/${dup.id}.pdf`, blockchain: { network: "MultiversX", transaction_hash: dup.transactionHash, explorer_url: dup.transactionUrl }, timestamp: dup.createdAt?.toISOString(), message: dupIsAcpReservation ? "This file hash is reserved by a pending ACP checkout payment. Certification will be attributed to that payer once confirmed." : "File already certified on MultiversX blockchain." }) }] };
+            if (dupIsAcpReservation) {
+              // Credit already refunded; displace the reservation and ask caller to retry.
+              await tryDisplaceAcpReservation(file_hash).catch(() => {});
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this hash. It has been cleared and your credit was refunded — please retry your request." }) }], isError: true };
+            }
+            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: dup.id, status: dup.blockchainStatus === "confirmed" ? "certified" : dup.blockchainStatus, file_hash: dup.fileHash, filename: dup.fileName, verify_url: `${baseUrl}/proof/${dup.id}`, certificate_url: `${baseUrl}/api/certificates/${dup.id}.pdf`, blockchain: { network: "MultiversX", transaction_hash: dup.transactionHash, explorer_url: dup.transactionUrl }, timestamp: dup.createdAt?.toISOString(), message: "File already certified on MultiversX blockchain." }) }] };
           }
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DUPLICATE_HASH", message: "File hash is already being certified by a concurrent request. Credit refunded." }) }], isError: true };
         }
@@ -319,7 +356,12 @@ export async function createMcpServer(ctx: McpContext) {
           const [cwcDup] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
           if (cwcDup) {
             const cwcDupIsAcpReservation = cwcDup.authMethod === "acp" && cwcDup.blockchainStatus === "pending" && !cwcDup.transactionHash;
-            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: cwcDup.id, status: cwcDup.blockchainStatus === "confirmed" ? "certified" : cwcDup.blockchainStatus, file_hash: cwcDup.fileHash, filename: cwcDup.fileName, verify_url: `${baseUrl}/proof/${cwcDup.id}`, blockchain: { network: "MultiversX", transaction_hash: cwcDup.transactionHash, explorer_url: cwcDup.transactionUrl }, timestamp: cwcDup.createdAt?.toISOString(), message: cwcDupIsAcpReservation ? "This file hash is reserved by a pending ACP checkout payment. Certification will be attributed to that payer once confirmed." : "File already certified on MultiversX blockchain." }) }] };
+            if (cwcDupIsAcpReservation) {
+              // Credit already refunded; displace the reservation and ask caller to retry.
+              await tryDisplaceAcpReservation(file_hash).catch(() => {});
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this hash. It has been cleared and your credit was refunded — please retry your request." }) }], isError: true };
+            }
+            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: cwcDup.id, status: cwcDup.blockchainStatus === "confirmed" ? "certified" : cwcDup.blockchainStatus, file_hash: cwcDup.fileHash, filename: cwcDup.fileName, verify_url: `${baseUrl}/proof/${cwcDup.id}`, blockchain: { network: "MultiversX", transaction_hash: cwcDup.transactionHash, explorer_url: cwcDup.transactionUrl }, timestamp: cwcDup.createdAt?.toISOString(), message: "File already certified on MultiversX blockchain." }) }] };
           }
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DUPLICATE_HASH", message: "File hash is already being certified by a concurrent request. Credit refunded." }) }], isError: true };
         }
@@ -658,24 +700,59 @@ export async function createMcpServer(ctx: McpContext) {
         const fileName = `audit-log-${params.session_id}.json`;
 
         // Idempotency check: return existing proof if this exact audit payload was already certified.
+        // If the blocking row is an unpaid ACP reservation, displace it so this paid caller can proceed.
         const [mcpExisting] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
         if (mcpExisting) {
-          return {
-            content: [{
-              type: "text" as const,
-              text: JSON.stringify({
-                proof_id: mcpExisting.id,
-                audit_url: `${baseUrl}/audit/${mcpExisting.id}`,
-                proof_url: `${baseUrl}/proof/${mcpExisting.id}`,
-                blockchain: { network: "MultiversX", transaction_hash: mcpExisting.transactionHash, explorer_url: mcpExisting.transactionUrl },
-                decision: params.decision,
-                risk_level: params.risk_level,
-                inputs_hash: params.inputs_hash,
-                timestamp: mcpExisting.createdAt?.toISOString(),
-                message: "This exact audit session was already certified. Returning existing proof — no credit consumed.",
-              }),
-            }],
-          };
+          const mcpExistingIsAcp = mcpExisting.authMethod === "acp" && mcpExisting.blockchainStatus === "pending" && !mcpExisting.transactionHash;
+          if (mcpExistingIsAcp) {
+            const dispResult = await tryDisplaceAcpReservation(fileHash);
+            if (dispResult !== "displaced") {
+              // Race: re-fetch and validate before returning.
+              const [nowExisting] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
+              if (nowExisting) {
+                const nowIsAcp = nowExisting.authMethod === "acp" && nowExisting.blockchainStatus === "pending" && !nowExisting.transactionHash;
+                if (nowIsAcp) {
+                  // Still an ACP reservation — make a second displacement attempt, then ask caller to retry.
+                  await tryDisplaceAcpReservation(fileHash).catch(() => {});
+                  return { content: [{ type: "text" as const, text: JSON.stringify({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this hash. It has been cleared — please retry your request." }) }], isError: true };
+                }
+                return {
+                  content: [{
+                    type: "text" as const,
+                    text: JSON.stringify({
+                      proof_id: nowExisting.id,
+                      audit_url: `${baseUrl}/audit/${nowExisting.id}`,
+                      proof_url: `${baseUrl}/proof/${nowExisting.id}`,
+                      blockchain: { network: "MultiversX", transaction_hash: nowExisting.transactionHash, explorer_url: nowExisting.transactionUrl },
+                      decision: params.decision,
+                      risk_level: params.risk_level,
+                      inputs_hash: params.inputs_hash,
+                      timestamp: nowExisting.createdAt?.toISOString(),
+                      message: "This exact audit session was already certified. Returning existing proof — no credit consumed.",
+                    }),
+                  }],
+                };
+              }
+            }
+            // displaced or no_row: fall through to certify below.
+          } else {
+            return {
+              content: [{
+                type: "text" as const,
+                text: JSON.stringify({
+                  proof_id: mcpExisting.id,
+                  audit_url: `${baseUrl}/audit/${mcpExisting.id}`,
+                  proof_url: `${baseUrl}/proof/${mcpExisting.id}`,
+                  blockchain: { network: "MultiversX", transaction_hash: mcpExisting.transactionHash, explorer_url: mcpExisting.transactionUrl },
+                  decision: params.decision,
+                  risk_level: params.risk_level,
+                  inputs_hash: params.inputs_hash,
+                  timestamp: mcpExisting.createdAt?.toISOString(),
+                  message: "This exact audit session was already certified. Returning existing proof — no credit consumed.",
+                }),
+              }],
+            };
+          }
         }
 
         // Attribution: always use the verified API key owner (never a shared system account)
@@ -724,7 +801,12 @@ export async function createMcpServer(ctx: McpContext) {
           const [auditDup] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
           if (auditDup) {
             const auditDupIsAcpReservation = auditDup.authMethod === "acp" && auditDup.blockchainStatus === "pending" && !auditDup.transactionHash;
-            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: auditDup.id, audit_url: `${baseUrl}/audit/${auditDup.id}`, proof_url: `${baseUrl}/proof/${auditDup.id}`, blockchain: { network: "MultiversX", transaction_hash: auditDup.transactionHash, explorer_url: auditDup.transactionUrl }, timestamp: auditDup.createdAt?.toISOString(), message: auditDupIsAcpReservation ? "This file hash is reserved by a pending ACP checkout payment. Certification will be attributed to that payer once confirmed." : "This exact audit session was already certified. Returning existing proof — no credit consumed." }) }] };
+            if (auditDupIsAcpReservation) {
+              // Credit already refunded; displace the reservation and ask caller to retry.
+              await tryDisplaceAcpReservation(fileHash).catch(() => {});
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this hash. It has been cleared and your credit was refunded — please retry your request." }) }], isError: true };
+            }
+            return { content: [{ type: "text" as const, text: JSON.stringify({ proof_id: auditDup.id, audit_url: `${baseUrl}/audit/${auditDup.id}`, proof_url: `${baseUrl}/proof/${auditDup.id}`, blockchain: { network: "MultiversX", transaction_hash: auditDup.transactionHash, explorer_url: auditDup.transactionUrl }, timestamp: auditDup.createdAt?.toISOString(), message: "This exact audit session was already certified. Returning existing proof — no credit consumed." }) }] };
           }
           return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DUPLICATE_HASH", message: "File hash is already being certified by a concurrent request. Credit refunded." }) }], isError: true };
         }

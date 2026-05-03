@@ -10,7 +10,7 @@ import { isX402Configured, verifyX402Payment, send402Response } from "../x402";
 import { recordOnBlockchain, isMultiversXConfigured } from "../blockchain";
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing";
 import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
-import { isAdminWallet, getApiKeyOwnerWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit, TRIAL_QUOTA, buildCanonicalId } from "./helpers";
+import { isAdminWallet, getApiKeyOwnerWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit, TRIAL_QUOTA, buildCanonicalId, tryDisplaceAcpReservation } from "./helpers";
 
 export function registerStandardRoutes(app: Express) {
   const SHA256_REGEX = /^sha256:[a-fA-F0-9]{64}$/;
@@ -381,6 +381,7 @@ export function registerStandardRoutes(app: Express) {
       // Check for an existing certification BEFORE any billing or blockchain work.
       // This makes the endpoint idempotent: re-submitting the same proof returns the
       // existing anchor at no cost rather than triggering a new blockchain transaction.
+      // If the blocking row is an unpaid ACP reservation, displace it so this paid caller can proceed.
       const baseUrl = `https://${req.get("host")}`;
       const [existingCert] = await db
         .select()
@@ -388,22 +389,57 @@ export function registerStandardRoutes(app: Express) {
         .where(eq(certifications.fileHash, canonicalHash))
         .limit(1);
       if (existingCert) {
-        logger.withRequest(req).info("Standard anchor: proof already anchored, returning existing", { canonicalHash, certId: existingCert.id });
-        return res.status(200).json({
-          proof_id: existingCert.id,
-          canonical_hash: canonicalHash,
-          chain_anchor: {
-            chain: "multiversx",
-            network: "mainnet",
-            tx_hash: existingCert.transactionHash,
-            explorer_url: existingCert.transactionUrl,
-            status: existingCert.blockchainStatus,
-          },
-          proof_url: `${baseUrl}/proof/${existingCert.id}`,
-          standard_version: "1.0",
-          auth_method: authMethod,
-          message: "Proof already anchored. Returning existing anchor (no charge).",
-        });
+        const existingIsAcp = existingCert.authMethod === "acp" && existingCert.blockchainStatus === "pending" && !existingCert.transactionHash;
+        if (existingIsAcp) {
+          // Displace the unpaid ACP reservation so this paid caller can anchor.
+          const dispResult = await tryDisplaceAcpReservation(canonicalHash);
+          if (dispResult !== "displaced") {
+            // Race: re-fetch and validate before returning.
+            const [nowCert] = await db.select().from(certifications).where(eq(certifications.fileHash, canonicalHash)).limit(1);
+            if (nowCert) {
+              const nowIsAcp = nowCert.authMethod === "acp" && nowCert.blockchainStatus === "pending" && !nowCert.transactionHash;
+              if (nowIsAcp) {
+                // Still an ACP reservation — make a second displacement attempt, then ask caller to retry.
+                await tryDisplaceAcpReservation(canonicalHash).catch(() => {});
+                return res.status(503).json({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this proof hash. It has been cleared — please retry your request." });
+              }
+              logger.withRequest(req).info("Standard anchor: proof already anchored (post-displacement race), returning existing", { canonicalHash, certId: nowCert.id });
+              return res.status(200).json({
+                proof_id: nowCert.id,
+                canonical_hash: canonicalHash,
+                chain_anchor: {
+                  chain: "multiversx",
+                  network: "mainnet",
+                  tx_hash: nowCert.transactionHash,
+                  explorer_url: nowCert.transactionUrl,
+                  status: nowCert.blockchainStatus,
+                },
+                proof_url: `${baseUrl}/proof/${nowCert.id}`,
+                standard_version: "1.0",
+                auth_method: authMethod,
+                message: "Proof already anchored. Returning existing anchor (no charge).",
+              });
+            }
+          }
+          // displaced or no_row: fall through to anchor below.
+        } else {
+          logger.withRequest(req).info("Standard anchor: proof already anchored, returning existing", { canonicalHash, certId: existingCert.id });
+          return res.status(200).json({
+            proof_id: existingCert.id,
+            canonical_hash: canonicalHash,
+            chain_anchor: {
+              chain: "multiversx",
+              network: "mainnet",
+              tx_hash: existingCert.transactionHash,
+              explorer_url: existingCert.transactionUrl,
+              status: existingCert.blockchainStatus,
+            },
+            proof_url: `${baseUrl}/proof/${existingCert.id}`,
+            standard_version: "1.0",
+            auth_method: authMethod,
+            message: "Proof already anchored. Returning existing anchor (no charge).",
+          });
+        }
       }
 
       const fileName = `standard_proof_${proof.agent_id.slice(0, 20)}_${Date.now()}`;
@@ -514,6 +550,15 @@ export function registerStandardRoutes(app: Express) {
         }
         const [raceCert] = await db.select().from(certifications).where(eq(certifications.fileHash, canonicalHash)).limit(1);
         if (raceCert) {
+          const raceIsAcp = raceCert.authMethod === "acp" && raceCert.blockchainStatus === "pending" && !raceCert.transactionHash;
+          if (raceIsAcp) {
+            // Credit already refunded (API-key paths); displace the reservation and ask caller to retry.
+            await tryDisplaceAcpReservation(canonicalHash).catch(() => {});
+            const retryMsg = authMethod === "api_key"
+              ? "An unpaid ACP reservation was blocking this proof hash. It has been cleared and your credit was refunded — please retry your request."
+              : "An unpaid ACP reservation was blocking this proof hash. It has been cleared — please retry your request.";
+            return res.status(503).json({ error: "RETRY_REQUIRED", message: retryMsg });
+          }
           return res.status(200).json({
             proof_id: raceCert.id,
             canonical_hash: canonicalHash,
