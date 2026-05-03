@@ -148,3 +148,8 @@ Required guarantees:
 - Current prerender JSON-LD uses `safeJsonLd()` and production blockchain simulation fails closed; keep the older findings as fixed unless those protections regress.
 - Current webhook delivery uses pinned DNS resolution, HTTPS-only requests, redirect refusal, bounded timeouts, and redacted webhook URL logging; generic API logging no longer serializes response bodies.
 - SAST raw-SQL hits in `server/index.ts` were reviewed as static startup/maintenance queries with parameter binding or constant SQL and are not currently exploitable injection findings.
+
+## Scan Notes — 2026-05-03 In-depth Continuation
+
+- MCP certification tools must consume or reserve a durable entitlement before displacing ACP pending reservations. A non-atomic positive-balance precheck is not enough because parallel MCP calls can clear multiple victim reservations while only one later consumes a trial/prepaid credit.
+- Public operational/statistics routes are DoS-sensitive when they recompute global database aggregates for anonymous callers. Generic `/api` rate limiting is not a substitute for route-specific throttling, caching, or precomputed summaries on endpoints such as `/api/stats`.
