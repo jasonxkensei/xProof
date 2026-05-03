@@ -637,7 +637,23 @@ export async function createMcpServer(ctx: McpContext) {
           }
         }
 
-        const canonicalJson = JSON.stringify(params, Object.keys(params).sort());
+        // Recursive canonical replacer: sorts object keys at every nesting level so
+        // that nested fields (e.g. context.model_hash, context.tool_version) are fully
+        // included in the serialised output and bound to the certified hash.
+        // Using an array replacer instead would only allowlist those names at every
+        // depth, causing nested objects to be serialised as {} and leaving their
+        // contents unbound — matching the behaviour of the REST audit route.
+        const canonicalReplacer = (_key: string, value: unknown): unknown => {
+          if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+            const sorted: Record<string, unknown> = {};
+            for (const k of Object.keys(value as object).sort()) {
+              sorted[k] = (value as Record<string, unknown>)[k];
+            }
+            return sorted;
+          }
+          return value;
+        };
+        const canonicalJson = JSON.stringify(params, canonicalReplacer);
         const fileHash = crypto.createHash("sha256").update(canonicalJson).digest("hex");
         const fileName = `audit-log-${params.session_id}.json`;
 
