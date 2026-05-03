@@ -9,6 +9,7 @@ import { isWalletAuthenticated } from "../walletAuth";
 import { getCertificationPriceEgld } from "../pricing";
 import { broadcastSignedTransaction } from "../blockchain";
 import { tryDisplaceAcpReservation } from "./helpers";
+import { safeHttpUrlSchema } from "@shared/url";
 
 export function registerCertificationsRoutes(app: Express) {
   // Create certification (unlimited, free service)
@@ -33,7 +34,11 @@ export function registerCertificationsRoutes(app: Express) {
         authorName: z.string().min(1),
         authorSignature: z.string().optional(),
         transactionHash: z.string().optional(),
-        transactionUrl: z.string().optional(),
+        // Restricted to absolute http/https URLs. The public proof page
+        // renders this value into an anchor `href`, so accepting arbitrary
+        // schemes (`javascript:`, `data:`, `vbscript:`) would create a
+        // stored XSS vector for any visitor who clicks the explorer link.
+        transactionUrl: safeHttpUrlSchema.optional(),
       });
 
       const data = schema.parse(req.body);

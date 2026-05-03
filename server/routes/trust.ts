@@ -8,6 +8,7 @@ import { isWalletAuthenticated } from "../walletAuth";
 import { publicReadRateLimiter, publicSearchRateLimiter, publicCompareRateLimiter } from "../reliability";
 import { computeTrustScore, computeTrustScoreByWallet, getLeaderboard, generateTrustBadgeSvg } from "../trust";
 import { reconstructAuditTrail } from "../audit-trail";
+import { safeHttpUrlSchema } from "@shared/url";
 import { isAdminWallet, computeDrift } from "./helpers";
 
 export function registerTrustRoutes(app: Express) {
@@ -444,7 +445,10 @@ export function registerTrustRoutes(app: Express) {
       const schema = z.object({
         agentName: z.string().max(80).optional().nullable(),
         agentDescription: z.string().max(300).optional().nullable(),
-        agentWebsite: z.string().url().optional().nullable().or(z.literal("")),
+        // Public agent profile pages render this value directly into an
+        // anchor `href`. `z.string().url()` accepts unsafe schemes such as
+        // `javascript:` and `data:`, so we restrict it to absolute http(s).
+        agentWebsite: safeHttpUrlSchema.optional().nullable().or(z.literal("")),
         agentCategory: z.enum(["trading", "data", "content", "code", "research", "assistant", "healthcare", "finance", "legal", "security", "other"]).optional().nullable(),
         isPublicProfile: z.boolean().optional(),
       });

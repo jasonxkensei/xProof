@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useEffect } from "react";
+import { safeHref } from "@shared/url";
 
 interface AttestationRecord {
   id: string;
@@ -696,16 +697,16 @@ export default function AgentProfilePage() {
                       </p>
                     )}
 
-                    {agent.agentWebsite && (
+                    {safeHref(agent.agentWebsite) && (
                       <a
-                        href={agent.agentWebsite}
+                        href={safeHref(agent.agentWebsite)!}
                         target="_blank"
                         rel="noopener noreferrer"
                         data-testid="link-agent-website"
                         className="inline-flex items-center gap-1 text-sm text-primary hover:underline underline-offset-4"
                       >
                         <Globe className="h-3.5 w-3.5" />
-                        {agent.agentWebsite.replace(/^https?:\/\//, "")}
+                        {agent.agentWebsite!.replace(/^https?:\/\//, "")}
                         <ExternalLink className="h-3 w-3 opacity-60" />
                       </a>
                     )}

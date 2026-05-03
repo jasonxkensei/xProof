@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { useToast } from "@/hooks/use-toast";
 import type { Certification } from "@shared/schema";
+import { safeHref } from "@shared/url";
 
 export default function ProofPage() {
   const { id } = useParams();
@@ -270,14 +271,14 @@ export default function ProofPage() {
                       {certification.transactionHash}
                     </p>
                   </div>
-                  {certification.transactionUrl && (
+                  {safeHref(certification.transactionUrl) && (
                     <Button
                       asChild
                       variant="outline"
                       className="w-full"
                       data-testid="button-view-blockchain"
                     >
-                      <a href={certification.transactionUrl} target="_blank" rel="noopener noreferrer">
+                      <a href={safeHref(certification.transactionUrl)!} target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="mr-2 h-4 w-4" />
                         View on MultiversX explorer
                       </a>
