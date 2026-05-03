@@ -128,3 +128,8 @@ Required guarantees:
 - Secret-bearing callback URLs must be redacted before logging; webhook destination validation mitigates SSRF but does not make the full URL safe for logs.
 - Standard proof signatures must cover every field that downstream code treats as signed accountability context. Optional action/session/target metadata that affects audit reconstruction should not be persisted or displayed as signature-verified unless it is cryptographically bound to the canonical payload.
 - Visibility-gated public artifacts such as certificate PDFs, SVG badges, Markdown snippets, and JSON proof documents should either avoid shared caching or use `private`/`no-store`; route-level visibility checks can be bypassed for the cache lifetime if an intermediary is allowed to serve stale public responses.
+
+## Scan Notes — 2026-05-02 In-depth Route Scan
+
+- Audit-log certification hashes must use recursive canonical JSON serialization. A top-level-only JSON replacer can leave nested manifest/context fields unbound even when those fields are stored and displayed as certified audit evidence.
+- Public agent/trust/attestation profile endpoints should have fixed row limits, pagination, cached aggregates, or precomputed summaries before performing per-request drift analysis or returning joined attestation lists to unauthenticated callers.
