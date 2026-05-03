@@ -217,7 +217,7 @@ export default function Landing() {
           <p className="mt-6 text-sm text-muted-foreground">{price} per proof • Unlimited</p>
 
           {pricing && pricing.next_tier && pricing.current_tier.max !== null && (
-            <div className="mt-4 mx-auto max-w-md text-left" data-testid="tier-progress">
+            <div className="mt-4 mx-auto max-w-xs text-left" data-testid="tier-progress">
               <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span data-testid="text-tier-current">
                   <span className="font-medium text-foreground">
