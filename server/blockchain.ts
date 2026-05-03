@@ -69,7 +69,23 @@ async function submitTransaction(tx: Transaction): Promise<{
  * future caller skips the schema, oversized payloads are rejected here
  * BEFORE any nonce claim, signing work, or gateway call.
  */
-const MAX_ONCHAIN_PAYLOAD_BYTES = 512;
+export const MAX_ONCHAIN_PAYLOAD_BYTES = 512;
+
+/**
+ * Compute the UTF-8 byte length of the payload that recordOnBlockchain will
+ * sign for the given (fileHash, filename, author). Routes use this to reject
+ * oversized requests BEFORE consuming credits or displacing ACP reservations,
+ * so a deterministic post-displacement validation failure cannot be used as
+ * a free griefing primitive against ACP payers.
+ */
+export function computeOnchainPayloadBytes(
+  fileHash: string,
+  filename?: string,
+  author?: string,
+): number {
+  const payloadText = `certify:${fileHash}${filename ? `|filename:${filename}` : ""}${author ? `|author:${author}` : ""}`;
+  return Buffer.byteLength(payloadText, "utf8");
+}
 
 /**
  * Typed error thrown by recordOnBlockchain when a hard validation rule fails
@@ -98,10 +114,22 @@ export async function recordOnBlockchain(
   transactionHash: string;
   transactionUrl: string;
 }> {
-  // If MultiversX is not configured, return simulation (for development)
+  // Fail-closed in production: if the MultiversX signer is missing or
+  // misconfigured, refuse to fabricate a simulated transaction. Returning a
+  // sim_<...> hash to a paid /api/proof, /api/batch, or MCP certify_* caller
+  // would persist publicly verifiable-looking certifications that have no
+  // on-chain anchor — silently undermining the integrity guarantees of the
+  // ledger during a misconfiguration window. Development environments still
+  // get the simulation path so local agents can exercise the flow without a
+  // live MultiversX wallet.
   if (!isMultiversXConfigured()) {
+    if (process.env.NODE_ENV === "production") {
+      logger.error("MultiversX signer not configured in production — refusing to simulate", { component: "blockchain" });
+      throw new Error("MultiversX signer not configured. Cannot anchor proofs on-chain.");
+    }
+
     logger.warn("MultiversX not configured, using simulation mode", { component: "blockchain" });
-    
+
     const simulatedHash = `sim_${Date.now()}_${fileHash.substring(0, 8)}`;
     return {
       transactionHash: simulatedHash,

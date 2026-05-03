@@ -8,6 +8,7 @@ import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
 import { getCertificationPriceEgld } from "../pricing";
 import { broadcastSignedTransaction } from "../blockchain";
+import { tryDisplaceAcpReservation } from "./helpers";
 
 export function registerCertificationsRoutes(app: Express) {
   // Create certification (unlimited, free service)
@@ -37,13 +38,23 @@ export function registerCertificationsRoutes(app: Express) {
 
       const data = schema.parse(req.body);
 
-      // Check if hash already exists
+      // Check if hash already exists. Note: an ACP-pending reservation is not
+      // a hard conflict for this route — wallet-authenticated callers with a
+      // verified on-chain payment may displace it. The displacement itself is
+      // deferred until AFTER tx verification (below) so a hash-only request
+      // cannot evict a legitimate ACP reservation without proving entitlement.
       const [existing] = await db
         .select()
         .from(certifications)
         .where(eq(certifications.fileHash, data.fileHash));
 
-      if (existing) {
+      const existingIsAcpReservation =
+        !!existing &&
+        existing.authMethod === "acp" &&
+        existing.blockchainStatus === "pending" &&
+        !existing.transactionHash;
+
+      if (existing && !existingIsAcpReservation) {
         return res.status(409).json({
           message: "This file has already been certified",
           certificationId: existing.id,
@@ -140,6 +151,26 @@ export function registerCertificationsRoutes(app: Express) {
       if (!isSenderAdmin && (!verificationResult.sender || verificationResult.sender.toLowerCase() !== walletAddress.toLowerCase())) {
         logger.withRequest(req).warn("Transaction sender does not match authenticated wallet", { transactionHash, sender: verificationResult.sender ?? "(absent)", wallet: walletAddress });
         return res.status(403).json({ message: "Transaction sender does not match your authenticated wallet address." });
+      }
+
+      // Now that the on-chain payment, sender binding, and data-field binding
+      // have all been verified, this caller has proven entitlement and may
+      // displace any unpaid ACP reservation on the same file hash.
+      if (existingIsAcpReservation) {
+        const outcome = await tryDisplaceAcpReservation(data.fileHash);
+        if (outcome === "not_acp_reservation") {
+          // Reservation was confirmed/upgraded between the initial read and
+          // here — surface as a deterministic conflict.
+          return res.status(409).json({
+            message: "This file has already been certified",
+            certificationId: existing!.id,
+          });
+        }
+        logger.withRequest(req).info("Displaced unpaid ACP reservation on /api/certifications", {
+          fileHash: data.fileHash,
+          displacedCertId: existing!.id,
+          outcome,
+        });
       }
 
       // Create certification — if the DB unique index fires (concurrent replay of same tx),

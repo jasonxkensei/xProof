@@ -492,6 +492,19 @@ export function registerAcpRoutes(app: Express) {
         });
       }
 
+      // Reject confirmation if the reservation was displaced by a paid path
+      // (/api/proof, /api/batch, /api/certifications). The fileHash slot now
+      // belongs to the displacing certification, so re-issuing it under this
+      // checkout would overwrite the legitimate paid record. The payer can
+      // verify whether their EGLD transaction was broadcast and contact
+      // support if a refund is required.
+      if (checkout.status === "displaced") {
+        return res.status(410).json({
+          error: "CHECKOUT_DISPLACED",
+          message: "This ACP checkout was displaced because the file hash was certified through another paid path before payment confirmation. If you already broadcast an EGLD transaction for this checkout, please contact support to arrange a refund.",
+        });
+      }
+
       // Block tx replay: a tx_hash may only be used for one checkout
       const [replayCheck] = await db
         .select({ id: acpCheckouts.id })
@@ -672,47 +685,86 @@ export function registerAcpRoutes(app: Express) {
       // Fall back to INSERT only for legacy checkouts that predate the reservation mechanism.
       let certification: typeof certifications.$inferSelect;
       if (checkout.certificationId) {
-        // Only update rows that are still in the expected reservation state
-        // (pending, no on-chain tx). This guards against rare state corruption
-        // or double-confirm races without touching already-confirmed records.
-        const [updated] = await db
-          .update(certifications)
-          .set({
-            userId: acpOwnerId,
-            transactionHash: data.tx_hash,
-            transactionUrl: `${explorerUrl}/transactions/${data.tx_hash}`,
-            blockchainStatus: "confirmed",
-            authMethod: "acp",
-          })
-          .where(
-            and(
-              eq(certifications.id, checkout.certificationId),
-              eq(certifications.fileHash, checkout.fileHash),
-              eq(certifications.blockchainStatus, "pending"),
-              sql`${certifications.transactionHash} IS NULL`,
+        // Serialize against displacement (tryDisplaceAcpReservation in
+        // helpers.ts uses the same pg_advisory_xact_lock(hashtext(fileHash))).
+        // Inside the transaction we re-read the checkout status so a
+        // displacement that committed between the initial read at L447 and
+        // here surfaces deterministically as 410 CHECKOUT_DISPLACED instead
+        // of falling into the generic CONFIRMATION_FAILED path.
+        const txResult = await db.transaction(async (tx) => {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${checkout.fileHash}))`);
+          const [freshCheckout] = await tx
+            .select({ status: acpCheckouts.status, certificationId: acpCheckouts.certificationId })
+            .from(acpCheckouts)
+            .where(eq(acpCheckouts.id, checkout.id));
+          if (!freshCheckout) {
+            return { kind: "missing_checkout" as const };
+          }
+          if (freshCheckout.status === "displaced") {
+            return { kind: "displaced" as const };
+          }
+          if (freshCheckout.status === "confirmed") {
+            return { kind: "already_confirmed" as const, certificationId: freshCheckout.certificationId };
+          }
+          const [updatedRow] = await tx
+            .update(certifications)
+            .set({
+              userId: acpOwnerId,
+              transactionHash: data.tx_hash,
+              transactionUrl: `${explorerUrl}/transactions/${data.tx_hash}`,
+              blockchainStatus: "confirmed",
+              authMethod: "acp",
+            })
+            .where(
+              and(
+                eq(certifications.id, checkout.certificationId!),
+                eq(certifications.fileHash, checkout.fileHash),
+                eq(certifications.blockchainStatus, "pending"),
+                sql`${certifications.transactionHash} IS NULL`,
+              )
             )
-          )
-          .returning();
-        if (!updated) {
-          // The reservation row was not in the expected state — it may have been
-          // already confirmed (double-confirm) or cleaned up by the expiry sweeper.
-          // Check for an already-confirmed row and return it idempotently if found.
-          const [existing] = await db
+            .returning();
+          if (updatedRow) {
+            return { kind: "updated" as const, row: updatedRow };
+          }
+          const [existing] = await tx
             .select()
             .from(certifications)
-            .where(eq(certifications.id, checkout.certificationId));
-          if (existing && existing.blockchainStatus === "confirmed") {
-            logger.withRequest(req).info("ACP confirm: reservation already confirmed (idempotent)", { checkoutId: checkout.id, certificationId: checkout.certificationId });
-            certification = existing;
-          } else {
-            logger.withRequest(req).error("ACP confirm: reservation row not in pending state", { checkoutId: checkout.id, certificationId: checkout.certificationId, existing: existing?.blockchainStatus });
-            return res.status(500).json({
-              error: "CONFIRMATION_FAILED",
-              message: "Certification reservation could not be found or is in an unexpected state. Please contact support.",
-            });
-          }
+            .where(eq(certifications.id, checkout.certificationId!));
+          return { kind: "unexpected" as const, existing };
+        });
+
+        if (txResult.kind === "displaced") {
+          return res.status(410).json({
+            error: "CHECKOUT_DISPLACED",
+            message: "This ACP checkout was displaced because the file hash was certified through another paid path before payment confirmation. If you already broadcast an EGLD transaction for this checkout, please contact support to arrange a refund.",
+          });
+        }
+        if (txResult.kind === "already_confirmed") {
+          return res.status(409).json({
+            error: "ALREADY_CONFIRMED",
+            message: "This checkout has already been confirmed",
+            certification_id: txResult.certificationId,
+          });
+        }
+        if (txResult.kind === "missing_checkout") {
+          logger.withRequest(req).error("ACP confirm: checkout disappeared mid-transaction", { checkoutId: checkout.id });
+          return res.status(500).json({
+            error: "CONFIRMATION_FAILED",
+            message: "Checkout could not be found. Please contact support.",
+          });
+        }
+        if (txResult.kind === "updated") {
+          certification = txResult.row;
+        } else if (txResult.existing && txResult.existing.blockchainStatus === "confirmed") {
+          logger.withRequest(req).info("ACP confirm: reservation already confirmed (idempotent)", { checkoutId: checkout.id, certificationId: checkout.certificationId });
+          certification = txResult.existing;
         } else {
-          certification = updated;
+          logger.withRequest(req).error("ACP confirm: reservation row not in pending state", { checkoutId: checkout.id, certificationId: checkout.certificationId, existing: txResult.existing?.blockchainStatus });
+          return res.status(500).json({
+            error: "CONFIRMATION_FAILED",
+            message: "Certification reservation could not be found or is in an unexpected state. Please contact support.",
+          });
         }
       } else {
         // Legacy path: checkout predates the reservation mechanism — INSERT the certification row.

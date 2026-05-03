@@ -7,11 +7,11 @@ import { eq, desc, sql, and, count, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { paymentRateLimiter, publicSearchRateLimiter } from "../reliability";
 import { isX402Configured, verifyX402Payment, send402Response } from "../x402";
-import { recordOnBlockchain, isMultiversXConfigured } from "../blockchain";
+import { recordOnBlockchain, isMultiversXConfigured, computeOnchainPayloadBytes, MAX_ONCHAIN_PAYLOAD_BYTES } from "../blockchain";
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing";
 import { auditLogSchema, AUDIT_LOG_JSON_SCHEMA, type AgentAuditLog, REVERSIBILITY_CLASSES, JURISDICTION_TYPES, validateTimestampOrdering, isStrictDatetime } from "../auditSchema";
 import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
-import { checkRateLimit, isAdminWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit, getApiKeyOwnerWallet, TRIAL_QUOTA, RATE_LIMIT_MAX_VALUE, buildCanonicalId } from "./helpers";
+import { checkRateLimit, isAdminWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit, getApiKeyOwnerWallet, TRIAL_QUOTA, RATE_LIMIT_MAX_VALUE, buildCanonicalId, tryDisplaceAcpReservation } from "./helpers";
 import { inArray } from "drizzle-orm";
 
 export function registerProofWriteRoutes(app: Express) {
@@ -419,35 +419,80 @@ export function registerProofWriteRoutes(app: Express) {
 
       const data = proofRequestSchema.parse(req.body);
       const baseUrl = `https://${req.get('host')}`;
+      // Single source of truth for the author string used in preflight,
+      // recordOnBlockchain payload construction, and the persisted
+      // authorName column. Any divergence between these three would let an
+      // oversized request slip past preflight and trigger the griefing path
+      // architect flagged.
+      const effectiveAuthor = data.author_name || "AI Agent";
 
-      const [existing] = await db
+      // Preflight payload-byte check: reject oversized UTF-8 payloads BEFORE
+      // entitlement consumption or ACP displacement. Without this the same
+      // rejection would happen inside recordOnBlockchain (after displacement)
+      // and the refund path would let an attacker grief ACP reservations at
+      // zero net cost via deterministic post-displacement validation failure.
+      const payloadBytes = computeOnchainPayloadBytes(data.file_hash, data.filename, effectiveAuthor);
+      if (payloadBytes > MAX_ONCHAIN_PAYLOAD_BYTES) {
+        return res.status(400).json({
+          error: "PAYLOAD_TOO_LARGE",
+          message: `On-chain data payload exceeds ${MAX_ONCHAIN_PAYLOAD_BYTES} bytes (got ${payloadBytes}). Shorten filename or author_name.`,
+        });
+      }
+
+      // Fail-closed FIRST, before any displacement or credit consumption.
+      // Without this gate `recordOnBlockchain` would (in dev) return a
+      // `sim_<...>` hash that would be persisted as a "confirmed" certification,
+      // misleading downstream verifiers; doing the check before displacement
+      // also prevents destroying a legitimate ACP reservation when we cannot
+      // actually replace it with a real proof. The audit route applies the
+      // same check.
+      if (!isMultiversXConfigured()) {
+        return res.status(503).json({
+          error: "BLOCKCHAIN_UNAVAILABLE",
+          message: "MultiversX signer is not configured on this server. Proofs cannot be anchored on-chain right now.",
+        });
+      }
+
+      const [initialExisting] = await db
         .select()
         .from(certifications)
         .where(eq(certifications.fileHash, data.file_hash));
+      const occupant: typeof certifications.$inferSelect | null = initialExisting ?? null;
 
-      if (existing) {
-        const isAcpReservation = existing.authMethod === "acp" && existing.blockchainStatus === "pending" && !existing.transactionHash;
-        const derivedStatus = existing.blockchainStatus === "confirmed" ? "certified" : existing.blockchainStatus;
-        logger.withRequest(req).info(isAcpReservation ? "File reserved by pending ACP checkout, blocking proof route" : "File already certified", { fileHash: data.file_hash, certificationId: existing.id });
+      // An ACP-pending reservation is unpaid (the EGLD payment is awaited at
+      // /api/acp/confirm). API-key callers can therefore squat on arbitrary
+      // file hashes and block legitimate paid certifications until the 1-hour
+      // expiry. The current caller is on a paid path (trial credit, prepaid
+      // credit, x402, or admin) and is allowed to displace the reservation —
+      // but only AFTER they have actually committed entitlement (consumed
+      // their credit/trial slot below). Otherwise a 402 caller could grief
+      // many ACP reservations without ever paying.
+      const occupantIsAcpReservation =
+        !!occupant &&
+        occupant.authMethod === "acp" &&
+        occupant.blockchainStatus === "pending" &&
+        !occupant.transactionHash;
+
+      if (occupant && !occupantIsAcpReservation) {
+        const derivedStatus = occupant.blockchainStatus === "confirmed" ? "certified" : occupant.blockchainStatus;
+        logger.withRequest(req).info("File already certified", { fileHash: data.file_hash, certificationId: occupant.id });
         return res.status(200).json({
-          proof_id: existing.id,
+          proof_id: occupant.id,
           status: derivedStatus,
-          file_hash: existing.fileHash,
-          filename: existing.fileName,
-          metadata: existing.metadata || null,
-          verify_url: `${baseUrl}/proof/${existing.id}`,
-          certificate_url: `${baseUrl}/api/certificates/${existing.id}.pdf`,
-          proof_json_url: `${baseUrl}/proof/${existing.id}.json`,
+          file_hash: occupant.fileHash,
+          filename: occupant.fileName,
+          metadata: occupant.metadata || null,
+          verify_url: `${baseUrl}/proof/${occupant.id}`,
+          certificate_url: `${baseUrl}/api/certificates/${occupant.id}.pdf`,
+          proof_json_url: `${baseUrl}/proof/${occupant.id}.json`,
           blockchain: {
             network: "MultiversX",
-            transaction_hash: existing.transactionHash,
-            explorer_url: existing.transactionUrl,
+            transaction_hash: occupant.transactionHash,
+            explorer_url: occupant.transactionUrl,
           },
-          timestamp: existing.createdAt?.toISOString() || new Date().toISOString(),
+          timestamp: occupant.createdAt?.toISOString() || new Date().toISOString(),
           webhook_status: "not_applicable",
-          message: isAcpReservation
-            ? "This file hash is reserved by a pending ACP checkout payment. Certification will be attributed to that payer once confirmed."
-            : "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
+          message: "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
         });
       }
 
@@ -463,6 +508,44 @@ export function registerProofWriteRoutes(app: Express) {
         if (!consumed) {
           return res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." });
         }
+      }
+
+      // Now that the caller has actually committed entitlement (credit/trial
+      // consumed, or x402/admin), displace any unpaid ACP reservation. If the
+      // reservation was confirmed/upgraded between the initial read and here,
+      // refund the just-consumed slot and return the existing certification.
+      if (occupantIsAcpReservation && occupant) {
+        const outcome = await tryDisplaceAcpReservation(data.file_hash);
+        if (outcome === "not_acp_reservation") {
+          if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+          else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+          const [refreshed] = await db.select().from(certifications).where(eq(certifications.fileHash, data.file_hash));
+          const target = refreshed ?? occupant;
+          const derivedStatus = target.blockchainStatus === "confirmed" ? "certified" : target.blockchainStatus;
+          return res.status(200).json({
+            proof_id: target.id,
+            status: derivedStatus,
+            file_hash: target.fileHash,
+            filename: target.fileName,
+            metadata: target.metadata || null,
+            verify_url: `${baseUrl}/proof/${target.id}`,
+            certificate_url: `${baseUrl}/api/certificates/${target.id}.pdf`,
+            proof_json_url: `${baseUrl}/proof/${target.id}.json`,
+            blockchain: {
+              network: "MultiversX",
+              transaction_hash: target.transactionHash,
+              explorer_url: target.transactionUrl,
+            },
+            timestamp: target.createdAt?.toISOString() || new Date().toISOString(),
+            webhook_status: "not_applicable",
+            message: "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
+          });
+        }
+        logger.withRequest(req).info("Displaced unpaid ACP reservation on /api/proof", {
+          fileHash: data.file_hash,
+          displacedCertId: occupant.id,
+          outcome,
+        });
       }
 
       const certUserId = trialInfo ? trialInfo.userId : (creditInfo ? creditInfo.userId : apiKeyUserId);
@@ -507,7 +590,7 @@ export function registerProofWriteRoutes(app: Express) {
             fileName: data.filename,
             fileHash: data.file_hash,
             fileType: data.filename.split(".").pop() || "unknown",
-            authorName: data.author_name || "AI Agent",
+            authorName: effectiveAuthor,
             blockchainStatus: "pending",
             isPublic: true,
             authMethod,
@@ -547,7 +630,7 @@ export function registerProofWriteRoutes(app: Express) {
 
       let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
       try {
-        result = await recordOnBlockchain(data.file_hash, data.filename, data.author_name || "AI Agent");
+        result = await recordOnBlockchain(data.file_hash, data.filename, effectiveAuthor);
       } catch (blockchainErr: any) {
         // Blockchain write failed — remove the pending reservation and refund the credit.
         await db.delete(certifications).where(eq(certifications.id, pendingCertification.id)).catch(() => {});
@@ -1186,6 +1269,25 @@ export function registerProofWriteRoutes(app: Express) {
         seenInBatch.add(f.file_hash);
         return true;
       });
+      // Single source of truth for the author string used for preflight,
+      // recordOnBlockchain payload construction, and the persisted authorName.
+      const effectiveBatchAuthor = data.author_name || "AI Agent";
+
+      // Preflight payload-byte check for every file BEFORE entitlement
+      // consumption or ACP displacement. See /api/proof for full rationale —
+      // this prevents oversized UTF-8 payloads from triggering deterministic
+      // post-displacement failures that would refund credits and let an
+      // attacker grief ACP reservations at zero net cost.
+      for (const f of batchFiles) {
+        const bytes = computeOnchainPayloadBytes(f.file_hash, f.filename, effectiveBatchAuthor);
+        if (bytes > MAX_ONCHAIN_PAYLOAD_BYTES) {
+          return res.status(400).json({
+            error: "PAYLOAD_TOO_LARGE",
+            message: `On-chain data payload for file ${f.filename} exceeds ${MAX_ONCHAIN_PAYLOAD_BYTES} bytes (got ${bytes}). Shorten filename or author_name.`,
+            file_hash: f.file_hash,
+          });
+        }
+      }
 
       // Pre-count new files and atomically consume credits upfront.
       // This prevents a single request from creating more proofs than the user's balance covers
@@ -1193,12 +1295,38 @@ export function registerProofWriteRoutes(app: Express) {
       // from racing through the same positive balance.
       const allHashes = batchFiles.map((f) => f.file_hash);
       const alreadyExistingRows = allHashes.length > 0
-        ? await db.select({ fileHash: certifications.fileHash })
+        ? await db.select({
+            fileHash: certifications.fileHash,
+            authMethod: certifications.authMethod,
+            blockchainStatus: certifications.blockchainStatus,
+            transactionHash: certifications.transactionHash,
+          })
             .from(certifications)
             .where(inArray(certifications.fileHash, allHashes))
         : [];
-      const alreadyExistingSet = new Set(alreadyExistingRows.map((r) => r.fileHash));
-      const newFileCount = batchFiles.filter((f) => !alreadyExistingSet.has(f.file_hash)).length;
+
+      // Identify ACP reservations the caller could displace, then fail-closed
+      // BEFORE doing any displacement: if MultiversX is unavailable we cannot
+      // replace the reservation with a real proof, so destroying it would only
+      // harm the legitimate ACP payer.
+      const displaceableHashes = alreadyExistingRows
+        .filter((r) => r.authMethod === "acp" && r.blockchainStatus === "pending" && !r.transactionHash)
+        .map((r) => r.fileHash);
+      const displaceableSet = new Set(displaceableHashes);
+      // newFileCount is computed assuming all displacements will succeed. We
+      // consume credits for this count up front (entitlement gate) and refund
+      // any slots whose displacement turns out to fail (race with /confirm).
+      // This ordering — entitlement before displacement — prevents an under-
+      // funded caller from griefing many ACP reservations and then 402'ing.
+      const newFileCount = batchFiles.filter(
+        (f) => !alreadyExistingRows.some((r) => r.fileHash === f.file_hash) || displaceableSet.has(f.file_hash)
+      ).length;
+      if (newFileCount > 0 && !isMultiversXConfigured()) {
+        return res.status(503).json({
+          error: "BLOCKCHAIN_UNAVAILABLE",
+          message: "MultiversX signer is not configured on this server. Proofs cannot be anchored on-chain right now.",
+        });
+      }
 
       // x402 pays a single flat fee per request and cannot express per-file pricing at request time.
       // Enforce a hard cap of 1 new file per x402 payment to prevent 1-payment → N-blockchain-writes abuse.
@@ -1243,6 +1371,39 @@ export function registerProofWriteRoutes(app: Express) {
         }
       }
 
+      // Now that credits/trial have been atomically committed, attempt the
+      // ACP displacements. Refund any slots whose displacement failed because
+      // the reservation was confirmed/upgraded between the initial read and
+      // the per-hash advisory lock.
+      let failedDisplaceCount = 0;
+      for (const fh of displaceableHashes) {
+        try {
+          const outcome = await tryDisplaceAcpReservation(fh);
+          if (outcome === "displaced" || outcome === "no_row") {
+            logger.withRequest(req).info("Displaced unpaid ACP reservation on /api/batch", { fileHash: fh });
+          } else {
+            failedDisplaceCount++;
+          }
+        } catch (displaceErr: any) {
+          logger.withRequest(req).warn("ACP displacement failed in batch — treating slot as occupied", { fileHash: fh, error: displaceErr?.message });
+          failedDisplaceCount++;
+        }
+      }
+      if (failedDisplaceCount > 0 && !isAdminExempt) {
+        if (trialInfo) {
+          for (let i = 0; i < failedDisplaceCount; i++) await refundTrialCredit(trialInfo.userId).catch(() => {});
+        } else if (creditInfo) {
+          for (let i = 0; i < failedDisplaceCount; i++) await refundCredit(creditInfo.userId).catch(() => {});
+        }
+      }
+      // Recompute the post-displacement existence set for the per-file loop.
+      const finalExistingRows = displaceableHashes.length > 0
+        ? await db.select({ fileHash: certifications.fileHash })
+            .from(certifications)
+            .where(inArray(certifications.fileHash, allHashes))
+        : alreadyExistingRows.map((r) => ({ fileHash: r.fileHash }));
+      const alreadyExistingSet = new Set(finalExistingRows.map((r) => r.fileHash));
+
       const results: any[] = [];
       let createdCount = 0;
       let existingCount = 0;
@@ -1282,7 +1443,7 @@ export function registerProofWriteRoutes(app: Express) {
               fileName: file.filename,
               fileHash: file.file_hash,
               fileType: file.filename.split(".").pop() || "unknown",
-              authorName: data.author_name || "AI Agent",
+              authorName: effectiveBatchAuthor,
               blockchainStatus: "pending",
               isPublic: true,
               authMethod,
@@ -1307,7 +1468,7 @@ export function registerProofWriteRoutes(app: Express) {
 
         let result: Awaited<ReturnType<typeof recordOnBlockchain>>;
         try {
-          result = await recordOnBlockchain(file.file_hash, file.filename, data.author_name || "AI Agent");
+          result = await recordOnBlockchain(file.file_hash, file.filename, effectiveBatchAuthor);
         } catch (batchBlockchainErr: any) {
           // Blockchain write failed — remove the pending row; refund this slot at end of loop.
           await db.delete(certifications).where(eq(certifications.id, batchPending.id)).catch(() => {});

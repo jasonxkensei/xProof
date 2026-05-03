@@ -2,9 +2,74 @@ import express from "express";
 import crypto from "crypto";
 import { db } from "../db";
 import { logger } from "../logger";
-import { users, apiKeys } from "@shared/schema";
+import { users, apiKeys, certifications, acpCheckouts } from "@shared/schema";
 import { eq, and, gte } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+
+/**
+ * Attempt to displace an ACP-pending reservation row for the given fileHash.
+ *
+ * Background: /api/acp/checkout inserts a `pending` row into certifications to
+ * reserve the unique fileHash slot before payment. An attacker holding only an
+ * API key (no payment) can therefore squat on arbitrary high-value hashes and
+ * block legitimate paid certifications via /api/proof, /api/batch, or
+ * /api/certifications until the 1-hour expiry — and renew indefinitely.
+ *
+ * Mitigation: any caller arriving with a *real* entitlement (consumed credit,
+ * x402 payment, or a wallet-signed transaction) is allowed to atomically
+ * remove the unpaid ACP reservation under the same per-hash advisory lock used
+ * at checkout time. The linked acp_checkouts row is marked `displaced` so the
+ * subsequent /api/acp/confirm path returns a clear error instead of silently
+ * pointing at a missing certification id.
+ *
+ * Return values:
+ *  - "displaced":            row existed, was an unpaid ACP reservation, and
+ *                            has been removed; caller may proceed to insert.
+ *  - "not_acp_reservation":  row exists but is not an unpaid ACP reservation
+ *                            (e.g. confirmed, non-ACP, or already has txHash);
+ *                            caller must treat the slot as occupied.
+ *  - "no_row":               nothing to displace; caller may proceed.
+ */
+export async function tryDisplaceAcpReservation(
+  fileHash: string,
+): Promise<"displaced" | "not_acp_reservation" | "no_row"> {
+  return await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${fileHash}))`);
+
+    const [row] = await tx
+      .select()
+      .from(certifications)
+      .where(eq(certifications.fileHash, fileHash));
+
+    if (!row) {
+      return "no_row";
+    }
+
+    const isAcpReservation =
+      row.authMethod === "acp" &&
+      row.blockchainStatus === "pending" &&
+      !row.transactionHash;
+
+    if (!isAcpReservation) {
+      return "not_acp_reservation";
+    }
+
+    await tx
+      .update(acpCheckouts)
+      .set({ status: "displaced" })
+      .where(eq(acpCheckouts.certificationId, row.id));
+
+    await tx.delete(certifications).where(eq(certifications.id, row.id));
+
+    logger.info("Unpaid ACP reservation displaced by paid path", {
+      component: "acp",
+      certificationId: row.id,
+      fileHash: fileHash.slice(0, 16),
+    });
+
+    return "displaced";
+  });
+}
 
 export const TRIAL_QUOTA = 10;
 
