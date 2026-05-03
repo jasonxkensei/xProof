@@ -153,3 +153,9 @@ Required guarantees:
 
 - MCP certification tools must consume or reserve a durable entitlement before displacing ACP pending reservations. A non-atomic positive-balance precheck is not enough because parallel MCP calls can clear multiple victim reservations while only one later consumes a trial/prepaid credit.
 - Public operational/statistics routes are DoS-sensitive when they recompute global database aggregates for anonymous callers. Generic `/api` rate limiting is not a substitute for route-specific throttling, caching, or precomputed summaries on endpoints such as `/api/stats`.
+
+## Scan Notes — 2026-05-03 Finalized Continuation
+
+- Current `/api/stats` has route-specific throttling, a short in-memory cache, and in-flight coalescing; treat the prior public-stats aggregate DoS as fixed unless those protections regress.
+- Public pagination endpoints remain in scope even when `limit` is capped. Unbounded `offset` on high-cardinality public proof/timeline searches can still force database scans/sorts; prefer capped offsets, keyset pagination, and indexes matching `(user_id, blockchain_status, is_public, created_at DESC)` style predicates.
+- The current webhook delivery path pins DNS resolution to the outbound HTTPS socket, refuses redirects, bounds timeouts, and redacts URL paths/query strings before logging. Treat older webhook SSRF/log-leak scanner leads as fixed unless a new call path bypasses `safeWebhookFetch()` or logs raw destination URLs.
