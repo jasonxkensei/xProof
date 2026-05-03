@@ -225,9 +225,6 @@ export default function Landing() {
                   </span>{" "}
                   / {pricing.current_tier.max.toLocaleString("en-US")} certifications
                 </span>
-                <span data-testid="text-tier-remaining">
-                  {(pricing.certifications_until_next_tier ?? 0).toLocaleString("en-US")} to go
-                </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-md bg-muted">
                 <div
