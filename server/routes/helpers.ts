@@ -54,9 +54,13 @@ export async function tryDisplaceAcpReservation(
       return "not_acp_reservation";
     }
 
+    // The acp_checkouts.certification_id FK is ON DELETE NO ACTION
+    // (shared/schema.ts + migrations/0000_bitter_reavers.sql), so we MUST
+    // null out the back-reference BEFORE deleting the certifications row,
+    // otherwise the delete fails and the squat condition stays in place.
     await tx
       .update(acpCheckouts)
-      .set({ status: "displaced" })
+      .set({ status: "displaced", certificationId: null })
       .where(eq(acpCheckouts.certificationId, row.id));
 
     await tx.delete(certifications).where(eq(certifications.id, row.id));

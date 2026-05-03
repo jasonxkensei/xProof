@@ -514,8 +514,25 @@ export function registerProofWriteRoutes(app: Express) {
       // consumed, or x402/admin), displace any unpaid ACP reservation. If the
       // reservation was confirmed/upgraded between the initial read and here,
       // refund the just-consumed slot and return the existing certification.
+      // Wrapped in try/catch so an unexpected DB failure during displacement
+      // refunds the just-consumed credit instead of letting the caller pay
+      // for nothing.
       if (occupantIsAcpReservation && occupant) {
-        const outcome = await tryDisplaceAcpReservation(data.file_hash);
+        let outcome: "displaced" | "not_acp_reservation" | "no_row";
+        try {
+          outcome = await tryDisplaceAcpReservation(data.file_hash);
+        } catch (displaceErr: any) {
+          if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+          else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+          logger.withRequest(req).error("ACP displacement threw on /api/proof — refunded entitlement", {
+            fileHash: data.file_hash,
+            error: displaceErr?.message,
+          });
+          return res.status(503).json({
+            error: "DISPLACEMENT_FAILED",
+            message: "Could not reclaim a pending reservation for this file hash. Please retry shortly.",
+          });
+        }
         if (outcome === "not_acp_reservation") {
           if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
           else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
