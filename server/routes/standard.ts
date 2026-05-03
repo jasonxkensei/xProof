@@ -382,7 +382,17 @@ export function registerStandardRoutes(app: Express) {
       // This makes the endpoint idempotent: re-submitting the same proof returns the
       // existing anchor at no cost rather than triggering a new blockchain transaction.
       // If the blocking row is an unpaid ACP reservation, displace it so this paid caller can proceed.
+      //
+      // SECURITY: For api_key callers the displacement MUST happen AFTER the credit is
+      // atomically consumed (see below). A caller with only one credit could otherwise
+      // submit many parallel requests that all pass the positive-balance pre-check, each
+      // displace a different ACP reservation, and only then race through the atomic consume
+      // — the losers return 402 but their ACP displacements are not reverted. For x402 the
+      // payment is fully verified upfront, so immediate displacement is safe.
       const baseUrl = `https://${req.get("host")}`;
+      // Flag set when an ACP reservation is found and the caller is on the api_key path.
+      // Displacement is deferred until after the atomic credit consumption below.
+      let standardNeedsAcpDisplacement = false;
       const [existingCert] = await db
         .select()
         .from(certifications)
@@ -391,37 +401,44 @@ export function registerStandardRoutes(app: Express) {
       if (existingCert) {
         const existingIsAcp = existingCert.authMethod === "acp" && existingCert.blockchainStatus === "pending" && !existingCert.transactionHash;
         if (existingIsAcp) {
-          // Displace the unpaid ACP reservation so this paid caller can anchor.
-          const dispResult = await tryDisplaceAcpReservation(canonicalHash);
-          if (dispResult !== "displaced") {
-            // Race: re-fetch and validate before returning.
-            const [nowCert] = await db.select().from(certifications).where(eq(certifications.fileHash, canonicalHash)).limit(1);
-            if (nowCert) {
-              const nowIsAcp = nowCert.authMethod === "acp" && nowCert.blockchainStatus === "pending" && !nowCert.transactionHash;
-              if (nowIsAcp) {
-                // Still an ACP reservation — make a second displacement attempt, then ask caller to retry.
-                await tryDisplaceAcpReservation(canonicalHash).catch(() => {});
-                return res.status(503).json({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this proof hash. It has been cleared — please retry your request." });
+          if (authMethod === "api_key") {
+            // Defer displacement until after the credit is atomically consumed so a
+            // caller with one credit cannot displace many ACP reservations for free.
+            standardNeedsAcpDisplacement = true;
+          } else {
+            // x402: payment already verified — safe to displace immediately.
+            const dispResult = await tryDisplaceAcpReservation(canonicalHash);
+            if (dispResult !== "displaced") {
+              // Race: re-fetch and validate before returning.
+              const [nowCert] = await db.select().from(certifications).where(eq(certifications.fileHash, canonicalHash)).limit(1);
+              if (nowCert) {
+                const nowIsAcp = nowCert.authMethod === "acp" && nowCert.blockchainStatus === "pending" && !nowCert.transactionHash;
+                if (nowIsAcp) {
+                  // Still an ACP reservation — make a second displacement attempt, then ask caller to retry.
+                  await tryDisplaceAcpReservation(canonicalHash).catch(() => {});
+                  return res.status(503).json({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this proof hash. It has been cleared — please retry your request." });
+                }
+                logger.withRequest(req).info("Standard anchor: proof already anchored (post-displacement race), returning existing", { canonicalHash, certId: nowCert.id });
+                return res.status(200).json({
+                  proof_id: nowCert.id,
+                  canonical_hash: canonicalHash,
+                  chain_anchor: {
+                    chain: "multiversx",
+                    network: "mainnet",
+                    tx_hash: nowCert.transactionHash,
+                    explorer_url: nowCert.transactionUrl,
+                    status: nowCert.blockchainStatus,
+                  },
+                  proof_url: `${baseUrl}/proof/${nowCert.id}`,
+                  standard_version: "1.0",
+                  auth_method: authMethod,
+                  message: "Proof already anchored. Returning existing anchor (no charge).",
+                });
               }
-              logger.withRequest(req).info("Standard anchor: proof already anchored (post-displacement race), returning existing", { canonicalHash, certId: nowCert.id });
-              return res.status(200).json({
-                proof_id: nowCert.id,
-                canonical_hash: canonicalHash,
-                chain_anchor: {
-                  chain: "multiversx",
-                  network: "mainnet",
-                  tx_hash: nowCert.transactionHash,
-                  explorer_url: nowCert.transactionUrl,
-                  status: nowCert.blockchainStatus,
-                },
-                proof_url: `${baseUrl}/proof/${nowCert.id}`,
-                standard_version: "1.0",
-                auth_method: authMethod,
-                message: "Proof already anchored. Returning existing anchor (no charge).",
-              });
+              // no_row: fall through to anchor below.
             }
+            // displaced or no_row: fall through to anchor below.
           }
-          // displaced or no_row: fall through to anchor below.
         } else {
           logger.withRequest(req).info("Standard anchor: proof already anchored, returning existing", { canonicalHash, certId: existingCert.id });
           return res.status(200).json({
@@ -463,6 +480,47 @@ export function registerStandardRoutes(app: Express) {
             return res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." });
           }
         }
+      }
+
+      // Deferred ACP displacement for api_key callers: credit is now durably consumed,
+      // so displacing the reservation is safe — the caller holds a real entitlement.
+      if (standardNeedsAcpDisplacement) {
+        const dispResult = await tryDisplaceAcpReservation(canonicalHash);
+        if (dispResult === "not_acp_reservation") {
+          // The row was updated to a confirmed/non-ACP cert between our initial read and now.
+          // Refund the just-consumed credit and return the existing anchor.
+          if (!standardIsAdminExempt && authMethod === "api_key") {
+            if (standardTrialInfo) await refundTrialCredit(standardTrialInfo.userId).catch(() => {});
+            else if (standardCreditInfo) await refundCredit(standardCreditInfo.userId).catch(() => {});
+          }
+          const [nowCert] = await db.select().from(certifications).where(eq(certifications.fileHash, canonicalHash)).limit(1);
+          if (nowCert) {
+            return res.status(200).json({
+              proof_id: nowCert.id,
+              canonical_hash: canonicalHash,
+              chain_anchor: {
+                chain: "multiversx",
+                network: "mainnet",
+                tx_hash: nowCert.transactionHash,
+                explorer_url: nowCert.transactionUrl,
+                status: nowCert.blockchainStatus,
+              },
+              proof_url: `${baseUrl}/proof/${nowCert.id}`,
+              standard_version: "1.0",
+              auth_method: authMethod,
+              message: "Proof already anchored. Returning existing anchor (no charge).",
+            });
+          }
+          // Row disappeared — fall through and let the pending-insert unique constraint handle it.
+        } else if (dispResult !== "displaced" && dispResult !== "no_row") {
+          // Unexpected result — refund and retry.
+          if (!standardIsAdminExempt && authMethod === "api_key") {
+            if (standardTrialInfo) await refundTrialCredit(standardTrialInfo.userId).catch(() => {});
+            else if (standardCreditInfo) await refundCredit(standardCreditInfo.userId).catch(() => {});
+          }
+          return res.status(503).json({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this proof hash. Your credit has been refunded — please retry your request." });
+        }
+        // "displaced" or "no_row": fall through to anchor below.
       }
 
       // Resolve the userId before the pending reservation insert.
@@ -552,11 +610,13 @@ export function registerStandardRoutes(app: Express) {
         if (raceCert) {
           const raceIsAcp = raceCert.authMethod === "acp" && raceCert.blockchainStatus === "pending" && !raceCert.transactionHash;
           if (raceIsAcp) {
-            // Credit already refunded (API-key paths); displace the reservation and ask caller to retry.
-            await tryDisplaceAcpReservation(canonicalHash).catch(() => {});
+            // Credit has already been refunded above. Do NOT call tryDisplaceAcpReservation here:
+            // the caller no longer holds a durable entitlement (credit was refunded), so displacing
+            // the ACP reservation would let an attacker destroy a victim's paid checkout at zero cost.
+            // Ask the caller to retry; on retry the fixed ordering will consume credit before displacement.
             const retryMsg = authMethod === "api_key"
-              ? "An unpaid ACP reservation was blocking this proof hash. It has been cleared and your credit was refunded — please retry your request."
-              : "An unpaid ACP reservation was blocking this proof hash. It has been cleared — please retry your request.";
+              ? "An ACP reservation holds this proof hash. Your credit was refunded — please retry your request."
+              : "An ACP reservation holds this proof hash — please retry your request.";
             return res.status(503).json({ error: "RETRY_REQUIRED", message: retryMsg });
           }
           return res.status(200).json({

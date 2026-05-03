@@ -733,41 +733,19 @@ export async function createMcpServer(ctx: McpContext) {
         const fileName = `audit-log-${params.session_id}.json`;
 
         // Idempotency check: return existing proof if this exact audit payload was already certified.
-        // If the blocking row is an unpaid ACP reservation, displace it so this paid caller can proceed.
+        // If the blocking row is an unpaid ACP reservation, we flag it for deferred displacement.
+        //
+        // SECURITY: Displacement MUST happen AFTER the credit is atomically consumed. A caller with
+        // only one credit could otherwise submit many parallel requests that all pass the positive-
+        // balance pre-check, each displace a different ACP reservation, and only then race through
+        // the atomic consume — the losers return an error but their ACP displacements are not reverted.
+        let mcpNeedsAcpDisplacement = false;
         const [mcpExisting] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
         if (mcpExisting) {
           const mcpExistingIsAcp = mcpExisting.authMethod === "acp" && mcpExisting.blockchainStatus === "pending" && !mcpExisting.transactionHash;
           if (mcpExistingIsAcp) {
-            const dispResult = await tryDisplaceAcpReservation(fileHash);
-            if (dispResult !== "displaced") {
-              // Race: re-fetch and validate before returning.
-              const [nowExisting] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
-              if (nowExisting) {
-                const nowIsAcp = nowExisting.authMethod === "acp" && nowExisting.blockchainStatus === "pending" && !nowExisting.transactionHash;
-                if (nowIsAcp) {
-                  // Still an ACP reservation — make a second displacement attempt, then ask caller to retry.
-                  await tryDisplaceAcpReservation(fileHash).catch(() => {});
-                  return { content: [{ type: "text" as const, text: JSON.stringify({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this hash. It has been cleared — please retry your request." }) }], isError: true };
-                }
-                return {
-                  content: [{
-                    type: "text" as const,
-                    text: JSON.stringify({
-                      proof_id: nowExisting.id,
-                      audit_url: `${baseUrl}/audit/${nowExisting.id}`,
-                      proof_url: `${baseUrl}/proof/${nowExisting.id}`,
-                      blockchain: { network: "MultiversX", transaction_hash: nowExisting.transactionHash, explorer_url: nowExisting.transactionUrl },
-                      decision: params.decision,
-                      risk_level: params.risk_level,
-                      inputs_hash: params.inputs_hash,
-                      timestamp: nowExisting.createdAt?.toISOString(),
-                      message: "This exact audit session was already certified. Returning existing proof — no credit consumed.",
-                    }),
-                  }],
-                };
-              }
-            }
-            // displaced or no_row: fall through to certify below.
+            // Defer displacement until after the credit is atomically consumed.
+            mcpNeedsAcpDisplacement = true;
           } else {
             return {
               content: [{
@@ -802,6 +780,43 @@ export async function createMcpServer(ctx: McpContext) {
           if (!consumed) {
             return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." }) }], isError: true };
           }
+        }
+
+        // Deferred ACP displacement: credit is now durably consumed, so displacing is safe.
+        if (mcpNeedsAcpDisplacement) {
+          const dispResult = await tryDisplaceAcpReservation(fileHash);
+          if (dispResult === "not_acp_reservation") {
+            // Row was updated to a confirmed/non-ACP cert between our initial read and now.
+            // Refund the just-consumed credit and return the existing anchor at no charge.
+            if (auditTrialInfo && !auditCreditInfo) await refundTrialCredit(auditTrialInfo.userId).catch(() => {});
+            else if (auditCreditInfo) await refundCredit(auditCreditInfo.userId).catch(() => {});
+            const [nowExisting] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
+            if (nowExisting) {
+              return {
+                content: [{
+                  type: "text" as const,
+                  text: JSON.stringify({
+                    proof_id: nowExisting.id,
+                    audit_url: `${baseUrl}/audit/${nowExisting.id}`,
+                    proof_url: `${baseUrl}/proof/${nowExisting.id}`,
+                    blockchain: { network: "MultiversX", transaction_hash: nowExisting.transactionHash, explorer_url: nowExisting.transactionUrl },
+                    decision: params.decision,
+                    risk_level: params.risk_level,
+                    inputs_hash: params.inputs_hash,
+                    timestamp: nowExisting.createdAt?.toISOString(),
+                    message: "This exact audit session was already certified. Returning existing proof — no credit consumed.",
+                  }),
+                }],
+              };
+            }
+            // Row disappeared — fall through and let the pending-insert unique constraint handle it.
+          } else if (dispResult !== "displaced" && dispResult !== "no_row") {
+            // Unexpected result — refund and ask caller to retry.
+            if (auditTrialInfo && !auditCreditInfo) await refundTrialCredit(auditTrialInfo.userId).catch(() => {});
+            else if (auditCreditInfo) await refundCredit(auditCreditInfo.userId).catch(() => {});
+            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this hash. Your credit has been refunded — please retry your request." }) }], isError: true };
+          }
+          // "displaced" or "no_row": fall through to certify below.
         }
 
         // Insert a pending reservation row BEFORE the blockchain write.
