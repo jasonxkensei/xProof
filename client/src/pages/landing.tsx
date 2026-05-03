@@ -34,7 +34,13 @@ import {
 
 export default function Landing() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const { data: pricing } = useQuery<{ current_price_usd: number }>({
+  const { data: pricing } = useQuery<{
+    current_price_usd: number;
+    total_certifications: number;
+    current_tier: { min: number; max: number | null; price_usd: number };
+    next_tier: { min: number; max: number | null; price_usd: number } | null;
+    certifications_until_next_tier: number | null;
+  }>({
     queryKey: ["/api/pricing"],
   });
   const price = pricing ? `$${pricing.current_price_usd}` : "$0.05";
@@ -209,6 +215,41 @@ export default function Landing() {
           </div>
           
           <p className="mt-6 text-sm text-muted-foreground">{price} per proof • Unlimited</p>
+
+          {pricing && pricing.next_tier && pricing.current_tier.max !== null && (
+            <div className="mt-8 mx-auto max-w-xl text-left" data-testid="tier-progress">
+              <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span data-testid="text-tier-current">
+                  <span className="font-medium text-foreground">
+                    {pricing.total_certifications.toLocaleString("en-US")}
+                  </span>{" "}
+                  / {pricing.current_tier.max.toLocaleString("en-US")} certifications
+                </span>
+                <span data-testid="text-tier-remaining">
+                  {(pricing.certifications_until_next_tier ?? 0).toLocaleString("en-US")} to go
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-md bg-muted">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.max(
+                        1,
+                        (pricing.total_certifications / pricing.current_tier.max) * 100,
+                      ),
+                    )}%`,
+                  }}
+                  data-testid="bar-tier-progress"
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground" data-testid="text-tier-next">
+                Next tier: ${pricing.next_tier.price_usd}/cert after{" "}
+                {pricing.current_tier.max.toLocaleString("en-US")} certifications
+              </p>
+            </div>
+          )}
         </div>
       </section>
       {/* Free Trial — Interactive Registration */}
