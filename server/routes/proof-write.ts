@@ -439,25 +439,25 @@ export function registerProofWriteRoutes(app: Express) {
         });
       }
 
-      // Fail-closed FIRST, before any displacement or credit consumption.
-      // Without this gate `recordOnBlockchain` would (in dev) return a
-      // `sim_<...>` hash that would be persisted as a "confirmed" certification,
-      // misleading downstream verifiers; doing the check before displacement
-      // also prevents destroying a legitimate ACP reservation when we cannot
-      // actually replace it with a real proof. The audit route applies the
-      // same check.
-      if (!isMultiversXConfigured()) {
-        return res.status(503).json({
-          error: "BLOCKCHAIN_UNAVAILABLE",
-          message: "MultiversX signer is not configured on this server. Proofs cannot be anchored on-chain right now.",
-        });
-      }
-
       const [initialExisting] = await db
         .select()
         .from(certifications)
         .where(eq(certifications.fileHash, data.file_hash));
       const occupant: typeof certifications.$inferSelect | null = initialExisting ?? null;
+
+      // Fail-closed against missing blockchain config — but only when we'd
+      // actually need to write to the chain. If the hash is already certified
+      // (non-ACP-pending occupant), the request is idempotent and may still
+      // be served. Mirrors /api/batch's `newFileCount > 0` gating semantics.
+      const needsChainWrite =
+        !occupant ||
+        (occupant.authMethod === "acp" && occupant.blockchainStatus === "pending" && !occupant.transactionHash);
+      if (needsChainWrite && !isMultiversXConfigured()) {
+        return res.status(503).json({
+          error: "BLOCKCHAIN_UNAVAILABLE",
+          message: "MultiversX signer is not configured on this server. Proofs cannot be anchored on-chain right now.",
+        });
+      }
 
       // An ACP-pending reservation is unpaid (the EGLD payment is awaited at
       // /api/acp/confirm). API-key callers can therefore squat on arbitrary
