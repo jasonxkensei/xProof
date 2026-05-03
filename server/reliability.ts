@@ -112,6 +112,19 @@ export const publicPdfRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
 });
 
+// /api/stats runs ~15 unauthenticated full-table aggregates per call. The
+// generic /api limiter (100 rpm) leaves room for a single client to keep the
+// database busy. We pair this strict limiter with an in-memory response
+// cache (see admin.ts) so concurrent callers share one computation.
+export const publicStatsRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many stats requests, please try again later" },
+});
+
 let commitSha = "unknown";
 try {
   commitSha = execSync("git rev-parse --short HEAD 2>/dev/null").toString().trim() || "unknown";

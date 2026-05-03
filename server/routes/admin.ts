@@ -11,10 +11,29 @@ import { getMetrics } from "../metrics";
 import { getPricingInfo } from "../pricing";
 import { getTxQueueStats } from "../txQueue";
 import { requireAdmin, EXCLUDED_IP_HASHES, getClientIp } from "./helpers";
+import { publicStatsRateLimiter } from "../reliability";
+
+// In-memory single-flight cache for /api/stats. The endpoint is unauthenticated
+// and runs ~15 full-table aggregates per call (counts on certifications and
+// visits, COUNT(DISTINCT ip_hash), grouped status, daily series, joins on
+// users/api_keys). Without coalescing, repeated unauthenticated calls would
+// serialize on the database. We serve a cached payload for STATS_CACHE_TTL_MS
+// and fold concurrent first-fetches into a single in-flight promise.
+const STATS_CACHE_TTL_MS = 60_000;
+let statsCache: { body: object; cachedAt: number } | null = null;
+let statsInflight: Promise<object> | null = null;
 
 export function registerAdminRoutes(app: Express) {
-  app.get("/api/stats", async (req: any, res) => {
+  app.get("/api/stats", publicStatsRateLimiter, async (req: any, res) => {
     try {
+      if (statsCache && Date.now() - statsCache.cachedAt < STATS_CACHE_TTL_MS) {
+        return res.json(statsCache.body);
+      }
+      if (statsInflight) {
+        const body = await statsInflight;
+        return res.json(body);
+      }
+      statsInflight = (async () => {
       const now = new Date();
       const h24 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const d7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -88,52 +107,62 @@ export function registerAdminRoutes(app: Express) {
       const [trialAgentsRow] = await db.select({ count: count() }).from(users).where(eq(users.isTrial, true));
       const [trialUsedRow] = await db.select({ total: sql<number>`COALESCE(SUM(trial_used), 0)` }).from(users).where(eq(users.isTrial, true));
 
-      res.json({
-        certifications: {
-          total: totalRow.count,
-          last_24h: last24hRow.count,
-          last_7d: last7dRow.count,
-          last_30d: last30dRow.count,
-          prev_7d: prev7dRow.count,
-          last_5m: recent5mRow.count,
-          by_source: { api: apiCerts, trial: trialCerts, user: userCerts },
-          by_status: byStatus,
-          daily: dailyCerts.rows.map((r: any) => ({
-            date: r.day,
-            count: parseInt(r.count),
-          })),
-        },
-        webhooks: {
-          total: whTotal,
-          delivered: whDelivered,
-          failed: parseInt(wh.failed || "0"),
-          pending: parseInt(wh.pending || "0"),
-          success_rate: whTotal > 0 ? Math.round((whDelivered / whTotal) * 100) : null,
-        },
-        blockchain: {
-          avg_latency_ms: metrics.transactions.avg_latency_ms,
-          last_known_latency_ms: metrics.transactions.last_known_latency_ms,
-          last_known_latency_at: metrics.transactions.last_known_latency_at,
-          total_success: metrics.transactions.total_success,
-          total_failed: metrics.transactions.total_failed,
-          last_success_at: metrics.transactions.last_success_at,
-        },
-        traffic: {
-          total_visits: totalVisitsRow.count,
-          unique_ips: Number(uniqueIpsRow.count) || 0,
-          human_visitors: Number(humanVisitsRow.count) || 0,
-          agent_visitors: Number(agentVisitsRow.count) || 0,
-        },
-        agents: {
-          unique_active: uniqueAgentsRow.count,
-          total_api_keys: totalApiKeysRow.count,
-          trial_agents: trialAgentsRow.count,
-          trial_certifications_used: Number(trialUsedRow.total) || 0,
-        },
-        pricing: await getPricingInfo(),
-        generated_at: now.toISOString(),
-      });
+        const body = {
+          certifications: {
+            total: totalRow.count,
+            last_24h: last24hRow.count,
+            last_7d: last7dRow.count,
+            last_30d: last30dRow.count,
+            prev_7d: prev7dRow.count,
+            last_5m: recent5mRow.count,
+            by_source: { api: apiCerts, trial: trialCerts, user: userCerts },
+            by_status: byStatus,
+            daily: dailyCerts.rows.map((r: any) => ({
+              date: r.day,
+              count: parseInt(r.count),
+            })),
+          },
+          webhooks: {
+            total: whTotal,
+            delivered: whDelivered,
+            failed: parseInt(wh.failed || "0"),
+            pending: parseInt(wh.pending || "0"),
+            success_rate: whTotal > 0 ? Math.round((whDelivered / whTotal) * 100) : null,
+          },
+          blockchain: {
+            avg_latency_ms: metrics.transactions.avg_latency_ms,
+            last_known_latency_ms: metrics.transactions.last_known_latency_ms,
+            last_known_latency_at: metrics.transactions.last_known_latency_at,
+            total_success: metrics.transactions.total_success,
+            total_failed: metrics.transactions.total_failed,
+            last_success_at: metrics.transactions.last_success_at,
+          },
+          traffic: {
+            total_visits: totalVisitsRow.count,
+            unique_ips: Number(uniqueIpsRow.count) || 0,
+            human_visitors: Number(humanVisitsRow.count) || 0,
+            agent_visitors: Number(agentVisitsRow.count) || 0,
+          },
+          agents: {
+            unique_active: uniqueAgentsRow.count,
+            total_api_keys: totalApiKeysRow.count,
+            trial_agents: trialAgentsRow.count,
+            trial_certifications_used: Number(trialUsedRow.total) || 0,
+          },
+          pricing: await getPricingInfo(),
+          generated_at: now.toISOString(),
+        };
+        statsCache = { body, cachedAt: Date.now() };
+        return body;
+      })();
+      try {
+        const body = await statsInflight;
+        res.json(body);
+      } finally {
+        statsInflight = null;
+      }
     } catch (error) {
+      statsInflight = null;
       logger.withRequest(req).error("Public stats error");
       res.status(500).json({ error: "Failed to generate stats" });
     }
