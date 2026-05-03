@@ -214,10 +214,10 @@ export default function Landing() {
             </Button>
           </div>
           
-          <p className="mt-10 text-sm text-muted-foreground">{price} per proof • Unlimited</p>
+          <p className="mt-12 text-sm text-muted-foreground">{price} per proof • Unlimited</p>
 
           {pricing && pricing.next_tier && pricing.current_tier.max !== null && (
-            <div className="mt-10 mx-auto w-full max-w-[15rem] text-center" data-testid="tier-progress">
+            <div className="mt-3 mx-auto w-full max-w-[15rem] text-center" data-testid="tier-progress">
               <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span data-testid="text-tier-current">
                   <span className="font-medium text-foreground">
