@@ -111,6 +111,9 @@ done
 - API keys are prefixed `pm_` -- treat them like passwords.
 - x402 mode requires no API key (payment replaces authentication).
 - Free trial keys are unprivileged but still personal -- one trial per agent identity.
+- **NEVER send plaintext content to xproof.app** -- always hash locally first (`sha256sum`, `crypto.subtle.digest`, or equivalent). The only field xproof accepts is `file_hash` (64-char SHA-256 hex). No raw text, documents, or binary data should ever leave your environment.
+- **x402 is opt-in and autonomous** -- once enabled, your agent can initiate USDC payments on Base without per-transaction confirmation. Configure a spending cap in your agent framework and require human approval above your threshold before enabling x402 in production.
+- **`llms.txt` and `llms-full.txt` are static documentation references** -- load them once at install time for API reference, not at runtime on every call. Fetching them dynamically on each invocation creates an unnecessary runtime dependency on xproof.app availability and a potential prompt-injection surface if the file is ever compromised.
 
 ---
 
@@ -142,6 +145,12 @@ Get a paid API key at [xproof.app](https://xproof.app) (connect wallet, go to Se
 ### Option C: x402 Payment Protocol (No Account Required)
 
 No configuration needed. Pay $0.05 per proof in USDC on Base (eip155:8453) directly in the HTTP request. The 402 response header tells your agent exactly what to pay. Best for fully autonomous agents that already hold USDC on Base.
+
+> **WARNING -- autonomous payments:** x402 is an opt-in mode that enables your agent to initiate on-chain USDC transactions without per-transaction user confirmation. Before enabling x402 in production:
+> - Set a **spending cap** in your agent framework (e.g. max $N/day or $N/session).
+> - Require **human approval** for any single call that would exceed your risk threshold.
+> - Note that `POST /api/batch` supports up to 50 items per call -- at $0.05 each, a single batch can reach $2.50.
+> - Disable x402 entirely in environments where autonomous spending is not authorised.
 
 ---
 
@@ -203,7 +212,7 @@ x402 is not a separate skill -- it is a payment method. When you call `POST /api
 ### Step-by-Step
 
 1. **Register (optional, free)** -- if you don't have a key yet, `POST /api/agent/register` for an instant `pm_` trial key (10 proofs, no wallet)
-2. **Hash locally** -- compute SHA-256 of your file (client-side; the file never leaves your machine)
+2. **Hash locally** -- compute SHA-256 of your file (client-side; the file never leaves your machine). The original content must never leave your environment -- xproof only receives the hash, filename, and metadata you choose to share.
 3. **Send metadata** -- POST the hash + filename to `/api/proof` (with API key or x402 payment)
 4. **Receive proof** -- xProof records the hash on MultiversX mainnet (6-second finality)
 5. **Verify anytime** -- anyone can verify via proof URL, JSON endpoint, or blockchain explorer

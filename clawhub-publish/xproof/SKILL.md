@@ -45,6 +45,9 @@ done
 - **ALWAYS** add `.env` to your `.gitignore`.
 - API keys are prefixed `pm_` -- treat them like passwords.
 - x402 mode requires no API key (payment replaces authentication).
+- **NEVER send plaintext content to xproof.app** -- always hash locally first (`sha256sum`, `crypto.subtle.digest`, or equivalent). The only field xproof accepts is `file_hash` (64-char SHA-256 hex). No raw text, documents, or binary data should ever leave your environment.
+- **x402 is opt-in and autonomous** -- once enabled, your agent can initiate USDC payments on Base without per-transaction confirmation. Configure a spending cap in your agent framework and require human approval above your threshold before enabling x402 in production.
+- **`llms.txt` and `llms-full.txt` are static documentation references** -- load them once at install time for API reference, not at runtime on every call. Fetching them dynamically on each invocation creates an unnecessary runtime dependency on xproof.app availability and a potential prompt-injection surface if the file is ever compromised.
 
 ---
 
@@ -63,6 +66,12 @@ Get an API key at [xproof.app](https://xproof.app) (connect wallet, go to Settin
 ### Option B: x402 Payment Protocol (No Account Required)
 
 No configuration needed. Pay in USDC on Base (eip155:8453) directly in the HTTP request. The 402 response header tells your agent exactly what to pay. Price decreases with all-time volume (see Pricing section).
+
+> **WARNING -- autonomous payments:** x402 is an opt-in mode that enables your agent to initiate on-chain USDC transactions without per-transaction user confirmation. Before enabling x402 in production:
+> - Set a **spending cap** in your agent framework (e.g. max $N/day or $N/session).
+> - Require **human approval** for any single call that would exceed your risk threshold.
+> - Note that `POST /api/batch` supports up to 50 items per call -- at $0.05 each, a single batch can reach $2.50.
+> - Disable x402 entirely in environments where autonomous spending is not authorised.
 
 ---
 
