@@ -5,7 +5,7 @@ import { certifications, users, attestations } from "@shared/schema";
 import { eq, desc, sql, and, gte, count } from "drizzle-orm";
 import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
-import { attestationIssuanceRateLimiter, publicSearchRateLimiter, publicPdfRateLimiter } from "../reliability";
+import { attestationIssuanceRateLimiter, publicSearchRateLimiter, publicPdfRateLimiter, publicReadRateLimiter } from "../reliability";
 import { computeTrustScoreByWallet } from "../trust";
 import { isValidWebhookUrl, safeWebhookFetch } from "../webhook";
 
@@ -129,8 +129,11 @@ export function registerAttestationsRoutes(app: Express) {
     }
   });
 
-  // GET /api/attestations/:wallet — public, returns all active attestations for a wallet
-  app.get("/api/attestations/:wallet", async (req, res) => {
+  // GET /api/attestations/:wallet — public, returns active attestations for a
+  // wallet with bounded pagination so a single unauthenticated request cannot
+  // force the API to scan/sort/serialize every attestation a popular agent
+  // has accumulated.
+  app.get("/api/attestations/:wallet", publicReadRateLimiter, async (req, res) => {
     try {
       const { wallet } = req.params;
 
@@ -142,6 +145,21 @@ export function registerAttestationsRoutes(app: Express) {
         return res.status(404).json({ error: "Wallet not found or not public" });
       }
 
+      const ATTESTATIONS_MAX_LIMIT = 100;
+      const ATTESTATIONS_DEFAULT_LIMIT = 50;
+      // Cap offset so attackers cannot drive arbitrarily deep pagination
+      // scans on this unauthenticated route. 10k rows is well above any
+      // realistic public-profile inspection use case.
+      const ATTESTATIONS_MAX_OFFSET = 10_000;
+      const limit = Math.min(
+        Math.max(parseInt(req.query.limit as string) || ATTESTATIONS_DEFAULT_LIMIT, 1),
+        ATTESTATIONS_MAX_LIMIT,
+      );
+      const offset = Math.min(
+        Math.max(parseInt(req.query.offset as string) || 0, 0),
+        ATTESTATIONS_MAX_OFFSET,
+      );
+
       const now = new Date();
       const result = await db.execute(sql`
         SELECT a.id, a.subject_wallet, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at
@@ -152,8 +170,9 @@ export function registerAttestationsRoutes(app: Express) {
           AND (a.expires_at IS NULL OR a.expires_at > ${now})
           AND issuer_u.is_public_profile = true
         ORDER BY a.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
       `);
-      res.json(result.rows);
+      res.json({ results: result.rows, limit, offset });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

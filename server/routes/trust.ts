@@ -316,6 +316,13 @@ export function registerTrustRoutes(app: Express) {
       const now = new Date();
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
+      // Hard caps on per-profile aggregation work. Public agent profiles are
+      // unauthenticated and rate-limited only by request count, so an attacker
+      // can repeatedly request a profile whose subject has accumulated many
+      // attestations or decision proofs to amplify per-request DB/CPU cost.
+      // Bounding both result sets gives the handler a predictable upper bound.
+      const MAX_PROFILE_ATTESTATIONS = 100;
+      const MAX_PROFILE_DECISION_CERTS = 500;
       const [recentCerts, agentAttestations, recentDecisionCerts] = await Promise.all([
         db
           .select({
@@ -328,7 +335,22 @@ export function registerTrustRoutes(app: Express) {
           .where(and(eq(certifications.userId, user.id), eq(certifications.isPublic, true), eq(certifications.blockchainStatus, "confirmed")))
           .orderBy(desc(certifications.createdAt))
           .limit(20),
+        // Two-step bounded query: first select the top N attestation IDs for
+        // this subject (cheap index scan + sort), then join issuer/cert tables
+        // only for that bounded set. This prevents the planner from joining
+        // and aggregating across every issuer certification before the LIMIT
+        // is applied for subjects with many attestations.
         db.execute(sql`
+          WITH top_attestations AS (
+            SELECT a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at
+            FROM attestations a
+            INNER JOIN users u ON u.wallet_address = a.issuer_wallet AND u.is_public_profile = true
+            WHERE a.subject_wallet = ${user.walletAddress}
+              AND a.status = 'active'
+              AND (a.expires_at IS NULL OR a.expires_at > ${now})
+            ORDER BY a.created_at DESC
+            LIMIT ${MAX_PROFILE_ATTESTATIONS}
+          )
           SELECT
             a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at,
             COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) AS issuer_confirmed_certs,
@@ -344,13 +366,9 @@ export function registerTrustRoutes(app: Express) {
               WHEN COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) >= 3 THEN 25
               ELSE 10
             END AS attestation_value
-          FROM attestations a
+          FROM top_attestations a
           LEFT JOIN users u ON u.wallet_address = a.issuer_wallet
           LEFT JOIN certifications c ON c.user_id = u.id
-          WHERE a.subject_wallet = ${user.walletAddress}
-            AND a.status = 'active'
-            AND (a.expires_at IS NULL OR a.expires_at > ${now})
-            AND u.is_public_profile = true
           GROUP BY a.id, a.issuer_wallet, a.issuer_name, a.domain, a.standard, a.title, a.description, a.expires_at, a.status, a.created_at
           ORDER BY a.created_at DESC
         `),
@@ -367,7 +385,9 @@ export function registerTrustRoutes(app: Express) {
             gte(certifications.createdAt, thirtyDaysAgo),
             sql`${certifications.metadata}->>'decision_id' IS NOT NULL`
           ))
-          .orderBy(certifications.createdAt),
+          .orderBy(desc(certifications.createdAt))
+          .limit(MAX_PROFILE_DECISION_CERTS)
+          .then(rows => rows.reverse()),
       ]);
 
       // Group decision certs by decision_id, keep chains with ≥2 anchors
