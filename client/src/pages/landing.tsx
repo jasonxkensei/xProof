@@ -241,7 +241,7 @@ export default function Landing() {
                   data-testid="bar-tier-progress"
                 />
               </div>
-              <p className="mt-2 text-xs text-muted-foreground" data-testid="text-tier-next">
+              <p className="mt-2 text-xs text-muted-foreground whitespace-nowrap" data-testid="text-tier-next">
                 Next tier: ${pricing.next_tier.price_usd}/cert after{" "}
                 {pricing.current_tier.max.toLocaleString("en-US")} certifications
               </p>
