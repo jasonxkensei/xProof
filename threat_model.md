@@ -133,3 +133,10 @@ Required guarantees:
 
 - Audit-log certification hashes must use recursive canonical JSON serialization. A top-level-only JSON replacer can leave nested manifest/context fields unbound even when those fields are stored and displayed as certified audit evidence.
 - Public agent/trust/attestation profile endpoints should have fixed row limits, pagination, cached aggregates, or precomputed summaries before performing per-request drift analysis or returning joined attestation lists to unauthenticated callers.
+
+## Scan Notes — 2026-05-03 Security Scan
+
+- MCP audit certification must use recursive canonical JSON serialization for all stored/displayed metadata. Top-level key sorting with a JSON replacer is insufficient because nested context fields can be omitted from the on-chain hash.
+- Production proof-write routes must fail closed when MultiversX signing is not configured; simulation mode is only acceptable for non-production development paths.
+- Unpaid checkout or reservation flows must not globally block later confirmed paid certifications for the same file hash unless an entitlement/payment has already been reserved or consumed.
+- JSON-LD inside prerendered HTML must escape script terminators such as `</script>` in addition to ordinary HTML escaping, especially while CSP permits inline scripts.
