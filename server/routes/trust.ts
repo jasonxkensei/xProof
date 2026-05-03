@@ -131,7 +131,19 @@ export function registerTrustRoutes(app: Express) {
     try {
       const { wallet } = req.params;
       const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
-      const offset = Math.max(0, Number(req.query.offset) || 0);
+      // Cap offset on this unauthenticated endpoint so callers cannot force
+      // PostgreSQL to walk past arbitrarily large numbers of confirmed public
+      // certifications before returning a tiny page. With limit<=100 this
+      // still allows browsing the most recent ~10k events per profile, which
+      // is far more than any human paginator needs.
+      const MAX_TIMELINE_OFFSET = 10_000;
+      const requestedOffset = Math.max(0, Number(req.query.offset) || 0);
+      if (requestedOffset > MAX_TIMELINE_OFFSET) {
+        return res.status(400).json({
+          message: `offset must be <= ${MAX_TIMELINE_OFFSET}`,
+        });
+      }
+      const offset = requestedOffset;
 
       const [user] = await db
         .select({ id: users.id, isPublicProfile: users.isPublicProfile })

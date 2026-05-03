@@ -23,7 +23,20 @@ export function registerProofWriteRoutes(app: Express) {
     try {
       const { model_hash, strategy_hash, key, value, wallet, limit: limitStr, offset: offsetStr } = req.query;
       const limit = Math.min(parseInt(limitStr as string) || 20, 100);
-      const offset = Math.max(parseInt(offsetStr as string) || 0, 0);
+      // Cap offset on this unauthenticated search endpoint. Without a bound an
+      // attacker can pair a popular wallet/metadata filter with offset=1e8 to
+      // force PostgreSQL to scan through huge numbers of matching certification
+      // rows before returning little or no data. ~10k still covers any
+      // realistic human pagination need with limit<=100.
+      const MAX_SEARCH_OFFSET = 10_000;
+      const requestedOffset = Math.max(parseInt(offsetStr as string) || 0, 0);
+      if (requestedOffset > MAX_SEARCH_OFFSET) {
+        return res.status(400).json({
+          error: "offset_too_large",
+          message: `offset must be <= ${MAX_SEARCH_OFFSET}`,
+        });
+      }
+      const offset = requestedOffset;
 
       // Bound search inputs so attackers cannot drive arbitrarily long JSONB
       // extraction predicates against the certifications table. Identifiers
