@@ -449,10 +449,12 @@ export function registerProofWriteRoutes(app: Express) {
       // actually need to write to the chain. If the hash is already certified
       // (non-ACP-pending occupant), the request is idempotent and may still
       // be served. Mirrors /api/batch's `newFileCount > 0` gating semantics.
+      // Gated to production so dev/staging keep working with the simulation
+      // path inside `recordOnBlockchain`.
       const needsChainWrite =
         !occupant ||
         (occupant.authMethod === "acp" && occupant.blockchainStatus === "pending" && !occupant.transactionHash);
-      if (needsChainWrite && !isMultiversXConfigured()) {
+      if (process.env.NODE_ENV === "production" && needsChainWrite && !isMultiversXConfigured()) {
         return res.status(503).json({
           error: "BLOCKCHAIN_UNAVAILABLE",
           message: "MultiversX signer is not configured on this server. Proofs cannot be anchored on-chain right now.",
@@ -1338,7 +1340,9 @@ export function registerProofWriteRoutes(app: Express) {
       const newFileCount = batchFiles.filter(
         (f) => !alreadyExistingRows.some((r) => r.fileHash === f.file_hash) || displaceableSet.has(f.file_hash)
       ).length;
-      if (newFileCount > 0 && !isMultiversXConfigured()) {
+      // Same dev-simulation carve-out as /api/proof: gate to production so
+      // local/staging keep working with `recordOnBlockchain`'s sim path.
+      if (process.env.NODE_ENV === "production" && newFileCount > 0 && !isMultiversXConfigured()) {
         return res.status(503).json({
           error: "BLOCKCHAIN_UNAVAILABLE",
           message: "MultiversX signer is not configured on this server. Proofs cannot be anchored on-chain right now.",
