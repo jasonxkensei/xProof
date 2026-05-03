@@ -96,10 +96,17 @@ function escapeHtml(str: string): string {
 // impossible to terminate the surrounding <script> tag or HTML comment.
 function safeJsonLd(
   value: unknown,
-  replacer?: (this: any, key: string, val: any) => any | null,
+  replacer?: ((this: unknown, key: string, val: unknown) => unknown) | (number | string)[] | null,
   space?: string | number,
 ): string {
-  return JSON.stringify(value, replacer as any, space)
+  const serialized =
+    typeof replacer === "function"
+      ? JSON.stringify(value, replacer, space)
+      : JSON.stringify(value, replacer ?? undefined, space);
+  if (serialized === undefined) {
+    return "null";
+  }
+  return serialized
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
     .replace(/&/g, "\\u0026")
