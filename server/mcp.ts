@@ -75,10 +75,32 @@ export async function createMcpServer(ctx: McpContext) {
           }
         }
 
+        // Track whether the atomic credit debit has already been performed so we do not
+        // double-charge in the second consume block below.
+        let creditConsumed = false;
+
         const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
         if (existing) {
           const isAcpReservation = existing.authMethod === "acp" && existing.blockchainStatus === "pending" && !existing.transactionHash;
           if (isAcpReservation) {
+            // Security: atomically consume the caller's entitlement BEFORE displacing the ACP
+            // reservation. This closes the race window where multiple concurrent requests can
+            // each pass the non-atomic precheck above, displace separate victim reservations,
+            // and only afterward race in atomicConsume — allowing one underfunded request to
+            // destroy a legitimate checkout slot at zero cost.
+            if (trialInfo && !mcpCreditInfo) {
+              const consumed = await atomicConsumeTrialCredit(trialInfo.userId);
+              if (!consumed) {
+                return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+              }
+            } else if (mcpCreditInfo) {
+              const consumed = await atomicConsumeCredit(mcpCreditInfo.userId);
+              if (!consumed) {
+                return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." }) }], isError: true };
+              }
+            }
+            creditConsumed = true;
+
             // Displace the unpaid ACP reservation so this paid MCP caller can certify.
             const dispResult = await tryDisplaceAcpReservation(file_hash);
             if (dispResult !== "displaced") {
@@ -88,9 +110,15 @@ export async function createMcpServer(ctx: McpContext) {
                 const nowIsAcp = nowExisting.authMethod === "acp" && nowExisting.blockchainStatus === "pending" && !nowExisting.transactionHash;
                 if (nowIsAcp) {
                   // Still an ACP reservation — make a second displacement attempt, then ask caller to retry.
+                  // Credit was already consumed; refund it since we are not completing a certification.
                   await tryDisplaceAcpReservation(file_hash).catch(() => {});
+                  if (trialInfo && !mcpCreditInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+                  else if (mcpCreditInfo) await refundCredit(mcpCreditInfo.userId).catch(() => {});
                   return { content: [{ type: "text" as const, text: JSON.stringify({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this hash. It has been cleared — please retry your request." }) }], isError: true };
                 }
+                // Another MCP caller already certified this hash; refund and surface the result.
+                if (trialInfo && !mcpCreditInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+                else if (mcpCreditInfo) await refundCredit(mcpCreditInfo.userId).catch(() => {});
                 return {
                   content: [{
                     type: "text" as const,
@@ -130,16 +158,19 @@ export async function createMcpServer(ctx: McpContext) {
           }
         }
 
-        // Atomically consume credit BEFORE the blockchain write to prevent parallel-request race conditions.
-        if (trialInfo && !mcpCreditInfo) {
-          const consumed = await atomicConsumeTrialCredit(trialInfo.userId);
-          if (!consumed) {
-            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
-          }
-        } else if (mcpCreditInfo) {
-          const consumed = await atomicConsumeCredit(mcpCreditInfo.userId);
-          if (!consumed) {
-            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." }) }], isError: true };
+        // Atomically consume credit BEFORE the blockchain write to prevent parallel-request race
+        // conditions. Skip if credit was already consumed during ACP displacement above.
+        if (!creditConsumed) {
+          if (trialInfo && !mcpCreditInfo) {
+            const consumed = await atomicConsumeTrialCredit(trialInfo.userId);
+            if (!consumed) {
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+            }
+          } else if (mcpCreditInfo) {
+            const consumed = await atomicConsumeCredit(mcpCreditInfo.userId);
+            if (!consumed) {
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." }) }], isError: true };
+            }
           }
         }
 
