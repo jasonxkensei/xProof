@@ -140,3 +140,11 @@ Required guarantees:
 - Production proof-write routes must fail closed when MultiversX signing is not configured; simulation mode is only acceptable for non-production development paths.
 - Unpaid checkout or reservation flows must not globally block later confirmed paid certifications for the same file hash unless an entitlement/payment has already been reserved or consumed.
 - JSON-LD inside prerendered HTML must escape script terminators such as `</script>` in addition to ordinary HTML escaping, especially while CSP permits inline scripts.
+
+## Scan Notes — 2026-05-03 Continued Scan
+
+- Public link fields rendered into browser `href` attributes must be scheme-allowlisted, not only URL-syntax-validated. `transactionUrl` on public proof pages and `agentWebsite` on public agent profiles are XSS-sensitive because `javascript:`/`data:` URLs can execute after user click even when text content is React-escaped.
+- The ACP unpaid-reservation issue is now narrower than the original REST proof finding: primary REST proof/certification routes displace unpaid ACP rows after entitlement, but MCP write tools and `/api/standard/anchor` still need equivalent displacement behavior.
+- Current prerender JSON-LD uses `safeJsonLd()` and production blockchain simulation fails closed; keep the older findings as fixed unless those protections regress.
+- Current webhook delivery uses pinned DNS resolution, HTTPS-only requests, redirect refusal, bounded timeouts, and redacted webhook URL logging; generic API logging no longer serializes response bodies.
+- SAST raw-SQL hits in `server/index.ts` were reviewed as static startup/maintenance queries with parameter binding or constant SQL and are not currently exploitable injection findings.
