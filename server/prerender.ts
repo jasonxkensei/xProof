@@ -88,6 +88,25 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
+// Safe JSON serializer for inline <script type="application/ld+json"> blocks.
+// Plain JSON.stringify does not escape "</script>", "<!--", or U+2028/U+2029,
+// so attacker-controlled fields embedded into JSON-LD can break out of the
+// script element and execute arbitrary JS in the page origin. Escaping these
+// code points to their \uXXXX form keeps the JSON valid while making it
+// impossible to terminate the surrounding <script> tag or HTML comment.
+function safeJsonLd(
+  value: unknown,
+  replacer?: (this: any, key: string, val: any) => any | null,
+  space?: string | number,
+): string {
+  return JSON.stringify(value, replacer as any, space)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 async function renderHomePage(baseUrl: string): Promise<string> {
   const priceUsd = await getCertificationPriceUsd();
   const title = "xproof — The on-chain notary for AI agents";
@@ -170,7 +189,7 @@ async function renderHomePage(baseUrl: string): Promise<string> {
 </footer>
 
 <script type="application/ld+json">
-${JSON.stringify({
+${safeJsonLd({
   "@context": "https://schema.org",
   "@type": "Organization",
   "name": "xproof",
@@ -187,7 +206,7 @@ ${JSON.stringify({
 </script>
 
 <script type="application/ld+json">
-${JSON.stringify({
+${safeJsonLd({
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "xproof",
@@ -224,7 +243,7 @@ ${JSON.stringify({
 </script>
 
 <script type="application/ld+json">
-${JSON.stringify({
+${safeJsonLd({
   "@context": "https://schema.org",
   "@type": "FAQPage",
   "mainEntity": [
@@ -388,7 +407,7 @@ function renderProofPage(baseUrl: string, cert: any): string {
 </footer>
 
 <script type="application/ld+json">
-${JSON.stringify({
+${safeJsonLd({
   "@context": "https://schema.org",
   "@type": "CreativeWork",
   "name": cert.fileName,
@@ -604,7 +623,7 @@ async function renderAgentProfilePage(baseUrl: string, walletAddress: string): P
 <footer><p>&copy; ${new Date().getFullYear()} xproof. Powered by <a href="https://multiversx.com">MultiversX</a></p></footer>
 
 <script type="application/ld+json">
-${JSON.stringify({
+${safeJsonLd({
   "@context": "https://schema.org",
   "@type": "Person",
   "name": name,
