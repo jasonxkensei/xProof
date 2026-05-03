@@ -156,7 +156,8 @@ Standard API: `GET /api/standard` | `GET /api/standard/validate` (POST)
 ## 12. Command Cheatsheet
 
 ```bash
-# Anchor a single file proof
+# Hash locally first -- the original content must never leave your environment.
+# xproof only receives the SHA-256 hex hash, filename, and metadata you choose to share.
 sha256sum myfile.pdf | awk '{print $1}'
 # Then POST the hash to /api/proof
 
