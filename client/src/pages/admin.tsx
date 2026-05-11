@@ -344,9 +344,9 @@ export default function AdminDashboard() {
               )}
               {stats?.traffic && (
                 <>
-                  <StatCard title="Visites totales" value={stats.traffic.total_visits} subtitle="Pages vues" icon={Globe} />
-                  <StatCard title="Unique Visitors" value={stats.traffic.human_visitors} subtitle="Human IPs" icon={Globe} />
-                  <StatCard title="Agent Visits" value={stats.traffic.agent_visitors} subtitle="Bot/Crawler IPs" icon={Bot} />
+                  <StatCard title="Total Visits" value={stats.traffic.total_visits} subtitle="All page views" icon={Globe} />
+                  <StatCard title="Unique Visitors" value={stats.traffic.human_visitors} subtitle="Distinct human IPs" icon={Globe} />
+                  <StatCard title="Agent Visits" value={stats.traffic.agent_visitors} subtitle="Distinct bot IPs" icon={Bot} />
                 </>
               )}
               {stats?.agents && (
