@@ -13,6 +13,63 @@ import { getTxQueueStats } from "../txQueue";
 import { requireAdmin, EXCLUDED_IP_HASHES, getClientIp } from "./helpers";
 import { publicStatsRateLimiter } from "../reliability";
 
+// Map a referer hostname to a friendly traffic-source label.
+// Pattern match (suffix-based) so subdomains like t.co, lm.facebook.com,
+// l.linkedin.com, out.reddit.com all collapse into the right brand.
+function labelForReferrerHost(host: string): string {
+  if (!host) return "Direct";
+  const h = host.toLowerCase();
+  const map: Array<[RegExp, string]> = [
+    [/(^|\.)google\./,                "Google"],
+    [/(^|\.)bing\.com$/,              "Bing"],
+    [/(^|\.)duckduckgo\.com$/,        "DuckDuckGo"],
+    [/(^|\.)yahoo\./,                 "Yahoo"],
+    [/(^|\.)yandex\./,                "Yandex"],
+    [/(^|\.)baidu\.com$/,             "Baidu"],
+    [/(^|\.)ecosia\.org$/,            "Ecosia"],
+    [/(^|\.)brave\.com$/,             "Brave Search"],
+    [/(^|\.)kagi\.com$/,              "Kagi"],
+    [/(^|\.)perplexity\.ai$/,         "Perplexity"],
+    [/(^|\.)chatgpt\.com$/,           "ChatGPT"],
+    [/(^|\.)openai\.com$/,            "ChatGPT"],
+    [/(^|\.)claude\.ai$/,             "Claude"],
+    [/(^|\.)anthropic\.com$/,         "Claude"],
+    [/(^|\.)gemini\.google\.com$/,    "Gemini"],
+    [/(^|\.)twitter\.com$/,           "Twitter / X"],
+    [/(^|\.)x\.com$/,                 "Twitter / X"],
+    [/^t\.co$/,                       "Twitter / X"],
+    [/(^|\.)linkedin\.com$/,          "LinkedIn"],
+    [/^lnkd\.in$/,                    "LinkedIn"],
+    [/(^|\.)facebook\.com$/,          "Facebook"],
+    [/^fb\.me$/,                      "Facebook"],
+    [/(^|\.)instagram\.com$/,         "Instagram"],
+    [/(^|\.)reddit\.com$/,            "Reddit"],
+    [/(^|\.)news\.ycombinator\.com$/, "Hacker News"],
+    [/(^|\.)producthunt\.com$/,       "Product Hunt"],
+    [/(^|\.)github\.com$/,            "GitHub"],
+    [/(^|\.)stackoverflow\.com$/,     "Stack Overflow"],
+    [/(^|\.)medium\.com$/,            "Medium"],
+    [/(^|\.)dev\.to$/,                "DEV.to"],
+    [/(^|\.)substack\.com$/,          "Substack"],
+    [/(^|\.)youtube\.com$/,           "YouTube"],
+    [/^youtu\.be$/,                   "YouTube"],
+    [/(^|\.)tiktok\.com$/,            "TikTok"],
+    [/(^|\.)discord\.com$/,           "Discord"],
+    [/(^|\.)t\.me$/,                  "Telegram"],
+    [/(^|\.)telegram\.org$/,          "Telegram"],
+    [/(^|\.)slack\.com$/,             "Slack"],
+    [/(^|\.)multiversx\.com$/,        "MultiversX"],
+    [/(^|\.)elrond\.com$/,            "MultiversX"],
+    [/(^|\.)xportal\.com$/,           "xPortal"],
+    [/(^|\.)coingecko\.com$/,         "CoinGecko"],
+    [/(^|\.)coinmarketcap\.com$/,     "CoinMarketCap"],
+  ];
+  for (const [re, label] of map) {
+    if (re.test(h)) return label;
+  }
+  return host;
+}
+
 // In-memory single-flight cache for /api/stats. The endpoint is unauthenticated
 // and runs ~15 full-table aggregates per call (counts on certifications and
 // visits, COUNT(DISTINCT ip_hash), grouped status, daily series, joins on
@@ -373,6 +430,68 @@ export function registerAdminRoutes(app: Express) {
     } catch (error) {
       logger.withRequest(req).error("UTM stats error");
       res.status(500).json({ error: "Failed to generate UTM stats" });
+    }
+  });
+
+  // Traffic Sources from HTTP Referer (real visits, not just UTM-tagged).
+  // Maps referrer hostnames to friendly source labels (Google, Twitter/X,
+  // LinkedIn, Reddit, etc.) so the admin sees where humans actually come from.
+  app.get("/api/admin/traffic-sources", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const rows = await db.execute(sql`
+        SELECT
+          referrer_host,
+          COUNT(*) AS visits,
+          COUNT(DISTINCT ip_hash) AS unique_ips,
+          COUNT(*) FILTER (WHERE is_agent) AS agent_visits,
+          COUNT(*) FILTER (WHERE NOT is_agent) AS human_visits,
+          MIN(created_at) AS first_seen,
+          MAX(created_at) AS last_seen
+        FROM visits
+        WHERE referrer_host IS NOT NULL
+        GROUP BY referrer_host
+        ORDER BY visits DESC
+        LIMIT 100
+      `);
+
+      const summary = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE referrer_host IS NOT NULL) AS referred_visits,
+          COUNT(DISTINCT ip_hash) FILTER (WHERE referrer_host IS NOT NULL) AS referred_unique_ips,
+          COUNT(DISTINCT referrer_host) AS unique_referrers,
+          COUNT(*) FILTER (WHERE referrer_host IS NULL) AS direct_visits,
+          COUNT(DISTINCT ip_hash) FILTER (WHERE referrer_host IS NULL) AS direct_unique_ips,
+          COUNT(*) AS total_visits,
+          COUNT(DISTINCT ip_hash) AS total_unique_ips
+        FROM visits
+      `);
+
+      const s = (summary.rows[0] as Record<string, string>) || {};
+      res.json({
+        rows: (rows.rows as Array<Record<string, string | null>>).map(r => ({
+          referrer_host: r.referrer_host,
+          source_label: labelForReferrerHost(r.referrer_host || ""),
+          visits: parseInt(r.visits as string || "0"),
+          unique_ips: parseInt(r.unique_ips as string || "0"),
+          human_visits: parseInt(r.human_visits as string || "0"),
+          agent_visits: parseInt(r.agent_visits as string || "0"),
+          first_seen: r.first_seen,
+          last_seen: r.last_seen,
+        })),
+        summary: {
+          referred_visits: parseInt(s.referred_visits || "0"),
+          referred_unique_ips: parseInt(s.referred_unique_ips || "0"),
+          unique_referrers: parseInt(s.unique_referrers || "0"),
+          direct_visits: parseInt(s.direct_visits || "0"),
+          direct_unique_ips: parseInt(s.direct_unique_ips || "0"),
+          total_visits: parseInt(s.total_visits || "0"),
+          total_unique_ips: parseInt(s.total_unique_ips || "0"),
+        },
+        generated_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.withRequest(req).error("Traffic sources error");
+      res.status(500).json({ error: "Failed to generate traffic sources" });
     }
   });
 

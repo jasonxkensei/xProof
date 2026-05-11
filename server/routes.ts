@@ -83,7 +83,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const utmMedium = (req.query.utm_medium as string | undefined)?.slice(0, 128) || null;
     const utmContent = (req.query.utm_content as string | undefined)?.slice(0, 256) || null;
 
-    db.insert(visits).values({ ipHash, userAgent: req.get("user-agent") || null, isAgent, path, utmSource, utmMedium, utmContent }).catch(() => {});
+    // Capture referer hostname only (no path / query) for Traffic Sources.
+    // Same-origin referers are dropped so we only see external traffic.
+    let referrerHost: string | null = null;
+    const rawReferer = req.get("referer") || req.get("referrer");
+    if (rawReferer) {
+      try {
+        const refHost = new URL(rawReferer).hostname.toLowerCase();
+        const selfHost = (req.get("host") || "").toLowerCase().split(":")[0];
+        if (refHost && refHost !== selfHost) {
+          referrerHost = refHost.slice(0, 128);
+        }
+      } catch { /* malformed referer header — ignore */ }
+    }
+
+    db.insert(visits).values({ ipHash, userAgent: req.get("user-agent") || null, isAgent, path, utmSource, utmMedium, utmContent, referrerHost }).catch(() => {});
   });
 
   registerAuthRoutes(app);

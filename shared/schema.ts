@@ -324,6 +324,8 @@ export const visits = pgTable("visits", {
   utmSource: varchar("utm_source", { length: 128 }),
   utmMedium: varchar("utm_medium", { length: 128 }),
   utmContent: varchar("utm_content", { length: 256 }),
+  // Privacy: only the referer hostname is stored, never the full URL or query string.
+  referrerHost: varchar("referrer_host", { length: 128 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

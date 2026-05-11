@@ -286,6 +286,17 @@ app.use((req, res, next) => {
       logger.error("agent_violations migration error", { component: "migration", error: err.message });
     }
 
+    // visits.referrer_host — hostname-only referer column for the
+    // Traffic Sources card on /admin. Storing only the hostname keeps
+    // PII to a minimum (no path or query string).
+    try {
+      await pool.query(`ALTER TABLE visits ADD COLUMN IF NOT EXISTS referrer_host VARCHAR(128)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_visits_referrer_host ON visits(referrer_host) WHERE referrer_host IS NOT NULL`);
+      logger.info("visits referrer_host column ready", { component: "migration" });
+    } catch (err: any) {
+      logger.error("visits referrer_host migration error", { component: "migration", error: err.message });
+    }
+
     // Ensure certifications.transaction_hash has a partial unique index (non-null only) so
     // that each on-chain payment transaction can only be used to certify one file.
     // Pending rows (transaction_hash IS NULL) are excluded from the constraint so they do
