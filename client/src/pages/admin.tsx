@@ -314,67 +314,48 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            {stats?.traffic && (
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-                {stats?.pricing && (
-                  <Card data-testid="card-pricing-tier">
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">Pricing Tier</CardTitle>
-                      <Target className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold" data-testid="text-current-price">${stats.pricing.current_price_usd}</div>
-                      {stats.pricing.next_tier && stats.pricing.certifications_until_next_tier !== null ? (
-                        <>
-                          <div className="w-full bg-muted rounded-full h-2 mt-2">
-                            <div
-                              className="bg-primary h-2 rounded-full transition-all"
-                              style={{ width: `${Math.min(100, Math.max(1, (stats.pricing.total_certifications / (stats.pricing.current_tier.max ?? stats.pricing.next_tier.min)) * 100))}%` }}
-                              data-testid="progress-tier"
-                            />
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {stats.pricing.total_certifications.toLocaleString()} / {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()} · next ${stats.pricing.next_tier.price_usd}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-xs text-muted-foreground mt-1">per certification</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-                <StatCard
-                  title="Visites totales"
-                  value={stats.traffic.total_visits}
-                  subtitle="Pages vues (humains + agents)"
-                  icon={Globe}
-                />
-                <StatCard
-                  title="Unique Visitors"
-                  value={stats.traffic.human_visitors}
-                  subtitle="Distinct human IPs"
-                  icon={Globe}
-                />
-                <StatCard
-                  title="Agent Visits"
-                  value={stats.traffic.agent_visitors}
-                  subtitle="Bot/Crawler IPs"
-                  icon={Bot}
-                />
-                <StatCard
-                  title="Active Agents"
-                  value={stats.agents?.unique_active || 0}
-                  subtitle={`${stats.agents?.total_api_keys || 0} API keys`}
-                  icon={Bot}
-                />
-                <StatCard
-                  title="Trial Agents"
-                  value={stats.agents?.trial_agents || 0}
-                  subtitle={`${stats.agents?.trial_certifications_used || 0} certs used`}
-                  icon={Bot}
-                />
-              </div>
-            )}
+            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 mb-6">
+              {stats?.pricing && (
+                <Card data-testid="card-pricing-tier">
+                  <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">Pricing Tier</CardTitle>
+                    <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold" data-testid="text-current-price">${stats.pricing.current_price_usd}</div>
+                    {stats.pricing.next_tier && stats.pricing.certifications_until_next_tier !== null ? (
+                      <>
+                        <div className="w-full bg-muted rounded-full h-1.5 mt-2">
+                          <div
+                            className="bg-primary h-1.5 rounded-full transition-all"
+                            style={{ width: `${Math.min(100, Math.max(1, (stats.pricing.total_certifications / (stats.pricing.current_tier.max ?? stats.pricing.next_tier.min)) * 100))}%` }}
+                            data-testid="progress-tier"
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                          next ${stats.pricing.next_tier.price_usd}/cert
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground mt-1">per cert</p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+              {stats?.traffic && (
+                <>
+                  <StatCard title="Visites totales" value={stats.traffic.total_visits} subtitle="Pages vues" icon={Globe} />
+                  <StatCard title="Unique Visitors" value={stats.traffic.human_visitors} subtitle="Human IPs" icon={Globe} />
+                  <StatCard title="Agent Visits" value={stats.traffic.agent_visitors} subtitle="Bot/Crawler IPs" icon={Bot} />
+                </>
+              )}
+              {stats?.agents && (
+                <>
+                  <StatCard title="Active Agents" value={stats.agents.unique_active} subtitle={`${stats.agents.total_api_keys} API keys`} icon={Bot} />
+                  <StatCard title="Trial Agents" value={stats.agents.trial_agents} subtitle={`${stats.agents.trial_certifications_used} certs used`} icon={Bot} />
+                </>
+              )}
+            </div>
 
             <div className="grid gap-4 grid-cols-1 lg:grid-cols-4 mb-6">
               {stats?.traffic && (
