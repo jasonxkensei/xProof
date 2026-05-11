@@ -314,39 +314,35 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            {stats?.pricing && (
-              <Card className="mb-6" data-testid="card-pricing-tier">
-                <CardContent className="py-3">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <Target className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="text-sm font-medium">Pricing Tier</span>
-                    <span className="text-lg font-bold" data-testid="text-current-price">${stats.pricing.current_price_usd}</span>
-                    {stats.pricing.next_tier && stats.pricing.certifications_until_next_tier !== null && (
-                      <>
-                        <div className="flex-1 min-w-[140px] flex items-center gap-2">
-                          <div className="flex-1 bg-muted rounded-full h-2">
+            {stats?.traffic && (
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+                {stats?.pricing && (
+                  <Card data-testid="card-pricing-tier">
+                    <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Pricing Tier</CardTitle>
+                      <Target className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold" data-testid="text-current-price">${stats.pricing.current_price_usd}</div>
+                      {stats.pricing.next_tier && stats.pricing.certifications_until_next_tier !== null ? (
+                        <>
+                          <div className="w-full bg-muted rounded-full h-2 mt-2">
                             <div
                               className="bg-primary h-2 rounded-full transition-all"
                               style={{ width: `${Math.min(100, Math.max(1, (stats.pricing.total_certifications / (stats.pricing.current_tier.max ?? stats.pricing.next_tier.min)) * 100))}%` }}
                               data-testid="progress-tier"
                             />
                           </div>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {stats.pricing.total_certifications.toLocaleString()} / {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()}
-                          </span>
-                        </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          Next: ${stats.pricing.next_tier.price_usd}/cert
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {stats?.traffic && (
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {stats.pricing.total_certifications.toLocaleString()} / {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()} · next ${stats.pricing.next_tier.price_usd}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-1">per certification</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
                 <StatCard
                   title="Visites totales"
                   value={stats.traffic.total_visits}
