@@ -316,42 +316,30 @@ export default function AdminDashboard() {
 
             {stats?.pricing && (
               <Card className="mb-6" data-testid="card-pricing-tier">
-                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                  <CardTitle className="text-sm font-medium">Pricing Tier Progress</CardTitle>
-                  <Target className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Current price</span>
-                      <span className="text-2xl font-bold" data-testid="text-current-price">${stats.pricing.current_price_usd}</span>
-                    </div>
-
+                <CardContent className="py-3">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <Target className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium">Pricing Tier</span>
+                    <span className="text-lg font-bold" data-testid="text-current-price">${stats.pricing.current_price_usd}</span>
                     {stats.pricing.next_tier && stats.pricing.certifications_until_next_tier !== null && (
                       <>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">
-                              {stats.pricing.total_certifications.toLocaleString()} / {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()} certifications
-                            </span>
-                            <span className="text-muted-foreground">
-                              {((stats.pricing.current_tier.max ?? stats.pricing.next_tier.min) - stats.pricing.total_certifications).toLocaleString()} to go
-                            </span>
-                          </div>
-                          <div className="w-full bg-muted rounded-full h-3">
+                        <div className="flex-1 min-w-[140px] flex items-center gap-2">
+                          <div className="flex-1 bg-muted rounded-full h-2">
                             <div
-                              className="bg-primary h-3 rounded-full transition-all"
+                              className="bg-primary h-2 rounded-full transition-all"
                               style={{ width: `${Math.min(100, Math.max(1, (stats.pricing.total_certifications / (stats.pricing.current_tier.max ?? stats.pricing.next_tier.min)) * 100))}%` }}
                               data-testid="progress-tier"
                             />
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            Next tier: ${stats.pricing.next_tier.price_usd}/cert after {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()} certifications
-                          </p>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {stats.pricing.total_certifications.toLocaleString()} / {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()}
+                          </span>
                         </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          Next: ${stats.pricing.next_tier.price_usd}/cert
+                        </span>
                       </>
                     )}
-
                   </div>
                 </CardContent>
               </Card>
@@ -360,9 +348,9 @@ export default function AdminDashboard() {
             {stats?.traffic && (
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
                 <StatCard
-                  title="Visiteurs"
+                  title="Visites totales"
                   value={stats.traffic.total_visits}
-                  subtitle="Pages vues (toutes confondues)"
+                  subtitle="Pages vues (humains + agents)"
                   icon={Globe}
                 />
                 <StatCard
@@ -598,105 +586,6 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             </div>
-
-            {(() => {
-              const adminRows = trafficSources?.rows;
-              const adminSummary = trafficSources?.summary;
-              const publicRows = stats?.traffic?.sources;
-              const publicSummary = stats?.traffic?.sources_summary;
-              const rows = adminRows ?? publicRows ?? [];
-              const summary = adminSummary
-                ? {
-                    total_unique_ips: adminSummary.total_unique_ips,
-                    referred_unique_ips: adminSummary.referred_unique_ips,
-                    unique_referrers: adminSummary.unique_referrers,
-                    direct_visits: adminSummary.direct_visits,
-                    direct_unique_ips: adminSummary.direct_unique_ips,
-                  }
-                : publicSummary
-                ? {
-                    total_unique_ips: stats?.traffic?.human_visitors ?? 0,
-                    referred_unique_ips: publicSummary.referred_unique_ips,
-                    unique_referrers: publicSummary.unique_referrers,
-                    direct_visits: publicSummary.direct_visits,
-                    direct_unique_ips: publicSummary.direct_unique_ips,
-                  }
-                : null;
-              if (!summary) return null;
-              return (
-                <Card className="mb-6" data-testid="card-traffic-sources">
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                    <CardTitle className="text-sm font-medium">Traffic Sources (Referer)</CardTitle>
-                    <Link2 className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-4 mb-4 text-sm">
-                      <span className="text-muted-foreground">
-                        <span className="font-medium text-foreground">{summary.total_unique_ips}</span> unique human visitors
-                      </span>
-                      <span className="text-muted-foreground">
-                        <span className="font-medium text-foreground">{summary.referred_unique_ips}</span> from external sources
-                      </span>
-                      <span className="text-muted-foreground">
-                        <span className="font-medium text-foreground">{summary.unique_referrers}</span> distinct referrers
-                      </span>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm" data-testid="table-traffic-sources">
-                        <thead>
-                          <tr className="border-b text-muted-foreground">
-                            <th className="text-left pb-2 pr-4 font-medium">Source</th>
-                            <th className="text-left pb-2 pr-4 font-medium">Host</th>
-                            <th className="text-right pb-2 pr-4 font-medium">Visits</th>
-                            <th className="text-right pb-2 pr-4 font-medium">Unique IPs</th>
-                            <th className="text-right pb-2 pr-4 font-medium">Humans</th>
-                            <th className="text-right pb-2 font-medium">Agents</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.map((row, i) => (
-                            <tr key={i} className="border-b" data-testid={`row-traffic-${i}`}>
-                              <td className="py-2 pr-4">
-                                <Badge variant="secondary" className="text-xs">{row.source_label}</Badge>
-                              </td>
-                              <td className="py-2 pr-4 text-xs text-muted-foreground font-mono truncate max-w-[200px]">{row.referrer_host}</td>
-                              <td className="py-2 pr-4 text-right font-medium">{row.visits}</td>
-                              <td className="py-2 pr-4 text-right text-muted-foreground">{row.unique_ips}</td>
-                              <td className="py-2 pr-4 text-right text-muted-foreground">{row.human_visits}</td>
-                              <td className="py-2 text-right text-muted-foreground">{row.agent_visits}</td>
-                            </tr>
-                          ))}
-                          {summary.direct_visits > 0 && (
-                            <tr className="last:border-0" data-testid="row-traffic-direct">
-                              <td className="py-2 pr-4">
-                                <Badge variant="outline" className="text-xs text-muted-foreground">Direct / Bookmark</Badge>
-                              </td>
-                              <td className="py-2 pr-4 text-xs text-muted-foreground">no referer</td>
-                              <td className="py-2 pr-4 text-right font-medium">{summary.direct_visits}</td>
-                              <td className="py-2 pr-4 text-right text-muted-foreground">{summary.direct_unique_ips}</td>
-                              <td className="py-2 pr-4 text-right text-muted-foreground">—</td>
-                              <td className="py-2 text-right text-muted-foreground">—</td>
-                            </tr>
-                          )}
-                          {rows.length === 0 && summary.direct_visits === 0 && (
-                            <tr>
-                              <td colSpan={6} className="py-4 text-center text-sm text-muted-foreground">
-                                No visits recorded yet.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                    {rows.length === 0 && summary.direct_visits > 0 && (
-                      <p className="text-xs text-muted-foreground mt-3">
-                        All visits so far are direct (no Referer header). External traffic from search engines or social platforms will appear here once visitors arrive via a link.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })()}
 
             {utmStats && utmStats.rows.length > 0 && (
               <Card className="mb-6" data-testid="card-utm-attribution">
