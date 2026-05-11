@@ -314,34 +314,46 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 mb-6">
-              {stats?.pricing && (
-                <Card data-testid="card-pricing-tier">
-                  <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                    <CardTitle className="text-xs font-medium text-muted-foreground">Pricing Tier</CardTitle>
-                    <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold" data-testid="text-current-price">${stats.pricing.current_price_usd}</div>
-                    {stats.pricing.next_tier && stats.pricing.certifications_until_next_tier !== null ? (
-                      <>
-                        <div className="w-full bg-muted rounded-full h-1.5 mt-2">
+            {stats?.pricing && (
+              <Card className="mb-6" data-testid="card-pricing-tier">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                  <CardTitle className="text-sm font-medium">Pricing Tier Progress</CardTitle>
+                  <Target className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Current price</span>
+                      <span className="text-2xl font-bold" data-testid="text-current-price">${stats.pricing.current_price_usd}</span>
+                    </div>
+                    {stats.pricing.next_tier && stats.pricing.certifications_until_next_tier !== null && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            {stats.pricing.total_certifications.toLocaleString()} / {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()} certifications
+                          </span>
+                          <span className="text-muted-foreground">
+                            {((stats.pricing.current_tier.max ?? stats.pricing.next_tier.min) - stats.pricing.total_certifications).toLocaleString()} to go
+                          </span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-3">
                           <div
-                            className="bg-primary h-1.5 rounded-full transition-all"
+                            className="bg-primary h-3 rounded-full transition-all"
                             style={{ width: `${Math.min(100, Math.max(1, (stats.pricing.total_certifications / (stats.pricing.current_tier.max ?? stats.pricing.next_tier.min)) * 100))}%` }}
                             data-testid="progress-tier"
                           />
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1 truncate">
-                          next ${stats.pricing.next_tier.price_usd}/cert
+                        <p className="text-xs text-muted-foreground">
+                          Next tier: ${stats.pricing.next_tier.price_usd}/cert after {(stats.pricing.current_tier.max ?? stats.pricing.next_tier.min).toLocaleString()} certifications
                         </p>
-                      </>
-                    ) : (
-                      <p className="text-xs text-muted-foreground mt-1">per cert</p>
+                      </div>
                     )}
-                  </CardContent>
-                </Card>
-              )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 mb-6">
               {stats?.traffic && (
                 <>
                   <StatCard title="Total Visits" value={stats.traffic.total_visits} subtitle="All page views" icon={Globe} />
