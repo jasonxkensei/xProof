@@ -13,7 +13,7 @@ import { ProviderTypeEnum } from '@multiversx/sdk-dapp/out/providers/types/provi
 import { loginAction, logoutAction } from '@multiversx/sdk-dapp/out/store/actions/sharedActions/sharedActions';
 import { useGetIsLoggedIn } from '@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn';
 import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
-import { Shield, Wallet, Loader2 } from "lucide-react";
+import { Shield, Wallet, Globe, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
@@ -25,20 +25,24 @@ interface WalletLoginModalProps {
 }
 
 export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLoginModalProps) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<string | null>(null); // which button is loading
   const [error, setError] = useState<string | null>(null);
   const [waitingForConnection, setWaitingForConnection] = useState(false);
   const providerRef = useRef<any>(null);
   const syncAttempted = useRef(false);
+  const pendingTokenRef = useRef<string | null>(null);
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const isLoggedIn = useGetIsLoggedIn();
   const { address } = useGetAccount();
 
   const getNativeAuthToken = (): string | null => {
+    // First check if we have a token from the login result (most reliable)
+    if (pendingTokenRef.current) return pendingTokenRef.current;
+
     const keys = Object.keys(localStorage);
     for (const key of keys) {
-      if (key.includes('nativeAuth') || key.includes('token')) {
+      if (key.includes('nativeAuth') || key.includes('token') || key.includes('accessToken')) {
         const value = localStorage.getItem(key);
         if (value && value.length > 50) return value;
       }
@@ -47,7 +51,7 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
     if (direct) return direct;
     const sKeys = Object.keys(sessionStorage);
     for (const key of sKeys) {
-      if (key.includes('nativeAuth') || key.includes('token')) {
+      if (key.includes('nativeAuth') || key.includes('token') || key.includes('accessToken')) {
         const value = sessionStorage.getItem(key);
         if (value && value.length > 50) return value;
       }
@@ -58,7 +62,7 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
   const syncAndRedirect = useCallback(async (walletAddress: string): Promise<boolean> => {
     if (syncAttempted.current) return false;
     syncAttempted.current = true;
-    
+
     try {
       logger.log('Syncing wallet with backend:', walletAddress);
 
@@ -66,7 +70,7 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
       if (!nativeAuthToken) {
         logger.error('No native auth token available; cannot authenticate without cryptographic proof');
         setError('Authentication requires a cryptographic signature from your wallet. Please try connecting again.');
-        setLoading(false);
+        setLoading(null);
         setWaitingForConnection(false);
         syncAttempted.current = false;
         return false;
@@ -81,60 +85,61 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
         credentials: 'include',
         body: JSON.stringify({ walletAddress }),
       });
-      
+
       if (response.ok) {
         const userData = await response.json();
         logger.log('Backend sync successful');
-        
+
         localStorage.setItem('walletAddress', walletAddress);
-        
+        pendingTokenRef.current = null;
+
         loginAction({ address: walletAddress, providerType: ProviderTypeEnum.extension });
-        
+
         queryClient.setQueryData(['/api/auth/me'], userData);
         await queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
-        
+
         toast({
           title: "Wallet connected",
           description: `Connected: ${walletAddress.substring(0, 10)}...${walletAddress.slice(-6)}`,
         });
-        
+
         onOpenChange(false);
         navigate(redirectTo || '/dashboard');
-        
+
         return true;
       } else {
         const errorBody = await response.text().catch(() => 'Unknown error');
         logger.error('Backend sync failed:', response.status, errorBody);
-        
+
         setError('Sync failed. Please try again.');
-        setLoading(false);
+        setLoading(null);
         setWaitingForConnection(false);
         syncAttempted.current = false;
-        
+
         toast({
           title: "Connection error",
           description: "Unable to create your session.",
           variant: "destructive"
         });
-        
+
         return false;
       }
     } catch (err) {
       logger.error('Sync error:', err);
       setError('Server connection error.');
-      setLoading(false);
+      setLoading(null);
       setWaitingForConnection(false);
       syncAttempted.current = false;
-      
+
       toast({
         title: "Connection error",
         description: "An error occurred.",
         variant: "destructive"
       });
-      
+
       return false;
     }
-  }, [toast, onOpenChange, navigate]);
+  }, [toast, onOpenChange, navigate, redirectTo]);
 
   useEffect(() => {
     if (isLoggedIn && address && open && !syncAttempted.current) {
@@ -145,38 +150,44 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
 
   useEffect(() => {
     if (!open) {
-      setLoading(false);
+      setLoading(null);
       setError(null);
       setWaitingForConnection(false);
       syncAttempted.current = false;
+      pendingTokenRef.current = null;
     }
   }, [open]);
 
-  const handleExtensionLogin = async () => {
-    setLoading(true);
+  const handleProviderLogin = async (providerType: ProviderTypeEnum, buttonKey: string) => {
+    setLoading(buttonKey);
     setError(null);
     syncAttempted.current = false;
-    
+    pendingTokenRef.current = null;
+
     try {
       try { logoutAction(); } catch (_e) { /* cleanup non-fatal */ }
-      
-      const provider = await ProviderFactory.create({ 
-        type: ProviderTypeEnum.extension 
-      });
+
+      const provider = await ProviderFactory.create({ type: providerType });
       providerRef.current = provider;
-      
+
       if (typeof provider.init === 'function') {
         await provider.init();
       }
-      
+
       const loginResult = await provider.login();
-      
+
       let walletAddress = '';
-      
-      if (loginResult && typeof loginResult === 'object' && 'address' in loginResult) {
-        walletAddress = (loginResult as any).address;
+      let accessToken = '';
+
+      if (loginResult && typeof loginResult === 'object') {
+        if ('address' in loginResult) walletAddress = (loginResult as any).address;
+        if ('accessToken' in loginResult && (loginResult as any).accessToken) {
+          accessToken = (loginResult as any).accessToken;
+          pendingTokenRef.current = accessToken;
+          logger.log('Got accessToken from login result');
+        }
       }
-      
+
       if (!walletAddress) {
         try {
           if (typeof (provider as any).getAddress === 'function') {
@@ -184,17 +195,18 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
           }
         } catch (_e) { /* fallback */ }
       }
-      
+
       if (!walletAddress && (provider as any).account?.address) {
         walletAddress = (provider as any).account.address;
       }
-      
+
       if (walletAddress && walletAddress.startsWith('erd1')) {
         await syncAndRedirect(walletAddress);
       } else {
+        // For providers that resolve asynchronously (e.g. web wallet popup)
         setWaitingForConnection(true);
         let attempts = 0;
-        const maxAttempts = 30;
+        const maxAttempts = 60;
         const checkAddress = setInterval(async () => {
           attempts++;
           let addr = '';
@@ -203,11 +215,11 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
               addr = await (provider as any).getAddress();
             }
           } catch (_e) { /* retry */ }
-          
+
           if (!addr && (provider as any).account?.address) {
             addr = (provider as any).account.address;
           }
-          
+
           if (addr && addr.startsWith('erd1')) {
             clearInterval(checkAddress);
             setWaitingForConnection(false);
@@ -215,21 +227,21 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
           } else if (attempts >= maxAttempts) {
             clearInterval(checkAddress);
             setWaitingForConnection(false);
-            setLoading(false);
+            setLoading(null);
             setError('Connection timed out. Please refresh the page and try again.');
           }
         }, 500);
       }
     } catch (err: any) {
-      logger.error('Extension login error:', err);
-      const errorMsg = err.message || "Please install the MultiversX DeFi Wallet extension";
+      logger.error(`${providerType} login error:`, err);
+      const errorMsg = err.message || "Connection failed. Please try again.";
       setError(`Error: ${errorMsg}`);
       toast({
         title: "Connection failed",
         description: errorMsg,
         variant: "destructive"
       });
-      setLoading(false);
+      setLoading(null);
       setWaitingForConnection(false);
     }
   };
@@ -244,7 +256,7 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
               Connecting...
             </DialogTitle>
             <DialogDescription>
-              Approve the connection in your wallet extension
+              Complete the connection in the wallet window
             </DialogDescription>
           </DialogHeader>
 
@@ -268,7 +280,7 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
             Connect your wallet
           </DialogTitle>
           <DialogDescription>
-            Sign in with your MultiversX browser extension
+            Choose how to sign in with your MultiversX wallet
           </DialogDescription>
         </DialogHeader>
 
@@ -280,18 +292,39 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
 
         <div className="space-y-3 py-4">
           <Button
-            onClick={handleExtensionLogin}
-            disabled={loading}
+            onClick={() => handleProviderLogin(ProviderTypeEnum.crossWindow, 'webwallet')}
+            disabled={loading !== null}
             className="w-full justify-start gap-3"
             variant="default"
+            data-testid="button-webwallet-login"
+          >
+            {loading === 'webwallet' ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Globe className="h-5 w-5" />
+            )}
+            <div className="flex flex-col items-start text-left">
+              <span>Web Wallet</span>
+              <span className="text-xs font-normal opacity-70">wallet.multiversx.com — no extension needed</span>
+            </div>
+          </Button>
+
+          <Button
+            onClick={() => handleProviderLogin(ProviderTypeEnum.extension, 'extension')}
+            disabled={loading !== null}
+            className="w-full justify-start gap-3"
+            variant="outline"
             data-testid="button-extension-login"
           >
-            {loading ? (
+            {loading === 'extension' ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <Wallet className="h-5 w-5" />
             )}
-            <span>MultiversX Wallet Extension</span>
+            <div className="flex flex-col items-start text-left">
+              <span>Browser Extension</span>
+              <span className="text-xs font-normal opacity-70">MultiversX DeFi Wallet extension</span>
+            </div>
           </Button>
         </div>
 
