@@ -71,6 +71,21 @@ interface PublicStats {
     unique_ips: number;
     human_visitors: number;
     agent_visitors: number;
+    sources?: Array<{
+      referrer_host: string;
+      source_label: string;
+      visits: number;
+      unique_ips: number;
+      human_visits: number;
+      agent_visits: number;
+    }>;
+    sources_summary?: {
+      referred_visits: number;
+      referred_unique_ips: number;
+      unique_referrers: number;
+      direct_visits: number;
+      direct_unique_ips: number;
+    };
   };
   agents?: {
     unique_active: number;
@@ -577,79 +592,104 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            {trafficSources && (
-              <Card className="mb-6" data-testid="card-traffic-sources">
-                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                  <CardTitle className="text-sm font-medium">Traffic Sources (Referer)</CardTitle>
-                  <Link2 className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-4 mb-4 text-sm">
-                    <span className="text-muted-foreground">
-                      <span className="font-medium text-foreground">{trafficSources.summary.total_unique_ips}</span> unique visitors total
-                    </span>
-                    <span className="text-muted-foreground">
-                      <span className="font-medium text-foreground">{trafficSources.summary.referred_unique_ips}</span> from external sources
-                    </span>
-                    <span className="text-muted-foreground">
-                      <span className="font-medium text-foreground">{trafficSources.summary.unique_referrers}</span> distinct referrers
-                    </span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm" data-testid="table-traffic-sources">
-                      <thead>
-                        <tr className="border-b text-muted-foreground">
-                          <th className="text-left pb-2 pr-4 font-medium">Source</th>
-                          <th className="text-left pb-2 pr-4 font-medium">Host</th>
-                          <th className="text-right pb-2 pr-4 font-medium">Visits</th>
-                          <th className="text-right pb-2 pr-4 font-medium">Unique IPs</th>
-                          <th className="text-right pb-2 pr-4 font-medium">Humans</th>
-                          <th className="text-right pb-2 font-medium">Agents</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {trafficSources.rows.map((row, i) => (
-                          <tr key={i} className="border-b" data-testid={`row-traffic-${i}`}>
-                            <td className="py-2 pr-4">
-                              <Badge variant="secondary" className="text-xs">{row.source_label}</Badge>
-                            </td>
-                            <td className="py-2 pr-4 text-xs text-muted-foreground font-mono truncate max-w-[200px]">{row.referrer_host}</td>
-                            <td className="py-2 pr-4 text-right font-medium">{row.visits}</td>
-                            <td className="py-2 pr-4 text-right text-muted-foreground">{row.unique_ips}</td>
-                            <td className="py-2 pr-4 text-right text-muted-foreground">{row.human_visits}</td>
-                            <td className="py-2 text-right text-muted-foreground">{row.agent_visits}</td>
+            {(() => {
+              const adminRows = trafficSources?.rows;
+              const adminSummary = trafficSources?.summary;
+              const publicRows = stats?.traffic?.sources;
+              const publicSummary = stats?.traffic?.sources_summary;
+              const rows = adminRows ?? publicRows ?? [];
+              const summary = adminSummary
+                ? {
+                    total_unique_ips: adminSummary.total_unique_ips,
+                    referred_unique_ips: adminSummary.referred_unique_ips,
+                    unique_referrers: adminSummary.unique_referrers,
+                    direct_visits: adminSummary.direct_visits,
+                    direct_unique_ips: adminSummary.direct_unique_ips,
+                  }
+                : publicSummary
+                ? {
+                    total_unique_ips: stats?.traffic?.unique_ips ?? 0,
+                    referred_unique_ips: publicSummary.referred_unique_ips,
+                    unique_referrers: publicSummary.unique_referrers,
+                    direct_visits: publicSummary.direct_visits,
+                    direct_unique_ips: publicSummary.direct_unique_ips,
+                  }
+                : null;
+              if (!summary) return null;
+              return (
+                <Card className="mb-6" data-testid="card-traffic-sources">
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                    <CardTitle className="text-sm font-medium">Traffic Sources (Referer)</CardTitle>
+                    <Link2 className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-4 mb-4 text-sm">
+                      <span className="text-muted-foreground">
+                        <span className="font-medium text-foreground">{summary.total_unique_ips}</span> unique visitors total
+                      </span>
+                      <span className="text-muted-foreground">
+                        <span className="font-medium text-foreground">{summary.referred_unique_ips}</span> from external sources
+                      </span>
+                      <span className="text-muted-foreground">
+                        <span className="font-medium text-foreground">{summary.unique_referrers}</span> distinct referrers
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm" data-testid="table-traffic-sources">
+                        <thead>
+                          <tr className="border-b text-muted-foreground">
+                            <th className="text-left pb-2 pr-4 font-medium">Source</th>
+                            <th className="text-left pb-2 pr-4 font-medium">Host</th>
+                            <th className="text-right pb-2 pr-4 font-medium">Visits</th>
+                            <th className="text-right pb-2 pr-4 font-medium">Unique IPs</th>
+                            <th className="text-right pb-2 pr-4 font-medium">Humans</th>
+                            <th className="text-right pb-2 font-medium">Agents</th>
                           </tr>
-                        ))}
-                        {trafficSources.summary.direct_visits > 0 && (
-                          <tr className="last:border-0" data-testid="row-traffic-direct">
-                            <td className="py-2 pr-4">
-                              <Badge variant="outline" className="text-xs text-muted-foreground">Direct / Bookmark</Badge>
-                            </td>
-                            <td className="py-2 pr-4 text-xs text-muted-foreground">no referer</td>
-                            <td className="py-2 pr-4 text-right font-medium">{trafficSources.summary.direct_visits}</td>
-                            <td className="py-2 pr-4 text-right text-muted-foreground">{trafficSources.summary.direct_unique_ips}</td>
-                            <td className="py-2 pr-4 text-right text-muted-foreground">—</td>
-                            <td className="py-2 text-right text-muted-foreground">—</td>
-                          </tr>
-                        )}
-                        {trafficSources.rows.length === 0 && trafficSources.summary.direct_visits === 0 && (
-                          <tr>
-                            <td colSpan={6} className="py-4 text-center text-sm text-muted-foreground">
-                              No visits recorded yet.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  {trafficSources.rows.length === 0 && trafficSources.summary.direct_visits > 0 && (
-                    <p className="text-xs text-muted-foreground mt-3">
-                      All visits so far are direct (no Referer header). External traffic from search engines or social platforms will appear here once visitors arrive via a link.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                        </thead>
+                        <tbody>
+                          {rows.map((row, i) => (
+                            <tr key={i} className="border-b" data-testid={`row-traffic-${i}`}>
+                              <td className="py-2 pr-4">
+                                <Badge variant="secondary" className="text-xs">{row.source_label}</Badge>
+                              </td>
+                              <td className="py-2 pr-4 text-xs text-muted-foreground font-mono truncate max-w-[200px]">{row.referrer_host}</td>
+                              <td className="py-2 pr-4 text-right font-medium">{row.visits}</td>
+                              <td className="py-2 pr-4 text-right text-muted-foreground">{row.unique_ips}</td>
+                              <td className="py-2 pr-4 text-right text-muted-foreground">{row.human_visits}</td>
+                              <td className="py-2 text-right text-muted-foreground">{row.agent_visits}</td>
+                            </tr>
+                          ))}
+                          {summary.direct_visits > 0 && (
+                            <tr className="last:border-0" data-testid="row-traffic-direct">
+                              <td className="py-2 pr-4">
+                                <Badge variant="outline" className="text-xs text-muted-foreground">Direct / Bookmark</Badge>
+                              </td>
+                              <td className="py-2 pr-4 text-xs text-muted-foreground">no referer</td>
+                              <td className="py-2 pr-4 text-right font-medium">{summary.direct_visits}</td>
+                              <td className="py-2 pr-4 text-right text-muted-foreground">{summary.direct_unique_ips}</td>
+                              <td className="py-2 pr-4 text-right text-muted-foreground">—</td>
+                              <td className="py-2 text-right text-muted-foreground">—</td>
+                            </tr>
+                          )}
+                          {rows.length === 0 && summary.direct_visits === 0 && (
+                            <tr>
+                              <td colSpan={6} className="py-4 text-center text-sm text-muted-foreground">
+                                No visits recorded yet.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    {rows.length === 0 && summary.direct_visits > 0 && (
+                      <p className="text-xs text-muted-foreground mt-3">
+                        All visits so far are direct (no Referer header). External traffic from search engines or social platforms will appear here once visitors arrive via a link.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             {utmStats && utmStats.rows.length > 0 && (
               <Card className="mb-6" data-testid="card-utm-attribution">

@@ -159,6 +159,33 @@ export function registerAdminRoutes(app: Express) {
       const [humanVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, false));
       const [agentVisitsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ip_hash)` }).from(visits).where(eq(visits.isAgent, true));
 
+      // Public traffic-source breakdown (referer hostname only — no PII).
+      // Top 20 referrers + direct/referred summary so /stats viewers see
+      // where humans actually come from without needing admin login.
+      const trafficSourceRows = await db.execute(sql`
+        SELECT
+          referrer_host,
+          COUNT(*) AS visits,
+          COUNT(DISTINCT ip_hash) AS unique_ips,
+          COUNT(*) FILTER (WHERE NOT is_agent) AS human_visits,
+          COUNT(*) FILTER (WHERE is_agent) AS agent_visits
+        FROM visits
+        WHERE referrer_host IS NOT NULL
+        GROUP BY referrer_host
+        ORDER BY visits DESC
+        LIMIT 20
+      `);
+      const trafficSummaryRow = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE referrer_host IS NOT NULL) AS referred_visits,
+          COUNT(DISTINCT ip_hash) FILTER (WHERE referrer_host IS NOT NULL) AS referred_unique_ips,
+          COUNT(DISTINCT referrer_host) AS unique_referrers,
+          COUNT(*) FILTER (WHERE referrer_host IS NULL) AS direct_visits,
+          COUNT(DISTINCT ip_hash) FILTER (WHERE referrer_host IS NULL) AS direct_unique_ips
+        FROM visits
+      `);
+      const trafficSummary = (trafficSummaryRow.rows[0] as Record<string, string>) || {};
+
       const [uniqueAgentsRow] = await db.select({ count: sql<number>`COUNT(DISTINCT ${users.id})` }).from(apiKeys).innerJoin(users, eq(apiKeys.userId, users.id)).where(and(eq(apiKeys.isActive, true), gt(apiKeys.requestCount, 0), sql`${users.isTrial} IS NOT TRUE`));
       const [totalApiKeysRow] = await db.select({ count: count() }).from(apiKeys).innerJoin(users, eq(apiKeys.userId, users.id)).where(and(eq(apiKeys.isActive, true), sql`${users.isTrial} IS NOT TRUE`));
       const [trialAgentsRow] = await db.select({ count: count() }).from(users).where(eq(users.isTrial, true));
@@ -199,6 +226,21 @@ export function registerAdminRoutes(app: Express) {
             unique_ips: Number(uniqueIpsRow.count) || 0,
             human_visitors: Number(humanVisitsRow.count) || 0,
             agent_visitors: Number(agentVisitsRow.count) || 0,
+            sources: (trafficSourceRows.rows as Array<Record<string, string | null>>).map(r => ({
+              referrer_host: r.referrer_host,
+              source_label: labelForReferrerHost(r.referrer_host || ""),
+              visits: parseInt(r.visits as string || "0"),
+              unique_ips: parseInt(r.unique_ips as string || "0"),
+              human_visits: parseInt(r.human_visits as string || "0"),
+              agent_visits: parseInt(r.agent_visits as string || "0"),
+            })),
+            sources_summary: {
+              referred_visits: parseInt(trafficSummary.referred_visits || "0"),
+              referred_unique_ips: parseInt(trafficSummary.referred_unique_ips || "0"),
+              unique_referrers: parseInt(trafficSummary.unique_referrers || "0"),
+              direct_visits: parseInt(trafficSummary.direct_visits || "0"),
+              direct_unique_ips: parseInt(trafficSummary.direct_unique_ips || "0"),
+            },
           },
           agents: {
             unique_active: uniqueAgentsRow.count,
