@@ -1631,7 +1631,14 @@ MCP tool: audit_agent_session (same params, enforces auth)
 
   // robots.txt for SEO and AI agent discovery
   app.get("/robots.txt", (req, res) => {
-    const baseUrl = `https://${req.get('host')}`;
+    // In production always advertise the canonical hostname so an
+    // attacker-controlled or proxy-rewritten Host header cannot poison
+    // the sitemap URL or any indexed canonical link. Dev only echoes
+    // the request host to keep local previews self-consistent.
+    const hostHeader = req.get('host') || '';
+    const isProd = process.env.NODE_ENV === 'production';
+    const canonicalHost = isProd ? 'xproof.app' : hostHeader || 'xproof.app';
+    const baseUrl = `https://${canonicalHost}`;
     const content = `User-agent: *
 Allow: /
 
@@ -1661,86 +1668,45 @@ Sitemap: ${baseUrl}/sitemap.xml
     res.send(content);
   });
 
-  // sitemap.xml for SEO
+  // sitemap.xml for SEO — only real HTML pages.
+  // Non-HTML discovery files (.json, .txt, .md, .py, .ts) are still
+  // exposed via robots.txt comments and Link headers, but listing them
+  // here causes Lighthouse/SEO crawlers to flag the site as "blocked
+  // from indexing" because they expect only crawlable HTML in a sitemap.
   app.get("/sitemap.xml", (req, res) => {
-    const baseUrl = `https://${req.get('host')}`;
+    // In production always emit the canonical hostname so the indexed
+    // URLs never depend on the request Host header (which a proxy or
+    // attacker can rewrite). Dev mirrors the request host for local
+    // previews only.
+    const hostHeader = req.get('host') || '';
+    const isProd = process.env.NODE_ENV === 'production';
+    const canonicalHost = isProd ? 'xproof.app' : hostHeader || 'xproof.app';
+    const baseUrl = `https://${canonicalHost}`;
+
+    const htmlPages: Array<{ path: string; changefreq: string; priority: string }> = [
+      { path: '/',                       changefreq: 'weekly',  priority: '1.0' },
+      { path: '/agents',                 changefreq: 'daily',   priority: '0.9' },
+      { path: '/leaderboard',            changefreq: 'daily',   priority: '0.9' },
+      { path: '/compare',                changefreq: 'weekly',  priority: '0.7' },
+      { path: '/stats',                  changefreq: 'daily',   priority: '0.8' },
+      { path: '/docs',                   changefreq: 'monthly', priority: '0.8' },
+      { path: '/docs/trading',           changefreq: 'monthly', priority: '0.7' },
+      { path: '/docs/4w',                changefreq: 'monthly', priority: '0.7' },
+      { path: '/docs/base-violations',   changefreq: 'monthly', priority: '0.7' },
+      { path: '/legal/mentions',         changefreq: 'yearly',  priority: '0.3' },
+      { path: '/legal/privacy',          changefreq: 'yearly',  priority: '0.3' },
+      { path: '/legal/terms',            changefreq: 'yearly',  priority: '0.3' },
+    ];
+
+    const urls = htmlPages.map(({ path, changefreq, priority }) => `  <url>
+    <loc>${baseUrl}${path}</loc>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+  </url>`).join('\n');
+
     const content = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${baseUrl}/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/.well-known/xproof.md</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/genesis.proof.json</loc>
-    <changefreq>never</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/learn/proof-of-existence.md</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/learn/verification.md</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/learn/api.md</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/llms.txt</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/llms-full.txt</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/.well-known/agent.json</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/.well-known/xproof.json</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/.well-known/agent-audit-schema.json</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/agent-tools/audit-guard-langchain.py</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/agent-tools/audit-guard-crewai.py</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/agent-tools/audit-guard-n8n.json</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/agent-tools/audit-guard-eliza.ts</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
+${urls}
 </urlset>`;
     res.setHeader('Content-Type', 'application/xml');
     res.send(content);

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ProviderFactory } from '@multiversx/sdk-dapp/out/providers/ProviderFactory';
 import { ProviderTypeEnum } from '@multiversx/sdk-dapp/out/providers/types/providerFactory.types';
 import { loginAction, logoutAction } from '@multiversx/sdk-dapp/out/store/actions/sharedActions/sharedActions';
+import { nativeAuth } from '@multiversx/sdk-dapp/out/services/nativeAuth/nativeAuth';
 import { useGetIsLoggedIn } from '@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn';
 import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
 import { Shield, Wallet, Globe, Loader2 } from "lucide-react";
@@ -174,17 +175,40 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
         await provider.init();
       }
 
-      const loginResult = await provider.login();
+      // Generate the nativeAuth init token. The wallet will sign this and
+      // return a signature, which we then compose into the final auth token.
+      // Without this, the wallet has nothing to sign and no token comes back.
+      const nativeAuthClient = nativeAuth({ expirySeconds: 86400 });
+      const initToken = await nativeAuthClient.initialize();
+      logger.log('Generated nativeAuth init token');
+
+      const loginResult = await provider.login({ token: initToken });
 
       let walletAddress = '';
-      let accessToken = '';
+      let signature = '';
 
       if (loginResult && typeof loginResult === 'object') {
         if ('address' in loginResult) walletAddress = (loginResult as any).address;
+        if ('signature' in loginResult) signature = (loginResult as any).signature || '';
+        // Some providers return the full nativeAuth token directly
         if ('accessToken' in loginResult && (loginResult as any).accessToken) {
-          accessToken = (loginResult as any).accessToken;
-          pendingTokenRef.current = accessToken;
-          logger.log('Got accessToken from login result');
+          pendingTokenRef.current = (loginResult as any).accessToken;
+          logger.log('Got accessToken directly from login result');
+        }
+      }
+
+      // If we have address + signature but no accessToken, compose it ourselves
+      if (!pendingTokenRef.current && walletAddress && signature) {
+        try {
+          const finalToken = nativeAuthClient.getToken({
+            address: walletAddress,
+            token: initToken,
+            signature,
+          });
+          pendingTokenRef.current = finalToken;
+          logger.log('Composed nativeAuth token from address + init + signature');
+        } catch (e) {
+          logger.error('Failed to compose nativeAuth token', e);
         }
       }
 
