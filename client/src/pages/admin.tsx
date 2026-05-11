@@ -68,6 +68,7 @@ interface PublicStats {
     certifications_until_next_tier: number | null;
   };
   traffic?: {
+    total_visits: number;
     unique_ips: number;
     human_visitors: number;
     agent_visitors: number;
@@ -359,6 +360,12 @@ export default function AdminDashboard() {
             {stats?.traffic && (
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
                 <StatCard
+                  title="Visiteurs"
+                  value={stats.traffic.total_visits}
+                  subtitle="Pages vues (toutes confondues)"
+                  icon={Globe}
+                />
+                <StatCard
                   title="Unique Visitors"
                   value={stats.traffic.human_visitors}
                   subtitle="Distinct human IPs"
@@ -608,7 +615,7 @@ export default function AdminDashboard() {
                   }
                 : publicSummary
                 ? {
-                    total_unique_ips: stats?.traffic?.unique_ips ?? 0,
+                    total_unique_ips: stats?.traffic?.human_visitors ?? 0,
                     referred_unique_ips: publicSummary.referred_unique_ips,
                     unique_referrers: publicSummary.unique_referrers,
                     direct_visits: publicSummary.direct_visits,
@@ -625,7 +632,7 @@ export default function AdminDashboard() {
                   <CardContent>
                     <div className="flex flex-wrap gap-4 mb-4 text-sm">
                       <span className="text-muted-foreground">
-                        <span className="font-medium text-foreground">{summary.total_unique_ips}</span> unique visitors total
+                        <span className="font-medium text-foreground">{summary.total_unique_ips}</span> unique human visitors
                       </span>
                       <span className="text-muted-foreground">
                         <span className="font-medium text-foreground">{summary.referred_unique_ips}</span> from external sources
