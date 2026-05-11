@@ -14,7 +14,7 @@ import { loginAction, logoutAction } from '@multiversx/sdk-dapp/out/store/action
 import { nativeAuth } from '@multiversx/sdk-dapp/out/services/nativeAuth/nativeAuth';
 import { useGetIsLoggedIn } from '@multiversx/sdk-dapp/out/react/account/useGetIsLoggedIn';
 import { useGetAccount } from '@multiversx/sdk-dapp/out/react/account/useGetAccount';
-import { Shield, Wallet, Globe, Loader2 } from "lucide-react";
+import { Shield, Wallet, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
@@ -308,36 +308,12 @@ export function WalletLoginModal({ open, onOpenChange, redirectTo }: WalletLogin
           </DialogDescription>
         </DialogHeader>
 
-        {error && (
-          <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
-            {error}
-          </div>
-        )}
-
         <div className="space-y-3 py-4">
-          <Button
-            onClick={() => handleProviderLogin(ProviderTypeEnum.crossWindow, 'webwallet')}
-            disabled={loading !== null}
-            className="w-full justify-start gap-3"
-            variant="default"
-            data-testid="button-webwallet-login"
-          >
-            {loading === 'webwallet' ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Globe className="h-5 w-5" />
-            )}
-            <div className="flex flex-col items-start text-left">
-              <span>Web Wallet</span>
-              <span className="text-xs font-normal opacity-70">wallet.multiversx.com — no extension needed</span>
-            </div>
-          </Button>
-
           <Button
             onClick={() => handleProviderLogin(ProviderTypeEnum.extension, 'extension')}
             disabled={loading !== null}
             className="w-full justify-start gap-3"
-            variant="outline"
+            variant="default"
             data-testid="button-extension-login"
           >
             {loading === 'extension' ? (
