@@ -327,9 +327,13 @@ export function registerAdminRoutes(app: Express) {
 
       const summary = await db.execute(sql`
         SELECT
-          COUNT(*) AS total_utm_visits,
-          COUNT(DISTINCT ip_hash) AS total_utm_unique_ips,
-          COUNT(DISTINCT utm_source) AS total_sources,
+          COUNT(*) FILTER (WHERE utm_source IS NOT NULL) AS total_utm_visits,
+          COUNT(DISTINCT ip_hash) FILTER (WHERE utm_source IS NOT NULL) AS total_utm_unique_ips,
+          COUNT(DISTINCT utm_source) FILTER (WHERE utm_source IS NOT NULL) AS total_sources,
+          COUNT(*) FILTER (WHERE utm_source IS NULL) AS direct_visits,
+          COUNT(DISTINCT ip_hash) FILTER (WHERE utm_source IS NULL) AS direct_unique_ips,
+          COUNT(*) AS total_all_visits,
+          COUNT(DISTINCT ip_hash) AS total_all_unique_ips,
           (
             SELECT COUNT(DISTINCT u.id)
             FROM (
@@ -342,7 +346,6 @@ export function registerAdminRoutes(app: Express) {
               AND u.created_at <= ft.touched_at + INTERVAL '24 hours'
           ) AS total_conversions
         FROM visits
-        WHERE utm_source IS NOT NULL
       `);
 
       const s = (summary.rows[0] as Record<string, string>) || {};
@@ -360,6 +363,10 @@ export function registerAdminRoutes(app: Express) {
           total_utm_unique_ips: parseInt(s.total_utm_unique_ips || "0"),
           total_sources: parseInt(s.total_sources || "0"),
           total_conversions: parseInt(s.total_conversions || "0"),
+          direct_visits: parseInt(s.direct_visits || "0"),
+          direct_unique_ips: parseInt(s.direct_unique_ips || "0"),
+          total_all_visits: parseInt(s.total_all_visits || "0"),
+          total_all_unique_ips: parseInt(s.total_all_unique_ips || "0"),
         },
         generated_at: new Date().toISOString(),
       });

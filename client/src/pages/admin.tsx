@@ -103,6 +103,10 @@ interface UtmStats {
     total_utm_unique_ips: number;
     total_sources: number;
     total_conversions: number;
+    direct_visits: number;
+    direct_unique_ips: number;
+    total_all_visits: number;
+    total_all_unique_ips: number;
   };
   generated_at: string;
 }
@@ -545,53 +549,63 @@ export default function AdminDashboard() {
             {utmStats && (
               <Card className="mb-6" data-testid="card-utm-attribution">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                  <CardTitle className="text-sm font-medium">UTM Attribution</CardTitle>
+                  <CardTitle className="text-sm font-medium">Traffic Sources</CardTitle>
                   <Link2 className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  {utmStats.rows.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No UTM visits recorded yet. Add <code className="text-xs bg-muted px-1 rounded">?utm_source=moltbook</code> to your CTA links.</p>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap gap-4 mb-4 text-sm">
-                        <span className="text-muted-foreground">
-                          <span className="font-medium text-foreground">{utmStats.summary.total_utm_visits}</span> UTM visits
-                        </span>
-                        <span className="text-muted-foreground">
-                          <span className="font-medium text-foreground">{utmStats.summary.total_utm_unique_ips}</span> unique IPs
-                        </span>
-                        <span className="text-muted-foreground">
-                          <span className="font-medium text-foreground">{utmStats.summary.total_sources}</span> sources
-                        </span>
-                        <span className="text-muted-foreground">
-                          <span className="font-medium text-foreground">{utmStats.summary.total_conversions}</span> conversions
-                        </span>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm" data-testid="table-utm-stats">
-                          <thead>
-                            <tr className="border-b text-muted-foreground">
-                              <th className="text-left pb-2 pr-4 font-medium">Source</th>
-                              <th className="text-right pb-2 pr-4 font-medium">Visits</th>
-                              <th className="text-right pb-2 pr-4 font-medium">Unique IPs</th>
-                              <th className="text-right pb-2 font-medium">Conversions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {utmStats.rows.map((row, i) => (
-                              <tr key={i} className="border-b last:border-0" data-testid={`row-utm-${i}`}>
-                                <td className="py-2 pr-4">
-                                  <Badge variant="secondary" className="font-mono text-xs">{row.utm_source ?? "—"}</Badge>
-                                </td>
-                                <td className="py-2 pr-4 text-right font-medium">{row.visits}</td>
-                                <td className="py-2 pr-4 text-right text-muted-foreground">{row.unique_ips}</td>
-                                <td className="py-2 text-right font-medium text-foreground" data-testid={`utm-conversions-${i}`}>{row.conversions}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </>
+                  <div className="flex flex-wrap gap-4 mb-4 text-sm">
+                    <span className="text-muted-foreground">
+                      <span className="font-medium text-foreground">{utmStats.summary.total_all_unique_ips}</span> unique visitors (all sources)
+                    </span>
+                    <span className="text-muted-foreground">
+                      <span className="font-medium text-foreground">{utmStats.summary.total_conversions}</span> conversions
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" data-testid="table-utm-stats">
+                      <thead>
+                        <tr className="border-b text-muted-foreground">
+                          <th className="text-left pb-2 pr-4 font-medium">Source</th>
+                          <th className="text-right pb-2 pr-4 font-medium">Visits</th>
+                          <th className="text-right pb-2 pr-4 font-medium">Unique IPs</th>
+                          <th className="text-right pb-2 font-medium">Conversions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {utmStats.rows.map((row, i) => (
+                          <tr key={i} className="border-b" data-testid={`row-utm-${i}`}>
+                            <td className="py-2 pr-4">
+                              <Badge variant="secondary" className="font-mono text-xs">{row.utm_source ?? "—"}</Badge>
+                            </td>
+                            <td className="py-2 pr-4 text-right font-medium">{row.visits}</td>
+                            <td className="py-2 pr-4 text-right text-muted-foreground">{row.unique_ips}</td>
+                            <td className="py-2 text-right font-medium text-foreground" data-testid={`utm-conversions-${i}`}>{row.conversions}</td>
+                          </tr>
+                        ))}
+                        {utmStats.summary.direct_visits > 0 && (
+                          <tr className="last:border-0" data-testid="row-utm-direct">
+                            <td className="py-2 pr-4">
+                              <Badge variant="outline" className="font-mono text-xs text-muted-foreground">direct / unknown</Badge>
+                            </td>
+                            <td className="py-2 pr-4 text-right font-medium">{utmStats.summary.direct_visits}</td>
+                            <td className="py-2 pr-4 text-right text-muted-foreground">{utmStats.summary.direct_unique_ips}</td>
+                            <td className="py-2 text-right text-muted-foreground">—</td>
+                          </tr>
+                        )}
+                        {utmStats.rows.length === 0 && utmStats.summary.direct_visits === 0 && (
+                          <tr>
+                            <td colSpan={4} className="py-4 text-center text-sm text-muted-foreground">
+                              No visits recorded yet. Add <code className="text-xs bg-muted px-1 rounded">?utm_source=twitter</code> to your links.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {utmStats.rows.length === 0 && utmStats.summary.direct_visits > 0 && (
+                    <p className="text-xs text-muted-foreground mt-3">
+                      All visits are untagged. Add <code className="bg-muted px-1 rounded">?utm_source=twitter</code> to your links to identify traffic sources.
+                    </p>
                   )}
                 </CardContent>
               </Card>
