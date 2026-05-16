@@ -702,14 +702,20 @@ function CalibrationGapChart({ points }: { points: CalibrationPoint[] }) {
 
 function CalibrationCard({ data }: { data: CalibrationData }) {
   const [expanded, setExpanded] = useState(false);
+  const [hovered, setHovered] = useState(false);
   if (!data.calibration || data.outcome_count === 0) return null;
 
   const { mean_gap, variance, bias_label } = data.calibration;
   const style = BIAS_STYLES[bias_label] ?? BIAS_STYLES.calibrated;
   const hasChart = data.time_series.length >= 2;
+  const showChart = expanded || hovered;
 
   return (
-    <Card data-testid="card-calibration">
+    <Card
+      data-testid="card-calibration"
+      onMouseEnter={() => hasChart && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base flex-wrap">
           <Target className="h-4 w-4" />
@@ -789,7 +795,7 @@ function CalibrationCard({ data }: { data: CalibrationData }) {
             : "Anchored confidence systematically underestimates actual outcomes. Mean gap < −0.10."}
         </p>
 
-        {expanded && hasChart && (
+        {showChart && hasChart && (
           <CalibrationGapChart points={[...data.time_series].reverse()} />
         )}
       </CardContent>
@@ -832,7 +838,10 @@ export default function AgentProfilePage() {
 
   const { data: calibrationData } = useQuery<CalibrationData>({
     queryKey: ["/api/agent/calibration", wallet],
-    queryFn: () => fetch(`/api/agent/calibration/${wallet}`).then((r) => r.json()),
+    queryFn: () => fetch(`/api/agent/calibration/${wallet}`).then((r) => {
+      if (!r.ok) throw new Error("calibration_fetch_failed");
+      return r.json();
+    }),
     enabled: !!wallet,
   });
 
