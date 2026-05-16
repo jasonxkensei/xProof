@@ -5,6 +5,7 @@ import { logger } from "../logger";
 import { users, apiKeys, certifications, acpCheckouts } from "@shared/schema";
 import { eq, and, gte } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+import { pgCheckRateLimit } from "../pgRateLimit";
 
 /**
  * Attempt to displace an ACP-pending reservation row for the given fileHash.
@@ -113,25 +114,12 @@ export function getClientIp(req: express.Request): string {
   return req.socket?.remoteAddress || "unknown";
 }
 
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_MAX = 100;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
-export function checkRateLimit(identifier: string): { allowed: boolean; remaining: number; resetAt: number } {
-  const now = Date.now();
-  const entry = rateLimitMap.get(identifier);
-
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(identifier, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return { allowed: true, remaining: RATE_LIMIT_MAX - 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX) {
-    return { allowed: false, remaining: 0, resetAt: entry.resetAt };
-  }
-
-  entry.count++;
-  return { allowed: true, remaining: RATE_LIMIT_MAX - entry.count, resetAt: entry.resetAt };
+// PostgreSQL-backed rate limiter — survives restarts and works across instances.
+export async function checkRateLimit(identifier: string): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  return pgCheckRateLimit("apikey", identifier, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
 }
 
 export const RATE_LIMIT_MAX_VALUE = RATE_LIMIT_MAX;
@@ -180,7 +168,7 @@ export async function validateApiKey(req: express.Request, res: express.Response
     });
   }
 
-  const rateLimit = checkRateLimit(apiKey.id);
+  const rateLimit = await checkRateLimit(apiKey.id);
   res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
   res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
   res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
@@ -302,7 +290,6 @@ export async function refundTrialCredit(userId: string, count: number = 1): Prom
     .where(eq(users.id, userId));
 }
 
-export const registerRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 export const REGISTER_RATE_LIMIT_MAX = 10;
 export const REGISTER_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 

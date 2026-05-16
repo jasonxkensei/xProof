@@ -11,6 +11,7 @@ import {
   setupProcessErrorHandlers 
 } from "./reliability";
 import { startTxQueueWorker } from "./txQueue";
+import { ensureRateLimitTable } from "./pgRateLimit";
 import { computeTrustScoreByWallet } from "./trust";
 import { pool, db } from "./db";
 import { users } from "@shared/schema";
@@ -453,6 +454,7 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
     startTxQueueWorker();
+    ensureRateLimitTable();
     migrateSystemUserCertifications();
     migrateAgentViolationsTable();
     migrateAgentOutcomesTable();

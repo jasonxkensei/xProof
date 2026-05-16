@@ -1,0 +1,149 @@
+import { pool } from "./db";
+import { logger } from "./logger";
+
+// ── Table DDL ──────────────────────────────────────────────────────────────
+// Bucket key format: "{namespace}:{key}:{window_start_unix_ms}"
+// One row per (identifier × window), cleaned up periodically.
+export async function ensureRateLimitTable(): Promise<void> {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rate_limit_counters (
+        bucket   TEXT PRIMARY KEY,
+        count    INTEGER NOT NULL DEFAULT 0,
+        reset_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS rate_limit_counters_reset_at_idx
+        ON rate_limit_counters (reset_at)
+    `);
+    logger.info("rate_limit_counters table ready", { component: "migration" });
+    // Background cleanup: remove expired rows every 5 minutes
+    const timer = setInterval(async () => {
+      try {
+        await pool.query(`DELETE FROM rate_limit_counters WHERE reset_at <= NOW()`);
+      } catch {
+        // non-fatal: cleanup will retry on the next tick
+      }
+    }, 5 * 60 * 1000);
+    if (typeof timer.unref === "function") timer.unref();
+  } catch (err) {
+    logger.error("Failed to create rate_limit_counters table", {
+      component: "pgRateLimit",
+      error: String(err),
+    });
+  }
+}
+
+// ── Atomic increment ───────────────────────────────────────────────────────
+// Uses a fixed-window bucket (window_start encoded in the key) so ON CONFLICT
+// is a simple increment — no CASE branching needed.
+async function pgIncrement(
+  namespace: string,
+  key: string,
+  windowMs: number,
+): Promise<{ count: number; resetAt: Date }> {
+  const now = Date.now();
+  const windowStart = Math.floor(now / windowMs) * windowMs;
+  const resetAt = new Date(windowStart + windowMs);
+  const bucket = `${namespace}:${key}:${windowStart}`;
+
+  const result = await pool.query<{ count: number; reset_at: Date }>(
+    `INSERT INTO rate_limit_counters (bucket, count, reset_at)
+     VALUES ($1, 1, $2)
+     ON CONFLICT (bucket) DO UPDATE
+       SET count = rate_limit_counters.count + 1
+     RETURNING count, reset_at`,
+    [bucket, resetAt],
+  );
+  return { count: result.rows[0].count, resetAt: result.rows[0].reset_at };
+}
+
+// ── pgCheckRateLimit ───────────────────────────────────────────────────────
+// Drop-in replacement for the old in-memory checkRateLimit / checkMcpRateLimit.
+// Fails open on DB error so a database outage does not take down all traffic.
+export async function pgCheckRateLimit(
+  namespace: string,
+  key: string,
+  limit: number,
+  windowMs: number,
+): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  try {
+    const { count, resetAt } = await pgIncrement(namespace, key, windowMs);
+    return {
+      allowed: count <= limit,
+      remaining: Math.max(0, limit - count),
+      resetAt: resetAt.getTime(),
+    };
+  } catch (err) {
+    // Fail open: a DB outage should not block all traffic; log and allow.
+    logger.warn("pgCheckRateLimit: DB error, failing open", {
+      component: "pgRateLimit",
+      namespace,
+      error: String(err),
+    });
+    const resetAt = Math.floor(Date.now() / windowMs) * windowMs + windowMs;
+    return { allowed: true, remaining: limit, resetAt };
+  }
+}
+
+// ── PgRateLimitStore ───────────────────────────────────────────────────────
+// Implements the express-rate-limit v7/v8 Store interface backed by PostgreSQL.
+// Pass a unique namespace string so different limiters do not share counters.
+export class PgRateLimitStore {
+  private namespace: string;
+  private windowMs: number;
+
+  // localKeys = false signals to express-rate-limit that this is a shared
+  // (cross-process) store, so it should not apply its own in-memory fallback.
+  localKeys = false;
+
+  constructor(namespace: string, windowMs = 60_000) {
+    this.namespace = namespace;
+    this.windowMs = windowMs;
+  }
+
+  // Called by express-rate-limit when the middleware is set up.
+  init(options: { windowMs: number; [k: string]: unknown }): void {
+    this.windowMs = options.windowMs;
+  }
+
+  async increment(key: string): Promise<{ totalHits: number; resetTime: Date }> {
+    try {
+      const { count, resetAt } = await pgIncrement(this.namespace, key, this.windowMs);
+      return { totalHits: count, resetTime: resetAt };
+    } catch (err) {
+      logger.warn("PgRateLimitStore.increment: DB error, failing open", {
+        component: "pgRateLimit",
+        namespace: this.namespace,
+        error: String(err),
+      });
+      // Fail open: return totalHits=0 so no request is blocked during an outage.
+      return { totalHits: 0, resetTime: new Date(Date.now() + this.windowMs) };
+    }
+  }
+
+  async decrement(key: string): Promise<void> {
+    try {
+      const windowStart = Math.floor(Date.now() / this.windowMs) * this.windowMs;
+      const bucket = `${this.namespace}:${key}:${windowStart}`;
+      await pool.query(
+        `UPDATE rate_limit_counters SET count = GREATEST(0, count - 1) WHERE bucket = $1`,
+        [bucket],
+      );
+    } catch {
+      // non-fatal
+    }
+  }
+
+  async resetKey(key: string): Promise<void> {
+    try {
+      await pool.query(
+        `DELETE FROM rate_limit_counters WHERE bucket LIKE $1`,
+        [`${this.namespace}:${key}:%`],
+      );
+    } catch {
+      // non-fatal
+    }
+  }
+}

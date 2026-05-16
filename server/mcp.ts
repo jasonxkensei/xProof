@@ -15,6 +15,7 @@ import {
   atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit,
   isAdminWallet, getApiKeyOwnerWallet, tryDisplaceAcpReservation,
 } from "./routes/helpers";
+import { pgCheckRateLimit } from "./pgRateLimit";
 
 interface McpContext {
   baseUrl: string;
@@ -36,31 +37,10 @@ const calibrationInFlight = new Map<string, Promise<object>>();
 // get_calibration: per-IP rate limit — 20 calls per minute for public tool
 const CALIBRATION_IP_LIMIT = 20;
 const CALIBRATION_IP_WINDOW_MS = 60_000;
-const calibrationIpRateMap = new Map<string, { count: number; resetAt: number }>();
 
 // submit_outcome: per-API-key rate limit — 10 submissions per 5 minutes
 const SUBMIT_OUTCOME_KEY_LIMIT = 10;
 const SUBMIT_OUTCOME_KEY_WINDOW_MS = 5 * 60_000;
-const submitOutcomeRateMap = new Map<string, { count: number; resetAt: number }>();
-
-function checkMcpRateLimit(
-  map: Map<string, { count: number; resetAt: number }>,
-  key: string,
-  limit: number,
-  windowMs: number,
-): { allowed: boolean; retryAfterSec: number } {
-  const now = Date.now();
-  const entry = map.get(key);
-  if (!entry || now > entry.resetAt) {
-    map.set(key, { count: 1, resetAt: now + windowMs });
-    return { allowed: true, retryAfterSec: 0 };
-  }
-  if (entry.count >= limit) {
-    return { allowed: false, retryAfterSec: Math.ceil((entry.resetAt - now) / 1000) };
-  }
-  entry.count++;
-  return { allowed: true, retryAfterSec: 0 };
-}
 
 export async function createMcpServer(ctx: McpContext) {
   const currentPriceUsd = await getCertificationPriceUsd();
@@ -1189,15 +1169,16 @@ export async function createMcpServer(ctx: McpContext) {
         };
       }
 
-      const submitRl = checkMcpRateLimit(
-        submitOutcomeRateMap,
-        auth.apiKeyId ? String(auth.apiKeyId) : auth.userId,
+      const submitRl = await pgCheckRateLimit(
+        "mcp_submit_outcome",
+        auth.apiKeyId ? String(auth.apiKeyId) : (auth.userId ?? "unknown"),
         SUBMIT_OUTCOME_KEY_LIMIT,
         SUBMIT_OUTCOME_KEY_WINDOW_MS,
       );
       if (!submitRl.allowed) {
+        const retryAfterSec = Math.ceil((submitRl.resetAt - Date.now()) / 1000);
         return {
-          content: [{ type: "text" as const, text: JSON.stringify({ error: "RATE_LIMIT_EXCEEDED", message: `Too many outcome submissions. Retry after ${submitRl.retryAfterSec}s.`, retry_after: submitRl.retryAfterSec }) }],
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "RATE_LIMIT_EXCEEDED", message: `Too many outcome submissions. Retry after ${retryAfterSec}s.`, retry_after: retryAfterSec }) }],
           isError: true,
         };
       }
@@ -1255,15 +1236,16 @@ export async function createMcpServer(ctx: McpContext) {
     },
     async ({ agent_id, n }) => {
       // Per-IP rate limit: 20 calls per minute for this public endpoint
-      const ipRl = checkMcpRateLimit(
-        calibrationIpRateMap,
+      const ipRl = await pgCheckRateLimit(
+        "mcp_calibration",
         clientIp,
         CALIBRATION_IP_LIMIT,
         CALIBRATION_IP_WINDOW_MS,
       );
       if (!ipRl.allowed) {
+        const retryAfterSec = Math.ceil((ipRl.resetAt - Date.now()) / 1000);
         return {
-          content: [{ type: "text" as const, text: JSON.stringify({ error: "RATE_LIMIT_EXCEEDED", message: `Too many calibration requests. Retry after ${ipRl.retryAfterSec}s.`, retry_after: ipRl.retryAfterSec }) }],
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "RATE_LIMIT_EXCEEDED", message: `Too many calibration requests. Retry after ${retryAfterSec}s.`, retry_after: retryAfterSec }) }],
           isError: true,
         };
       }

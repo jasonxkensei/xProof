@@ -1,6 +1,7 @@
 import { type Request, type Response, type NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { pool } from "./db";
+import { PgRateLimitStore } from "./pgRateLimit";
 import { getMetrics, getLatencyPercentiles } from "./metrics";
 import { isMX8004Configured } from "./mx8004";
 import { isMultiversXConfigured } from "./blockchain";
@@ -24,6 +25,7 @@ export const globalRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("global"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many requests, please try again later" },
   skip: (req) => {
     return req.path === "/api/acp/health";
@@ -36,6 +38,7 @@ export const healthRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("health"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many health check requests, please try again later" },
 });
 
@@ -45,6 +48,7 @@ export const authRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("auth"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many authentication attempts, please try again later" },
 });
 
@@ -54,6 +58,7 @@ export const paymentRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("payment"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many payment requests, please try again later" },
 });
 
@@ -63,6 +68,7 @@ export const apiKeyCreationRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("apikey_create"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many API key operations, please try again later" },
 });
 
@@ -73,6 +79,7 @@ export const attestationIssuanceRateLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req: any) => (req.walletAddress as string) ?? "unknown",
   skip: (req: any) => !req.walletAddress,
+  store: new PgRateLimitStore("attest"),
   message: { error: "TOO_MANY_REQUESTS", message: "Attestation rate limit exceeded: max 20 per hour per issuer" },
 });
 
@@ -82,6 +89,7 @@ export const publicReadRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("pub_read"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many requests, please try again later" },
 });
 
@@ -91,6 +99,7 @@ export const publicSearchRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("pub_search"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many search requests, please try again later" },
 });
 
@@ -100,6 +109,7 @@ export const publicCompareRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("pub_compare"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many comparison requests, please try again later" },
 });
 
@@ -109,6 +119,7 @@ export const publicPdfRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("pub_pdf"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
 });
 
@@ -122,6 +133,7 @@ export const publicStatsRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("pub_stats"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many stats requests, please try again later" },
 });
 

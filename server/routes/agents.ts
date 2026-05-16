@@ -8,7 +8,8 @@ import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
 import { paymentRateLimiter } from "../reliability";
 import { computeTrustScoreByWallet } from "../trust";
-import { TRIAL_QUOTA, registerRateLimitMap, REGISTER_RATE_LIMIT_MAX, REGISTER_RATE_LIMIT_WINDOW_MS, getClientIp } from "./helpers";
+import { TRIAL_QUOTA, REGISTER_RATE_LIMIT_MAX, REGISTER_RATE_LIMIT_WINDOW_MS, getClientIp } from "./helpers";
+import { pgCheckRateLimit } from "../pgRateLimit";
 
 // ============================================
 // Builds the machine-actionable quick_start guide
@@ -370,19 +371,13 @@ export function registerAgentsRoutes(app: Express) {
       const ip = getClientIp(req);
       const ipHash = crypto.createHash("sha256").update(ip).digest("hex").slice(0, 16);
 
-      const now = Date.now();
-      const entry = registerRateLimitMap.get(ipHash);
-      if (entry && now < entry.resetAt && entry.count >= REGISTER_RATE_LIMIT_MAX) {
+      const regRl = await pgCheckRateLimit("register", ipHash, REGISTER_RATE_LIMIT_MAX, REGISTER_RATE_LIMIT_WINDOW_MS);
+      if (!regRl.allowed) {
         return res.status(429).json({
           error: "RATE_LIMIT_EXCEEDED",
           message: `Maximum ${REGISTER_RATE_LIMIT_MAX} trial registrations per hour per IP. Try again later.`,
-          retry_after: Math.ceil((entry.resetAt - now) / 1000),
+          retry_after: Math.ceil((regRl.resetAt - Date.now()) / 1000),
         });
-      }
-      if (!entry || now >= entry.resetAt) {
-        registerRateLimitMap.set(ipHash, { count: 1, resetAt: now + REGISTER_RATE_LIMIT_WINDOW_MS });
-      } else {
-        entry.count++;
       }
 
       const data = agentRegisterSchema.parse(req.body);

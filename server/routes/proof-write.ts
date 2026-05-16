@@ -325,7 +325,7 @@ export function registerProofWriteRoutes(app: Express) {
 
         apiKeyUserId = apiKey.userId || null;
 
-        const rateLimit = checkRateLimit(apiKey.id);
+        const rateLimit = await checkRateLimit(apiKey.id);
         res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX_VALUE.toString());
         res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
         res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
@@ -823,7 +823,7 @@ export function registerProofWriteRoutes(app: Express) {
         if (!apiKey) return res.status(401).json({ error: "INVALID_API_KEY", message: "Invalid or expired API key" });
         if (!apiKey.isActive) return res.status(403).json({ error: "API_KEY_DISABLED", message: "This API key has been disabled" });
 
-        const rateLimit = checkRateLimit(apiKey.id);
+        const rateLimit = await checkRateLimit(apiKey.id);
         res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX_VALUE.toString());
         res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
         res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
@@ -1167,7 +1167,7 @@ export function registerProofWriteRoutes(app: Express) {
 
         apiKeyUserId = apiKey.userId || null;
 
-        const rateLimit = checkRateLimit(apiKey.id);
+        const rateLimit = await checkRateLimit(apiKey.id);
         res.setHeader("X-RateLimit-Limit", RATE_LIMIT_MAX_VALUE.toString());
         res.setHeader("X-RateLimit-Remaining", rateLimit.remaining.toString());
         res.setHeader("X-RateLimit-Reset", Math.floor(rateLimit.resetAt / 1000).toString());
