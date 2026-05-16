@@ -276,13 +276,18 @@ export function registerCalibrationRoutes(app: Express) {
 
   // ── GET /api/agent/calibration/:agentId/export.csv ───────────────────────
   // Downloads calibration history as a CSV file.
-  // Auth: optional — authenticated API key owner sees ALL outcomes (public + private);
-  //       unauthenticated callers see public outcomes only.
-  // Query param: ?n=200 (max 1000 for CSV export, default 200)
+  // Auth:  API-key owner or wallet-session owner → all outcomes (public + private).
+  //        Unauthenticated → allowed only when ALL outcomes are public; blocked otherwise (401).
+  // ?n=X  Optional row cap (hard ceiling 100 000). Omit to export full history.
   app.get("/api/agent/calibration/:agentId/export.csv", optionalApiKey, async (req, res) => {
     try {
       const { agentId } = req.params;
-      const n = Math.min(1000, Math.max(1, parseInt((req.query.n as string) || "200", 10) || 200));
+      // n is optional — omitting it exports the full history (no row cap).
+      // Callers may pass ?n=X to limit output (hard cap: 100 000).
+      const rawN = req.query.n as string | undefined;
+      const n: number | null = rawN
+        ? Math.min(100_000, Math.max(1, parseInt(rawN, 10) || 1))
+        : null;
       const callerUserId: string | undefined = (req as any).optionalUserId;
 
       // Resolve agentId → user
@@ -322,6 +327,18 @@ export function registerCalibrationRoutes(app: Express) {
       // Owner: all outcomes; unauthenticated (all-public verified above): public only
       const visibilityClause = isOwner ? "" : "AND ao.visibility = 'public'";
 
+      const queryText = n !== null
+        ? `SELECT ao.submitted_at, ao.certification_id, ao.anchored_confidence, ao.outcome_score, ao.confidence_gap, ao.visibility
+           FROM agent_outcomes ao
+           WHERE ao.user_id = $1 ${visibilityClause}
+           ORDER BY ao.submitted_at DESC
+           LIMIT $2`
+        : `SELECT ao.submitted_at, ao.certification_id, ao.anchored_confidence, ao.outcome_score, ao.confidence_gap, ao.visibility
+           FROM agent_outcomes ao
+           WHERE ao.user_id = $1 ${visibilityClause}
+           ORDER BY ao.submitted_at DESC`;
+      const queryParams = n !== null ? [user.id, n] : [user.id];
+
       const rows = await pool.query<{
         submitted_at: Date;
         certification_id: string;
@@ -329,14 +346,7 @@ export function registerCalibrationRoutes(app: Express) {
         outcome_score: string;
         confidence_gap: string;
         visibility: string;
-      }>(
-        `SELECT ao.submitted_at, ao.certification_id, ao.anchored_confidence, ao.outcome_score, ao.confidence_gap, ao.visibility
-         FROM agent_outcomes ao
-         WHERE ao.user_id = $1 ${visibilityClause}
-         ORDER BY ao.submitted_at DESC
-         LIMIT $2`,
-        [user.id, n]
-      );
+      }>(queryText, queryParams);
 
       if (rows.rows.length === 0) {
         // Return empty CSV with headers rather than an error
