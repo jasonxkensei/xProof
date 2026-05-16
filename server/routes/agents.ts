@@ -239,6 +239,36 @@ export function registerAgentsRoutes(app: Express) {
           description: "Verify any proof without authentication",
           endpoint: `GET ${baseUrl}/api/proof/{proof_id}`,
         },
+        calibration: {
+          description: "Confidence Gap Tracking — submit actual outcomes after decisions anchored with confidence_level, and query calibration quality over time.",
+          submit_outcome: {
+            description: "After a decision resolves, submit the actual outcome_score. The gap between anchored confidence and actual outcome is computed and stored. Operator-only (not self-reportable by the agent).",
+            endpoint: `POST ${baseUrl}/api/agent/outcome`,
+            auth: "Authorization: Bearer YOUR_API_KEY",
+            body: {
+              proof_id: "UUID of the certification that carried metadata.confidence_level",
+              outcome_score: "0.0 to 1.0 — actual outcome quality (1.0 = fully successful)",
+              visibility: "public | private (default: public)",
+            },
+            response_contains: ["outcome_id", "anchored_confidence", "outcome_score", "confidence_gap", "bias_hint"],
+            note: "Each proof can only have one outcome. The proof must have been anchored with metadata.confidence_level.",
+          },
+          get_calibration: {
+            description: "Public endpoint — any agent or operator can query calibration stats for any agent. Returns mean gap, variance, bias label, and full time series. Use this to evaluate another agent before trusting it.",
+            endpoint: `GET ${baseUrl}/api/agent/calibration/{agentId}`,
+            auth: "None — fully public",
+            params: {
+              agentId: "MultiversX wallet address (erd1...) or internal user id",
+              n: "Number of outcomes to include (default 50, max 200)",
+            },
+            response_contains: ["mean_gap", "variance", "bias_label", "outcome_count", "time_series"],
+            bias_labels: {
+              overconfident: "mean_gap > 0.10 — agent consistently over-predicts confidence",
+              underconfident: "mean_gap < -0.10 — agent consistently under-predicts confidence",
+              calibrated: "mean_gap between -0.10 and 0.10 — well-calibrated",
+            },
+          },
+        },
       },
 
       // ── MCP ───────────────────────────────────────────────────────────

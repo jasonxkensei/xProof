@@ -385,6 +385,35 @@ export const insertAgentViolationSchema = createInsertSchema(agentViolations).om
 export type InsertAgentViolation = z.infer<typeof insertAgentViolationSchema>;
 export type AgentViolation = typeof agentViolations.$inferSelect;
 
+// ============================================
+// Agent Outcomes — Confidence Gap Tracking
+// ============================================
+// An operator submits the actual outcome_score after a decision that was
+// anchored with metadata.confidence_level. The gap reveals calibration quality
+// over time (overconfident / underconfident / calibrated).
+// Submission is restricted to the API key owner (operator), not the agent itself,
+// to prevent self-reporting manipulation.
+export const agentOutcomes = pgTable("agent_outcomes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  certificationId: varchar("certification_id").notNull().references(() => certifications.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // Anchored confidence from certification metadata, copied at submission time
+  anchoredConfidence: varchar("anchored_confidence").notNull(),
+  // Operator-submitted actual outcome score (0–1)
+  outcomeScore: varchar("outcome_score").notNull(),
+  // Computed gap: anchored_confidence − outcome_score (signed, −1 to 1)
+  confidenceGap: varchar("confidence_gap").notNull(),
+  visibility: varchar("visibility").default("public").notNull(),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+});
+
+export const insertAgentOutcomeSchema = createInsertSchema(agentOutcomes).omit({
+  id: true,
+  submittedAt: true,
+});
+export type InsertAgentOutcome = z.infer<typeof insertAgentOutcomeSchema>;
+export type AgentOutcome = typeof agentOutcomes.$inferSelect;
+
 // Raw-SQL tables — registered here so drizzle-kit push does not try to drop them.
 // These tables are managed exclusively via raw SQL in server/nonce.ts and server/trust.ts.
 export const walletNonces = pgTable("wallet_nonces", {

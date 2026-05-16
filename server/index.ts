@@ -345,6 +345,29 @@ app.use((req, res, next) => {
     }
   }
 
+  async function migrateAgentOutcomesTable() {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS agent_outcomes (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          certification_id VARCHAR NOT NULL REFERENCES certifications(id) ON DELETE CASCADE,
+          user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          anchored_confidence VARCHAR NOT NULL,
+          outcome_score VARCHAR NOT NULL,
+          confidence_gap VARCHAR NOT NULL,
+          visibility VARCHAR NOT NULL DEFAULT 'public',
+          submitted_at TIMESTAMP NOT NULL DEFAULT now()
+        )
+      `);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_user_id ON agent_outcomes(user_id)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_cert_id ON agent_outcomes(certification_id)`);
+      await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_outcomes_cert_unique ON agent_outcomes(certification_id)`);
+      logger.info("agent_outcomes table ready", { component: "migration" });
+    } catch (err: any) {
+      logger.error("agent_outcomes migration error", { component: "migration", error: err.message });
+    }
+  }
+
   async function purgeStaleSnapshotAttestationCounts() {
     // Historical trust_score_snapshots were computed without issuer-privacy filtering,
     // so their active_attestations counts may include private issuers. Zero them out
@@ -405,6 +428,7 @@ app.use((req, res, next) => {
     startTxQueueWorker();
     migrateSystemUserCertifications();
     migrateAgentViolationsTable();
+    migrateAgentOutcomesTable();
     purgeStaleSnapshotAttestationCounts();
     runDailyMaintenance();
     setInterval(runDailyMaintenance, 24 * 60 * 60 * 1000);
