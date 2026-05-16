@@ -301,8 +301,13 @@ export function registerCalibrationRoutes(app: Express) {
         return res.status(404).json({ error: "AGENT_NOT_FOUND", message: `No agent found with id or wallet: ${agentId}` });
       }
 
-      // Owner check 1: API key owner (set by optionalApiKey middleware)
-      // Owner check 2: wallet session — logged-in user viewing their own profile
+      // Owner check 1: API key owner (set by optionalApiKey middleware above)
+      // Owner check 2: wallet session — intentionally included so a logged-in operator
+      //   can click the download button in the browser without supplying an API key.
+      //   Session validity is guaranteed by MultiversX Native Auth (cryptographic proof),
+      //   so this is equivalent security to API-key ownership for browser-originated exports.
+      // NOTE: optionalApiKey shares key-resolution logic with validateApiKey (helpers.ts).
+      //   If validateApiKey changes (e.g. new rotation fields), mirror the change here too.
       const sessionWallet = (req as any).session?.walletAddress as string | undefined;
       const isOwner =
         (!!callerUserId && callerUserId === user.id) ||
