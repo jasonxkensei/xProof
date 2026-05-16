@@ -6,7 +6,7 @@ import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { validateApiKey } from "./helpers";
-import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter } from "../reliability";
+import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter } from "../reliability";
 
 // ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
 // Keyed by `${agentId}:${n}` so different ?n values are cached independently.
@@ -308,7 +308,7 @@ export function registerCalibrationRoutes(app: Express) {
   // Auth:  API-key owner or wallet-session owner → all outcomes (public + private).
   //        Unauthenticated → allowed only when ALL outcomes are public; blocked otherwise (401).
   // ?n=X  Optional row cap (hard ceiling 100 000). Omit to export full history.
-  app.get("/api/agent/calibration/:agentId/export.csv", optionalApiKey, async (req, res) => {
+  app.get("/api/agent/calibration/:agentId/export.csv", calibrationCsvExportRateLimiter, optionalApiKey, async (req, res) => {
     try {
       const { agentId } = req.params;
       // n is optional — omitting it exports the full history (no row cap).

@@ -123,6 +123,19 @@ export const publicPdfRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
 });
 
+// GET /api/agent/calibration/:agentId/export.csv streams a full-table scan for
+// every request. 5 req/min per IP mirrors publicPdfRateLimiter — keeps scans
+// bounded while still allowing owners to regenerate exports comfortably.
+export const calibrationCsvExportRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("pub_csv"),
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
+});
+
 // /api/agent/calibration/:agentId is a public endpoint that runs a raw SQL
 // query on every call. 20 req/min per IP keeps the DB load bounded while
 // still allowing reasonable polling. Paired with a 30 s in-memory cache in
