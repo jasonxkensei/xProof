@@ -296,7 +296,12 @@ export function registerCalibrationRoutes(app: Express) {
         return res.status(404).json({ error: "AGENT_NOT_FOUND", message: `No agent found with id or wallet: ${agentId}` });
       }
 
-      const isOwner = !!callerUserId && callerUserId === user.id;
+      // Owner check 1: API key owner (set by optionalApiKey middleware)
+      // Owner check 2: wallet session — logged-in user viewing their own profile
+      const sessionWallet = (req as any).session?.walletAddress as string | undefined;
+      const isOwner =
+        (!!callerUserId && callerUserId === user.id) ||
+        (!!sessionWallet && sessionWallet === user.walletAddress);
 
       // Spec: unauthenticated access allowed ONLY when ALL outcomes are public.
       // If the agent has even one private outcome, ownership auth is required.

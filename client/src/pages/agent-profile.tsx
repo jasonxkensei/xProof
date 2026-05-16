@@ -704,7 +704,44 @@ function CalibrationGapChart({ points }: { points: CalibrationPoint[] }) {
 function CalibrationCard({ data }: { data: CalibrationData }) {
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const { toast } = useToast();
   if (!data.calibration || data.outcome_count === 0) return null;
+
+  async function downloadCsv() {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/agent/calibration/${data.wallet_address}/export.csv`, {
+        credentials: "include",
+      });
+      if (res.status === 401) {
+        toast({
+          title: "Authentication required",
+          description: "To export private outcomes, use your API key: Authorization: Bearer pm_xxx",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!res.ok) {
+        toast({ title: "Export failed", description: "Could not download calibration data.", variant: "destructive" });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `calibration-${data.wallet_address.slice(0, 12)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({ title: "Export failed", description: "Network error — please try again.", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   const { mean_gap, variance, bias_label } = data.calibration;
   const style = BIAS_STYLES[bias_label] ?? BIAS_STYLES.calibrated;
@@ -734,16 +771,12 @@ function CalibrationCard({ data }: { data: CalibrationData }) {
             <Button
               size="icon"
               variant="ghost"
-              asChild
+              onClick={downloadCsv}
+              disabled={downloading}
               data-testid="button-calibration-download"
               aria-label="Download calibration history as CSV"
             >
-              <a
-                href={`/api/agent/calibration/${data.wallet_address}/export.csv`}
-                download
-              >
-                <Download className="h-3.5 w-3.5" />
-              </a>
+              <Download className="h-3.5 w-3.5" />
             </Button>
             {hasChart && (
               <Button
