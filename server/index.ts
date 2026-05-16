@@ -447,6 +447,12 @@ app.use((req, res, next) => {
     }
   }
 
+  // Rate-limit table must exist before the first request is handled.
+  // Awaiting here ensures no request races the DDL; on failure the error is
+  // logged and the server continues (pgCheckRateLimit fails open on DB errors,
+  // so availability is preserved but enforcement is temporarily bypassed).
+  await ensureRateLimitTable();
+
   server.listen({
     port,
     host: "0.0.0.0",
@@ -454,7 +460,6 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
     startTxQueueWorker();
-    ensureRateLimitTable();
     migrateSystemUserCertifications();
     migrateAgentViolationsTable();
     migrateAgentOutcomesTable();
