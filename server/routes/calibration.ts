@@ -2,7 +2,7 @@ import { type Express, type Request, type Response, type NextFunction } from "ex
 import { db, pool } from "../db";
 import { logger } from "../logger";
 import { certifications, users, agentOutcomes, apiKeys } from "@shared/schema";
-import { eq, or } from "drizzle-orm";
+import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { validateApiKey } from "./helpers";
@@ -30,6 +30,7 @@ const outcomeSubmitSchema = z.object({
 });
 
 // ── Optional API-key extractor (non-blocking — sets req.optionalUserId) ──────
+// Mirrors validateApiKey semantics: checks primary hash then rotated-key hash.
 async function optionalApiKey(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers["authorization"];
   if (!authHeader || !authHeader.startsWith("Bearer ")) return next();
@@ -37,8 +38,20 @@ async function optionalApiKey(req: Request, res: Response, next: NextFunction) {
   if (!rawKey.startsWith("pm_")) return next();
   try {
     const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
-    const [key] = await db.select({ userId: apiKeys.userId, isActive: apiKeys.isActive })
-      .from(apiKeys).where(eq(apiKeys.keyHash, keyHash)).limit(1);
+    let [key] = await db
+      .select({ userId: apiKeys.userId, isActive: apiKeys.isActive })
+      .from(apiKeys)
+      .where(eq(apiKeys.keyHash, keyHash))
+      .limit(1);
+    // Rotated-key fallback: check previousKeyHash within its grace period
+    if (!key) {
+      const [rotated] = await db
+        .select({ userId: apiKeys.userId, isActive: apiKeys.isActive })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.previousKeyHash, keyHash), gte(apiKeys.previousKeyExpiresAt, new Date())))
+        .limit(1);
+      if (rotated) key = rotated;
+    }
     if (key?.isActive) (req as any).optionalUserId = key.userId;
   } catch {
     // silent — optional auth, keep going
@@ -283,8 +296,25 @@ export function registerCalibrationRoutes(app: Express) {
         return res.status(404).json({ error: "AGENT_NOT_FOUND", message: `No agent found with id or wallet: ${agentId}` });
       }
 
-      // Determine visibility filter: owner can see all, others see public only
       const isOwner = !!callerUserId && callerUserId === user.id;
+
+      // Spec: unauthenticated access allowed ONLY when ALL outcomes are public.
+      // If the agent has even one private outcome, ownership auth is required.
+      if (!isOwner) {
+        const { rows: privCheck } = await pool.query<{ cnt: string }>(
+          `SELECT COUNT(*)::text AS cnt FROM agent_outcomes WHERE user_id = $1 AND visibility = 'private' LIMIT 1`,
+          [user.id]
+        );
+        const privateCount = parseInt(privCheck[0]?.cnt ?? "0", 10);
+        if (privateCount > 0) {
+          return res.status(401).json({
+            error: "UNAUTHORIZED",
+            message: "This agent has private outcomes. Include 'Authorization: Bearer pm_xxx' header and use the owner's API key to export all outcomes.",
+          });
+        }
+      }
+
+      // Owner: all outcomes; unauthenticated (all-public verified above): public only
       const visibilityClause = isOwner ? "" : "AND ao.visibility = 'public'";
 
       const rows = await pool.query<{
