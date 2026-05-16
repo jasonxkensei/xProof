@@ -2,7 +2,7 @@ import { type Express } from "express";
 import { db, pool } from "../db";
 import { logger } from "../logger";
 import { certifications, users, agentOutcomes } from "@shared/schema";
-import { eq, and, desc, or } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { z } from "zod";
 import { validateApiKey } from "./helpers";
 

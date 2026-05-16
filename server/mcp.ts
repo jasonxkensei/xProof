@@ -1,9 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import crypto from "crypto";
-import { db } from "./db";
-import { certifications, apiKeys, users, MAX_ONCHAIN_FILENAME_LEN, MAX_ONCHAIN_AUTHOR_LEN } from "@shared/schema";
-import { eq, sql, and } from "drizzle-orm";
+import { db, pool } from "./db";
+import { certifications, apiKeys, users, agentOutcomes, MAX_ONCHAIN_FILENAME_LEN, MAX_ONCHAIN_AUTHOR_LEN } from "@shared/schema";
+import { eq, sql, and, or } from "drizzle-orm";
 import { recordOnBlockchain } from "./blockchain";
 import { getCertificationPriceUsd } from "./pricing";
 import { logger } from "./logger";
@@ -1129,6 +1129,121 @@ export async function createMcpServer(ctx: McpContext) {
         text: `Visit ${baseUrl}/api/acp/openapi.json for the OpenAPI specification.`,
       }],
     })
+  );
+
+  // ── submit_outcome ────────────────────────────────────────────────────────
+  // Operator-only: submit the actual outcome for a decision anchored with
+  // metadata.confidence_level. Computes and stores the calibration gap.
+  server.tool(
+    "submit_outcome",
+    "Submit the actual outcome for a decision previously anchored with metadata.confidence_level. Computes the confidence gap (anchored − actual) and stores it for calibration tracking. Operator-only — you must own the proof. Each proof can only have one outcome.",
+    {
+      proof_id: z.string().min(1).describe("UUID of the certification that was anchored with metadata.confidence_level"),
+      outcome_score: z.number().min(0).max(1).describe("Actual outcome quality (0.0 = complete failure, 1.0 = fully successful)"),
+      visibility: z.enum(["public", "private"]).default("public").describe("Whether this outcome is publicly visible (default: public)"),
+    },
+    async ({ proof_id, outcome_score, visibility }) => {
+      if (!auth.valid || !auth.userId) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "UNAUTHORIZED", message: "API key required. Include Authorization: Bearer pm_xxx header." }) }],
+          isError: true,
+        };
+      }
+
+      try {
+        const [cert] = await db.select().from(certifications).where(eq(certifications.id, proof_id)).limit(1);
+        if (!cert) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "PROOF_NOT_FOUND", message: `No certification found with proof_id: ${proof_id}` }) }], isError: true };
+        }
+        if (cert.userId !== auth.userId) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "FORBIDDEN", message: "You can only submit outcomes for proofs anchored by your own API key." }) }], isError: true };
+        }
+
+        const meta = (cert.metadata as Record<string, any>) ?? {};
+        const rawAnchored = meta.confidence_level;
+        if (rawAnchored === undefined || rawAnchored === null) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "NO_CONFIDENCE_LEVEL", message: "This proof has no metadata.confidence_level. Confidence gap tracking requires a proof anchored with confidence_level." }) }], isError: true };
+        }
+        const anchoredNum = Number(rawAnchored);
+        if (!Number.isFinite(anchoredNum) || anchoredNum < 0 || anchoredNum > 1) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INVALID_CONFIDENCE_LEVEL", message: `The proof's metadata.confidence_level (${rawAnchored}) is not a valid number between 0.0 and 1.0.` }) }], isError: true };
+        }
+
+        const confidenceGap = Math.round((anchoredNum - outcome_score) * 10000) / 10000;
+        const biasHint = confidenceGap > 0.10 ? "overconfident" : confidenceGap < -0.10 ? "underconfident" : "calibrated";
+
+        const [inserted] = await db.insert(agentOutcomes).values({
+          certificationId: cert.id,
+          userId: auth.userId,
+          anchoredConfidence: anchoredNum,
+          outcomeScore: outcome_score,
+          confidenceGap,
+          visibility,
+        }).returning();
+
+        return { content: [{ type: "text" as const, text: JSON.stringify({ outcome_id: inserted.id, proof_id: cert.id, anchored_confidence: anchoredNum, outcome_score, confidence_gap: confidenceGap, bias_hint: biasHint, visibility: inserted.visibility, submitted_at: inserted.submittedAt }) }] };
+      } catch (err: any) {
+        if (err?.code === "23505" || err?.message?.includes("unique")) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "OUTCOME_ALREADY_SUBMITTED", message: "An outcome has already been submitted for this proof." }) }], isError: true };
+        }
+        logger.error("MCP submit_outcome failed", { error: err.message });
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INTERNAL_ERROR", message: "Failed to submit outcome" }) }], isError: true };
+      }
+    }
+  );
+
+  // ── get_calibration ───────────────────────────────────────────────────────
+  // Public — no auth required. Returns calibration stats for any agent.
+  server.tool(
+    "get_calibration",
+    "Query an agent's calibration quality over time: mean confidence gap, variance, bias label (overconfident / underconfident / calibrated), and per-decision time series. Fully public — use this to evaluate another agent before trusting it. agentId accepts a MultiversX wallet address (erd1...) or internal user id.",
+    {
+      agent_id: z.string().min(1).describe("Agent wallet address (erd1...) or internal user id"),
+      n: z.number().int().min(1).max(200).default(50).describe("Number of recent outcomes to include (default 50, max 200)"),
+    },
+    async ({ agent_id, n }) => {
+      try {
+        const [user] = await db.select({ id: users.id, walletAddress: users.walletAddress, agentName: users.agentName })
+          .from(users)
+          .where(or(eq(users.id, agent_id), eq(users.walletAddress, agent_id)))
+          .limit(1);
+
+        if (!user) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "AGENT_NOT_FOUND", message: `No agent found with id or wallet: ${agent_id}` }) }], isError: true };
+        }
+
+        const rows = await pool.query<{ confidence_gap: string; anchored_confidence: string; outcome_score: string; submitted_at: Date; certification_id: string }>(
+          `SELECT ao.confidence_gap, ao.anchored_confidence, ao.outcome_score, ao.submitted_at, ao.certification_id
+           FROM agent_outcomes ao
+           WHERE ao.user_id = $1 AND ao.visibility = 'public'
+           ORDER BY ao.submitted_at DESC LIMIT $2`,
+          [user.id, n]
+        );
+
+        const outcomes = rows.rows;
+        if (outcomes.length === 0) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ agent_id: user.id, wallet_address: user.walletAddress, agent_name: user.agentName, outcome_count: 0, calibration: null, message: "No public outcome data yet for this agent." }) }] };
+        }
+
+        const gaps = outcomes.map(r => parseFloat(r.confidence_gap));
+        const count = gaps.length;
+        const meanGap = Math.round((gaps.reduce((s, g) => s + g, 0) / count) * 10000) / 10000;
+        const variance = count > 1 ? Math.round((gaps.reduce((s, g) => s + Math.pow(g - meanGap, 2), 0) / (count - 1)) * 10000) / 10000 : 0;
+        const biasLabel = meanGap > 0.10 ? "overconfident" : meanGap < -0.10 ? "underconfident" : "calibrated";
+
+        return { content: [{ type: "text" as const, text: JSON.stringify({
+          agent_id: user.id,
+          wallet_address: user.walletAddress,
+          agent_name: user.agentName,
+          outcome_count: count,
+          calibration: { mean_gap: meanGap, variance, bias_label: biasLabel },
+          time_series: outcomes.map(r => ({ submitted_at: r.submitted_at, proof_id: r.certification_id, anchored_confidence: parseFloat(r.anchored_confidence), outcome_score: parseFloat(r.outcome_score), confidence_gap: parseFloat(r.confidence_gap) })),
+        }) }] };
+      } catch (err: any) {
+        logger.error("MCP get_calibration failed", { error: err.message });
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INTERNAL_ERROR", message: "Failed to fetch calibration data" }) }], isError: true };
+      }
+    }
   );
 
   return server;
