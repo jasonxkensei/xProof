@@ -20,6 +20,7 @@ import {
   Target,
   ChevronDown,
   ChevronUp,
+  Download,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -730,6 +731,20 @@ function CalibrationCard({ data }: { data: CalibrationData }) {
             <span className="text-xs font-normal text-muted-foreground" data-testid="text-outcome-count">
               {data.outcome_count} outcome{data.outcome_count !== 1 ? "s" : ""}
             </span>
+            <Button
+              size="icon"
+              variant="ghost"
+              asChild
+              data-testid="button-calibration-download"
+              aria-label="Download calibration history as CSV"
+            >
+              <a
+                href={`/api/agent/calibration/${data.wallet_address}/export.csv`}
+                download
+              >
+                <Download className="h-3.5 w-3.5" />
+              </a>
+            </Button>
             {hasChart && (
               <Button
                 size="icon"

@@ -1,9 +1,10 @@
-import { type Express } from "express";
+import { type Express, type Request, type Response, type NextFunction } from "express";
 import { db, pool } from "../db";
 import { logger } from "../logger";
-import { certifications, users, agentOutcomes } from "@shared/schema";
+import { certifications, users, agentOutcomes, apiKeys } from "@shared/schema";
 import { eq, or } from "drizzle-orm";
 import { z } from "zod";
+import crypto from "crypto";
 import { validateApiKey } from "./helpers";
 
 // ── Bias label thresholds — intentionally fixed, revisit after real data ──────
@@ -27,6 +28,23 @@ const outcomeSubmitSchema = z.object({
     .max(1, "outcome_score must be <= 1"),
   visibility: z.enum(["public", "private"]).default("public"),
 });
+
+// ── Optional API-key extractor (non-blocking — sets req.optionalUserId) ──────
+async function optionalApiKey(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return next();
+  const rawKey = authHeader.slice(7);
+  if (!rawKey.startsWith("pm_")) return next();
+  try {
+    const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+    const [key] = await db.select({ userId: apiKeys.userId, isActive: apiKeys.isActive })
+      .from(apiKeys).where(eq(apiKeys.keyHash, keyHash)).limit(1);
+    if (key?.isActive) (req as any).optionalUserId = key.userId;
+  } catch {
+    // silent — optional auth, keep going
+  }
+  next();
+}
 
 export function registerCalibrationRoutes(app: Express) {
   // ── POST /api/agent/outcome ───────────────────────────────────────────────
@@ -240,6 +258,84 @@ export function registerCalibrationRoutes(app: Express) {
     } catch (error) {
       logger.error("Failed to fetch agent calibration", { error: (error as Error).message });
       return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to fetch calibration data" });
+    }
+  });
+
+  // ── GET /api/agent/calibration/:agentId/export.csv ───────────────────────
+  // Downloads calibration history as a CSV file.
+  // Auth: optional — authenticated API key owner sees ALL outcomes (public + private);
+  //       unauthenticated callers see public outcomes only.
+  // Query param: ?n=200 (max 1000 for CSV export, default 200)
+  app.get("/api/agent/calibration/:agentId/export.csv", optionalApiKey, async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      const n = Math.min(1000, Math.max(1, parseInt((req.query.n as string) || "200", 10) || 200));
+      const callerUserId: string | undefined = (req as any).optionalUserId;
+
+      // Resolve agentId → user
+      const [user] = await db
+        .select({ id: users.id, walletAddress: users.walletAddress, agentName: users.agentName })
+        .from(users)
+        .where(or(eq(users.id, agentId), eq(users.walletAddress, agentId)))
+        .limit(1);
+
+      if (!user) {
+        return res.status(404).json({ error: "AGENT_NOT_FOUND", message: `No agent found with id or wallet: ${agentId}` });
+      }
+
+      // Determine visibility filter: owner can see all, others see public only
+      const isOwner = !!callerUserId && callerUserId === user.id;
+      const visibilityClause = isOwner ? "" : "AND ao.visibility = 'public'";
+
+      const rows = await pool.query<{
+        submitted_at: Date;
+        certification_id: string;
+        anchored_confidence: string;
+        outcome_score: string;
+        confidence_gap: string;
+        visibility: string;
+      }>(
+        `SELECT ao.submitted_at, ao.certification_id, ao.anchored_confidence, ao.outcome_score, ao.confidence_gap, ao.visibility
+         FROM agent_outcomes ao
+         WHERE ao.user_id = $1 ${visibilityClause}
+         ORDER BY ao.submitted_at DESC
+         LIMIT $2`,
+        [user.id, n]
+      );
+
+      if (rows.rows.length === 0) {
+        // Return empty CSV with headers rather than an error
+        const headers = "submitted_at,proof_id,anchored_confidence,outcome_score,confidence_gap\n";
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="calibration-${user.walletAddress.slice(0, 12)}.csv"`);
+        res.setHeader("Cache-Control", "no-store");
+        return res.send(headers);
+      }
+
+      // Build CSV rows — values are numeric/UUIDs/ISO dates, no escaping needed
+      const csvLines = [
+        "submitted_at,proof_id,anchored_confidence,outcome_score,confidence_gap",
+        ...rows.rows.map(r =>
+          [
+            new Date(r.submitted_at).toISOString(),
+            r.certification_id,
+            parseFloat(r.anchored_confidence).toFixed(4),
+            parseFloat(r.outcome_score).toFixed(4),
+            parseFloat(r.confidence_gap).toFixed(4),
+          ].join(",")
+        ),
+      ];
+
+      const csv = csvLines.join("\n") + "\n";
+      const safeAgentName = (user.agentName ?? user.walletAddress.slice(0, 12)).replace(/[^a-z0-9_-]/gi, "_");
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="calibration-${safeAgentName}.csv"`);
+      res.setHeader("Cache-Control", "no-store");
+      return res.send(csv);
+    } catch (error) {
+      logger.error("Failed to export calibration CSV", { error: (error as Error).message });
+      return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to export calibration data" });
     }
   });
 }
