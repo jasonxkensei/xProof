@@ -581,6 +581,8 @@ export async function createMcpServer(ctx: McpContext) {
               `certify_with_confidence - Staged proof with confidence score (initial/partial/pre-commitment/final) — $${currentPriceUsd}/stage`,
               "verify_proof - Verify existing proof",
               "get_proof - Retrieve proof in JSON or Markdown",
+              "submit_outcome - Submit actual outcome for a confidence-anchored decision (operator only, via REST POST /api/agent/outcome)",
+              "get_calibration - Query an agent's calibration stats: mean gap, variance, bias label (public, via REST GET /api/agent/calibration/:agentId)",
             ],
             when_to_certify: {
               description: "Autonomous agents should certify outputs whenever provenance, integrity, or priority matters.",

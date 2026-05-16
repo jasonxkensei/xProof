@@ -71,8 +71,8 @@ export function registerCalibrationRoutes(app: Express) {
 
       // Verify the certification carries a confidence_level
       const meta = (cert.metadata as Record<string, any>) ?? {};
-      const anchoredConfidence = meta.confidence_level;
-      if (anchoredConfidence === undefined || anchoredConfidence === null) {
+      const rawAnchored = meta.confidence_level;
+      if (rawAnchored === undefined || rawAnchored === null) {
         return res.status(422).json({
           error: "NO_CONFIDENCE_LEVEL",
           message: "This proof has no metadata.confidence_level. Confidence gap tracking requires a proof anchored with confidence_level.",
@@ -80,7 +80,14 @@ export function registerCalibrationRoutes(app: Express) {
         });
       }
 
-      const anchoredNum = Number(anchoredConfidence);
+      const anchoredNum = Number(rawAnchored);
+      if (!Number.isFinite(anchoredNum) || anchoredNum < 0 || anchoredNum > 1) {
+        return res.status(422).json({
+          error: "INVALID_CONFIDENCE_LEVEL",
+          message: `The proof's metadata.confidence_level (${rawAnchored}) is not a valid number between 0.0 and 1.0.`,
+        });
+      }
+
       const confidenceGap = Math.round((anchoredNum - outcome_score) * 10000) / 10000;
 
       // Insert — unique index on certification_id prevents duplicate submissions
@@ -90,9 +97,9 @@ export function registerCalibrationRoutes(app: Express) {
           .values({
             certificationId: cert.id,
             userId: apiKey.userId,
-            anchoredConfidence: String(anchoredNum),
-            outcomeScore: String(outcome_score),
-            confidenceGap: String(confidenceGap),
+            anchoredConfidence: anchoredNum,
+            outcomeScore: outcome_score,
+            confidenceGap,
             visibility,
           })
           .returning();

@@ -352,9 +352,9 @@ app.use((req, res, next) => {
           id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
           certification_id VARCHAR NOT NULL REFERENCES certifications(id) ON DELETE CASCADE,
           user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          anchored_confidence VARCHAR NOT NULL,
-          outcome_score VARCHAR NOT NULL,
-          confidence_gap VARCHAR NOT NULL,
+          anchored_confidence REAL NOT NULL CHECK (anchored_confidence >= 0 AND anchored_confidence <= 1),
+          outcome_score REAL NOT NULL CHECK (outcome_score >= 0 AND outcome_score <= 1),
+          confidence_gap REAL NOT NULL,
           visibility VARCHAR NOT NULL DEFAULT 'public',
           submitted_at TIMESTAMP NOT NULL DEFAULT now()
         )
@@ -362,6 +362,33 @@ app.use((req, res, next) => {
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_user_id ON agent_outcomes(user_id)`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_cert_id ON agent_outcomes(certification_id)`);
       await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_outcomes_cert_unique ON agent_outcomes(certification_id)`);
+      // Migrate VARCHAR columns to REAL if table was created before numeric type change
+      await pool.query(`
+        DO $$ BEGIN
+          ALTER TABLE agent_outcomes ALTER COLUMN anchored_confidence TYPE REAL USING anchored_confidence::REAL;
+        EXCEPTION WHEN others THEN NULL; END $$
+      `);
+      await pool.query(`
+        DO $$ BEGIN
+          ALTER TABLE agent_outcomes ALTER COLUMN outcome_score TYPE REAL USING outcome_score::REAL;
+        EXCEPTION WHEN others THEN NULL; END $$
+      `);
+      await pool.query(`
+        DO $$ BEGIN
+          ALTER TABLE agent_outcomes ALTER COLUMN confidence_gap TYPE REAL USING confidence_gap::REAL;
+        EXCEPTION WHEN others THEN NULL; END $$
+      `);
+      // Add CHECK constraints idempotently
+      await pool.query(`
+        DO $$ BEGIN
+          ALTER TABLE agent_outcomes ADD CONSTRAINT chk_anchored_confidence CHECK (anchored_confidence >= 0 AND anchored_confidence <= 1);
+        EXCEPTION WHEN duplicate_object THEN NULL; END $$
+      `);
+      await pool.query(`
+        DO $$ BEGIN
+          ALTER TABLE agent_outcomes ADD CONSTRAINT chk_outcome_score CHECK (outcome_score >= 0 AND outcome_score <= 1);
+        EXCEPTION WHEN duplicate_object THEN NULL; END $$
+      `);
       logger.info("agent_outcomes table ready", { component: "migration" });
     } catch (err: any) {
       logger.error("agent_outcomes migration error", { component: "migration", error: err.message });

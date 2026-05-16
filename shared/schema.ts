@@ -12,6 +12,7 @@ import {
   text,
   integer,
   boolean,
+  real,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -397,12 +398,12 @@ export const agentOutcomes = pgTable("agent_outcomes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   certificationId: varchar("certification_id").notNull().references(() => certifications.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  // Anchored confidence from certification metadata, copied at submission time
-  anchoredConfidence: varchar("anchored_confidence").notNull(),
-  // Operator-submitted actual outcome score (0–1)
-  outcomeScore: varchar("outcome_score").notNull(),
-  // Computed gap: anchored_confidence − outcome_score (signed, −1 to 1)
-  confidenceGap: varchar("confidence_gap").notNull(),
+  // Anchored confidence from certification metadata, copied at submission time (0.0–1.0)
+  anchoredConfidence: real("anchored_confidence").notNull(),
+  // Operator-submitted actual outcome score (0.0–1.0)
+  outcomeScore: real("outcome_score").notNull(),
+  // Computed gap: anchored_confidence − outcome_score (signed, −1.0 to 1.0)
+  confidenceGap: real("confidence_gap").notNull(),
   visibility: varchar("visibility").default("public").notNull(),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
 });

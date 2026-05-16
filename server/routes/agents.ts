@@ -86,7 +86,7 @@ function buildQuickStart(apiKey: string, agentName: string, baseUrl: string) {
             },
           },
         },
-        available_tools: ["certify_file", "certify_with_confidence", "verify_proof", "get_proof", "discover_services", "audit_agent_session", "check_attestations", "investigate_proof"],
+        available_tools: ["certify_file", "certify_with_confidence", "verify_proof", "get_proof", "discover_services", "audit_agent_session", "check_attestations", "investigate_proof", "submit_outcome", "get_calibration"],
         note: "MCP tools accept the same parameters as the REST API. certify_with_confidence is the recommended tool for multi-stage decisions.",
       },
     ],
@@ -277,7 +277,7 @@ export function registerAgentsRoutes(app: Express) {
         endpoint: `${baseUrl}/mcp`,
         protocol: "JSON-RPC 2.0 over Streamable HTTP (MCP spec 2025-03-26)",
         auth: "Authorization: Bearer YOUR_API_KEY",
-        tools: ["certify_file", "certify_with_confidence", "verify_proof", "get_proof", "discover_services", "audit_agent_session", "check_attestations", "investigate_proof"],
+        tools: ["certify_file", "certify_with_confidence", "verify_proof", "get_proof", "discover_services", "audit_agent_session", "check_attestations", "investigate_proof", "submit_outcome", "get_calibration"],
         claude_desktop_config: {
           mcpServers: {
             xproof: {
