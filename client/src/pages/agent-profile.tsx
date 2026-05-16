@@ -17,6 +17,9 @@ import {
   BarChart2,
   AlertTriangle,
   Activity,
+  Target,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -100,6 +103,27 @@ interface ViolationRecord {
   auto_confirmed: boolean;
   detected_at: string;
   confirmed_at: string | null;
+}
+
+interface CalibrationPoint {
+  submitted_at: string;
+  proof_id: string;
+  anchored_confidence: number;
+  outcome_score: number;
+  confidence_gap: number;
+}
+
+interface CalibrationData {
+  agent_id: string;
+  wallet_address: string;
+  agent_name: string | null;
+  outcome_count: number;
+  calibration: {
+    mean_gap: number;
+    variance: number;
+    bias_label: "overconfident" | "underconfident" | "calibrated";
+  } | null;
+  time_series: CalibrationPoint[];
 }
 
 const TRUST_LEVEL_STYLES: Record<string, { badge: string }> = {
@@ -559,6 +583,220 @@ function ScoreBreakdown({ agent }: { agent: AgentProfile }) {
   );
 }
 
+const BIAS_STYLES = {
+  calibrated:    { badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30", bar: "bg-emerald-500", label: "Calibrated" },
+  overconfident: { badge: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",   bar: "bg-amber-500",   label: "Overconfident" },
+  underconfident:{ badge: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",       bar: "bg-blue-500",    label: "Underconfident" },
+};
+
+function CalibrationGapChart({ points }: { points: CalibrationPoint[] }) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  if (points.length < 2) return null;
+
+  const W = 600;
+  const H = 120;
+  const PAD = { top: 16, bottom: 20, left: 36, right: 12 };
+
+  const gaps = points.map((p) => p.confidence_gap);
+  const rawMin = Math.min(...gaps, -0.15);
+  const rawMax = Math.max(...gaps, 0.15);
+  const chartMin = rawMin - 0.05;
+  const chartMax = rawMax + 0.05;
+  const range = chartMax - chartMin || 1;
+
+  const xScale = (i: number) =>
+    PAD.left + (i / (points.length - 1)) * (W - PAD.left - PAD.right);
+  const yScale = (v: number) =>
+    H - PAD.bottom - ((v - chartMin) / range) * (H - PAD.top - PAD.bottom);
+
+  const pts = points.map((p, i) => ({ x: xScale(i), y: yScale(p.confidence_gap), gap: p.confidence_gap }));
+  const polyline = pts.map((p) => `${p.x},${p.y}`).join(" ");
+  const zeroY = yScale(0);
+  const clampedZeroY = Math.max(PAD.top, Math.min(H - PAD.bottom, zeroY));
+
+  const hovered = hoveredIdx !== null ? { pt: pts[hoveredIdx], data: points[hoveredIdx] } : null;
+
+  return (
+    <div className="relative mt-3" data-testid="chart-calibration-gap">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 130 }} onMouseLeave={() => setHoveredIdx(null)}>
+        <defs>
+          <linearGradient id="calPosGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgb(251,191,36)" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="rgb(251,191,36)" stopOpacity="0.02" />
+          </linearGradient>
+          <linearGradient id="calNegGrad" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0%" stopColor="rgb(59,130,246)" stopOpacity="0.20" />
+            <stop offset="100%" stopColor="rgb(59,130,246)" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        {/* zero line */}
+        <line x1={PAD.left} y1={clampedZeroY} x2={W - PAD.right} y2={clampedZeroY}
+          stroke="currentColor" strokeWidth="0.5" strokeDasharray="3,3" className="text-muted-foreground" opacity="0.5" />
+        <text x={PAD.left - 4} y={clampedZeroY + 3} textAnchor="end" fontSize="7" className="fill-muted-foreground" opacity="0.7">0</text>
+
+        {/* threshold lines ±0.10 */}
+        {[0.10, -0.10].map((v) => {
+          const ty = yScale(v);
+          if (ty < PAD.top || ty > H - PAD.bottom) return null;
+          return (
+            <g key={v}>
+              <line x1={PAD.left} y1={ty} x2={W - PAD.right} y2={ty}
+                stroke={v > 0 ? "rgb(251,191,36)" : "rgb(59,130,246)"} strokeWidth="0.5" strokeDasharray="2,3" opacity="0.35" />
+              <text x={PAD.left - 4} y={ty + 3} textAnchor="end" fontSize="7"
+                fill={v > 0 ? "rgb(251,191,36)" : "rgb(59,130,246)"} opacity="0.6">{v > 0 ? "+.10" : "−.10"}</text>
+            </g>
+          );
+        })}
+
+        <polyline points={polyline} fill="none" stroke="rgb(16,185,129)" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+
+        {/* dots */}
+        {pts.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="3"
+            fill={p.gap > 0.10 ? "rgb(251,191,36)" : p.gap < -0.10 ? "rgb(59,130,246)" : "rgb(16,185,129)"}
+            stroke="white" strokeWidth="1"
+          />
+        ))}
+
+        {/* hover zone */}
+        {pts.map((p, i) => (
+          <rect key={i}
+            x={p.x - (W / points.length) / 2} y={PAD.top}
+            width={W / points.length} height={H - PAD.top - PAD.bottom}
+            fill="transparent"
+            onMouseEnter={(e) => {
+              setHoveredIdx(i);
+              const svg = e.currentTarget.ownerSVGElement;
+              if (svg) {
+                const rect = svg.getBoundingClientRect();
+                setTooltipPos({ x: (p.x / W) * rect.width, y: 0 });
+              }
+            }}
+          />
+        ))}
+
+        {hoveredIdx !== null && (
+          <g>
+            <line x1={pts[hoveredIdx].x} y1={PAD.top} x2={pts[hoveredIdx].x} y2={H - PAD.bottom}
+              stroke="rgb(16,185,129)" strokeWidth="0.5" opacity="0.5" />
+          </g>
+        )}
+      </svg>
+
+      {hovered && (
+        <div
+          className="pointer-events-none absolute top-0 z-10 rounded-md border bg-card px-3 py-2 text-xs shadow-md"
+          style={{ left: `${tooltipPos.x}px`, transform: tooltipPos.x > 250 ? "translateX(-110%)" : "translateX(10%)" }}
+        >
+          <p className="font-medium tabular-nums">{hovered.data.submitted_at.slice(0, 10)}</p>
+          <p className="tabular-nums">Gap: <span className={`font-semibold ${hovered.pt.gap > 0.10 ? "text-amber-600 dark:text-amber-400" : hovered.pt.gap < -0.10 ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400"}`}>{hovered.pt.gap > 0 ? "+" : ""}{hovered.pt.gap.toFixed(3)}</span></p>
+          <p className="tabular-nums text-muted-foreground">Anchored: {hovered.data.anchored_confidence.toFixed(2)} · Actual: {hovered.data.outcome_score.toFixed(2)}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CalibrationCard({ data }: { data: CalibrationData }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!data.calibration || data.outcome_count === 0) return null;
+
+  const { mean_gap, variance, bias_label } = data.calibration;
+  const style = BIAS_STYLES[bias_label] ?? BIAS_STYLES.calibrated;
+  const hasChart = data.time_series.length >= 2;
+
+  return (
+    <Card data-testid="card-calibration">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base flex-wrap">
+          <Target className="h-4 w-4" />
+          Confidence calibration
+          <span
+            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${style.badge}`}
+            data-testid="badge-bias-label"
+          >
+            {style.label}
+          </span>
+          <span className="ml-auto flex items-center gap-2">
+            <span className="text-xs font-normal text-muted-foreground" data-testid="text-outcome-count">
+              {data.outcome_count} outcome{data.outcome_count !== 1 ? "s" : ""}
+            </span>
+            {hasChart && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setExpanded((v) => !v)}
+                data-testid="button-calibration-expand"
+                aria-label={expanded ? "Collapse chart" : "Expand chart"}
+              >
+                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </Button>
+            )}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-md bg-muted/30 p-3 text-center">
+            <p
+              className={`text-xl font-bold tabular-nums ${mean_gap > 0.10 ? "text-amber-600 dark:text-amber-400" : mean_gap < -0.10 ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400"}`}
+              data-testid="text-mean-gap"
+            >
+              {mean_gap > 0 ? "+" : ""}{mean_gap.toFixed(3)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Mean gap</p>
+          </div>
+          <div className="rounded-md bg-muted/30 p-3 text-center">
+            <p className="text-xl font-bold tabular-nums" data-testid="text-variance">
+              {variance.toFixed(4)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Variance</p>
+          </div>
+          <div className="rounded-md bg-muted/30 p-3 text-center">
+            <p className="text-xl font-bold tabular-nums" data-testid="text-calibration-count">
+              {data.outcome_count}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Data points</p>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Underconfident</span>
+            <span className="font-medium text-foreground">{style.label}</span>
+            <span>Overconfident</span>
+          </div>
+          <div className="relative h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className={`absolute h-full rounded-full ${style.bar} transition-all`}
+              style={{
+                width: `${Math.min(100, Math.max(0, Math.abs(mean_gap) / 0.5 * 50))}%`,
+                left: mean_gap >= 0 ? "50%" : `${50 - Math.min(50, Math.abs(mean_gap) / 0.5 * 50)}%`,
+              }}
+            />
+            <div className="absolute left-1/2 top-0 h-full w-px bg-muted-foreground/20" />
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          {bias_label === "calibrated"
+            ? "Confidence estimates closely match actual outcomes. Gap within ±0.10 threshold."
+            : bias_label === "overconfident"
+            ? "Anchored confidence systematically exceeds actual outcomes. Mean gap > +0.10."
+            : "Anchored confidence systematically underestimates actual outcomes. Mean gap < −0.10."}
+        </p>
+
+        {expanded && hasChart && (
+          <CalibrationGapChart points={[...data.time_series].reverse()} />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AgentProfilePage() {
   const params = useParams<{ wallet: string }>();
   const wallet = params.wallet;
@@ -589,6 +827,12 @@ export default function AgentProfilePage() {
   const { data: violationsData } = useQuery<{ violations: ViolationRecord[] }>({
     queryKey: ["/api/agents", wallet, "violations"],
     queryFn: () => fetch(`/api/agents/${wallet}/violations`).then((r) => r.json()),
+    enabled: !!wallet,
+  });
+
+  const { data: calibrationData } = useQuery<CalibrationData>({
+    queryKey: ["/api/agent/calibration", wallet],
+    queryFn: () => fetch(`/api/agent/calibration/${wallet}`).then((r) => r.json()),
     enabled: !!wallet,
   });
 
@@ -857,6 +1101,11 @@ export default function AgentProfilePage() {
                   </p>
                 </CardContent>
               </Card>
+            )}
+
+            {/* Confidence Calibration */}
+            {calibrationData && calibrationData.outcome_count > 0 && (
+              <CalibrationCard data={calibrationData} />
             )}
 
             {/* Trust Score History */}
