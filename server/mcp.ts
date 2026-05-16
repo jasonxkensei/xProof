@@ -21,6 +21,45 @@ interface McpContext {
   auth: { valid: boolean; keyHash?: string; apiKeyId?: number; userId?: string };
   xPaymentHeader?: string;
   host: string;
+  clientIp: string;
+}
+
+// ── MCP calibration rate limiting + caching ───────────────────────────────
+// Module-level so state persists across requests (each request creates a new
+// McpServer instance but shares these maps).
+
+// get_calibration: 30 s in-memory cache keyed by "agentId:n"
+const CALIBRATION_CACHE_TTL_MS = 30_000;
+const calibrationCache = new Map<string, { body: object; cachedAt: number }>();
+const calibrationInFlight = new Map<string, Promise<object>>();
+
+// get_calibration: per-IP rate limit — 20 calls per minute for public tool
+const CALIBRATION_IP_LIMIT = 20;
+const CALIBRATION_IP_WINDOW_MS = 60_000;
+const calibrationIpRateMap = new Map<string, { count: number; resetAt: number }>();
+
+// submit_outcome: per-API-key rate limit — 10 submissions per 5 minutes
+const SUBMIT_OUTCOME_KEY_LIMIT = 10;
+const SUBMIT_OUTCOME_KEY_WINDOW_MS = 5 * 60_000;
+const submitOutcomeRateMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkMcpRateLimit(
+  map: Map<string, { count: number; resetAt: number }>,
+  key: string,
+  limit: number,
+  windowMs: number,
+): { allowed: boolean; retryAfterSec: number } {
+  const now = Date.now();
+  const entry = map.get(key);
+  if (!entry || now > entry.resetAt) {
+    map.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, retryAfterSec: 0 };
+  }
+  if (entry.count >= limit) {
+    return { allowed: false, retryAfterSec: Math.ceil((entry.resetAt - now) / 1000) };
+  }
+  entry.count++;
+  return { allowed: true, retryAfterSec: 0 };
 }
 
 export async function createMcpServer(ctx: McpContext) {
@@ -31,7 +70,7 @@ export async function createMcpServer(ctx: McpContext) {
     version: "1.3.0",
   });
 
-  const { baseUrl, auth, xPaymentHeader, host } = ctx;
+  const { baseUrl, auth, xPaymentHeader, host, clientIp } = ctx;
 
   server.tool(
     "certify_file",
@@ -1150,6 +1189,19 @@ export async function createMcpServer(ctx: McpContext) {
         };
       }
 
+      const submitRl = checkMcpRateLimit(
+        submitOutcomeRateMap,
+        auth.apiKeyId ? String(auth.apiKeyId) : auth.userId,
+        SUBMIT_OUTCOME_KEY_LIMIT,
+        SUBMIT_OUTCOME_KEY_WINDOW_MS,
+      );
+      if (!submitRl.allowed) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "RATE_LIMIT_EXCEEDED", message: `Too many outcome submissions. Retry after ${submitRl.retryAfterSec}s.`, retry_after: submitRl.retryAfterSec }) }],
+          isError: true,
+        };
+      }
+
       try {
         const [cert] = await db.select().from(certifications).where(eq(certifications.id, proof_id)).limit(1);
         if (!cert) {
@@ -1202,43 +1254,92 @@ export async function createMcpServer(ctx: McpContext) {
       n: z.number().int().min(1).max(200).default(50).describe("Number of recent outcomes to include (default 50, max 200)"),
     },
     async ({ agent_id, n }) => {
+      // Per-IP rate limit: 20 calls per minute for this public endpoint
+      const ipRl = checkMcpRateLimit(
+        calibrationIpRateMap,
+        clientIp,
+        CALIBRATION_IP_LIMIT,
+        CALIBRATION_IP_WINDOW_MS,
+      );
+      if (!ipRl.allowed) {
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ error: "RATE_LIMIT_EXCEEDED", message: `Too many calibration requests. Retry after ${ipRl.retryAfterSec}s.`, retry_after: ipRl.retryAfterSec }) }],
+          isError: true,
+        };
+      }
+
+      const cacheKey = `${agent_id}:${n}`;
+
+      // Serve from cache if fresh
+      const cached = calibrationCache.get(cacheKey);
+      if (cached && Date.now() - cached.cachedAt < CALIBRATION_CACHE_TTL_MS) {
+        return { content: [{ type: "text" as const, text: JSON.stringify(cached.body) }] };
+      }
+
+      // Coalesce concurrent fetches for the same key
+      const inflight = calibrationInFlight.get(cacheKey);
+      if (inflight) {
+        try {
+          const body = await inflight;
+          const isErr = "error" in body;
+          return { content: [{ type: "text" as const, text: JSON.stringify(body) }], ...(isErr ? { isError: true } : {}) };
+        } catch (err: any) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INTERNAL_ERROR", message: "Failed to fetch calibration data" }) }], isError: true };
+        }
+      }
+
+      const fetchPromise = (async (): Promise<object> => {
+        try {
+          const [user] = await db.select({ id: users.id, walletAddress: users.walletAddress, agentName: users.agentName })
+            .from(users)
+            .where(or(eq(users.id, agent_id), eq(users.walletAddress, agent_id)))
+            .limit(1);
+
+          if (!user) {
+            return { error: "AGENT_NOT_FOUND", message: `No agent found with id or wallet: ${agent_id}` };
+          }
+
+          const rows = await pool.query<{ confidence_gap: string; anchored_confidence: string; outcome_score: string; submitted_at: Date; certification_id: string }>(
+            `SELECT ao.confidence_gap, ao.anchored_confidence, ao.outcome_score, ao.submitted_at, ao.certification_id
+             FROM agent_outcomes ao
+             WHERE ao.user_id = $1 AND ao.visibility = 'public'
+             ORDER BY ao.submitted_at DESC LIMIT $2`,
+            [user.id, n]
+          );
+
+          const outcomes = rows.rows;
+          if (outcomes.length === 0) {
+            return { agent_id: user.id, wallet_address: user.walletAddress, agent_name: user.agentName, outcome_count: 0, calibration: null, message: "No public outcome data yet for this agent." };
+          }
+
+          const gaps = outcomes.map(r => parseFloat(r.confidence_gap));
+          const count = gaps.length;
+          const meanGap = Math.round((gaps.reduce((s, g) => s + g, 0) / count) * 10000) / 10000;
+          const variance = count > 1 ? Math.round((gaps.reduce((s, g) => s + Math.pow(g - meanGap, 2), 0) / (count - 1)) * 10000) / 10000 : 0;
+          const biasLabel = meanGap > 0.10 ? "overconfident" : meanGap < -0.10 ? "underconfident" : "calibrated";
+
+          return {
+            agent_id: user.id,
+            wallet_address: user.walletAddress,
+            agent_name: user.agentName,
+            outcome_count: count,
+            calibration: { mean_gap: meanGap, variance, bias_label: biasLabel },
+            time_series: outcomes.map(r => ({ submitted_at: r.submitted_at, proof_id: r.certification_id, anchored_confidence: parseFloat(r.anchored_confidence), outcome_score: parseFloat(r.outcome_score), confidence_gap: parseFloat(r.confidence_gap) })),
+          };
+        } finally {
+          calibrationInFlight.delete(cacheKey);
+        }
+      })();
+
+      calibrationInFlight.set(cacheKey, fetchPromise);
+
       try {
-        const [user] = await db.select({ id: users.id, walletAddress: users.walletAddress, agentName: users.agentName })
-          .from(users)
-          .where(or(eq(users.id, agent_id), eq(users.walletAddress, agent_id)))
-          .limit(1);
-
-        if (!user) {
-          return { content: [{ type: "text" as const, text: JSON.stringify({ error: "AGENT_NOT_FOUND", message: `No agent found with id or wallet: ${agent_id}` }) }], isError: true };
+        const body = await fetchPromise;
+        const isErr = "error" in body;
+        if (!isErr) {
+          calibrationCache.set(cacheKey, { body, cachedAt: Date.now() });
         }
-
-        const rows = await pool.query<{ confidence_gap: string; anchored_confidence: string; outcome_score: string; submitted_at: Date; certification_id: string }>(
-          `SELECT ao.confidence_gap, ao.anchored_confidence, ao.outcome_score, ao.submitted_at, ao.certification_id
-           FROM agent_outcomes ao
-           WHERE ao.user_id = $1 AND ao.visibility = 'public'
-           ORDER BY ao.submitted_at DESC LIMIT $2`,
-          [user.id, n]
-        );
-
-        const outcomes = rows.rows;
-        if (outcomes.length === 0) {
-          return { content: [{ type: "text" as const, text: JSON.stringify({ agent_id: user.id, wallet_address: user.walletAddress, agent_name: user.agentName, outcome_count: 0, calibration: null, message: "No public outcome data yet for this agent." }) }] };
-        }
-
-        const gaps = outcomes.map(r => parseFloat(r.confidence_gap));
-        const count = gaps.length;
-        const meanGap = Math.round((gaps.reduce((s, g) => s + g, 0) / count) * 10000) / 10000;
-        const variance = count > 1 ? Math.round((gaps.reduce((s, g) => s + Math.pow(g - meanGap, 2), 0) / (count - 1)) * 10000) / 10000 : 0;
-        const biasLabel = meanGap > 0.10 ? "overconfident" : meanGap < -0.10 ? "underconfident" : "calibrated";
-
-        return { content: [{ type: "text" as const, text: JSON.stringify({
-          agent_id: user.id,
-          wallet_address: user.walletAddress,
-          agent_name: user.agentName,
-          outcome_count: count,
-          calibration: { mean_gap: meanGap, variance, bias_label: biasLabel },
-          time_series: outcomes.map(r => ({ submitted_at: r.submitted_at, proof_id: r.certification_id, anchored_confidence: parseFloat(r.anchored_confidence), outcome_score: parseFloat(r.outcome_score), confidence_gap: parseFloat(r.confidence_gap) })),
-        }) }] };
+        return { content: [{ type: "text" as const, text: JSON.stringify(body) }], ...(isErr ? { isError: true } : {}) };
       } catch (err: any) {
         logger.error("MCP get_calibration failed", { error: err.message });
         return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INTERNAL_ERROR", message: "Failed to fetch calibration data" }) }], isError: true };

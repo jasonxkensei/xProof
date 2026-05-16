@@ -3,6 +3,7 @@ import { logger } from "../logger";
 import { paymentRateLimiter } from "../reliability";
 import { createMcpServer, authenticateApiKey } from "../mcp";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { getClientIp } from "../routes/helpers";
 
 export function registerMcpRoutesRoutes(app: Express) {
   app.post("/mcp", paymentRateLimiter, async (req, res) => {
@@ -47,7 +48,8 @@ export function registerMcpRoutesRoutes(app: Express) {
 
       const xPaymentHeader = req.headers["x-payment"] as string | undefined;
       const host = req.get('host') || '';
-      const mcpServer = await createMcpServer({ baseUrl, auth, xPaymentHeader, host });
+      const clientIp = getClientIp(req);
+      const mcpServer = await createMcpServer({ baseUrl, auth, xPaymentHeader, host, clientIp });
 
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
