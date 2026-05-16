@@ -6,6 +6,24 @@ import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { validateApiKey } from "./helpers";
+import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter } from "../reliability";
+
+// ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
+// Keyed by `${agentId}:${n}` so different ?n values are cached independently.
+// Mirrors the pattern used in admin.ts for /api/stats.
+const CALIBRATION_CACHE_TTL_MS = 30_000;
+const calibrationCache = new Map<string, { body: object; cachedAt: number }>();
+
+// Evict expired entries every 5 minutes to prevent stale accumulation over
+// long uptimes (e.g. many unique agentId/n combinations building up).
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of calibrationCache) {
+    if (now - entry.cachedAt >= CALIBRATION_CACHE_TTL_MS) {
+      calibrationCache.delete(key);
+    }
+  }
+}, 5 * 60 * 1000).unref();
 
 // ── Bias label thresholds — intentionally fixed, revisit after real data ──────
 // mean_gap = anchored_confidence − outcome_score
@@ -64,7 +82,7 @@ export function registerCalibrationRoutes(app: Express) {
   // Auth: Authorization: Bearer pm_xxx (operator only, not the agent itself)
   // Submits the actual outcome for a decision previously anchored with
   // metadata.confidence_level. Computes and stores the calibration gap.
-  app.post("/api/agent/outcome", validateApiKey, async (req, res) => {
+  app.post("/api/agent/outcome", validateApiKey, outcomeSubmitRateLimiter, async (req, res) => {
     try {
       const parsed = outcomeSubmitSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -175,10 +193,17 @@ export function registerCalibrationRoutes(app: Express) {
   // Any agent or operator can check another agent's calibration quality.
   // agentId: MultiversX wallet address (erd1...) or internal user id.
   // Query params: ?n=50 (number of outcomes, default 50, max 200)
-  app.get("/api/agent/calibration/:agentId", async (req, res) => {
+  app.get("/api/agent/calibration/:agentId", publicCalibrationRateLimiter, async (req, res) => {
     try {
       const { agentId } = req.params;
       const n = Math.min(200, Math.max(1, parseInt((req.query.n as string) || "50", 10) || 50));
+
+      // Serve from cache if still fresh
+      const cacheKey = `${agentId}:${n}`;
+      const cached = calibrationCache.get(cacheKey);
+      if (cached && Date.now() - cached.cachedAt < CALIBRATION_CACHE_TTL_MS) {
+        return res.json(cached.body);
+      }
 
       // Resolve agentId → user (accepts wallet address or user id)
       const [user] = await db
@@ -216,7 +241,7 @@ export function registerCalibrationRoutes(app: Express) {
       const count = outcomes.length;
 
       if (count === 0) {
-        return res.json({
+        const emptyBody = {
           agent_id: user.id,
           wallet_address: user.walletAddress,
           agent_name: user.agentName ?? null,
@@ -224,7 +249,9 @@ export function registerCalibrationRoutes(app: Express) {
           calibration: null,
           message: "No public outcome data yet for this agent.",
           time_series: [],
-        });
+        };
+        calibrationCache.set(cacheKey, { body: emptyBody, cachedAt: Date.now() });
+        return res.json(emptyBody);
       }
 
       // Compute calibration statistics
@@ -246,7 +273,7 @@ export function registerCalibrationRoutes(app: Express) {
         confidence_gap: parseFloat(r.confidence_gap),
       }));
 
-      return res.json({
+      const responseBody = {
         agent_id: user.id,
         wallet_address: user.walletAddress,
         agent_name: user.agentName ?? null,
@@ -267,7 +294,9 @@ export function registerCalibrationRoutes(app: Express) {
           },
         },
         time_series: timeSeries,
-      });
+      };
+      calibrationCache.set(cacheKey, { body: responseBody, cachedAt: Date.now() });
+      return res.json(responseBody);
     } catch (error) {
       logger.error("Failed to fetch agent calibration", { error: (error as Error).message });
       return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to fetch calibration data" });

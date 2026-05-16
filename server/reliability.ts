@@ -123,6 +123,33 @@ export const publicPdfRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
 });
 
+// /api/agent/calibration/:agentId is a public endpoint that runs a raw SQL
+// query on every call. 20 req/min per IP keeps the DB load bounded while
+// still allowing reasonable polling. Paired with a 30 s in-memory cache in
+// calibration.ts so concurrent callers share one computation.
+export const publicCalibrationRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many calibration requests, please try again later" },
+});
+
+// POST /api/agent/outcome is authenticated but writes to the DB on every call.
+// 10 submissions per 5 minutes per API key is tighter than the global 100 rpm
+// limit and prevents a single operator from flooding the outcome table.
+// Keyed on req.apiKey.id (the API key row PK) so each pm_xxx token has its
+// own independent bucket — a user with multiple keys is not pooled together.
+export const outcomeSubmitRateLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => (req.apiKey?.id as string) ?? getClientIp(req),
+  message: { error: "TOO_MANY_REQUESTS", message: "Outcome submission rate limit exceeded: max 10 per 5 minutes per API key" },
+});
+
 // /api/stats runs ~15 unauthenticated full-table aggregates per call. The
 // generic /api limiter (100 rpm) leaves room for a single client to keep the
 // database busy. We pair this strict limiter with an in-memory response
