@@ -123,10 +123,13 @@ export const publicPdfRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
 });
 
-// GET /api/agent/calibration/:agentId/export.csv — anonymous / non-owner guard.
-// Runs FIRST in the route chain (before optionalApiKey) so it throttles every
-// request including non-existent agentId paths, before any DB work begins.
-// 5 req/min per IP is the effective limit for unauthenticated and non-owner callers.
+// GET /api/agent/calibration/:agentId/export.csv — baseline per-IP guard.
+// Applied FIRST in the route chain (before optionalApiKey) so every request,
+// including those for non-existent agentId values, is throttled before any DB
+// work begins.  5 req/min per IP is the effective cap for anonymous and non-owner
+// callers.  Confirmed owners are additionally checked against the pub_csv_owner
+// namespace (30/min per identity) inside the handler after isOwner is resolved;
+// their cross-IP aggregate can reach 30/min while each IP remains bounded at 5/min.
 export const calibrationCsvExportRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
@@ -134,23 +137,6 @@ export const calibrationCsvExportRateLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
   store: new PgRateLimitStore("pub_csv"),
-  message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
-});
-
-// Confirmed-owner limiter — 30/min keyed on authenticated identity.
-// Ownership of the specific :agentId is only knowable after a DB lookup inside the
-// handler, so this cannot be wired as standalone route middleware. Instead the route
-// handler calls pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000) after
-// isOwner is established; that call shares this store's namespace and parameters.
-// Having this export keeps the config authoritative and visible alongside the anon
-// limiter for maintenance, monitoring, and future refactoring.
-export const calibrationCsvExportOwnerRateLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req: any) => (req.optionalUserId as string) ?? (req.session?.walletAddress as string) ?? getClientIp(req),
-  store: new PgRateLimitStore("pub_csv_owner"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
 });
 
