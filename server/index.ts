@@ -11,7 +11,7 @@ import {
   setupProcessErrorHandlers 
 } from "./reliability";
 import { startTxQueueWorker } from "./txQueue";
-import { ensureRateLimitTable } from "./pgRateLimit";
+import { ensureRateLimitTable, purgeExpiredRateLimitRows } from "./pgRateLimit";
 import { computeTrustScoreByWallet } from "./trust";
 import { pool, db } from "./db";
 import { users } from "@shared/schema";
@@ -164,11 +164,23 @@ app.use((req, res, next) => {
         );
       }
 
-      if (snapshots > 0 || expiring.rows.length > 0) {
+      let purgedRateLimitRows = 0;
+      try {
+        purgedRateLimitRows = await purgeExpiredRateLimitRows();
+      } catch (purgeErr: any) {
+        // non-fatal: best-effort cleanup; log for incident diagnosis
+        logger.debug("Rate limit purge skipped during maintenance", {
+          component: "maintenance",
+          error: purgeErr?.message ?? String(purgeErr),
+        });
+      }
+
+      if (snapshots > 0 || expiring.rows.length > 0 || purgedRateLimitRows > 0) {
         logger.info("Daily maintenance complete", {
           component: "maintenance",
           snapshots,
           expiryNotifications: expiring.rows.length,
+          purgedRateLimitRows,
         });
       }
     } catch (err: any) {

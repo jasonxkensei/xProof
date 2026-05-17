@@ -19,7 +19,8 @@ export async function ensureRateLimitTable(): Promise<void> {
         ON rate_limit_counters (reset_at)
     `);
     logger.info("rate_limit_counters table ready", { component: "migration" });
-    // Background cleanup: remove expired rows every 5 minutes
+    // Best-effort background cleanup every 5 minutes; primary cleanup runs
+    // inside runDailyMaintenance() so it fires even on short-lived instances.
     const timer = setInterval(async () => {
       try {
         await pool.query(`DELETE FROM rate_limit_counters WHERE reset_at <= NOW()`);
@@ -34,6 +35,21 @@ export async function ensureRateLimitTable(): Promise<void> {
       error: String(err),
     });
   }
+}
+
+// ── purgeExpiredRateLimitRows ──────────────────────────────────────────────
+// Deletes all rows whose window has already closed. Called by
+// runDailyMaintenance() in server/index.ts so cleanup happens on every server
+// start regardless of how long the instance stays up.
+// The rate_limit_counters_reset_at_idx index on (reset_at) makes this DELETE
+// an index scan rather than a sequential scan.
+export async function purgeExpiredRateLimitRows(): Promise<number> {
+  const result = await pool.query(
+    `DELETE FROM rate_limit_counters WHERE reset_at <= NOW()`,
+  );
+  // pool.query returns a QueryResult whose rowCount is the number of rows
+  // affected by a DELETE statement.
+  return result.rowCount ?? 0;
 }
 
 // ── Atomic increment ───────────────────────────────────────────────────────
