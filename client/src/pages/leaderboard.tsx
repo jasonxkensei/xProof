@@ -36,6 +36,7 @@ interface LeaderboardEntry {
   previousLevel: string | null;
   violationCount?: number;
   violationPenalty?: number;
+  calibrationLabel?: "calibrated" | "overconfident" | "underconfident" | null;
 }
 
 interface LeaderboardResponse {
@@ -82,6 +83,24 @@ function TrustBadge({ level }: { level: string }) {
       className={`border text-xs font-medium ${style.badge}`}
     >
       {level === "Verified" && <Shield className="mr-1 h-3 w-3" />}
+      {style.label}
+    </Badge>
+  );
+}
+
+const CALIBRATION_STYLES: Record<string, { badge: string; label: string }> = {
+  calibrated:    { badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30", label: "Calibrated" },
+  overconfident: { badge: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",   label: "Overconfident" },
+  underconfident:{ badge: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",       label: "Underconfident" },
+};
+
+function CalibrationBadge({ label }: { label: "calibrated" | "overconfident" | "underconfident" }) {
+  const style = CALIBRATION_STYLES[label];
+  return (
+    <Badge
+      data-testid={`badge-calibration-${label}`}
+      className={`border text-[10px] px-1.5 py-0 font-medium ${style.badge}`}
+    >
       {style.label}
     </Badge>
   );
@@ -406,6 +425,9 @@ export default function Leaderboard() {
                               <AlertTriangle className="mr-0.5 h-2.5 w-2.5" />
                               {entry.violationCount} audit flag{(entry.violationCount ?? 0) > 1 ? "s" : ""}
                             </Badge>
+                          )}
+                          {entry.calibrationLabel && (
+                            <CalibrationBadge label={entry.calibrationLabel} />
                           )}
                         </div>
                         <div className="flex items-center gap-1">

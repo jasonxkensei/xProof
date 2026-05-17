@@ -336,6 +336,8 @@ export async function computeTrustScoreByWallet(walletAddress: string): Promise<
   }
 }
 
+export type CalibrationLabel = "calibrated" | "overconfident" | "underconfident";
+
 export interface LeaderboardEntry {
   walletAddress: string;
   agentName: string | null;
@@ -358,6 +360,7 @@ export interface LeaderboardEntry {
   previousLevel: TrustLevel | null;
   violationCount: number;
   violationPenalty: number;
+  calibrationLabel: CalibrationLabel | null;
 }
 
 export interface LeaderboardFilters {
@@ -413,12 +416,13 @@ async function computeAllLeaderboardEntries(): Promise<LeaderboardEntry[]> {
   const cutoff7d = new Date();
   cutoff7d.setDate(cutoff7d.getDate() - 7);
 
-  const [streakMap, attestationMap, oldScoreMap, prevLevelMap, violationMap] = await Promise.all([
+  const [streakMap, attestationMap, oldScoreMap, prevLevelMap, violationMap, calibrationMap] = await Promise.all([
     computeStreakWeeksBatch(userIds),
     computeAttestationBonusBatch(walletAddresses),
     getOldScoreBatch(walletAddresses, cutoff7d),
     getPreviousLevelBatch(walletAddresses),
     computeViolationPenaltyBatch(walletAddresses),
+    computeCalibrationLabelBatch(),
   ]);
 
   const entries: LeaderboardEntry[] = allRows.map((row) => {
@@ -459,6 +463,7 @@ async function computeAllLeaderboardEntries(): Promise<LeaderboardEntry[]> {
       previousLevel: prevLevelMap.get(row.wallet_address) ?? null,
       violationCount: vResult.fault + vResult.breach,
       violationPenalty: vResult.penalty,
+      calibrationLabel: calibrationMap.get(row.id) ?? null,
     };
   });
 
@@ -513,6 +518,39 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
   const paged = entries.slice(start, start + limit);
 
   return { entries: paged, total, page, limit, totalPages };
+}
+
+// Thresholds match calibration.ts constants (no import to avoid circular dep)
+const CAL_OVER = 0.10;
+const CAL_UNDER = -0.10;
+
+function calibrationLabelFromMean(mean: number): CalibrationLabel {
+  if (mean > CAL_OVER) return "overconfident";
+  if (mean < CAL_UNDER) return "underconfident";
+  return "calibrated";
+}
+
+async function computeCalibrationLabelBatch(): Promise<Map<string, CalibrationLabel>> {
+  try {
+    const result = await db.execute(sql`
+      SELECT ao.user_id::text AS user_id, AVG(ao.confidence_gap) AS mean_gap
+      FROM agent_outcomes ao
+      JOIN users u ON u.id = ao.user_id
+      WHERE ao.is_public = true
+        AND u.is_public_profile = true
+        AND u.wallet_address NOT LIKE 'erd1trial%'
+      GROUP BY ao.user_id
+      HAVING COUNT(*) > 0
+    `);
+    return new Map(
+      (result.rows as any[]).map((r) => [
+        r.user_id as string,
+        calibrationLabelFromMean(Number(r.mean_gap)),
+      ])
+    );
+  } catch {
+    return new Map();
+  }
 }
 
 async function computeViolationPenaltyBatch(walletAddresses: string[]): Promise<Map<string, { penalty: number; fault: number; breach: number; proposed: number }>> {
