@@ -411,6 +411,55 @@ describe("xproof API", () => {
     });
   });
 
+  describe("GET /api/agent/calibration/:agentId/export.csv — Task #223", () => {
+    it("returns 404 for non-existent agent (unauthenticated)", async () => {
+      const id = "erd1csvtest000000000000000000000000000000000000000000000000001aaa";
+      const res = await fetch(`${BASE_URL}/api/agent/calibration/${id}/export.csv`);
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe("AGENT_NOT_FOUND");
+    });
+
+    it("returns 404 for non-existent agent even with an invalid API key", async () => {
+      const id = "erd1csvtest000000000000000000000000000000000000000000000000002bbb";
+      const res = await fetch(`${BASE_URL}/api/agent/calibration/${id}/export.csv`, {
+        headers: { Authorization: "Bearer pm_invalid_key_that_does_not_exist" },
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe("AGENT_NOT_FOUND");
+    });
+
+    it("route is reachable without auth headers (optionalApiKey does not block access)", async () => {
+      // The route uses optionalApiKey (non-blocking), so a request without an
+      // Authorization header must not be rejected with 401 before the agent lookup.
+      // 404 (agent not found) confirms the middleware chain completed normally.
+      const id = "erd1csvtest000000000000000000000000000000000000000000000000003ccc";
+      const res = await fetch(`${BASE_URL}/api/agent/calibration/${id}/export.csv`);
+      expect([404, 200]).toContain(res.status);
+      if (res.status === 404) {
+        const body = await res.json();
+        expect(body.error).toBe("AGENT_NOT_FOUND");
+      }
+    });
+
+    it("session cookie is forwarded and checked without blocking the middleware chain", async () => {
+      // Simulates a logged-in browser: cookies header present but agent does not exist.
+      // Session wallet check runs after the user lookup, so a missing agent still 404s
+      // (or 429 if the rate limiter triggers, but never 401 for a missing agent).
+      const id = "erd1csvtest000000000000000000000000000000000000000000000000004ddd";
+      const res = await fetch(`${BASE_URL}/api/agent/calibration/${id}/export.csv`, {
+        headers: { Cookie: "connect.sid=s%3Afake_session_that_does_not_exist.fakesig" },
+      });
+      // 404 = agent not found (most likely); 429 = rate limited; never 401 for unknown agent
+      expect([404, 429]).toContain(res.status);
+      if (res.status === 404) {
+        const body = await res.json();
+        expect(body.error).toBe("AGENT_NOT_FOUND");
+      }
+    });
+  });
+
   describe("Timestamp Decomposition — Task #87", () => {
     it("GET /.well-known/agent-audit-schema.json includes all 4 new timing fields", async () => {
       const res = await fetch(`${BASE_URL}/.well-known/agent-audit-schema.json`);

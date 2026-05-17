@@ -718,7 +718,7 @@ function CalibrationCard({ data }: { data: CalibrationData }) {
       if (res.status === 401) {
         toast({
           title: "Authentication required",
-          description: "To export private outcomes, use your API key: Authorization: Bearer pm_xxx",
+          description: "Log in to download your full calibration history, or supply the owner API key via Authorization: Bearer pm_xxx",
           variant: "destructive",
         });
         return;
