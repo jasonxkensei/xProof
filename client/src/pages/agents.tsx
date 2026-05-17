@@ -168,8 +168,10 @@ export default function AgentsPage() {
   const { data: calibratedData } = useQuery<LeaderboardResponse>({
     queryKey: ["/api/leaderboard", { calibrated: true, limit: 6, sort: "calibration" }],
     queryFn: () =>
-      fetch("/api/leaderboard?calibrated=true&limit=6&sort=calibration")
-        .then((r) => r.json()),
+      fetch("/api/leaderboard?calibrated=true&limit=6&sort=calibration").then((r) => {
+        if (!r.ok) throw new Error(`Leaderboard fetch failed: ${r.status}`);
+        return r.json();
+      }),
   });
   const calibratedAgents = calibratedData?.entries ?? [];
 
@@ -314,7 +316,10 @@ export default function AgentsPage() {
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-8">
                 {calibratedAgents.map((agent) => {
-                  const style = CALIBRATION_STYLES[agent.calibrationLabel];
+                  const style = CALIBRATION_STYLES[agent.calibrationLabel] ?? {
+                    badge: "bg-muted text-muted-foreground border-border",
+                    label: agent.calibrationLabel,
+                  };
                   const shortWallet = `${agent.walletAddress.slice(0, 8)}…${agent.walletAddress.slice(-6)}`;
                   return (
                     <a
