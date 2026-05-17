@@ -363,6 +363,7 @@ app.use((req, res, next) => {
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_user_id ON agent_outcomes(user_id)`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_cert_id ON agent_outcomes(certification_id)`);
       await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_outcomes_cert_unique ON agent_outcomes(certification_id)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_user_vis_time ON agent_outcomes(user_id, visibility, submitted_at DESC)`);
       // Migrate VARCHAR columns to REAL if table was created before numeric type change
       await pool.query(`
         DO $$ BEGIN
