@@ -14,11 +14,15 @@ import { ApiKeysSection } from "@/components/api-keys-section";
 
 function TrustBadgeSection({ wallet, isPublic }: { wallet: string; isPublic: boolean }) {
   const { toast } = useToast();
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://xproof.app";
-  const badgeUrl = `${origin}/badge/trust/${wallet}.svg`;
-  const linkUrl = `${origin}/agent/${wallet}`;
-  const markdownSnippet = `[![xproof Trust](${badgeUrl})](${linkUrl})`;
-  const scriptSnippet = `<script src="${origin}/widget/trust/${wallet}.js"></script>`;
+  // Live preview uses current origin so it works in dev/staging as well.
+  const previewUrl = `${typeof window !== "undefined" ? window.location.origin : "https://xproof.app"}/badge/trust/${wallet}.svg`;
+  // Snippet text always uses the canonical production URL so copied embed codes
+  // point to the live service regardless of where the dashboard is opened.
+  const canonicalOrigin = "https://xproof.app";
+  const snippetBadgeUrl = `${canonicalOrigin}/badge/trust/${wallet}.svg`;
+  const snippetLinkUrl = `${canonicalOrigin}/agent/${wallet}`;
+  const markdownSnippet = `[![xproof Trust](${snippetBadgeUrl})](${snippetLinkUrl})`;
+  const scriptSnippet = `<script src="${canonicalOrigin}/widget/trust/${wallet}.js"></script>`;
 
   const handleCopy = async (text: string, label: string) => {
     const success = await copyToClipboard(text);
@@ -55,7 +59,7 @@ function TrustBadgeSection({ wallet, isPublic }: { wallet: string; isPublic: boo
             <div>
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Live preview</p>
               <img
-                src={badgeUrl}
+                src={previewUrl}
                 alt="xproof Trust Badge"
                 className="h-7"
                 data-testid="img-trust-badge-preview"
