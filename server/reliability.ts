@@ -123,9 +123,10 @@ export const publicPdfRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
 });
 
-// GET /api/agent/calibration/:agentId/export.csv streams a full-table scan for
-// every request. 5 req/min per IP mirrors publicPdfRateLimiter — keeps scans
-// bounded while still allowing owners to regenerate exports comfortably.
+// GET /api/agent/calibration/:agentId/export.csv — unauthenticated callers.
+// Runs AFTER optionalApiKey so the skip function can detect authenticated
+// requests and exempt them from this tighter IP-based cap.
+// 5 req/min per IP protects the full-table-scan path from anonymous DoS.
 export const calibrationCsvExportRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
@@ -133,22 +134,28 @@ export const calibrationCsvExportRateLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
   store: new PgRateLimitStore("pub_csv"),
+  // Skip for any caller who has already been authenticated by optionalApiKey
+  // (API key → req.optionalUserId) or by a wallet session — they are governed
+  // by the more generous owner limiter that follows.
+  skip: (req: any) => !!(req.optionalUserId) || !!(req.session?.walletAddress),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
 });
 
-// Owners (API-key or wallet-session authenticated) get a more generous limit
-// keyed on their identity so they can regenerate exports across multiple IPs.
-// Applied inside the route handler after isOwner is resolved (cannot be a
-// standalone middleware because ownership requires a DB lookup).
+// Owners (API-key or wallet-session authenticated) get 30 req/min keyed on
+// their identity so a pipeline re-exporting after each outcome upload is not
+// throttled by the anonymous IP cap.
+// Runs as the third route middleware (after optionalApiKey + anon limiter).
+// Skips unauthenticated callers — they are governed by the anon limiter above.
 export const calibrationCsvExportOwnerRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  // optionalApiKey sets req.optionalUserId (user DB ID), not req.apiKey.
+  // optionalApiKey sets req.optionalUserId (user DB ID, not req.apiKey).
   // Wallet-session callers are identified by req.session.walletAddress.
   keyGenerator: (req: any) => (req.optionalUserId as string) ?? (req.session?.walletAddress as string) ?? getClientIp(req),
   store: new PgRateLimitStore("pub_csv_owner"),
+  skip: (req: any) => !(req.optionalUserId) && !(req.session?.walletAddress),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
 });
 
