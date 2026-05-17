@@ -199,8 +199,15 @@ export function registerCalibrationRoutes(app: Express) {
       const { agentId } = req.params;
       const n = Math.min(200, Math.max(1, parseInt((req.query.n as string) || "50", 10) || 50));
 
+      // Optional cursor: ISO timestamp from a previous response's next_cursor field
+      const beforeRaw = req.query.before as string | undefined;
+      const beforeTs = beforeRaw ? new Date(beforeRaw) : null;
+      if (beforeTs !== null && isNaN(beforeTs.getTime())) {
+        return res.status(400).json({ error: "INVALID_CURSOR", message: "before must be a valid ISO 8601 timestamp" });
+      }
+
       // Serve from cache if still fresh
-      const cacheKey = `${agentId}:${n}`;
+      const cacheKey = `${agentId}:${n}:${beforeTs?.toISOString() ?? ""}`;
       const cached = calibrationCache.get(cacheKey);
       if (cached && Date.now() - cached.cachedAt < CALIBRATION_CACHE_TTL_MS) {
         return res.json(cached.body);
@@ -229,7 +236,9 @@ export function registerCalibrationRoutes(app: Express) {
       );
       const hasPrivateOutcomes = privCheckResult.rows[0]?.exists === true;
 
-      // Fetch last N public outcomes for this agent, most recent first
+      // Fetch last N public outcomes for this agent, most recent first.
+      // When a cursor is supplied, keyset-filter to avoid scanning sorted rows
+      // before the cursor position (eliminates deep-offset cost).
       const rows = await pool.query<{
         id: string;
         certification_id: string;
@@ -238,13 +247,21 @@ export function registerCalibrationRoutes(app: Express) {
         confidence_gap: string;
         submitted_at: Date;
       }>(
-        `SELECT ao.id, ao.certification_id, ao.anchored_confidence, ao.outcome_score, ao.confidence_gap, ao.submitted_at
-         FROM agent_outcomes ao
-         WHERE ao.user_id = $1
-           AND ao.visibility = 'public'
-         ORDER BY ao.submitted_at DESC
-         LIMIT $2`,
-        [user.id, n]
+        beforeTs
+          ? `SELECT ao.id, ao.certification_id, ao.anchored_confidence, ao.outcome_score, ao.confidence_gap, ao.submitted_at
+             FROM agent_outcomes ao
+             WHERE ao.user_id = $1
+               AND ao.visibility = 'public'
+               AND ao.submitted_at < $3
+             ORDER BY ao.submitted_at DESC
+             LIMIT $2`
+          : `SELECT ao.id, ao.certification_id, ao.anchored_confidence, ao.outcome_score, ao.confidence_gap, ao.submitted_at
+             FROM agent_outcomes ao
+             WHERE ao.user_id = $1
+               AND ao.visibility = 'public'
+             ORDER BY ao.submitted_at DESC
+             LIMIT $2`,
+        beforeTs ? [user.id, n, beforeTs.toISOString()] : [user.id, n]
       );
 
       const outcomes = rows.rows;
@@ -260,6 +277,7 @@ export function registerCalibrationRoutes(app: Express) {
           calibration: null,
           message: "No public outcome data yet for this agent.",
           time_series: [],
+          next_cursor: null,
         };
         calibrationCache.set(cacheKey, { body: emptyBody, cachedAt: Date.now() });
         return res.json(emptyBody);
@@ -306,6 +324,14 @@ export function registerCalibrationRoutes(app: Express) {
           },
         },
         time_series: timeSeries,
+        // next_cursor is the submitted_at of the oldest row in this page.
+        // Clients pass it as ?before=<next_cursor> to fetch the next page.
+        // null means this page is the last one (fewer rows than requested).
+        next_cursor: count === n
+          ? (outcomes[count - 1].submitted_at instanceof Date
+              ? (outcomes[count - 1].submitted_at as Date).toISOString()
+              : String(outcomes[count - 1].submitted_at))
+          : null,
       };
       calibrationCache.set(cacheKey, { body: responseBody, cachedAt: Date.now() });
       return res.json(responseBody);
