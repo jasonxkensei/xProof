@@ -420,6 +420,9 @@ export function registerCalibrationRoutes(app: Express) {
           res.set("Retry-After", String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
           return res.status(429).json({ error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" });
         }
+        res.set("X-RateLimit-Limit", String(CSV_OWNER_RL_MAX));
+        res.set("X-RateLimit-Remaining", String(rl.remaining));
+        res.set("X-RateLimit-Reset", String(Math.ceil(rl.resetAt / 1000)));
       }
 
       // Spec: unauthenticated access allowed ONLY when ALL outcomes are public.
