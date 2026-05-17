@@ -25,10 +25,13 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useEffect } from "react";
 import { safeHref } from "@shared/url";
+import { useWalletAuth } from "@/hooks/useWalletAuth";
+import { WalletLoginModal } from "@/components/wallet-login-modal";
 
 interface AttestationRecord {
   id: string;
@@ -119,6 +122,7 @@ interface CalibrationData {
   wallet_address: string;
   agent_name: string | null;
   outcome_count: number;
+  has_private_outcomes: boolean;
   calibration: {
     mean_gap: number;
     variance: number;
@@ -705,11 +709,17 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
   const { toast } = useToast();
+  const { isAuthenticated } = useWalletAuth();
   if (!data.calibration || data.outcome_count === 0) return null;
 
   async function downloadCsv() {
     if (downloading) return;
+    if (!isAuthenticated && data.has_private_outcomes) {
+      setLoginModalOpen(true);
+      return;
+    }
     setDownloading(true);
     try {
       const res = await fetch(`/api/agent/calibration/${data.wallet_address}/export.csv`, {
@@ -778,16 +788,29 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
                 Full dashboard
               </Link>
             </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={downloadCsv}
-              disabled={downloading}
-              data-testid="button-calibration-download"
-              aria-label="Download calibration history as CSV"
-            >
-              <Download className="h-3.5 w-3.5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={downloadCsv}
+                  disabled={downloading}
+                  data-testid="button-calibration-download"
+                  aria-label={
+                    !isAuthenticated && data.has_private_outcomes
+                      ? "Log in to download full history"
+                      : "Download calibration history as CSV"
+                  }
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              {!isAuthenticated && data.has_private_outcomes && (
+                <TooltipContent>
+                  Log in to download full history
+                </TooltipContent>
+              )}
+            </Tooltip>
             {hasChart && (
               <Button
                 size="icon"
@@ -857,6 +880,7 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
           <CalibrationGapChart points={[...data.time_series].reverse()} />
         )}
       </CardContent>
+      <WalletLoginModal open={loginModalOpen} onOpenChange={setLoginModalOpen} redirectTo={`/agent/${data.wallet_address}`} />
     </Card>
   );
 }

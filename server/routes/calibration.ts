@@ -220,6 +220,15 @@ export function registerCalibrationRoutes(app: Express) {
         });
       }
 
+      // Check whether this agent has any private outcomes (needed by the
+      // frontend to decide whether to show a login prompt on the download
+      // button).  EXISTS stops at the first matching row.
+      const privCheckResult = await pool.query<{ exists: boolean }>(
+        `SELECT EXISTS(SELECT 1 FROM agent_outcomes WHERE user_id = $1 AND visibility = 'private') AS exists`,
+        [user.id]
+      );
+      const hasPrivateOutcomes = privCheckResult.rows[0]?.exists === true;
+
       // Fetch last N public outcomes for this agent, most recent first
       const rows = await pool.query<{
         id: string;
@@ -247,6 +256,7 @@ export function registerCalibrationRoutes(app: Express) {
           wallet_address: user.walletAddress,
           agent_name: user.agentName ?? null,
           outcome_count: 0,
+          has_private_outcomes: hasPrivateOutcomes,
           calibration: null,
           message: "No public outcome data yet for this agent.",
           time_series: [],
@@ -279,6 +289,7 @@ export function registerCalibrationRoutes(app: Express) {
         wallet_address: user.walletAddress,
         agent_name: user.agentName ?? null,
         outcome_count: count,
+        has_private_outcomes: hasPrivateOutcomes,
         calibration: {
           mean_gap: roundedMean,
           variance: roundedVariance,
