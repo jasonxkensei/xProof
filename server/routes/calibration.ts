@@ -6,7 +6,7 @@ import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { validateApiKey, getClientIp } from "./helpers";
-import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter } from "../reliability";
+import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter } from "../reliability";
 import { pgCheckRateLimit } from "../pgRateLimit";
 
 // ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
@@ -309,7 +309,7 @@ export function registerCalibrationRoutes(app: Express) {
   // Auth:  API-key owner or wallet-session owner → all outcomes (public + private).
   //        Unauthenticated → allowed only when ALL outcomes are public; blocked otherwise (401).
   // ?n=X  Optional row cap (hard ceiling 100 000). Omit to export full history.
-  app.get("/api/agent/calibration/:agentId/export.csv", calibrationCsvExportRateLimiter, optionalApiKey, async (req, res) => {
+  app.get("/api/agent/calibration/:agentId/export.csv", optionalApiKey, async (req, res) => {
     try {
       const { agentId } = req.params;
       // n is optional — omitting it exports the full history (no row cap).
@@ -343,13 +343,19 @@ export function registerCalibrationRoutes(app: Express) {
         (!!callerUserId && callerUserId === user.id) ||
         (!!sessionWallet && sessionWallet === user.walletAddress);
 
-      // Owner-specific rate limit: 30 req/min per authenticated identity.
-      // The IP-based anon limiter (5 req/min) already ran before optionalApiKey;
-      // this check replaces that tighter cap for owners so a pipeline re-exporting
-      // after each outcome upload is not blocked by the anonymous threshold.
+      // Tiered rate limiting: owners get 30 req/min keyed by identity;
+      // anonymous (or non-owner) callers get 5 req/min keyed by IP.
+      // Both checks run after auth resolution so the correct limit applies.
       if (isOwner) {
         const ownerKey = callerUserId ?? sessionWallet ?? getClientIp(req);
         const rl = await pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000);
+        if (!rl.allowed) {
+          res.set("Retry-After", String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
+          return res.status(429).json({ error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" });
+        }
+      } else {
+        const anonKey = getClientIp(req);
+        const rl = await pgCheckRateLimit("pub_csv", anonKey, 5, 60_000);
         if (!rl.allowed) {
           res.set("Retry-After", String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
           return res.status(429).json({ error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" });
