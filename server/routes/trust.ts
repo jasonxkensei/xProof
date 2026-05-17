@@ -6,7 +6,7 @@ import { certifications, users, attestations } from "@shared/schema";
 import { eq, desc, sql, and, gte, count } from "drizzle-orm";
 import { isWalletAuthenticated } from "../walletAuth";
 import { publicReadRateLimiter, publicSearchRateLimiter, publicCompareRateLimiter } from "../reliability";
-import { computeTrustScore, computeTrustScoreByWallet, getLeaderboard, generateTrustBadgeSvg } from "../trust";
+import { computeTrustScore, computeTrustScoreByWallet, getLeaderboard, generateTrustBadgeSvg, getCalibrationSummaryByWallet } from "../trust";
 import { reconstructAuditTrail } from "../audit-trail";
 import { safeHttpUrlSchema } from "@shared/url";
 import { isAdminWallet, computeDrift } from "./helpers";
@@ -544,7 +544,10 @@ export function registerTrustRoutes(app: Express) {
         return res.send(privateFallback);
       }
 
-      const trust = await computeTrustScoreByWallet(wallet);
+      const [trust, calibration] = await Promise.all([
+        computeTrustScoreByWallet(wallet),
+        getCalibrationSummaryByWallet(wallet),
+      ]);
 
       if (!trust) {
         res.setHeader("Content-Type", "image/svg+xml");
@@ -553,7 +556,7 @@ export function registerTrustRoutes(app: Express) {
       }
 
       const vCount = (trust.violations?.fault || 0) + (trust.violations?.breach || 0);
-      const svg = generateTrustBadgeSvg(trust.level, trust.score, trust.activeAttestations ?? 0, vCount);
+      const svg = generateTrustBadgeSvg(trust.level, trust.score, trust.activeAttestations ?? 0, vCount, calibration?.biasLabel ?? null);
       res.setHeader("Content-Type", "image/svg+xml");
       res.setHeader("Cache-Control", "private, no-store");
       res.send(svg);

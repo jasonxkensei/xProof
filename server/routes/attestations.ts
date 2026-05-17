@@ -6,7 +6,7 @@ import { eq, desc, sql, and, gte, count } from "drizzle-orm";
 import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
 import { attestationIssuanceRateLimiter, publicSearchRateLimiter, publicPdfRateLimiter, publicReadRateLimiter } from "../reliability";
-import { computeTrustScoreByWallet } from "../trust";
+import { computeTrustScoreByWallet, getCalibrationSummaryByWallet } from "../trust";
 import { isValidWebhookUrl, safeWebhookFetch } from "../webhook";
 
 export function registerAttestationsRoutes(app: Express) {
@@ -621,6 +621,15 @@ export function registerAttestationsRoutes(app: Express) {
 
       const baseUrl = `https://${req.get("host")}`;
 
+      const calibration = await getCalibrationSummaryByWallet(wallet);
+      const safeCalibration = calibration
+        ? JSON.stringify({
+            label: calibration.biasLabel.charAt(0).toUpperCase() + calibration.biasLabel.slice(1),
+            meanGap: Math.round(calibration.meanGap * 10000) / 10000,
+            count: calibration.outcomeCount,
+          })
+        : "null";
+
       // Use JSON.stringify to safely serialize both values into JS string literals,
       // providing defense-in-depth even though wallet is already regex-validated.
       const safeWallet = JSON.stringify(wallet);
@@ -628,14 +637,24 @@ export function registerAttestationsRoutes(app: Express) {
       const js = `(function(){
   var w=${safeWallet};
   var base=${safeBase};
+  var cal=${safeCalibration};
   function inject(el){
+    var wrap=document.createElement("span");
+    wrap.style.cssText="display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;vertical-align:middle;";
     var img=document.createElement("img");
     img.src=base+"/badge/trust/"+w+".svg";
     img.alt="xproof trust badge";
-    img.style.cssText="height:24px;vertical-align:middle;border:0;";
+    img.style.cssText="height:24px;border:0;cursor:pointer;";
     img.addEventListener("click",function(){window.open(base+"/agent/"+w,"_blank");});
-    img.style.cursor="pointer";
-    el.appendChild(img);
+    wrap.appendChild(img);
+    if(cal){
+      var gap=cal.meanGap>=0?"+"+cal.meanGap.toFixed(4):cal.meanGap.toFixed(4);
+      var txt=document.createElement("span");
+      txt.textContent="Calibration: "+cal.label+" (gap: "+gap+", n="+cal.count+")";
+      txt.style.cssText="font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:10px;color:#888;letter-spacing:0.2px;";
+      wrap.appendChild(txt);
+    }
+    el.appendChild(wrap);
   }
   function run(){
     var els=document.querySelectorAll("xproof-badge[wallet='"+w+"'],xproof-badge:not([wallet]),[data-xproof-wallet='"+w+"']");

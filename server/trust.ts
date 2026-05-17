@@ -625,7 +625,31 @@ async function getPreviousLevelBatch(wallets: string[]): Promise<Map<string, Tru
   }
 }
 
-export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestationCount = 0, violationCount = 0): string {
+export interface CalibrationSummary {
+  meanGap: number;
+  biasLabel: CalibrationLabel;
+  outcomeCount: number;
+}
+
+export async function getCalibrationSummaryByWallet(walletAddress: string): Promise<CalibrationSummary | null> {
+  try {
+    const result = await db.execute(sql`
+      SELECT AVG(ao.confidence_gap)::float AS mean_gap, COUNT(*)::int AS cnt
+      FROM agent_outcomes ao
+      JOIN users u ON u.id = ao.user_id
+      WHERE u.wallet_address = ${walletAddress} AND ao.visibility = 'public'
+    `);
+    const row = result.rows[0] as any;
+    const cnt = Number(row?.cnt ?? 0);
+    if (cnt === 0) return null;
+    const meanGap = Number(row.mean_gap);
+    return { meanGap, biasLabel: calibrationLabelFromMean(meanGap), outcomeCount: cnt };
+  } catch {
+    return null;
+  }
+}
+
+export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestationCount = 0, violationCount = 0, calibrationLabel?: string | null): string {
   const levelColor = getTrustLevelColor(level);
   const levelColorDark = adjustColor(levelColor, -20);
   const hasAttestations = attestationCount > 0;
@@ -633,7 +657,10 @@ export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestat
   const labelText = "xproof";
   const attestedLabel = hasAttestations ? ` · ${attestationCount} attested` : "";
   const violationLabel = violationCount > 0 ? ` · ${violationCount} violation${violationCount > 1 ? "s" : ""}` : "";
-  const statusText = `${level}${attestedLabel}${violationLabel} (${score})`;
+  const calibrationText = calibrationLabel
+    ? ` · ${calibrationLabel.charAt(0).toUpperCase() + calibrationLabel.slice(1)}`
+    : "";
+  const statusText = `${level}${attestedLabel}${violationLabel}${calibrationText} (${score})`;
   const pad = 10;
   const labelCharW = 6.8;
   const statusCharW = 6.2;
