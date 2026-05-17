@@ -621,7 +621,15 @@ export function registerAttestationsRoutes(app: Express) {
 
       const baseUrl = `https://${req.get("host")}`;
 
-      const calibration = await getCalibrationSummaryByWallet(wallet);
+      const [userCheck, calibrationRaw] = await Promise.all([
+        db.select({ isPublicProfile: users.isPublicProfile })
+          .from(users)
+          .where(eq(users.walletAddress, wallet))
+          .then((rows) => rows[0] ?? null),
+        getCalibrationSummaryByWallet(wallet),
+      ]);
+      const calibration = userCheck?.isPublicProfile ? calibrationRaw : null;
+
       const safeCalibration = calibration
         ? JSON.stringify({
             label: calibration.biasLabel.charAt(0).toUpperCase() + calibration.biasLabel.slice(1),
