@@ -536,7 +536,7 @@ async function computeCalibrationLabelBatch(): Promise<Map<string, CalibrationLa
       SELECT ao.user_id::text AS user_id, AVG(ao.confidence_gap) AS mean_gap
       FROM agent_outcomes ao
       JOIN users u ON u.id = ao.user_id
-      WHERE ao.is_public = true
+      WHERE ao.visibility = 'public'
         AND u.is_public_profile = true
         AND u.wallet_address NOT LIKE 'erd1trial%'
       GROUP BY ao.user_id
@@ -548,7 +548,8 @@ async function computeCalibrationLabelBatch(): Promise<Map<string, CalibrationLa
         calibrationLabelFromMean(Number(r.mean_gap)),
       ])
     );
-  } catch {
+  } catch (err: any) {
+    console.error("[leaderboard] calibration batch failed:", err?.message);
     return new Map();
   }
 }
