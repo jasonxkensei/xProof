@@ -6,7 +6,7 @@ import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { validateApiKey, getClientIp } from "./helpers";
-import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter } from "../reliability";
+import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter } from "../reliability";
 import { pgCheckRateLimit } from "../pgRateLimit";
 
 // ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
@@ -309,7 +309,13 @@ export function registerCalibrationRoutes(app: Express) {
   // Auth:  API-key owner or wallet-session owner → all outcomes (public + private).
   //        Unauthenticated → allowed only when ALL outcomes are public; blocked otherwise (401).
   // ?n=X  Optional row cap (hard ceiling 100 000). Omit to export full history.
-  app.get("/api/agent/calibration/:agentId/export.csv", calibrationCsvExportRateLimiter, optionalApiKey, async (req, res) => {
+  // Rate limiting for this route is applied inline inside the handler (after isOwner
+  // is resolved via DB lookup) so the correct cap applies to each traffic class:
+  //   confirmed owners  → 30/min keyed on identity  (pub_csv_owner)
+  //   everyone else     → 5/min  keyed on source IP  (pub_csv)
+  // Requests for non-existent agentId return 404 before the CSV work begins;
+  // the global /api rate limiter (100 rpm) still bounds that path.
+  app.get("/api/agent/calibration/:agentId/export.csv", optionalApiKey, async (req, res) => {
     try {
       const { agentId } = req.params;
       // n is optional — omitting it exports the full history (no row cap).
@@ -343,15 +349,21 @@ export function registerCalibrationRoutes(app: Express) {
         (!!callerUserId && callerUserId === user.id) ||
         (!!sessionWallet && sessionWallet === user.walletAddress);
 
-      // Owner-specific limit (30/min per identity). The 5/min IP-based
-      // calibrationCsvExportRateLimiter already ran before optionalApiKey in
-      // the middleware chain — it provides a baseline DoS guard for all paths
-      // including non-existent agentId requests. This inline check uses the same
-      // "pub_csv_owner" namespace as calibrationCsvExportOwnerRateLimiter in
-      // reliability.ts, so both share the same PostgreSQL rate-limit counters.
-      if (isOwner) {
-        const ownerKey = (callerUserId ?? sessionWallet)!;
-        const rl = await pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000);
+      // Tiered rate limit — applied after isOwner is resolved so each traffic
+      // class is governed by the correct cap with no class left unbounded:
+      //   confirmed owners  → 30/min per identity key  (pub_csv_owner namespace)
+      //   everyone else     → 5/min  per source IP     (pub_csv namespace)
+      // Uses the same namespaces as calibrationCsvExportRateLimiter /
+      // calibrationCsvExportOwnerRateLimiter in reliability.ts, sharing counters.
+      {
+        const isOwnerCheck = isOwner;
+        const rlKey = isOwnerCheck ? (callerUserId ?? sessionWallet)! : getClientIp(req);
+        const rl = await pgCheckRateLimit(
+          isOwnerCheck ? "pub_csv_owner" : "pub_csv",
+          rlKey,
+          isOwnerCheck ? 30 : 5,
+          60_000,
+        );
         if (!rl.allowed) {
           res.set("Retry-After", String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
           return res.status(429).json({ error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" });
