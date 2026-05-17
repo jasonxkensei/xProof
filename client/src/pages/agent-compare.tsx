@@ -5,6 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceLine,
+  CartesianGrid,
+} from "recharts";
 
 interface CompareAgent {
   walletAddress: string;
@@ -26,12 +36,41 @@ interface CompareResponse {
   agents: CompareAgent[];
 }
 
+interface CalibrationTimePoint {
+  submitted_at: string;
+  proof_id: string;
+  anchored_confidence: number;
+  outcome_score: number;
+  confidence_gap: number;
+}
+
+interface CalibrationData {
+  agent_id: string;
+  wallet_address: string;
+  agent_name: string | null;
+  outcome_count: number;
+  calibration: {
+    mean_gap: number;
+    variance: number;
+    bias_label: "overconfident" | "underconfident" | "calibrated";
+  } | null;
+  time_series: CalibrationTimePoint[];
+}
+
 const TRUST_LEVEL_STYLES: Record<string, string> = {
   Verified: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
   Trusted: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30",
   Active: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
   Newcomer: "bg-muted text-muted-foreground border-border",
 };
+
+const BIAS_LABEL_STYLES: Record<string, string> = {
+  overconfident: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
+  underconfident: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+  calibrated: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+};
+
+const CHART_COLORS = ["hsl(var(--primary))", "#f59e0b"];
 
 const CATEGORY_LABELS: Record<string, string> = {
   trading: "Trading", data: "Data", content: "Content", code: "Code",
@@ -44,6 +83,10 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function formatShortDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function HighlightCell({ value, isMax, format }: { value: string | number; isMax: boolean; format?: "number" }) {
   const display = format === "number" ? Number(value).toLocaleString() : value;
   return (
@@ -51,6 +94,93 @@ function HighlightCell({ value, isMax, format }: { value: string | number; isMax
       {display}
     </span>
   );
+}
+
+function CalibrationChart({
+  timeSeries,
+  color,
+  agentName,
+  walletAddress,
+}: {
+  timeSeries: CalibrationTimePoint[];
+  color: string;
+  agentName: string | null;
+  walletAddress: string;
+}) {
+  if (!timeSeries || timeSeries.length === 0) {
+    return (
+      <div
+        className="flex items-center justify-center h-36 text-muted-foreground text-xs"
+        data-testid={`calibration-chart-empty-${walletAddress}`}
+      >
+        No outcome data yet
+      </div>
+    );
+  }
+
+  const chartData = [...timeSeries]
+    .reverse()
+    .map((pt, i) => ({
+      index: i + 1,
+      date: formatShortDate(pt.submitted_at),
+      gap: pt.confidence_gap,
+    }));
+
+  return (
+    <div data-testid={`calibration-chart-${walletAddress}`} className="w-full">
+      <p className="text-xs text-muted-foreground mb-2 font-medium truncate">
+        {agentName || walletAddress.slice(0, 12) + "…"}
+      </p>
+      <ResponsiveContainer width="100%" height={140}>
+        <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: -20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <XAxis
+            dataKey="date"
+            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            domain={["auto", "auto"]}
+          />
+          <Tooltip
+            contentStyle={{
+              background: "hsl(var(--popover))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "6px",
+              fontSize: "11px",
+              color: "hsl(var(--popover-foreground))",
+            }}
+            formatter={(val: number) => [val.toFixed(4), "Gap"]}
+          />
+          <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 2" strokeWidth={1} />
+          <Line
+            type="monotone"
+            dataKey="gap"
+            stroke={color}
+            dot={chartData.length <= 20 ? { r: 3, fill: color } : false}
+            strokeWidth={2}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function useCalibration(walletAddress: string, enabled: boolean) {
+  return useQuery<CalibrationData>({
+    queryKey: ["/api/agent/calibration", walletAddress],
+    queryFn: async () => {
+      const res = await fetch(`/api/agent/calibration/${encodeURIComponent(walletAddress)}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch calibration");
+      return res.json();
+    },
+    enabled,
+    staleTime: 30_000,
+  });
 }
 
 export default function AgentComparePage() {
@@ -71,6 +201,11 @@ export default function AgentComparePage() {
     },
     enabled: wallets.length >= 2,
   });
+
+  const calibrationQueries = [
+    useCalibration(wallets[0] || "", wallets.length >= 2 && !!data),
+    useCalibration(wallets[1] || "", wallets.length >= 2 && !!data),
+  ];
 
   if (wallets.length < 2) {
     return (
@@ -207,6 +342,8 @@ export default function AgentComparePage() {
     },
   ];
 
+  const calibrationLoading = calibrationQueries.some(q => q.isLoading);
+
   return (
     <div className="min-h-screen bg-background" data-testid="page-agent-compare">
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
@@ -224,7 +361,8 @@ export default function AgentComparePage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-7xl mx-auto px-4 py-6 flex flex-col gap-6">
+        {/* Trust metrics table */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Comparing {agents.length} Agents</CardTitle>
@@ -254,6 +392,131 @@ export default function AgentComparePage() {
                 ))}
               </tbody>
             </table>
+          </CardContent>
+        </Card>
+
+        {/* Calibration section */}
+        <Card data-testid="card-calibration-comparison">
+          <CardHeader>
+            <CardTitle className="text-base">Calibration Comparison</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {calibrationLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground text-sm py-6 justify-center" data-testid="text-calibration-loading">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading calibration data…
+              </div>
+            ) : (
+              <div className="flex flex-col gap-6">
+                {/* Summary metrics table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm" data-testid="table-calibration-summary">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-3 px-3 font-medium text-muted-foreground min-w-[140px]">Metric</th>
+                        {agents.map((agent, idx) => {
+                          const cal = calibrationQueries[idx]?.data;
+                          return (
+                            <th key={agent.walletAddress} className="text-left py-3 px-3 font-medium min-w-[160px]" data-testid={`th-calib-agent-${agent.walletAddress}`}>
+                              <span
+                                className="inline-block w-2 h-2 rounded-full mr-2"
+                                style={{ backgroundColor: CHART_COLORS[idx] ?? CHART_COLORS[0] }}
+                              />
+                              {cal?.agent_name || agent.agentName || agent.walletAddress.slice(0, 10) + "..."}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="py-3 px-3 font-medium text-muted-foreground">Outcomes</td>
+                        {agents.map((agent, idx) => {
+                          const cal = calibrationQueries[idx]?.data;
+                          return (
+                            <td key={agent.walletAddress} className="py-3 px-3" data-testid={`cell-outcomes-${agent.walletAddress}`}>
+                              {cal ? cal.outcome_count.toLocaleString() : "—"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-3 px-3 font-medium text-muted-foreground">Mean Gap</td>
+                        {agents.map((agent, idx) => {
+                          const cal = calibrationQueries[idx]?.data;
+                          const meanGap = cal?.calibration?.mean_gap;
+                          const allGaps = calibrationQueries
+                            .map(q => q.data?.calibration?.mean_gap)
+                            .filter((v): v is number => v !== undefined);
+                          const bestGap = allGaps.length
+                            ? allGaps.reduce((best, v) => Math.abs(v) < Math.abs(best) ? v : best, allGaps[0])
+                            : null;
+                          const isBest =
+                            meanGap !== undefined &&
+                            bestGap !== null &&
+                            Math.abs(meanGap) === Math.abs(bestGap) &&
+                            allGaps.filter(v => Math.abs(v) === Math.abs(bestGap)).length < allGaps.length;
+                          return (
+                            <td key={agent.walletAddress} className="py-3 px-3" data-testid={`cell-mean-gap-${agent.walletAddress}`}>
+                              {meanGap !== undefined ? (
+                                <span className={isBest ? "text-emerald-600 dark:text-emerald-400 font-semibold" : ""}>
+                                  {meanGap >= 0 ? "+" : ""}{meanGap.toFixed(4)}
+                                </span>
+                              ) : "—"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr>
+                        <td className="py-3 px-3 font-medium text-muted-foreground">Bias</td>
+                        {agents.map((agent, idx) => {
+                          const cal = calibrationQueries[idx]?.data;
+                          const biasLabel = cal?.calibration?.bias_label;
+                          return (
+                            <td key={agent.walletAddress} className="py-3 px-3" data-testid={`cell-bias-${agent.walletAddress}`}>
+                              {biasLabel ? (
+                                <Badge
+                                  variant="outline"
+                                  className={BIAS_LABEL_STYLES[biasLabel] || ""}
+                                  data-testid={`badge-bias-${agent.walletAddress}`}
+                                >
+                                  {biasLabel}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">No data</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Side-by-side trend charts */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="grid-calibration-charts">
+                  {agents.map((agent, idx) => {
+                    const cal = calibrationQueries[idx]?.data;
+                    return (
+                      <div key={agent.walletAddress} className="rounded-md border p-4">
+                        <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">
+                          Confidence Gap Trend
+                        </p>
+                        <CalibrationChart
+                          timeSeries={cal?.time_series ?? []}
+                          color={CHART_COLORS[idx] ?? CHART_COLORS[0]}
+                          agentName={cal?.agent_name || agent.agentName}
+                          walletAddress={agent.walletAddress}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Mean Gap = anchored confidence − actual outcome score. Values near 0 indicate well-calibrated predictions. Positive values indicate overconfidence; negative values indicate underconfidence.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </main>
