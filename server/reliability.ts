@@ -123,15 +123,36 @@ export const publicPdfRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
 });
 
-// GET /api/agent/calibration/:agentId/export.csv uses tiered inline rate limiting
-// inside the handler (after ownership of :agentId is resolved via DB lookup):
-//   - confirmed owners  → pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000)
-//   - everyone else     → pgCheckRateLimit("pub_csv",       clientIp,  5, 60_000)
-// Ownership cannot be determined at middleware time without the agentId→user lookup,
-// so the limiting is applied inline rather than as express-rate-limit middleware.
-// The constants below are the authoritative source for the two limit configs.
-export const CSV_OWNER_RL  = { namespace: "pub_csv_owner", max: 30, windowMs: 60_000 } as const;
-export const CSV_ANON_RL   = { namespace: "pub_csv",       max:  5, windowMs: 60_000 } as const;
+// GET /api/agent/calibration/:agentId/export.csv — anonymous / non-owner guard.
+// Runs FIRST in the route chain (before optionalApiKey) so it throttles every
+// request including non-existent agentId paths, before any DB work begins.
+// 5 req/min per IP is the effective limit for unauthenticated and non-owner callers.
+export const calibrationCsvExportRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
+  store: new PgRateLimitStore("pub_csv"),
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
+});
+
+// Confirmed-owner limiter — 30/min keyed on authenticated identity.
+// Ownership of the specific :agentId is only knowable after a DB lookup inside the
+// handler, so this cannot be wired as standalone route middleware. Instead the route
+// handler calls pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000) after
+// isOwner is established; that call shares this store's namespace and parameters.
+// Having this export keeps the config authoritative and visible alongside the anon
+// limiter for maintenance, monitoring, and future refactoring.
+export const calibrationCsvExportOwnerRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => (req.optionalUserId as string) ?? (req.session?.walletAddress as string) ?? getClientIp(req),
+  store: new PgRateLimitStore("pub_csv_owner"),
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
+});
 
 // /api/agent/calibration/:agentId is a public endpoint that runs a raw SQL
 // query on every call. 20 req/min per IP keeps the DB load bounded while
