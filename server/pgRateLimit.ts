@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { pool } from "./db";
 import { logger } from "./logger";
 
@@ -93,7 +94,9 @@ export async function pgCheckRateLimit(
 // Only non-expired buckets (reset_at > NOW()) are included.
 export interface RateLimitStat {
   namespace: string;
-  key_prefix: string;   // first 12 chars of the original key (IP hash or key ID)
+  // First 8 hex chars of SHA-256(key) — enough to spot repeated callers
+  // without exposing raw IPs, wallet addresses, or API-key UUIDs.
+  key_hash: string;
   count: number;
   reset_at: string;     // ISO 8601
 }
@@ -101,15 +104,15 @@ export interface RateLimitStat {
 export async function getRateLimitStats(topN = 10): Promise<RateLimitStat[]> {
   const result = await pool.query<{
     namespace: string;
-    key_prefix: string;
+    raw_key: string;
     count: string;
     reset_at: Date;
   }>(
-    `SELECT namespace, key_prefix, count, reset_at
+    `SELECT namespace, raw_key, count, reset_at
      FROM (
        SELECT
-         SPLIT_PART(bucket, ':', 1)                      AS namespace,
-         LEFT(SPLIT_PART(bucket, ':', 2), 12)            AS key_prefix,
+         SPLIT_PART(bucket, ':', 1)   AS namespace,
+         SPLIT_PART(bucket, ':', 2)   AS raw_key,
          count,
          reset_at,
          ROW_NUMBER() OVER (
@@ -125,7 +128,7 @@ export async function getRateLimitStats(topN = 10): Promise<RateLimitStat[]> {
   );
   return result.rows.map((r) => ({
     namespace: r.namespace,
-    key_prefix: r.key_prefix,
+    key_hash: crypto.createHash("sha256").update(r.raw_key).digest("hex").slice(0, 8),
     count: Number(r.count),
     reset_at: r.reset_at instanceof Date ? r.reset_at.toISOString() : String(r.reset_at),
   }));

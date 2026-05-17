@@ -723,7 +723,8 @@ export function registerAdminRoutes(app: Express) {
     }
 
     try {
-      const topN = Math.min(50, Math.max(1, parseInt((req.query.top as string) || "10", 10)));
+      const parsed = parseInt((req.query.top as string) || "10", 10);
+      const topN = Math.min(50, Math.max(1, Number.isNaN(parsed) ? 10 : parsed));
       const stats = await getRateLimitStats(topN);
 
       // Group by namespace for a cleaner response shape
