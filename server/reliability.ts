@@ -131,10 +131,13 @@ export const publicPdfRateLimiter = rateLimit({
 //   Uses csvAnonStore so the handler can call csvAnonStore.decrement() to refund
 //   the token for confirmed owners (see layer 2).
 //
-// Layer 2 — calibrationCsvExportOwnerRateLimiter (30/min per identity)
+// Layer 2 — calibrationCsvExportOwnerRateLimiter (30/min per API key or session wallet)
 //   Applied inside the handler AFTER isOwner is resolved via DB lookup.
 //   Confirmed owners have their layer-1 token refunded first (via csvAnonStore.decrement),
-//   then are checked against the 30/min owner budget keyed on their identity.
+//   then are checked against the 30/min owner budget keyed on req.apiKey?.id (API-key PK)
+//   when present, falling back to session wallet address for browser-session owners.
+//   Each API key gets its own independent bucket — consistent with outcomeSubmitRateLimiter
+//   — so owners with multiple keys are not constrained by a shared per-user cap.
 //   Non-owners are NOT refunded — they remain capped at 5/min by layer 1.
 //   404 paths hit layer 1 but exit before the decrement → still bounded at 5/min.
 export const csvAnonStore = new PgRateLimitStore("pub_csv");

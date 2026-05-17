@@ -400,19 +400,21 @@ export function registerCalibrationRoutes(app: Express) {
       // Owners get a higher effective limit (30/min) via a two-step token swap:
       //   1. Refund the token consumed by the calibrationCsvExportRateLimiter
       //      middleware (5/min per IP) so the IP cap does not constrain owners.
-      //   2. Apply the owner-specific 30/min identity check using the constants
-      //      defined in reliability.ts (CSV_OWNER_RL_*) as the single source of
-      //      truth — avoids config drift between reliability.ts and this handler.
+      //   2. Apply the owner-specific 30/min check using the constants defined in
+      //      reliability.ts (CSV_OWNER_RL_*) as the single source of truth —
+      //      avoids config drift between reliability.ts and this handler.
       // Non-owners: no refund → governed solely by layer-1 (5/min per IP).
       // 404 paths: exit before this block → decrement is never reached.
       //
-      // Owner key: user DB ID (from API-key auth) or wallet address (from session).
-      // Using user-level identity means all API keys for one user share the 30/min
-      // budget — a deliberate product choice (see follow-up #239 for API-key-level
-      // keying if finer granularity is needed in future).
+      // Owner key: API-key PK (req.apiKey?.id) when authenticated via an API key,
+      // falling back to session wallet address for browser-session owners, and
+      // finally to client IP as a safety net (should not occur when isOwner=true).
+      // Keying on the API-key PK gives each key its own 30/min bucket — consistent
+      // with outcomeSubmitRateLimiter — so agents with multiple keys are not
+      // unfairly constrained by a shared per-user bucket.
       if (isOwner) {
         await csvAnonStore.decrement(getClientIp(req));
-        const ownerKey = (callerUserId ?? sessionWallet)!;
+        const ownerKey = ((req as any).apiKey?.id ?? sessionWallet ?? getClientIp(req))!;
         const rl = await pgCheckRateLimit(CSV_OWNER_RL_NAMESPACE, ownerKey, CSV_OWNER_RL_MAX, CSV_OWNER_RL_WINDOW_MS);
         if (!rl.allowed) {
           res.set("Retry-After", String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
