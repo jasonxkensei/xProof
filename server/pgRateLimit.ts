@@ -87,6 +87,50 @@ export async function pgCheckRateLimit(
   }
 }
 
+// ── getRateLimitStats ──────────────────────────────────────────────────────
+// Returns the top `topN` active buckets per namespace, sorted by count DESC.
+// Keys are truncated to the first 12 chars to avoid exposing raw IPs/UUIDs.
+// Only non-expired buckets (reset_at > NOW()) are included.
+export interface RateLimitStat {
+  namespace: string;
+  key_prefix: string;   // first 12 chars of the original key (IP hash or key ID)
+  count: number;
+  reset_at: string;     // ISO 8601
+}
+
+export async function getRateLimitStats(topN = 10): Promise<RateLimitStat[]> {
+  const result = await pool.query<{
+    namespace: string;
+    key_prefix: string;
+    count: string;
+    reset_at: Date;
+  }>(
+    `SELECT namespace, key_prefix, count, reset_at
+     FROM (
+       SELECT
+         SPLIT_PART(bucket, ':', 1)                      AS namespace,
+         LEFT(SPLIT_PART(bucket, ':', 2), 12)            AS key_prefix,
+         count,
+         reset_at,
+         ROW_NUMBER() OVER (
+           PARTITION BY SPLIT_PART(bucket, ':', 1)
+           ORDER BY count DESC
+         ) AS rn
+       FROM rate_limit_counters
+       WHERE reset_at > NOW()
+     ) sub
+     WHERE rn <= $1
+     ORDER BY namespace, count DESC`,
+    [topN],
+  );
+  return result.rows.map((r) => ({
+    namespace: r.namespace,
+    key_prefix: r.key_prefix,
+    count: Number(r.count),
+    reset_at: r.reset_at instanceof Date ? r.reset_at.toISOString() : String(r.reset_at),
+  }));
+}
+
 // ── PgRateLimitStore ───────────────────────────────────────────────────────
 // Implements the express-rate-limit v7/v8 Store interface backed by PostgreSQL.
 // Pass a unique namespace string so different limiters do not share counters.

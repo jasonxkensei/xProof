@@ -1,6 +1,7 @@
 import { type Express } from "express";
 import crypto from "crypto";
 import { db, pool } from "../db";
+import { getRateLimitStats } from "../pgRateLimit";
 import { logger } from "../logger";
 import { certifications, users, apiKeys, visits, txQueue as txQueueTable } from "@shared/schema";
 import { eq, desc, sql, and, gte, gt, count } from "drizzle-orm";
@@ -681,6 +682,68 @@ export function registerAdminRoutes(app: Express) {
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================
+  // GET /api/admin/rate-limit-stats
+  // Returns top N active rate-limit buckets per namespace so admins can spot
+  // abuse patterns without touching the DB directly.
+  // Protected: wallet-authenticated admin only.
+  // Cache: 30 s in-memory to avoid hammering the DB.
+  // Rate limit: 10 req/min per admin to prevent accidental polling loops.
+  // ============================================
+  let rlStatsCache: { body: object; cachedAt: number } | null = null;
+  const RL_STATS_CACHE_TTL_MS = 30 * 1000;
+  const rlStatsWindowMs = 60 * 1000;
+  const rlStatsMax = 10;
+  // Per-admin rate limit using a simple in-memory map (admin endpoints are
+  // low-volume; a full PG store is not warranted here).
+  const rlStatsHits = new Map<string, { count: number; windowStart: number }>();
+
+  function checkAdminRlStatsLimit(key: string): boolean {
+    const now = Date.now();
+    const entry = rlStatsHits.get(key);
+    if (!entry || now - entry.windowStart >= rlStatsWindowMs) {
+      rlStatsHits.set(key, { count: 1, windowStart: now });
+      return true; // allowed
+    }
+    entry.count += 1;
+    return entry.count <= rlStatsMax;
+  }
+
+  app.get("/api/admin/rate-limit-stats", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
+    const callerKey = req.walletAddress || getClientIp(req);
+    if (!checkAdminRlStatsLimit(callerKey)) {
+      return res.status(429).json({ error: "TOO_MANY_REQUESTS", message: "Slow down — max 10 req/min for this endpoint" });
+    }
+
+    if (rlStatsCache && Date.now() - rlStatsCache.cachedAt < RL_STATS_CACHE_TTL_MS) {
+      return res.json(rlStatsCache.body);
+    }
+
+    try {
+      const topN = Math.min(50, Math.max(1, parseInt((req.query.top as string) || "10", 10)));
+      const stats = await getRateLimitStats(topN);
+
+      // Group by namespace for a cleaner response shape
+      const byNamespace: Record<string, typeof stats> = {};
+      for (const row of stats) {
+        if (!byNamespace[row.namespace]) byNamespace[row.namespace] = [];
+        byNamespace[row.namespace].push(row);
+      }
+
+      const body = {
+        generated_at: new Date().toISOString(),
+        top_n_per_namespace: topN,
+        namespaces: byNamespace,
+      };
+
+      rlStatsCache = { body, cachedAt: Date.now() };
+      return res.json(body);
+    } catch (err: any) {
+      logger.error("Failed to fetch rate-limit stats", { component: "admin", error: err.message });
+      return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to fetch rate-limit stats" });
     }
   });
 
