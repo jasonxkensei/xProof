@@ -6,7 +6,8 @@ import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { validateApiKey } from "./helpers";
-import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter, calibrationCsvExportOwnerRateLimiter } from "../reliability";
+import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter, CSV_EXPORT_OWNER_LIMIT } from "../reliability";
+import { pgCheckRateLimit } from "../pgRateLimit";
 
 // ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
 // Keyed by `${agentId}:${n}` so different ?n values are cached independently.
@@ -308,7 +309,7 @@ export function registerCalibrationRoutes(app: Express) {
   // Auth:  API-key owner or wallet-session owner → all outcomes (public + private).
   //        Unauthenticated → allowed only when ALL outcomes are public; blocked otherwise (401).
   // ?n=X  Optional row cap (hard ceiling 100 000). Omit to export full history.
-  app.get("/api/agent/calibration/:agentId/export.csv", optionalApiKey, calibrationCsvExportRateLimiter, calibrationCsvExportOwnerRateLimiter, async (req, res) => {
+  app.get("/api/agent/calibration/:agentId/export.csv", optionalApiKey, calibrationCsvExportRateLimiter, async (req, res) => {
     try {
       const { agentId } = req.params;
       // n is optional — omitting it exports the full history (no row cap).
@@ -341,6 +342,26 @@ export function registerCalibrationRoutes(app: Express) {
       const isOwner =
         (!!callerUserId && callerUserId === user.id) ||
         (!!sessionWallet && sessionWallet === user.walletAddress);
+
+      // Confirmed owners get 30 req/min keyed on their identity (user DB ID or
+      // wallet address). This check runs here — after isOwner is resolved via
+      // DB lookup — so the limit only applies to the actual agent owner, not any
+      // authenticated caller.  Anonymous/non-owner callers are already governed by
+      // calibrationCsvExportRateLimiter (5 req/min IP, skip for authenticated)
+      // which ran before this handler.
+      if (isOwner) {
+        const ownerKey = (callerUserId ?? sessionWallet)!;
+        const rl = await pgCheckRateLimit(
+          CSV_EXPORT_OWNER_LIMIT.namespace,
+          ownerKey,
+          CSV_EXPORT_OWNER_LIMIT.max,
+          CSV_EXPORT_OWNER_LIMIT.windowMs,
+        );
+        if (!rl.allowed) {
+          res.set("Retry-After", String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
+          return res.status(429).json({ error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" });
+        }
+      }
 
       // Spec: unauthenticated access allowed ONLY when ALL outcomes are public.
       // If the agent has even one private outcome, ownership auth is required.
