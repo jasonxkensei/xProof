@@ -192,8 +192,25 @@ export function registerCalibrationRoutes(app: Express) {
   // ── GET /api/agent/calibration/:agentId ──────────────────────────────────
   // Public — no auth required.
   // Any agent or operator can check another agent's calibration quality.
-  // agentId: MultiversX wallet address (erd1...) or internal user id.
-  // Query params: ?n=50 (number of outcomes, default 50, max 200)
+  //
+  // Path param:
+  //   agentId — MultiversX wallet address (erd1...) or internal user id.
+  //
+  // Query params:
+  //   ?n=50    — page size (default 50, max 200).
+  //   ?before  — cursor for keyset pagination. Must be an ISO 8601 timestamp
+  //              string (e.g. "2025-03-15T12:34:56.000Z") as returned by the
+  //              `next_cursor` field of a previous response. Non-ISO values
+  //              are rejected with 400 INVALID_CURSOR.
+  //              Absent or empty → first page (most recent outcomes).
+  //
+  // Pagination contract:
+  //   Response always includes `next_cursor: string | null`.
+  //   When non-null, pass it verbatim as `?before=<next_cursor>` to fetch the
+  //   next (older) page. `null` means the current page is the last one.
+  //   NOTE: if multiple outcomes share the exact same submitted_at timestamp,
+  //   a row can theoretically appear on two consecutive pages. Use a compound
+  //   (submitted_at, id) cursor to eliminate this edge case in a future hardening.
   app.get("/api/agent/calibration/:agentId", publicCalibrationRateLimiter, async (req, res) => {
     try {
       const { agentId } = req.params;
