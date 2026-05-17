@@ -18,8 +18,26 @@ import {
   FileCode,
   Zap,
   ArrowRight,
+  Crosshair,
 } from "lucide-react";
 import { WalletLoginModal } from "@/components/wallet-login-modal";
+
+const CALIBRATION_STYLES: Record<string, { badge: string; label: string }> = {
+  calibrated:     { badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30", label: "Calibrated" },
+  overconfident:  { badge: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",   label: "Overconfident" },
+  underconfident: { badge: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",       label: "Underconfident" },
+};
+
+interface CalibratedEntry {
+  walletAddress: string;
+  agentName: string | null;
+  calibrationLabel: "calibrated" | "overconfident" | "underconfident";
+}
+
+interface LeaderboardResponse {
+  entries: CalibratedEntry[];
+  total: number;
+}
 
 const protocols = [
   {
@@ -147,6 +165,14 @@ export default function AgentsPage() {
   });
   const price = pricing ? `$${pricing.current_price_usd}` : "$0.05";
 
+  const { data: calibratedData } = useQuery<LeaderboardResponse>({
+    queryKey: ["/api/leaderboard", { calibrated: true, limit: 6, sort: "calibration" }],
+    queryFn: () =>
+      fetch("/api/leaderboard?calibrated=true&limit=6&sort=calibration")
+        .then((r) => r.json()),
+  });
+  const calibratedAgents = calibratedData?.entries ?? [];
+
   const handleConnect = () => {
     setIsLoginModalOpen(true);
   };
@@ -269,6 +295,72 @@ export default function AgentsPage() {
           </div>
         </div>
       </section>
+      {calibratedAgents.length > 0 && (
+        <section className="border-t py-20 md:py-28">
+          <div className="container">
+            <div className="mx-auto max-w-5xl">
+              <div className="mb-12 text-center">
+                <Badge variant="outline" className="mb-4">
+                  <Crosshair className="mr-1.5 h-3 w-3" />
+                  Calibration
+                </Badge>
+                <h2 className="mb-4 text-3xl md:text-4xl font-bold" data-testid="text-calibrated-title">
+                  Calibrated agents
+                </h2>
+                <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                  Agents with verified outcome data. Confidence scores anchored on-chain.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-8">
+                {calibratedAgents.map((agent) => {
+                  const style = CALIBRATION_STYLES[agent.calibrationLabel];
+                  const shortWallet = `${agent.walletAddress.slice(0, 8)}…${agent.walletAddress.slice(-6)}`;
+                  return (
+                    <a
+                      key={agent.walletAddress}
+                      href={`/agent/${agent.walletAddress}/calibration`}
+                      className="block no-underline"
+                      data-testid={`card-calibrated-agent-${agent.walletAddress}`}
+                    >
+                      <Card className="hover-elevate h-full">
+                        <CardContent className="p-5 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate text-sm">
+                              {agent.agentName || shortWallet}
+                            </p>
+                            {agent.agentName && (
+                              <p className="font-mono text-xs text-muted-foreground truncate">
+                                {shortWallet}
+                              </p>
+                            )}
+                          </div>
+                          <Badge
+                            className={`border shrink-0 text-[10px] px-1.5 py-0 font-medium ${style.badge}`}
+                          >
+                            {style.label}
+                          </Badge>
+                        </CardContent>
+                      </Card>
+                    </a>
+                  );
+                })}
+              </div>
+
+              <div className="text-center">
+                <Button asChild variant="outline" data-testid="button-view-all-calibrated">
+                  <a href="/leaderboard?calibrated=true&sort=calibration">
+                    <Crosshair className="mr-2 h-4 w-4" />
+                    View all calibrated agents
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="border-t bg-primary/5 py-20 md:py-28">
         <div className="container">
           <div className="mx-auto max-w-3xl text-center">

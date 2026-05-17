@@ -474,7 +474,18 @@ export default function Leaderboard() {
                             </Badge>
                           )}
                           {entry.calibrationLabel && (
-                            <CalibrationBadge label={entry.calibrationLabel} />
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Link
+                                  href={`/agent/${entry.walletAddress}/calibration`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`link-calibration-${entry.walletAddress}`}
+                                >
+                                  <CalibrationBadge label={entry.calibrationLabel} />
+                                </Link>
+                              </TooltipTrigger>
+                              <TooltipContent>View calibration dashboard</TooltipContent>
+                            </Tooltip>
                           )}
                         </div>
                         <div className="flex items-center gap-1">
