@@ -701,7 +701,7 @@ function CalibrationGapChart({ points }: { points: CalibrationPoint[] }) {
   );
 }
 
-function CalibrationCard({ data }: { data: CalibrationData }) {
+function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: string }) {
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -768,6 +768,16 @@ function CalibrationCard({ data }: { data: CalibrationData }) {
             <span className="text-xs font-normal text-muted-foreground" data-testid="text-outcome-count">
               {data.outcome_count} outcome{data.outcome_count !== 1 ? "s" : ""}
             </span>
+            <Button
+              asChild
+              size="sm"
+              variant="ghost"
+              data-testid="button-calibration-full-dashboard"
+            >
+              <Link href={`/agent/${wallet}/calibration`} className="text-xs">
+                Full dashboard
+              </Link>
+            </Button>
             <Button
               size="icon"
               variant="ghost"
@@ -1162,7 +1172,7 @@ export default function AgentProfilePage() {
 
             {/* Confidence Calibration */}
             {calibrationData && calibrationData.outcome_count > 0 && (
-              <CalibrationCard data={calibrationData} />
+              <CalibrationCard data={calibrationData} wallet={wallet || ""} />
             )}
 
             {/* Trust Score History */}

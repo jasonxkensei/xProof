@@ -29,6 +29,7 @@ const DocsTradingPage = lazy(() => import("@/pages/docs-trading"));
 const Docs4WPage = lazy(() => import("@/pages/docs-4w"));
 const DocsBaseViolationsPage = lazy(() => import("@/pages/docs-base-violations"));
 const IncidentReportPage = lazy(() => import("@/pages/incident-report"));
+const AgentCalibrationPage = lazy(() => import("@/pages/agent-calibration"));
 
 function Router() {
   const { isAuthenticated, isLoading } = useWalletAuth();
@@ -71,6 +72,7 @@ function Router() {
           <Route path="/legal/terms" component={ConditionsUtilisation} />
           <Route path="/agents" component={AgentsPage} />
           <Route path="/leaderboard" component={Leaderboard} />
+          <Route path="/agent/:wallet/calibration" component={AgentCalibrationPage} />
           <Route path="/agent/:wallet" component={AgentProfilePage} />
           <Route path="/attestation/:id" component={AttestationDetailPage} />
           <Route path="/issuer/:wallet" component={IssuerProfilePage} />
@@ -106,6 +108,7 @@ function Router() {
         <Route path="/legal/terms" component={ConditionsUtilisation} />
         <Route path="/agents" component={AgentsPage} />
         <Route path="/leaderboard" component={Leaderboard} />
+        <Route path="/agent/:wallet/calibration" component={AgentCalibrationPage} />
         <Route path="/agent/:wallet" component={AgentProfilePage} />
         <Route path="/attestation/:id" component={AttestationDetailPage} />
         <Route path="/issuer/:wallet" component={IssuerProfilePage} />
