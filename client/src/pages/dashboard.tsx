@@ -5,12 +5,114 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Upload, FileText, ExternalLink, Download, Copy, LogOut, Settings as SettingsIcon, Activity, Check, ArrowRight, Rocket, X, Sparkles, Trophy } from "lucide-react";
+import { Shield, Upload, FileText, ExternalLink, Download, Copy, LogOut, Settings as SettingsIcon, Activity, Check, ArrowRight, Rocket, X, Sparkles, Trophy, Code2 } from "lucide-react";
 import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import type { Certification } from "@shared/schema";
 import { ApiKeysSection } from "@/components/api-keys-section";
+
+function TrustBadgeSection({ wallet, isPublic }: { wallet: string; isPublic: boolean }) {
+  const { toast } = useToast();
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://xproof.app";
+  const badgeUrl = `${origin}/badge/trust/${wallet}.svg`;
+  const linkUrl = `${origin}/agent/${wallet}`;
+  const markdownSnippet = `[![xproof Trust](${badgeUrl})](${linkUrl})`;
+  const scriptSnippet = `<script src="${origin}/widget/trust/${wallet}.js"></script>`;
+
+  const handleCopy = async (text: string, label: string) => {
+    const success = await copyToClipboard(text);
+    if (success) {
+      toast({ title: "Copied!", description: `${label} copied to clipboard` });
+    }
+  };
+
+  return (
+    <Card data-testid="card-trust-badge">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Code2 className="h-5 w-5 text-primary" />
+          <CardTitle className="text-base">Trust Badge</CardTitle>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Add your xproof trust badge to GitHub READMEs or any website
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {!isPublic ? (
+          <div className="flex items-start gap-3 rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+            <Shield className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              Your trust badge is only available when your profile is public.{" "}
+              <Link href="/settings" className="underline underline-offset-2 text-foreground">
+                Enable public profile in Settings.
+              </Link>
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Live preview */}
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Live preview</p>
+              <img
+                src={badgeUrl}
+                alt="xproof Trust Badge"
+                className="h-7"
+                data-testid="img-trust-badge-preview"
+              />
+            </div>
+
+            {/* Markdown snippet */}
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Markdown — GitHub README
+              </p>
+              <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                <code
+                  className="flex-1 truncate font-mono text-xs"
+                  data-testid="text-markdown-snippet"
+                >
+                  {markdownSnippet}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleCopy(markdownSnippet, "Markdown snippet")}
+                  data-testid="button-copy-markdown"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Script widget */}
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                HTML widget — websites &amp; docs
+              </p>
+              <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                <code
+                  className="flex-1 truncate font-mono text-xs"
+                  data-testid="text-script-snippet"
+                >
+                  {scriptSnippet}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleCopy(scriptSnippet, "Script tag")}
+                  data-testid="button-copy-script"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function OnboardingCard({ certifications, isPublicProfile, onDismiss }: { certifications: Certification[] | undefined; isPublicProfile: boolean; onDismiss: () => void }) {
   const certCount = certifications?.length || 0;
@@ -272,9 +374,19 @@ export default function Dashboard() {
         </div>
 
         {/* API Keys Section */}
-        <div className="mb-12">
+        <div className="mb-8">
           <ApiKeysSection />
         </div>
+
+        {/* Trust Badge Section */}
+        {user?.walletAddress && (
+          <div className="mb-12">
+            <TrustBadgeSection
+              wallet={user.walletAddress}
+              isPublic={(user as any).isPublicProfile || false}
+            />
+          </div>
+        )}
 
         {/* Certifications List */}
         <div>
