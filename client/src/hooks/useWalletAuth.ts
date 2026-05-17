@@ -19,6 +19,7 @@ interface User {
   companyLogoUrl?: string | null;
   firstName?: string | null;
   lastName?: string | null;
+  isPublicProfile?: boolean | null;
   usageResetDate?: Date | null;
   createdAt?: Date | null;
 }

@@ -383,7 +383,7 @@ export default function Dashboard() {
           <div className="mb-12">
             <TrustBadgeSection
               wallet={user.walletAddress}
-              isPublic={(user as any).isPublicProfile || false}
+              isPublic={user?.isPublicProfile ?? false}
             />
           </div>
         )}
