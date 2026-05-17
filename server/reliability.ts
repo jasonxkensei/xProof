@@ -123,12 +123,11 @@ export const publicPdfRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
 });
 
-// GET /api/agent/calibration/:agentId/export.csv — anonymous callers.
-// Runs AFTER optionalApiKey (set before this in the route chain) so the skip
-// function can exempt already-authenticated callers from this 5 req/min IP cap.
-// 5 req/min per IP prevents anonymous DoS on the expensive full-table-scan path.
-// Authenticated callers are subject instead to the owner-specific pgCheckRateLimit
-// call made inside the handler after ownership of the specific agent is confirmed.
+// GET /api/agent/calibration/:agentId/export.csv — baseline DoS protection.
+// Runs BEFORE optionalApiKey (first in the route chain) so it guards the DB
+// lookup path even for non-existent agentId values.  All callers — including
+// authenticated and owner callers — are subject to this IP-based cap.
+// 5 req/min per IP mirrors publicPdfRateLimiter.
 export const calibrationCsvExportRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
@@ -136,20 +135,25 @@ export const calibrationCsvExportRateLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
   store: new PgRateLimitStore("pub_csv"),
-  // Skip for any caller already authenticated by optionalApiKey (req.optionalUserId)
-  // or by a wallet session; these callers are governed by the per-identity owner check.
-  skip: (req: any) => !!(req.optionalUserId) || !!(req.session?.walletAddress),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
 });
 
-// Owners confirmed inside the handler (after agentId → user DB lookup) get
-// 30 req/min keyed on their identity (user DB ID or wallet address).
-// NOT used as route middleware — ownership of `:agentId` requires a DB lookup
-// and can only be resolved inside the handler. The handler calls
-// pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000) directly after
-// isOwner is established. This export is the authoritative source of the
-// config (namespace, max, window) for that inline call.
-export const CSV_EXPORT_OWNER_LIMIT = { namespace: "pub_csv_owner", max: 30, windowMs: 60_000 } as const;
+// Confirmed owners (verified inside the handler after agentId → user DB lookup)
+// additionally get 30 req/min keyed on their identity (user DB ID or wallet address).
+// This allows a pipeline running from multiple IPs to reach up to 30/min total,
+// while each individual IP is still bounded by calibrationCsvExportRateLimiter above.
+// NOT used as standalone route middleware — ownership requires the DB lookup.
+// The route handler calls pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000)
+// after isOwner is established; this export provides the consistent config.
+export const calibrationCsvExportOwnerRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => (req.optionalUserId as string) ?? (req.session?.walletAddress as string) ?? getClientIp(req),
+  store: new PgRateLimitStore("pub_csv_owner"),
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
+});
 
 // /api/agent/calibration/:agentId is a public endpoint that runs a raw SQL
 // query on every call. 20 req/min per IP keeps the DB load bounded while
