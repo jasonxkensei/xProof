@@ -129,6 +129,9 @@ function useDebounce(value: string, delay: number) {
   return debouncedValue;
 }
 
+const VALID_SORTS = ["score", "certs", "streak", "attestations", "calibration"] as const;
+type SortBy = typeof VALID_SORTS[number];
+
 function getInitialParam(key: string, defaultValue: string) {
   if (typeof window === "undefined") return defaultValue;
   return new URLSearchParams(window.location.search).get(key) ?? defaultValue;
@@ -140,9 +143,10 @@ export default function Leaderboard() {
   const [categoryFilter, setCategoryFilter] = useState(() => getInitialParam("category", "all"));
   const [attestedOnly, setAttestedOnly] = useState(() => getInitialParam("attested", "") === "true");
   const [calibratedOnly, setCalibratedOnly] = useState(() => getInitialParam("calibrated", "") === "true");
-  const [sortBy, setSortBy] = useState<"score" | "certs" | "streak" | "attestations" | "calibration">(
-    () => (getInitialParam("sort", "score") as "score" | "certs" | "streak" | "attestations" | "calibration")
-  );
+  const [sortBy, setSortBy] = useState<SortBy>(() => {
+    const v = getInitialParam("sort", "score");
+    return (VALID_SORTS as readonly string[]).includes(v) ? (v as SortBy) : "score";
+  });
   const [page, setPage] = useState(() => {
     const p = parseInt(getInitialParam("page", "1"), 10);
     return isNaN(p) || p < 1 ? 1 : p;
