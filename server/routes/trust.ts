@@ -23,7 +23,8 @@ export function registerTrustRoutes(app: Express) {
         category: (req.query.category as string) || undefined,
         search: (req.query.search as string) || undefined,
         attestedOnly: req.query.attested === "true",
-        sortBy: (req.query.sort as "score" | "certs" | "streak" | "attestations") || undefined,
+        calibratedOnly: req.query.calibrated === "true",
+        sortBy: (req.query.sort as "score" | "certs" | "streak" | "attestations" | "calibration") || undefined,
       };
       const result = await getLeaderboard(filters);
       res.json(result);

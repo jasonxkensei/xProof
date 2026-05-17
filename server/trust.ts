@@ -369,7 +369,8 @@ export interface LeaderboardFilters {
   category?: string;
   search?: string;
   attestedOnly?: boolean;
-  sortBy?: "score" | "certs" | "streak" | "attestations";
+  calibratedOnly?: boolean;
+  sortBy?: "score" | "certs" | "streak" | "attestations" | "calibration";
 }
 
 export interface LeaderboardResult {
@@ -507,10 +508,27 @@ export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<
   if (filters.attestedOnly) {
     entries = entries.filter((e) => e.activeAttestations > 0);
   }
+  if (filters.calibratedOnly) {
+    entries = entries.filter((e) => e.calibrationLabel !== null);
+  }
 
   if (filters.sortBy === "certs") entries.sort((a, b) => b.certTotal - a.certTotal);
   else if (filters.sortBy === "streak") entries.sort((a, b) => b.streakWeeks - a.streakWeeks);
   else if (filters.sortBy === "attestations") entries.sort((a, b) => b.activeAttestations - a.activeAttestations);
+  else if (filters.sortBy === "calibration") {
+    // Calibrated > Underconfident > Overconfident > None (null)
+    const CALIBRATION_ORDER: Record<string, number> = {
+      calibrated: 0,
+      underconfident: 1,
+      overconfident: 2,
+    };
+    entries.sort((a, b) => {
+      const aOrder = a.calibrationLabel !== null ? (CALIBRATION_ORDER[a.calibrationLabel] ?? 3) : 3;
+      const bOrder = b.calibrationLabel !== null ? (CALIBRATION_ORDER[b.calibrationLabel] ?? 3) : 3;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return b.trustScore - a.trustScore;
+    });
+  }
 
   const total = entries.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));

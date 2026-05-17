@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, TrendingDown, Flame, BadgeCheck, Award, ChevronLeft, ChevronRight, Sparkles, AlertTriangle } from "lucide-react";
+import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, TrendingDown, Flame, BadgeCheck, Award, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Crosshair } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -129,13 +129,24 @@ function useDebounce(value: string, delay: number) {
   return debouncedValue;
 }
 
+function getInitialParam(key: string, defaultValue: string) {
+  if (typeof window === "undefined") return defaultValue;
+  return new URLSearchParams(window.location.search).get(key) ?? defaultValue;
+}
+
 export default function Leaderboard() {
   const [, navigate] = useLocation();
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [attestedOnly, setAttestedOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<"score" | "certs" | "streak" | "attestations">("score");
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(() => getInitialParam("q", ""));
+  const [categoryFilter, setCategoryFilter] = useState(() => getInitialParam("category", "all"));
+  const [attestedOnly, setAttestedOnly] = useState(() => getInitialParam("attested", "") === "true");
+  const [calibratedOnly, setCalibratedOnly] = useState(() => getInitialParam("calibrated", "") === "true");
+  const [sortBy, setSortBy] = useState<"score" | "certs" | "streak" | "attestations" | "calibration">(
+    () => (getInitialParam("sort", "score") as "score" | "certs" | "streak" | "attestations" | "calibration")
+  );
+  const [page, setPage] = useState(() => {
+    const p = parseInt(getInitialParam("page", "1"), 10);
+    return isNaN(p) || p < 1 ? 1 : p;
+  });
   const limit = 50;
   const [selectedWallets, setSelectedWallets] = useState<Set<string>>(new Set());
 
@@ -143,14 +154,27 @@ export default function Leaderboard() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, categoryFilter, attestedOnly, sortBy]);
+  }, [debouncedSearch, categoryFilter, attestedOnly, calibratedOnly, sortBy]);
+
+  // Sync filter state to URL for shareability
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    if (categoryFilter !== "all") params.set("category", categoryFilter);
+    if (attestedOnly) params.set("attested", "true");
+    if (calibratedOnly) params.set("calibrated", "true");
+    if (sortBy !== "score") params.set("sort", sortBy);
+    if (page > 1) params.set("page", String(page));
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [debouncedSearch, categoryFilter, attestedOnly, calibratedOnly, sortBy, page]);
 
   useEffect(() => {
     document.title = "Agent Trust Leaderboard | xproof";
   }, []);
 
   const { data, isLoading } = useQuery<LeaderboardResponse>({
-    queryKey: ["/api/leaderboard", page, limit, categoryFilter, debouncedSearch, attestedOnly, sortBy],
+    queryKey: ["/api/leaderboard", page, limit, categoryFilter, debouncedSearch, attestedOnly, calibratedOnly, sortBy],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("page", String(page));
@@ -158,6 +182,7 @@ export default function Leaderboard() {
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (categoryFilter !== "all") params.set("category", categoryFilter);
       if (attestedOnly) params.set("attested", "true");
+      if (calibratedOnly) params.set("calibrated", "true");
       params.set("sort", sortBy);
       const res = await fetch(`/api/leaderboard?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch leaderboard");
@@ -267,7 +292,7 @@ export default function Leaderboard() {
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-            <SelectTrigger data-testid="select-sort-filter" className="w-40">
+            <SelectTrigger data-testid="select-sort-filter" className="w-44">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
@@ -275,6 +300,7 @@ export default function Leaderboard() {
               <SelectItem value="certs">Proofs</SelectItem>
               <SelectItem value="streak">Streak</SelectItem>
               <SelectItem value="attestations">Attestations</SelectItem>
+              <SelectItem value="calibration">Calibration</SelectItem>
             </SelectContent>
           </Select>
           <Tooltip>
@@ -292,6 +318,23 @@ export default function Leaderboard() {
             </TooltipTrigger>
             <TooltipContent side="bottom" className="max-w-xs text-center">
               Show only agents verified by a credentialed issuer. Attestations are granted manually — separate from the trust score.
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={calibratedOnly ? "default" : "outline"}
+                size="sm"
+                data-testid="button-calibrated-filter"
+                onClick={() => setCalibratedOnly((v) => !v)}
+                className="gap-1.5"
+              >
+                <Crosshair className="h-3.5 w-3.5" />
+                Calibrated only
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs text-center">
+              Show only agents with calibration data. Calibration measures whether an agent's confidence scores match its actual outcome accuracy.
             </TooltipContent>
           </Tooltip>
         </div>
@@ -523,7 +566,10 @@ export default function Leaderboard() {
         <p className="mt-4 text-center text-xs text-muted-foreground">
           Trust scores are computed from on-chain proof history. No self-reporting.
           {attestedOnly && (
-            <span className="ml-2 text-emerald-600 dark:text-emerald-400">· Showing attested agents only</span>
+            <span className="ml-2 text-emerald-600 dark:text-emerald-400">· Attested agents only</span>
+          )}
+          {calibratedOnly && (
+            <span className="ml-2 text-emerald-600 dark:text-emerald-400">· Calibrated agents only</span>
           )}
         </p>
       </div>
