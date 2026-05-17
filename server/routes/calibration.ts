@@ -5,8 +5,8 @@ import { certifications, users, agentOutcomes, apiKeys } from "@shared/schema";
 import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
-import { validateApiKey } from "./helpers";
-import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter } from "../reliability";
+import { validateApiKey, getClientIp } from "./helpers";
+import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, CSV_OWNER_RL, CSV_ANON_RL } from "../reliability";
 import { pgCheckRateLimit } from "../pgRateLimit";
 
 // ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
@@ -309,7 +309,7 @@ export function registerCalibrationRoutes(app: Express) {
   // Auth:  API-key owner or wallet-session owner → all outcomes (public + private).
   //        Unauthenticated → allowed only when ALL outcomes are public; blocked otherwise (401).
   // ?n=X  Optional row cap (hard ceiling 100 000). Omit to export full history.
-  app.get("/api/agent/calibration/:agentId/export.csv", calibrationCsvExportRateLimiter, optionalApiKey, async (req, res) => {
+  app.get("/api/agent/calibration/:agentId/export.csv", optionalApiKey, async (req, res) => {
     try {
       const { agentId } = req.params;
       // n is optional — omitting it exports the full history (no row cap).
@@ -343,14 +343,14 @@ export function registerCalibrationRoutes(app: Express) {
         (!!callerUserId && callerUserId === user.id) ||
         (!!sessionWallet && sessionWallet === user.walletAddress);
 
-      // Confirmed owners get 30 req/min keyed on their identity (user DB ID or
-      // wallet address). Runs here — after isOwner is resolved via DB lookup —
-      // so the higher limit applies only to the actual agent owner.
-      // Non-owner callers (anon or authenticated) are governed by the 5 req/min
-      // IP-based calibrationCsvExportRateLimiter that ran first in the middleware chain.
-      if (isOwner) {
-        const ownerKey = (callerUserId ?? sessionWallet)!;
-        const rl = await pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000);
+      // Tiered rate limit — applied here, after isOwner is resolved via DB lookup,
+      // so each traffic class gets the correct cap and no class is left unbounded.
+      //   owners      → 30/min keyed on identity (user DB ID or wallet address)
+      //   everyone else → 5/min keyed on source IP
+      {
+        const cfg = isOwner ? CSV_OWNER_RL : CSV_ANON_RL;
+        const key = isOwner ? (callerUserId ?? sessionWallet)! : getClientIp(req);
+        const rl  = await pgCheckRateLimit(cfg.namespace, key, cfg.max, cfg.windowMs);
         if (!rl.allowed) {
           res.set("Retry-After", String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
           return res.status(429).json({ error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" });
