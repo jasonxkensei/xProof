@@ -6,7 +6,7 @@ import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { validateApiKey, getClientIp } from "./helpers";
-import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter } from "../reliability";
+import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter, csvAnonStore } from "../reliability";
 import { pgCheckRateLimit } from "../pgRateLimit";
 
 // ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
@@ -343,13 +343,16 @@ export function registerCalibrationRoutes(app: Express) {
         (!!callerUserId && callerUserId === user.id) ||
         (!!sessionWallet && sessionWallet === user.walletAddress);
 
-      // Confirmed owners get a higher aggregate budget (30/min by identity) applied
-      // after ownership of :agentId is resolved via the DB lookup above.  The
-      // calibrationCsvExportRateLimiter middleware already ran (5/min per IP) before
-      // optionalApiKey, so every request — including 404 paths — is bounded early.
-      // Owners with multiple egress IPs can collectively reach 30/min; each IP is
-      // still capped at 5 by the upstream middleware.
+      // Owners get a higher effective limit (30/min by identity) via a two-step swap:
+      //   1. Refund the token consumed by the calibrationCsvExportRateLimiter middleware
+      //      (5/min per IP) — this undoes the anon bucket hit for confirmed owners so
+      //      the 5/min IP cap does not apply to them.
+      //   2. Apply the owner-specific 30/min identity check (pub_csv_owner namespace,
+      //      same config as calibrationCsvExportOwnerRateLimiter in reliability.ts).
+      // Non-owners keep their layer-1 token consumed → effective cap: 5/min per IP.
+      // 404 paths exit before this block → they cannot trigger the decrement.
       if (isOwner) {
+        await csvAnonStore.decrement(getClientIp(req));
         const ownerKey = (callerUserId ?? sessionWallet)!;
         const rl = await pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000);
         if (!rl.allowed) {

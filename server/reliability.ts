@@ -123,20 +123,39 @@ export const publicPdfRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many PDF requests, please try again later" },
 });
 
-// GET /api/agent/calibration/:agentId/export.csv — baseline per-IP guard.
-// Applied FIRST in the route chain (before optionalApiKey) so every request,
-// including those for non-existent agentId values, is throttled before any DB
-// work begins.  5 req/min per IP is the effective cap for anonymous and non-owner
-// callers.  Confirmed owners are additionally checked against the pub_csv_owner
-// namespace (30/min per identity) inside the handler after isOwner is resolved;
-// their cross-IP aggregate can reach 30/min while each IP remains bounded at 5/min.
+// GET /api/agent/calibration/:agentId/export.csv — two-tier rate limiting.
+//
+// Layer 1 — calibrationCsvExportRateLimiter (5/min per IP)
+//   Runs FIRST in the route chain, before optionalApiKey and before any DB work.
+//   Bounds ALL callers, including requests for non-existent agentId values (404 paths).
+//   Uses csvAnonStore so the handler can call csvAnonStore.decrement() to refund
+//   the token for confirmed owners (see layer 2).
+//
+// Layer 2 — calibrationCsvExportOwnerRateLimiter (30/min per identity)
+//   Applied inside the handler AFTER isOwner is resolved via DB lookup.
+//   Confirmed owners have their layer-1 token refunded first (via csvAnonStore.decrement),
+//   then are checked against the 30/min owner budget keyed on their identity.
+//   Non-owners are NOT refunded — they remain capped at 5/min by layer 1.
+//   404 paths hit layer 1 but exit before the decrement → still bounded at 5/min.
+export const csvAnonStore = new PgRateLimitStore("pub_csv");
+
 export const calibrationCsvExportRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
-  store: new PgRateLimitStore("pub_csv"),
+  store: csvAnonStore,
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
+});
+
+export const calibrationCsvExportOwnerRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => (req as any).optionalUserId ?? (req as any).session?.walletAddress ?? getClientIp(req),
+  store: new PgRateLimitStore("pub_csv_owner"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
 });
 
