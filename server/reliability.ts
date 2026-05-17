@@ -153,9 +153,15 @@ export const calibrationCsvExportRateLimiter = rateLimit({
 });
 
 // Owner-tier config constants — single authoritative source shared with the inline
-// pgCheckRateLimit call in server/routes/calibration.ts (handler applies owner check
-// after isOwner is resolved via DB lookup; middleware invocation at that point is not
-// possible without a fragile Promise wrapper, so inline pgCheckRateLimit is used).
+// pgCheckRateLimit call in server/routes/calibration.ts.
+//
+// ARCHITECTURE NOTE: there is intentionally NO express-rate-limit middleware or
+// keyGenerator for the owner tier. Owner identity (API-key PK or session wallet)
+// can only be resolved after a DB lookup inside the handler (isOwner check), so a
+// middleware keyGenerator would require a fragile async DB call at the middleware
+// layer. The inline pgCheckRateLimit call is the correct design for this flow.
+// The exported constants below (namespace, max, windowMs) are the single source of
+// truth; both the handler and any future test must import them from here.
 export const CSV_OWNER_RL_NAMESPACE = "pub_csv_owner";
 export const CSV_OWNER_RL_MAX       = 30;
 export const CSV_OWNER_RL_WINDOW_MS = 60_000;
