@@ -136,6 +136,20 @@ export const calibrationCsvExportRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
 });
 
+// Owners (API-key or wallet-session authenticated) get a more generous limit
+// keyed on their identity so they can regenerate exports across multiple IPs.
+// Applied inside the route handler after isOwner is resolved (cannot be a
+// standalone middleware because ownership requires a DB lookup).
+export const calibrationCsvExportOwnerRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => (req.apiKey?.id as string) ?? (req.session?.walletAddress as string) ?? getClientIp(req),
+  store: new PgRateLimitStore("pub_csv_owner"),
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
+});
+
 // /api/agent/calibration/:agentId is a public endpoint that runs a raw SQL
 // query on every call. 20 req/min per IP keeps the DB load bounded while
 // still allowing reasonable polling. Paired with a 30 s in-memory cache in

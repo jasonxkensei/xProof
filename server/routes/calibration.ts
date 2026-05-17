@@ -5,8 +5,9 @@ import { certifications, users, agentOutcomes, apiKeys } from "@shared/schema";
 import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
-import { validateApiKey } from "./helpers";
+import { validateApiKey, getClientIp } from "./helpers";
 import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter } from "../reliability";
+import { pgCheckRateLimit } from "../pgRateLimit";
 
 // ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
 // Keyed by `${agentId}:${n}` so different ?n values are cached independently.
@@ -341,6 +342,19 @@ export function registerCalibrationRoutes(app: Express) {
       const isOwner =
         (!!callerUserId && callerUserId === user.id) ||
         (!!sessionWallet && sessionWallet === user.walletAddress);
+
+      // Owner-specific rate limit: 30 req/min per authenticated identity.
+      // The IP-based anon limiter (5 req/min) already ran before optionalApiKey;
+      // this check replaces that tighter cap for owners so a pipeline re-exporting
+      // after each outcome upload is not blocked by the anonymous threshold.
+      if (isOwner) {
+        const ownerKey = callerUserId ?? sessionWallet ?? getClientIp(req);
+        const rl = await pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000);
+        if (!rl.allowed) {
+          res.set("Retry-After", String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
+          return res.status(429).json({ error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" });
+        }
+      }
 
       // Spec: unauthenticated access allowed ONLY when ALL outcomes are public.
       // If the agent has even one private outcome, ownership auth is required.
