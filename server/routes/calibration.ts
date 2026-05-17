@@ -6,7 +6,7 @@ import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { validateApiKey, getClientIp } from "./helpers";
-import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter, csvAnonStore } from "../reliability";
+import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter, csvAnonStore, CSV_OWNER_RL_NAMESPACE, CSV_OWNER_RL_MAX, CSV_OWNER_RL_WINDOW_MS } from "../reliability";
 import { pgCheckRateLimit } from "../pgRateLimit";
 
 // ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
@@ -343,18 +343,23 @@ export function registerCalibrationRoutes(app: Express) {
         (!!callerUserId && callerUserId === user.id) ||
         (!!sessionWallet && sessionWallet === user.walletAddress);
 
-      // Owners get a higher effective limit (30/min by identity) via a two-step swap:
-      //   1. Refund the token consumed by the calibrationCsvExportRateLimiter middleware
-      //      (5/min per IP) — this undoes the anon bucket hit for confirmed owners so
-      //      the 5/min IP cap does not apply to them.
-      //   2. Apply the owner-specific 30/min identity check (pub_csv_owner namespace,
-      //      same config as calibrationCsvExportOwnerRateLimiter in reliability.ts).
-      // Non-owners keep their layer-1 token consumed → effective cap: 5/min per IP.
-      // 404 paths exit before this block → they cannot trigger the decrement.
+      // Owners get a higher effective limit (30/min) via a two-step token swap:
+      //   1. Refund the token consumed by the calibrationCsvExportRateLimiter
+      //      middleware (5/min per IP) so the IP cap does not constrain owners.
+      //   2. Apply the owner-specific 30/min identity check using the constants
+      //      defined in reliability.ts (CSV_OWNER_RL_*) as the single source of
+      //      truth — avoids config drift between reliability.ts and this handler.
+      // Non-owners: no refund → governed solely by layer-1 (5/min per IP).
+      // 404 paths: exit before this block → decrement is never reached.
+      //
+      // Owner key: user DB ID (from API-key auth) or wallet address (from session).
+      // Using user-level identity means all API keys for one user share the 30/min
+      // budget — a deliberate product choice (see follow-up #239 for API-key-level
+      // keying if finer granularity is needed in future).
       if (isOwner) {
         await csvAnonStore.decrement(getClientIp(req));
         const ownerKey = (callerUserId ?? sessionWallet)!;
-        const rl = await pgCheckRateLimit("pub_csv_owner", ownerKey, 30, 60_000);
+        const rl = await pgCheckRateLimit(CSV_OWNER_RL_NAMESPACE, ownerKey, CSV_OWNER_RL_MAX, CSV_OWNER_RL_WINDOW_MS);
         if (!rl.allowed) {
           res.set("Retry-After", String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
           return res.status(429).json({ error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" });

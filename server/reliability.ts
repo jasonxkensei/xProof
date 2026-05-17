@@ -149,15 +149,13 @@ export const calibrationCsvExportRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
 });
 
-export const calibrationCsvExportOwnerRateLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req: any) => (req as any).optionalUserId ?? (req as any).session?.walletAddress ?? getClientIp(req),
-  store: new PgRateLimitStore("pub_csv_owner"),
-  message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
-});
+// Owner-tier config constants — single authoritative source shared with the inline
+// pgCheckRateLimit call in server/routes/calibration.ts (handler applies owner check
+// after isOwner is resolved via DB lookup; middleware invocation at that point is not
+// possible without a fragile Promise wrapper, so inline pgCheckRateLimit is used).
+export const CSV_OWNER_RL_NAMESPACE = "pub_csv_owner";
+export const CSV_OWNER_RL_MAX       = 30;
+export const CSV_OWNER_RL_WINDOW_MS = 60_000;
 
 // /api/agent/calibration/:agentId is a public endpoint that runs a raw SQL
 // query on every call. 20 req/min per IP keeps the DB load bounded while
