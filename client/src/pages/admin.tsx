@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,9 @@ import {
   Zap,
   Globe,
   Target,
-
+  ChevronDown,
+  ChevronRight,
+  Gauge,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -129,6 +133,122 @@ interface TrafficSources {
   generated_at: string;
 }
 
+interface RateLimitStatRow {
+  namespace: string;
+  key_hash: string;
+  count: number;
+  reset_at: string;
+}
+
+interface RateLimitStats {
+  generated_at: string;
+  top_n_per_namespace: number;
+  namespaces: Record<string, RateLimitStatRow[]>;
+}
+
+function formatResetsIn(isoDate: string): string {
+  const ms = new Date(isoDate).getTime() - Date.now();
+  if (ms <= 0) return "expired";
+  const secs = Math.ceil(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const remSecs = secs % 60;
+  return remSecs > 0 ? `${mins}m ${remSecs}s` : `${mins}m`;
+}
+
+function RateLimitActivityCard({ data, isError }: { data: RateLimitStats | undefined; isError: boolean }) {
+  const [expanded, setExpanded] = useState(true);
+
+  const allRows: RateLimitStatRow[] = data
+    ? Object.values(data.namespaces).flat()
+    : [];
+
+  const totalHits = allRows.reduce((sum, r) => sum + r.count, 0);
+
+  return (
+    <Card data-testid="card-rate-limit-activity">
+      <CardHeader
+        className="flex flex-row items-center justify-between gap-2 space-y-0 cursor-pointer select-none"
+        onClick={() => setExpanded((v) => !v)}
+        data-testid="button-toggle-rate-limit"
+      >
+        <div className="flex items-center gap-2">
+          {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          <CardTitle className="text-sm font-medium">Rate Limit Activity</CardTitle>
+          {allRows.length > 0 && (
+            <Badge variant="secondary" data-testid="badge-rate-limit-count">
+              {allRows.length} active
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {totalHits > 0 && (
+            <span className="text-xs text-muted-foreground">{totalHits.toLocaleString()} hits</span>
+          )}
+          <Gauge className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </CardHeader>
+
+      {expanded && (
+        <CardContent className="pt-0">
+          {isError && (
+            <div className="flex items-center gap-2 py-4 text-sm text-destructive" data-testid="rate-limit-error">
+              <AlertTriangle className="h-4 w-4" />
+              Unable to load rate limit data. Ensure you are authenticated as an admin.
+            </div>
+          )}
+          {!isError && !data && (
+            <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground" data-testid="rate-limit-loading">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading rate limit data…
+            </div>
+          )}
+          {data && allRows.length === 0 && (
+            <p className="py-4 text-sm text-muted-foreground" data-testid="rate-limit-empty">
+              No active rate-limit buckets — all namespaces are under their limits.
+            </p>
+          )}
+          {data && allRows.length > 0 && (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="table-rate-limit-rows">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <th className="pb-2 pr-4 font-medium text-muted-foreground">Namespace</th>
+                      <th className="pb-2 pr-4 font-medium text-muted-foreground">Key prefix</th>
+                      <th className="pb-2 pr-4 font-medium text-muted-foreground text-right">Count</th>
+                      <th className="pb-2 font-medium text-muted-foreground text-right">Resets in</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(data.namespaces).map(([ns, rows]) =>
+                      rows.map((row, i) => (
+                        <tr
+                          key={`${ns}-${row.key_hash}-${i}`}
+                          className="border-b last:border-0"
+                          data-testid={`row-rate-limit-${ns}-${i}`}
+                        >
+                          <td className="py-2 pr-4 font-mono text-xs">{row.namespace}</td>
+                          <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{row.key_hash}</td>
+                          <td className="py-2 pr-4 text-right tabular-nums">{row.count.toLocaleString()}</td>
+                          <td className="py-2 text-right tabular-nums text-muted-foreground">{formatResetsIn(row.reset_at)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Showing top {data.top_n_per_namespace} per namespace · auto-refreshes every 30s · as of {new Date(data.generated_at).toLocaleTimeString()}
+              </p>
+            </>
+          )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 function StatCard({ title, value, subtitle, icon: Icon }: { title: string; value: string | number; subtitle?: string; icon: any }) {
   return (
     <Card data-testid={`stat-card-${title.toLowerCase().replace(/\s+/g, '-')}`}>
@@ -188,6 +308,8 @@ function TrendIndicator({ current, previous }: { current: number; previous: numb
 }
 
 export default function AdminDashboard() {
+  const { isAuthenticated } = useWalletAuth();
+
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<PublicStats>({
     queryKey: ["/api/stats"],
     refetchInterval: 30000,
@@ -198,11 +320,24 @@ export default function AdminDashboard() {
     refetchInterval: 15000,
   });
 
+  const { data: authData } = useQuery<{ isAdmin?: boolean }>({
+    queryKey: ["/api/auth/me"],
+    enabled: isAuthenticated,
+  });
+
+  const isAdmin = isAuthenticated && !!authData?.isAdmin;
 
   const { data: trafficSources } = useQuery<TrafficSources>({
     queryKey: ["/api/admin/traffic-sources"],
     refetchInterval: 60000,
     retry: false,
+  });
+
+  const { data: rateLimitStats, isError: rateLimitError } = useQuery<RateLimitStats>({
+    queryKey: ["/api/admin/rate-limit-stats?top=10"],
+    refetchInterval: 30000,
+    retry: false,
+    enabled: isAdmin,
   });
 
   if (statsLoading || healthLoading) {
@@ -548,6 +683,12 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
+
+            {isAdmin && (
+              <div className="mb-6">
+                <RateLimitActivityCard data={rateLimitStats} isError={rateLimitError} />
+              </div>
+            )}
 
             <div className="flex flex-col items-center gap-2">
               <Button variant="outline" onClick={() => refetchStats()} data-testid="button-refresh-stats">
