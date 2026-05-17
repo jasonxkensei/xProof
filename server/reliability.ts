@@ -145,7 +145,9 @@ export const calibrationCsvExportOwnerRateLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => (req.apiKey?.id as string) ?? (req.session?.walletAddress as string) ?? getClientIp(req),
+  // optionalApiKey sets req.optionalUserId (user DB ID), not req.apiKey.
+  // Wallet-session callers are identified by req.session.walletAddress.
+  keyGenerator: (req: any) => (req.optionalUserId as string) ?? (req.session?.walletAddress as string) ?? getClientIp(req),
   store: new PgRateLimitStore("pub_csv_owner"),
   message: { error: "TOO_MANY_REQUESTS", message: "Too many CSV export requests, please try again later" },
 });
