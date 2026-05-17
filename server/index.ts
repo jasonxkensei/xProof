@@ -376,6 +376,19 @@ app.use((req, res, next) => {
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_cert_id ON agent_outcomes(certification_id)`);
       await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_outcomes_cert_unique ON agent_outcomes(certification_id)`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_user_vis_time ON agent_outcomes(user_id, visibility, submitted_at DESC)`);
+      // Covers mixed-visibility (no visibility filter) queries such as the owner CSV
+      // export path: WHERE user_id = $1 ORDER BY submitted_at DESC.
+      // The composite (user_id, visibility, submitted_at DESC) index above is optimal
+      // for equality-on-visibility predicates, but the planner may not use it when
+      // visibility is absent from the WHERE clause; this index fills that gap.
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_user_time ON agent_outcomes(user_id, submitted_at DESC)`);
+      // Partial index for the private-outcome EXISTS/COUNT checks:
+      // SELECT ... FROM agent_outcomes WHERE user_id = $1 AND visibility = 'private'
+      // Keeps the index tiny (only private rows) so the planner reads only
+      // private-row pages.  For EXISTS the planner can short-circuit after the
+      // first match; COUNT must visit all matching rows but still avoids
+      // scanning the much larger public-row portion of the table.
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_outcomes_user_private ON agent_outcomes(user_id, submitted_at DESC) WHERE visibility = 'private'`);
       // Migrate VARCHAR columns to REAL if table was created before numeric type change
       await pool.query(`
         DO $$ BEGIN
