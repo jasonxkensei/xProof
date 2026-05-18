@@ -23,6 +23,7 @@ import {
   ChevronUp,
   Download,
   Plus,
+  Code2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1060,6 +1061,121 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
   );
 }
 
+function BadgeEmbedPanel({ wallet }: { wallet: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [copiedMarkdown, setCopiedMarkdown] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+  const { toast } = useToast();
+
+  const previewUrl = `${typeof window !== "undefined" ? window.location.origin : "https://xproof.app"}/badge/trust/${wallet}.svg`;
+  const canonicalOrigin = "https://xproof.app";
+  const snippetBadgeUrl = `${canonicalOrigin}/badge/trust/${wallet}.svg`;
+  const snippetLinkUrl = `${canonicalOrigin}/agent/${wallet}`;
+  const markdownSnippet = `[![xproof Trust](${snippetBadgeUrl})](${snippetLinkUrl})`;
+  const scriptSnippet = `<script src="${canonicalOrigin}/widget/trust/${wallet}.js"></script>`;
+
+  async function copyText(text: string, setter: (v: boolean) => void, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setter(true);
+      toast({ title: "Copied!", description: `${label} copied to clipboard` });
+      setTimeout(() => setter(false), 2000);
+    } catch {
+      toast({ title: "Copy failed", description: "Could not access clipboard.", variant: "destructive" });
+    }
+  }
+
+  return (
+    <Card data-testid="card-badge-embed">
+      <CardContent className="pt-5 pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <img
+              src={previewUrl}
+              alt="xproof Trust Badge"
+              className="h-7"
+              data-testid="img-badge-preview"
+            />
+            <span className="text-sm text-muted-foreground">Trust badge</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setExpanded((v) => !v)}
+            data-testid="button-badge-embed-toggle"
+          >
+            <Code2 className="h-3.5 w-3.5 mr-1.5" />
+            Embed this badge
+            {expanded ? (
+              <ChevronUp className="h-3 w-3 ml-1.5" />
+            ) : (
+              <ChevronDown className="h-3 w-3 ml-1.5" />
+            )}
+          </Button>
+        </div>
+
+        {expanded && (
+          <div className="mt-4 space-y-3 border-t pt-4">
+            <div>
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Markdown — GitHub README
+              </p>
+              <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                <code
+                  className="flex-1 truncate font-mono text-xs"
+                  data-testid="text-badge-markdown"
+                >
+                  {markdownSnippet}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => copyText(markdownSnippet, setCopiedMarkdown, "Markdown snippet")}
+                  data-testid="button-badge-copy-markdown"
+                  aria-label="Copy markdown snippet"
+                >
+                  {copiedMarkdown ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                HTML widget — websites &amp; docs
+              </p>
+              <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                <code
+                  className="flex-1 truncate font-mono text-xs"
+                  data-testid="text-badge-script"
+                >
+                  {scriptSnippet}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => copyText(scriptSnippet, setCopiedScript, "Script tag")}
+                  data-testid="button-badge-copy-script"
+                  aria-label="Copy script tag"
+                >
+                  {copiedScript ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AgentProfilePage() {
   const params = useParams<{ wallet: string }>();
   const wallet = params.wallet;
@@ -1255,6 +1371,9 @@ export default function AgentProfilePage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Trust Badge Embed */}
+            <BadgeEmbedPanel wallet={wallet || ""} />
 
             {/* Stats */}
             <div className="grid gap-4 sm:grid-cols-4">
