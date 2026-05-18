@@ -283,6 +283,78 @@ export function registerCalibrationRoutes(app: Express) {
     }
   });
 
+  // ── GET /api/agent/calibration/:agentId/eligible-proofs ─────────────────
+  // Owner-only: returns the caller's certifications that carry
+  // metadata.confidence_level and have no submitted outcome yet.
+  // Auth: Authorization: Bearer pm_xxx  (API key)
+  //    OR authenticated wallet session  (browser / dashboard)
+  // Returns: { proofs: [{ id, file_name, confidence_level, created_at }] }
+  // Capped at 50 rows ordered by created_at DESC.
+  app.get("/api/agent/calibration/:agentId/eligible-proofs", optionalApiKey, async (req, res) => {
+    try {
+      const { agentId } = req.params;
+
+      // Resolve caller identity: API key takes priority over session
+      const callerUserId: string | undefined = (req as any).optionalUserId;
+      const sessionWallet = (req as any).session?.walletAddress as string | undefined;
+
+      // Resolve agentId → user
+      const [agent] = await db
+        .select({ id: users.id, walletAddress: users.walletAddress })
+        .from(users)
+        .where(or(eq(users.id, agentId), eq(users.walletAddress, agentId)))
+        .limit(1);
+
+      if (!agent) {
+        return res.status(404).json({ error: "AGENT_NOT_FOUND", message: `No agent found with id or wallet: ${agentId}` });
+      }
+
+      // Auth: caller must be the owner
+      const isOwner =
+        (!!callerUserId && callerUserId === agent.id) ||
+        (!!sessionWallet && sessionWallet === agent.walletAddress);
+
+      if (!isOwner) {
+        return res.status(401).json({
+          error: "UNAUTHORIZED",
+          message: "Authentication required. Provide 'Authorization: Bearer pm_xxx' or authenticate with your wallet.",
+        });
+      }
+
+      // Query certifications that have metadata.confidence_level and no outcome yet
+      const result = await pool.query<{
+        id: string;
+        file_name: string | null;
+        confidence_level: string;
+        created_at: Date;
+      }>(
+        `SELECT c.id, c.file_name,
+                (c.metadata->>'confidence_level')::text AS confidence_level,
+                c.created_at
+         FROM certifications c
+         LEFT JOIN agent_outcomes ao ON ao.certification_id = c.id
+         WHERE c.user_id = $1
+           AND c.metadata->>'confidence_level' IS NOT NULL
+           AND ao.id IS NULL
+         ORDER BY c.created_at DESC
+         LIMIT 50`,
+        [agent.id]
+      );
+
+      return res.json({
+        proofs: result.rows.map((r) => ({
+          id: r.id,
+          file_name: r.file_name ?? null,
+          confidence_level: parseFloat(r.confidence_level),
+          created_at: r.created_at,
+        })),
+      });
+    } catch (error) {
+      logger.error("Failed to fetch eligible proofs", { error: (error as Error).message });
+      return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to fetch eligible proofs" });
+    }
+  });
+
   // ── GET /api/agent/calibration/:agentId ──────────────────────────────────
   // Public — no auth required.
   // Any agent or operator can check another agent's calibration quality.

@@ -720,6 +720,20 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
   const { isAuthenticated, walletAddress } = useWalletAuth();
   const isOwner = isAuthenticated && !!walletAddress && walletAddress === wallet;
 
+  const { data: eligibleData, isLoading: eligibleLoading } = useQuery<{
+    proofs: { id: string; file_name: string | null; confidence_level: number; created_at: string }[];
+  }>({
+    queryKey: ["/api/agent/calibration", wallet, "eligible-proofs"],
+    queryFn: () =>
+      fetch(`/api/agent/calibration/${wallet}/eligible-proofs`, { credentials: "include" }).then((r) => {
+        if (!r.ok) throw new Error("Failed to load eligible proofs");
+        return r.json();
+      }),
+    enabled: isOwner && showForm,
+    staleTime: 30_000,
+  });
+  const eligibleProofs = eligibleData?.proofs ?? [];
+
   const submitOutcomeMutation = useMutation({
     mutationFn: (body: { proof_id: string; outcome_score: number; visibility: string }) =>
       apiRequest("POST", "/api/agent/outcome", body),
@@ -729,6 +743,7 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
       setOutcomeScore("");
       setShowForm(false);
       queryClient.invalidateQueries({ queryKey: ["/api/agent/calibration", wallet] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/calibration", wallet, "eligible-proofs"] });
     },
     onError: (err: any) => {
       // apiRequest throws Error with message pattern "STATUS: body_text"
@@ -748,15 +763,15 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
   function handleOutcomeSubmit(e: React.FormEvent) {
     e.preventDefault();
     const score = parseFloat(outcomeScore);
-    if (!proofId.trim()) {
-      toast({ title: "Proof ID required", variant: "destructive" });
+    if (!proofId) {
+      toast({ title: "Please select a proof", variant: "destructive" });
       return;
     }
     if (isNaN(score) || score < 0 || score > 1) {
       toast({ title: "Score must be between 0.00 and 1.00", variant: "destructive" });
       return;
     }
-    submitOutcomeMutation.mutate({ proof_id: proofId.trim(), outcome_score: score, visibility: "public" });
+    submitOutcomeMutation.mutate({ proof_id: proofId, outcome_score: score, visibility: "public" });
   }
 
   if (!data.calibration || data.outcome_count === 0) {
@@ -784,19 +799,30 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
           {isOwner && showForm ? (
             <form onSubmit={handleOutcomeSubmit} className="space-y-3" data-testid="form-submit-outcome">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Proof ID</label>
-                <input
-                  type="text"
-                  value={proofId}
-                  onChange={(e) => setProofId(e.target.value)}
-                  placeholder="e.g. abc123..."
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  data-testid="input-proof-id"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Must be a proof anchored with <code className="text-xs">metadata.confidence_level</code>.
-                </p>
+                <label className="text-xs font-medium text-muted-foreground">Proof</label>
+                {eligibleLoading ? (
+                  <p className="text-xs text-muted-foreground py-1">Loading eligible proofs…</p>
+                ) : eligibleProofs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-1" data-testid="text-no-eligible-proofs">
+                    Anchor a proof with <code className="text-xs">metadata.confidence_level</code> first.
+                  </p>
+                ) : (
+                  <select
+                    value={proofId}
+                    onChange={(e) => setProofId(e.target.value)}
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    data-testid="select-proof-id"
+                  >
+                    <option value="">Select a proof…</option>
+                    {eligibleProofs.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.file_name ? `${p.file_name} — confidence: ${p.confidence_level}` : `${p.id.slice(0, 12)}… — confidence: ${p.confidence_level}`}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
+              {eligibleProofs.length > 0 && (
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Outcome score (0.00 – 1.00)</label>
                 <input
@@ -811,8 +837,9 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
                   data-testid="input-outcome-score"
                 />
               </div>
+              )}
               <div className="flex gap-2">
-                <Button type="submit" size="sm" disabled={submitOutcomeMutation.isPending} data-testid="button-submit-outcome">
+                <Button type="submit" size="sm" disabled={submitOutcomeMutation.isPending || eligibleProofs.length === 0} data-testid="button-submit-outcome">
                   {submitOutcomeMutation.isPending ? "Submitting…" : "Submit outcome"}
                 </Button>
                 <Button type="button" size="sm" variant="ghost" onClick={() => setShowForm(false)} data-testid="button-cancel-outcome">
@@ -1018,19 +1045,30 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
           <form onSubmit={handleOutcomeSubmit} className="space-y-3 border-t pt-4 mt-2" data-testid="form-submit-outcome">
             <p className="text-xs font-medium text-muted-foreground">Record a new outcome</p>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Proof ID</label>
-              <input
-                type="text"
-                value={proofId}
-                onChange={(e) => setProofId(e.target.value)}
-                placeholder="e.g. abc123…"
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                data-testid="input-proof-id"
-              />
-              <p className="text-xs text-muted-foreground">
-                Must be a proof anchored with <code className="text-xs">metadata.confidence_level</code>.
-              </p>
+              <label className="text-xs text-muted-foreground">Proof</label>
+              {eligibleLoading ? (
+                <p className="text-xs text-muted-foreground py-1">Loading eligible proofs…</p>
+              ) : eligibleProofs.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-1" data-testid="text-no-eligible-proofs">
+                  Anchor a proof with <code className="text-xs">metadata.confidence_level</code> first.
+                </p>
+              ) : (
+                <select
+                  value={proofId}
+                  onChange={(e) => setProofId(e.target.value)}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  data-testid="select-proof-id"
+                >
+                  <option value="">Select a proof…</option>
+                  {eligibleProofs.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.file_name ? `${p.file_name} — confidence: ${p.confidence_level}` : `${p.id.slice(0, 12)}… — confidence: ${p.confidence_level}`}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
+            {eligibleProofs.length > 0 && (
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Outcome score (0.00 – 1.00)</label>
               <input
@@ -1045,8 +1083,9 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
                 data-testid="input-outcome-score"
               />
             </div>
+            )}
             <div className="flex gap-2">
-              <Button type="submit" size="sm" disabled={submitOutcomeMutation.isPending} data-testid="button-submit-outcome">
+              <Button type="submit" size="sm" disabled={submitOutcomeMutation.isPending || eligibleProofs.length === 0} data-testid="button-submit-outcome">
                 {submitOutcomeMutation.isPending ? "Submitting…" : "Submit outcome"}
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setShowForm(false)} data-testid="button-cancel-outcome">
