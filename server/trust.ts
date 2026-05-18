@@ -1,6 +1,7 @@
-import { db } from "./db";
+import { db, pool } from "./db";
 import { certifications, users, agentViolations } from "@shared/schema";
 import { eq, sql, and } from "drizzle-orm";
+import { logger } from "./logger";
 
 export type TrustLevel = "Newcomer" | "Active" | "Trusted" | "Verified";
 
@@ -161,15 +162,30 @@ async function computeStreakWeeks(userId: string): Promise<number> {
 
 async function computeStreakWeeksBatch(userIds: string[]): Promise<Map<string, number>> {
   if (userIds.length === 0) return new Map();
-
-  const results = await Promise.all(
-    userIds.map(async (id) => {
-      const streak = await computeStreakWeeks(id);
-      return [id, streak] as [string, number];
-    }),
-  );
-
-  return new Map(results);
+  try {
+    const result = await pool.query<{ user_id: string; week_num: number }>(
+      `SELECT user_id::text, FLOOR(EXTRACT(EPOCH FROM created_at - '2024-01-01'::timestamp) / 604800)::int AS week_num
+       FROM certifications
+       WHERE user_id = ANY($1)
+         AND blockchain_status = 'confirmed'
+         AND is_public = true
+       ORDER BY user_id, week_num DESC`,
+      [userIds],
+    );
+    const weeksByUser = new Map<string, number[]>();
+    for (const row of result.rows) {
+      const uid = row.user_id;
+      if (!weeksByUser.has(uid)) weeksByUser.set(uid, []);
+      weeksByUser.get(uid)!.push(Number(row.week_num));
+    }
+    const out = new Map<string, number>();
+    for (const id of userIds) {
+      out.set(id, computeStreakFromWeekNumbers(weeksByUser.get(id) ?? []));
+    }
+    return out;
+  } catch {
+    return new Map(userIds.map((id) => [id, 0]));
+  }
 }
 
 async function computeAttestationBonus(walletAddress: string): Promise<{ bonus: number; count: number }> {
@@ -203,13 +219,36 @@ async function computeAttestationBonus(walletAddress: string): Promise<{ bonus: 
 async function computeAttestationBonusBatch(walletAddresses: string[]): Promise<Map<string, { bonus: number; count: number }>> {
   if (walletAddresses.length === 0) return new Map();
   try {
-    const results = await Promise.all(
-      walletAddresses.map(async (wallet) => {
-        const result = await computeAttestationBonus(wallet);
-        return [wallet, result] as [string, { bonus: number; count: number }];
-      }),
+    const now = new Date();
+    const result = await pool.query<{ subject_wallet: string; issuer_wallet: string; issuer_confirmed_certs: string }>(
+      `SELECT
+         a.subject_wallet,
+         a.issuer_wallet,
+         COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed' AND c.is_public = true) AS issuer_confirmed_certs
+       FROM attestations a
+       LEFT JOIN users u ON u.wallet_address = a.issuer_wallet
+       LEFT JOIN certifications c ON c.user_id = u.id
+       WHERE a.subject_wallet = ANY($1)
+         AND a.status = 'active'
+         AND (a.expires_at IS NULL OR a.expires_at > $2)
+         AND u.is_public_profile = true
+       GROUP BY a.subject_wallet, a.issuer_wallet`,
+      [walletAddresses, now],
     );
-    return new Map(results);
+    const rowsBySubject = new Map<string, { issuer_wallet: string; issuer_confirmed_certs: number }[]>();
+    for (const row of result.rows) {
+      const sw = row.subject_wallet;
+      if (!rowsBySubject.has(sw)) rowsBySubject.set(sw, []);
+      rowsBySubject.get(sw)!.push({ issuer_wallet: row.issuer_wallet, issuer_confirmed_certs: Number(row.issuer_confirmed_certs || 0) });
+    }
+    const out = new Map<string, { bonus: number; count: number }>();
+    for (const wallet of walletAddresses) {
+      const rows = (rowsBySubject.get(wallet) ?? []).sort((a, b) => b.issuer_confirmed_certs - a.issuer_confirmed_certs);
+      const count = rows.length;
+      const bonus = rows.slice(0, 3).reduce((sum, r) => sum + issuerBonusFromCertCount(r.issuer_confirmed_certs), 0);
+      out.set(wallet, { bonus, count });
+    }
+    return out;
   } catch {
     return new Map();
   }
@@ -286,15 +325,16 @@ export async function computeTrustScore(userId: string): Promise<TrustScore> {
   };
 }
 
-// Per-wallet TTL cache + inflight coalescing for trust score computation.
-// computeTrustScore() runs ~6 aggregate/join queries; without coalescing, public
-// unauthenticated paths (badges, prerender SSR for /agent/:wallet) can be used
-// to amplify a single attacker request into many DB queries. The cache + single
-// flight pattern caps cost at one computation per wallet per TTL window.
-const TRUST_CACHE_TTL_MS = 30_000;
+// ─── Per-wallet trust score read-through cache ───────────────────────────────
+//
+// Security guarantee: public read paths NEVER trigger live trust recomputation.
+// The cache is populated ONLY by the scheduled background refresh worker.
+// Public reads go: in-memory cache → trust_score_snapshots.full_trust_data → null.
+// A null response means the wallet has not yet been indexed; it will appear after
+// the next scheduled refresh cycle.
+//
 const TRUST_CACHE_MAX_ENTRIES = 5000;
 const trustCache = new Map<string, { value: TrustScore | null; cachedAt: number }>();
-const trustInflight = new Map<string, Promise<TrustScore | null>>();
 
 function setTrustCache(key: string, value: TrustScore | null) {
   if (trustCache.size >= TRUST_CACHE_MAX_ENTRIES) {
@@ -304,36 +344,31 @@ function setTrustCache(key: string, value: TrustScore | null) {
   trustCache.set(key, { value, cachedAt: Date.now() });
 }
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of trustCache) {
-    if (now - v.cachedAt >= TRUST_CACHE_TTL_MS) trustCache.delete(k);
-  }
-}, TRUST_CACHE_TTL_MS).unref();
-
+// Public read — bounded: in-memory cache first, then single indexed snapshot row.
+// NO live computation is ever triggered from this function.
 export async function computeTrustScoreByWallet(walletAddress: string): Promise<TrustScore | null> {
   const cached = trustCache.get(walletAddress);
-  if (cached && Date.now() - cached.cachedAt < TRUST_CACHE_TTL_MS) {
-    return cached.value;
-  }
-  const inflight = trustInflight.get(walletAddress);
-  if (inflight) return inflight;
+  if (cached) return cached.value;
 
-  const promise = (async () => {
-    const [user] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.walletAddress, walletAddress));
-    const value = user ? await computeTrustScore(user.id) : null;
-    setTrustCache(walletAddress, value);
-    return value;
-  })();
-  trustInflight.set(walletAddress, promise);
+  // Single bounded indexed read from the precomputed snapshot table.
   try {
-    return await promise;
-  } finally {
-    trustInflight.delete(walletAddress);
-  }
+    const snap = await pool.query<{ full_trust_data: unknown }>(
+      `SELECT full_trust_data
+       FROM trust_score_snapshots
+       WHERE wallet_address = $1
+         AND full_trust_data IS NOT NULL
+       ORDER BY snapshot_date DESC LIMIT 1`,
+      [walletAddress],
+    );
+    if (snap.rows.length > 0 && snap.rows[0].full_trust_data) {
+      const value = snap.rows[0].full_trust_data as TrustScore;
+      setTrustCache(walletAddress, value);
+      return value;
+    }
+  } catch { /* snapshot read failure is non-fatal; return null below */ }
+
+  // Wallet not yet indexed.  The scheduled refresh will populate it.
+  return null;
 }
 
 export type CalibrationLabel = "calibrated" | "overconfident" | "underconfident";
@@ -381,9 +416,14 @@ export interface LeaderboardResult {
   totalPages: number;
 }
 
-const LEADERBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
+// ─── Leaderboard in-memory cache ─────────────────────────────────────────────
+//
+// Security guarantee: public read paths NEVER trigger live leaderboard
+// recomputation.  The cache is populated ONLY by the scheduled background
+// refresh worker (runLeaderboardRefreshCycle).  Public reads go:
+//   in-memory cache → leaderboard_snapshot table → empty list.
+//
 let leaderboardCache: { allEntries: LeaderboardEntry[]; cachedAt: number } | null = null;
-let leaderboardInflight: Promise<LeaderboardEntry[]> | null = null;
 
 async function computeAllLeaderboardEntries(): Promise<LeaderboardEntry[]> {
   const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -475,21 +515,200 @@ async function computeAllLeaderboardEntries(): Promise<LeaderboardEntry[]> {
   return entries;
 }
 
+// ─── Scheduled background refresh worker ─────────────────────────────────────
+//
+// ALL expensive trust/leaderboard recomputation is confined here.
+// Public request handlers MUST NOT call computeTrustScore() or
+// computeAllLeaderboardEntries() — not directly and not via background triggers
+// initiated from the request path.
+//
+// The scheduler runs two independent cycles on a fixed interval:
+//   • runLeaderboardRefreshCycle() — recomputes the full leaderboard and persists
+//     it to the leaderboard_snapshot table (single-row upsert).
+//   • runTrustRefreshCycle()      — refreshes per-wallet trust scores for all
+//     public profiles, persisting to trust_score_snapshots.full_trust_data.
+//
+// Both cycles are guarded by a running-flag to prevent overlap.  The per-wallet
+// cycle also caps parallel DB queries with TRUST_REFRESH_CONCURRENCY so that a
+// large profile count cannot saturate the connection pool.
+
+const TRUST_REFRESH_INTERVAL_MS  = 5 * 60 * 1000;  // Full cycle every 5 min
+const TRUST_REFRESH_CONCURRENCY  = 5;               // Max parallel wallet recomputes
+const SCHEDULER_STARTUP_JITTER   = 20_000;          // 0-20 s startup jitter
+
+let _trustRefreshRunning       = false;
+let _leaderboardRefreshRunning = false;
+
+export async function runTrustRefreshCycle(): Promise<void> {
+  if (_trustRefreshRunning) {
+    logger.debug("Trust refresh cycle already running, skipping", { component: "trust-scheduler" });
+    return;
+  }
+  _trustRefreshRunning = true;
+  const cycleStart = Date.now();
+  let succeeded = 0;
+  let failed = 0;
+  try {
+    const result = await pool.query<{ id: string; wallet_address: string }>(
+      `SELECT id::text AS id, wallet_address
+       FROM users
+       WHERE is_public_profile = true
+         AND wallet_address NOT LIKE 'erd1trial%'
+       ORDER BY wallet_address`,
+    );
+    const rows = result.rows;
+    for (let i = 0; i < rows.length; i += TRUST_REFRESH_CONCURRENCY) {
+      const batch = rows.slice(i, i + TRUST_REFRESH_CONCURRENCY);
+      await Promise.all(batch.map(async ({ id, wallet_address }) => {
+        try {
+          const trust = await computeTrustScore(id);
+          setTrustCache(wallet_address, trust);
+          await pool.query(
+            `INSERT INTO trust_score_snapshots
+               (wallet_address, score, level, cert_total, active_attestations, rank, snapshot_date, full_trust_data)
+             VALUES ($1, $2, $3, $4, $5, 0, CURRENT_DATE, $6::jsonb)
+             ON CONFLICT (wallet_address, snapshot_date) DO UPDATE
+               SET full_trust_data      = EXCLUDED.full_trust_data,
+                   score                = EXCLUDED.score,
+                   level                = EXCLUDED.level,
+                   cert_total           = EXCLUDED.cert_total,
+                   active_attestations  = EXCLUDED.active_attestations`,
+            [
+              wallet_address,
+              trust.score,
+              trust.level,
+              trust.certTotal,
+              trust.activeAttestations ?? 0,
+              JSON.stringify(trust),
+            ],
+          );
+          succeeded++;
+        } catch (err: any) {
+          failed++;
+          logger.warn("Trust refresh failed for wallet", {
+            component: "trust-scheduler",
+            wallet: wallet_address,
+            error: err?.message ?? String(err),
+          });
+        }
+      }));
+    }
+    logger.info("Trust refresh cycle complete", {
+      component: "trust-scheduler",
+      total: rows.length,
+      succeeded,
+      failed,
+      durationMs: Date.now() - cycleStart,
+    });
+  } catch (err: any) {
+    logger.error("Trust refresh cycle error", {
+      component: "trust-scheduler",
+      error: err?.message ?? String(err),
+      durationMs: Date.now() - cycleStart,
+    });
+  } finally { _trustRefreshRunning = false; }
+}
+
+export async function runLeaderboardRefreshCycle(): Promise<void> {
+  if (_leaderboardRefreshRunning) {
+    logger.debug("Leaderboard refresh cycle already running, skipping", { component: "trust-scheduler" });
+    return;
+  }
+  _leaderboardRefreshRunning = true;
+  const cycleStart = Date.now();
+  try {
+    const entries = await computeAllLeaderboardEntries();
+    await pool.query(
+      `INSERT INTO leaderboard_snapshot (id, entries, computed_at)
+       VALUES (1, $1::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE
+         SET entries     = EXCLUDED.entries,
+             computed_at = EXCLUDED.computed_at`,
+      [JSON.stringify(entries)],
+    );
+    leaderboardCache = { allEntries: entries, cachedAt: Date.now() };
+    logger.info("Leaderboard refresh cycle complete", {
+      component: "trust-scheduler",
+      entries: entries.length,
+      durationMs: Date.now() - cycleStart,
+    });
+  } catch (err: any) {
+    logger.error("Leaderboard refresh cycle error", {
+      component: "trust-scheduler",
+      error: err?.message ?? String(err),
+      durationMs: Date.now() - cycleStart,
+    });
+  } finally { _leaderboardRefreshRunning = false; }
+}
+
+// Warm the in-memory caches at startup by reading EXISTING snapshot rows —
+// zero live computation.  Scheduled refresh cycles will keep data fresh.
+export async function warmCachesFromSnapshots(): Promise<void> {
+  try {
+    const snap = await pool.query<{ entries: LeaderboardEntry[]; computed_at: string }>(
+      `SELECT entries, computed_at FROM leaderboard_snapshot WHERE id = 1`,
+    );
+    if (snap.rows.length > 0) {
+      leaderboardCache = { allEntries: snap.rows[0].entries, cachedAt: Date.now() };
+      logger.info("Leaderboard cache warmed from snapshot", {
+        component: "trust-scheduler",
+        entries: snap.rows[0].entries.length,
+        snapshotAt: snap.rows[0].computed_at,
+      });
+    } else {
+      logger.info("No leaderboard snapshot found; awaiting first refresh cycle", {
+        component: "trust-scheduler",
+      });
+    }
+  } catch (err: any) {
+    logger.warn("Failed to warm leaderboard cache from snapshot", {
+      component: "trust-scheduler",
+      error: err?.message ?? String(err),
+    });
+  }
+}
+
+// Start both refresh cycles.  Called once from server startup after migrations
+// complete.  A small random jitter prevents thundering-herd on multi-instance
+// restarts.
+export function startTrustRefreshScheduler(): void {
+  const jitter = Math.floor(Math.random() * SCHEDULER_STARTUP_JITTER);
+  logger.info("Trust refresh scheduler starting", { component: "trust-scheduler", jitterMs: jitter });
+  setTimeout(async () => {
+    await runLeaderboardRefreshCycle();
+    await runTrustRefreshCycle();
+    setInterval(runLeaderboardRefreshCycle, TRUST_REFRESH_INTERVAL_MS);
+    setInterval(runTrustRefreshCycle, TRUST_REFRESH_INTERVAL_MS);
+  }, jitter);
+}
+
 export async function getLeaderboard(filters: LeaderboardFilters = {}): Promise<LeaderboardResult> {
   const page = Math.max(1, filters.page || 1);
   const limit = Math.min(100, Math.max(1, filters.limit || 50));
 
   let allEntries: LeaderboardEntry[];
 
-  if (leaderboardCache && Date.now() - leaderboardCache.cachedAt < LEADERBOARD_CACHE_TTL_MS) {
+  if (leaderboardCache) {
+    // Serve from in-memory cache — no DB work.
     allEntries = leaderboardCache.allEntries;
   } else {
-    if (!leaderboardInflight) {
-      leaderboardInflight = computeAllLeaderboardEntries().finally(() => {
-        leaderboardInflight = null;
-      });
+    // Cache is cold (server restart before first refresh cycle completes).
+    // Do a single bounded read from the precomputed snapshot table.
+    // This NEVER calls computeAllLeaderboardEntries().
+    try {
+      const snap = await pool.query<{ entries: LeaderboardEntry[] }>(
+        `SELECT entries FROM leaderboard_snapshot WHERE id = 1`,
+      );
+      if (snap.rows.length > 0) {
+        leaderboardCache = { allEntries: snap.rows[0].entries, cachedAt: Date.now() };
+        allEntries = leaderboardCache.allEntries;
+      } else {
+        // No snapshot yet — first scheduled refresh hasn't run.
+        allEntries = [];
+      }
+    } catch {
+      allEntries = [];
     }
-    allEntries = await leaderboardInflight;
   }
 
   let entries = [...allEntries];
@@ -575,13 +794,31 @@ async function computeCalibrationLabelBatch(): Promise<Map<string, CalibrationLa
 async function computeViolationPenaltyBatch(walletAddresses: string[]): Promise<Map<string, { penalty: number; fault: number; breach: number; proposed: number }>> {
   if (walletAddresses.length === 0) return new Map();
   try {
-    const results = await Promise.all(
-      walletAddresses.map(async (wallet) => {
-        const result = await computeViolationPenalty(wallet);
-        return [wallet, result] as [string, { penalty: number; fault: number; breach: number; proposed: number }];
-      }),
+    const result = await pool.query<{ wallet_address: string; type: string; status: string; cnt: string }>(
+      `SELECT wallet_address, type, status, COUNT(*)::int AS cnt
+       FROM agent_violations
+       WHERE wallet_address = ANY($1)
+       GROUP BY wallet_address, type, status`,
+      [walletAddresses],
     );
-    return new Map(results);
+    const raw = new Map<string, { fault: number; breach: number; proposed: number }>();
+    for (const row of result.rows) {
+      if (!raw.has(row.wallet_address)) raw.set(row.wallet_address, { fault: 0, breach: 0, proposed: 0 });
+      const entry = raw.get(row.wallet_address)!;
+      const cnt = Number(row.cnt);
+      if (row.status === "confirmed" && row.type === "fault") entry.fault = cnt;
+      else if (row.status === "confirmed" && row.type === "breach") entry.breach = cnt;
+      else if (row.status === "proposed") entry.proposed += cnt;
+    }
+    const out = new Map<string, { penalty: number; fault: number; breach: number; proposed: number }>();
+    for (const wallet of walletAddresses) {
+      const entry = raw.get(wallet) ?? { fault: 0, breach: 0, proposed: 0 };
+      out.set(wallet, {
+        penalty: (entry.fault * VIOLATION_PENALTY.fault) + (entry.breach * VIOLATION_PENALTY.breach),
+        ...entry,
+      });
+    }
+    return out;
   } catch {
     return new Map();
   }
@@ -590,17 +827,18 @@ async function computeViolationPenaltyBatch(walletAddresses: string[]): Promise<
 async function getOldScoreBatch(wallets: string[], cutoff: Date): Promise<Map<string, number>> {
   if (wallets.length === 0) return new Map();
   try {
-    const results = await Promise.all(
-      wallets.map(async (w) => {
-        const r = await db.execute(sql`
-          SELECT score FROM trust_score_snapshots
-          WHERE wallet_address = ${w} AND snapshot_date <= ${cutoff.toISOString().split("T")[0]}
-          ORDER BY snapshot_date DESC LIMIT 1
-        `);
-        return [w, r.rows.length > 0 ? Number((r.rows[0] as any).score) : null] as [string, number | null];
-      }),
+    const result = await pool.query<{ wallet_address: string; score: string }>(
+      `SELECT DISTINCT ON (wallet_address) wallet_address, score
+       FROM trust_score_snapshots
+       WHERE wallet_address = ANY($1) AND snapshot_date <= $2
+       ORDER BY wallet_address, snapshot_date DESC`,
+      [wallets, cutoff.toISOString().split("T")[0]],
     );
-    return new Map(results.filter(([, v]) => v !== null) as Array<[string, number]>);
+    const out = new Map<string, number>();
+    for (const row of result.rows) {
+      out.set(row.wallet_address, Number(row.score));
+    }
+    return out;
   } catch {
     return new Map();
   }
@@ -609,17 +847,22 @@ async function getOldScoreBatch(wallets: string[], cutoff: Date): Promise<Map<st
 async function getPreviousLevelBatch(wallets: string[]): Promise<Map<string, TrustLevel>> {
   if (wallets.length === 0) return new Map();
   try {
-    const results = await Promise.all(
-      wallets.map(async (w) => {
-        const r = await db.execute(sql`
-          SELECT level FROM trust_score_snapshots
-          WHERE wallet_address = ${w}
-          ORDER BY snapshot_date DESC LIMIT 1 OFFSET 1
-        `);
-        return [w, r.rows.length > 0 ? (r.rows[0] as any).level as TrustLevel : null] as [string, TrustLevel | null];
-      }),
+    const result = await pool.query<{ wallet_address: string; level: string }>(
+      `SELECT wallet_address, level
+       FROM (
+         SELECT wallet_address, level,
+                ROW_NUMBER() OVER (PARTITION BY wallet_address ORDER BY snapshot_date DESC) AS rn
+         FROM trust_score_snapshots
+         WHERE wallet_address = ANY($1)
+       ) ranked
+       WHERE rn = 2`,
+      [wallets],
     );
-    return new Map(results.filter(([, v]) => v !== null) as Array<[string, TrustLevel]>);
+    const out = new Map<string, TrustLevel>();
+    for (const row of result.rows) {
+      out.set(row.wallet_address, row.level as TrustLevel);
+    }
+    return out;
   } catch {
     return new Map();
   }

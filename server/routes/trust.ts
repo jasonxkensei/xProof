@@ -69,7 +69,8 @@ export function registerTrustRoutes(app: Express) {
         wallets.map(async (wallet) => {
           const [user] = await db.select().from(users).where(eq(users.walletAddress, wallet));
           if (!user || !user.isPublicProfile) return null;
-          const trust = await computeTrustScore(user.id);
+          const trust = await computeTrustScoreByWallet(wallet);
+          if (!trust) return null;
           return {
             walletAddress: wallet,
             agentName: user.agentName,
@@ -325,7 +326,10 @@ export function registerTrustRoutes(app: Express) {
         return res.status(404).json({ message: "Agent profile not found or not public" });
       }
 
-      const trust = await computeTrustScore(user.id);
+      const trust = await computeTrustScoreByWallet(wallet);
+      if (!trust) {
+        return res.status(404).json({ message: "Agent profile not found or not public" });
+      }
 
       const now = new Date();
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);

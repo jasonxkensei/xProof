@@ -12,7 +12,7 @@ import {
 } from "./reliability";
 import { startTxQueueWorker } from "./txQueue";
 import { ensureRateLimitTable, purgeExpiredRateLimitRows } from "./pgRateLimit";
-import { computeTrustScoreByWallet } from "./trust";
+import { computeTrustScore, warmCachesFromSnapshots, startTrustRefreshScheduler } from "./trust";
 import { pool, db } from "./db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -111,16 +111,28 @@ app.use((req, res, next) => {
   async function runDailyMaintenance() {
     try {
       const publicAgents = await db
-        .select({ walletAddress: users.walletAddress })
+        .select({ id: users.id, walletAddress: users.walletAddress })
         .from(users)
         .where(eq(users.isPublicProfile, true));
       let snapshots = 0;
-      const agentScores: Array<{ wallet: string; score: number; level: string; certTotal: number; activeAttestations: number }> = [];
+      const agentScores: Array<{
+        wallet: string; score: number; level: string;
+        certTotal: number; activeAttestations: number; fullData: string;
+      }> = [];
       for (const row of publicAgents) {
         try {
-          const trust = await computeTrustScoreByWallet(row.walletAddress);
+          // Use live computation here — this is the scheduled maintenance job,
+          // not a public request path.
+          const trust = await computeTrustScore(row.id);
           if (trust) {
-            agentScores.push({ wallet: row.walletAddress, score: trust.score, level: trust.level, certTotal: trust.certTotal, activeAttestations: trust.activeAttestations ?? 0 });
+            agentScores.push({
+              wallet: row.walletAddress,
+              score: trust.score,
+              level: trust.level,
+              certTotal: trust.certTotal,
+              activeAttestations: trust.activeAttestations ?? 0,
+              fullData: JSON.stringify(trust),
+            });
           }
         } catch {}
       }
@@ -129,15 +141,17 @@ app.use((req, res, next) => {
         const a = agentScores[i];
         try {
           await pool.query(
-            `INSERT INTO trust_score_snapshots (wallet_address, score, level, cert_total, active_attestations, rank, snapshot_date)
-             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE)
+            `INSERT INTO trust_score_snapshots
+               (wallet_address, score, level, cert_total, active_attestations, rank, snapshot_date, full_trust_data)
+             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, $7::jsonb)
              ON CONFLICT (wallet_address, snapshot_date) DO UPDATE SET
-               score = EXCLUDED.score,
-               level = EXCLUDED.level,
-               cert_total = EXCLUDED.cert_total,
+               score               = EXCLUDED.score,
+               level               = EXCLUDED.level,
+               cert_total          = EXCLUDED.cert_total,
                active_attestations = EXCLUDED.active_attestations,
-               rank = EXCLUDED.rank`,
-            [a.wallet, a.score, a.level, a.certTotal, a.activeAttestations, i + 1]
+               rank                = EXCLUDED.rank,
+               full_trust_data     = EXCLUDED.full_trust_data`,
+            [a.wallet, a.score, a.level, a.certTotal, a.activeAttestations, i + 1, a.fullData]
           );
           snapshots++;
         } catch {}
@@ -356,6 +370,41 @@ app.use((req, res, next) => {
     } catch (err: any) {
       logger.error("certifications metadata index migration error", { component: "migration", error: err.message });
     }
+
+    // Composite partial indexes for trust and leaderboard computation.
+    // The heaviest confirmed-public certification access patterns (per-user
+    // totals, 30-day counts, first/last timestamps, streak week numbers)
+    // all filter on blockchain_status = 'confirmed' AND is_public = true,
+    // then sort or aggregate by created_at.  A partial index on those two
+    // columns covers every trust-score and leaderboard sub-query and keeps
+    // the index small because most certifications start in pending state.
+    //
+    // Additional indexes on attestations and trust_score_snapshots back the
+    // batch lookups used by computeAttestationBonusBatch and getOldScoreBatch /
+    // getPreviousLevelBatch, which were rewritten as true batch queries.
+    try {
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_certs_trust_lookup
+          ON certifications (user_id, created_at DESC)
+          WHERE blockchain_status = 'confirmed' AND is_public = true
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_attestations_subject_active
+          ON attestations (subject_wallet, status, created_at DESC)
+          WHERE status = 'active'
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_violations_wallet_type_status
+          ON agent_violations (wallet_address, type, status)
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_snapshots_wallet_date
+          ON trust_score_snapshots (wallet_address, snapshot_date DESC)
+      `);
+      logger.info("trust computation composite indexes ready", { component: "migration" });
+    } catch (err: any) {
+      logger.error("trust computation index migration error", { component: "migration", error: err.message });
+    }
   }
 
   async function migrateAgentOutcomesTable() {
@@ -419,6 +468,30 @@ app.use((req, res, next) => {
       logger.info("agent_outcomes table ready", { component: "migration" });
     } catch (err: any) {
       logger.error("agent_outcomes migration error", { component: "migration", error: err.message });
+    }
+  }
+
+  async function migrateTrustSnapshotSchema() {
+    // Add full_trust_data JSONB column to trust_score_snapshots.
+    // Stores the complete TrustScore object so public reads never need live computation.
+    try {
+      await pool.query(`
+        ALTER TABLE trust_score_snapshots
+          ADD COLUMN IF NOT EXISTS full_trust_data JSONB
+      `);
+      // leaderboard_snapshot: single-row table holding the latest leaderboard entries
+      // as a JSONB blob.  Public GET /api/leaderboard reads from this table only.
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS leaderboard_snapshot (
+          id          INTEGER PRIMARY KEY DEFAULT 1,
+          entries     JSONB NOT NULL,
+          computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT single_row CHECK (id = 1)
+        )
+      `);
+      logger.info("trust snapshot schema ready", { component: "migration" });
+    } catch (err: any) {
+      logger.error("trust snapshot schema migration error", { component: "migration", error: err.message });
     }
   }
 
@@ -490,6 +563,11 @@ app.use((req, res, next) => {
     migrateAgentViolationsTable();
     migrateAgentOutcomesTable();
     purgeStaleSnapshotAttestationCounts();
+    // Schema migration must complete before the refresh scheduler reads snapshots.
+    // Sequence: schema → warm caches from existing snapshots (zero compute) →
+    // start background scheduler (runs first cycle with jitter, then every 5 min).
+    // Daily maintenance continues to run independently once per day.
+    migrateTrustSnapshotSchema().then(() => warmCachesFromSnapshots()).then(() => startTrustRefreshScheduler());
     runDailyMaintenance();
     setInterval(runDailyMaintenance, 24 * 60 * 60 * 1000);
     sweepExpiredAcpReservations();
