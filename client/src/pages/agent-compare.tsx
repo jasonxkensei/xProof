@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Shield, ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -175,20 +175,6 @@ function CalibrationChart({
   );
 }
 
-function useCalibration(walletAddress: string, enabled: boolean) {
-  return useQuery<CalibrationData>({
-    queryKey: ["/api/agent/calibration", walletAddress],
-    queryFn: async () => {
-      const res = await fetch(`/api/agent/calibration/${encodeURIComponent(walletAddress)}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch calibration");
-      return res.json();
-    },
-    enabled,
-    staleTime: 30_000,
-  });
-}
 
 export default function AgentComparePage() {
   const params = new URLSearchParams(window.location.search);
@@ -209,14 +195,20 @@ export default function AgentComparePage() {
     enabled: wallets.length >= 2,
   });
 
-  const calibrationQueries = [
-    useCalibration(wallets[0] ?? "", wallets.length >= 2 && !!data && wallets.length > 0),
-    useCalibration(wallets[1] ?? "", wallets.length >= 2 && !!data && wallets.length > 1),
-    useCalibration(wallets[2] ?? "", wallets.length >= 2 && !!data && wallets.length > 2),
-    useCalibration(wallets[3] ?? "", wallets.length >= 2 && !!data && wallets.length > 3),
-    useCalibration(wallets[4] ?? "", wallets.length >= 2 && !!data && wallets.length > 4),
-    useCalibration(wallets[5] ?? "", wallets.length >= 2 && !!data && wallets.length > 5),
-  ];
+  const calibrationQueries = useQueries({
+    queries: wallets.map((wallet) => ({
+      queryKey: ["/api/agent/calibration", wallet],
+      queryFn: async (): Promise<CalibrationData> => {
+        const res = await fetch(`/api/agent/calibration/${encodeURIComponent(wallet)}`, {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error("Failed to fetch calibration");
+        return res.json();
+      },
+      enabled: wallets.length >= 2 && !!data,
+      staleTime: 30_000,
+    })),
+  });
 
   if (wallets.length < 2) {
     return (
@@ -507,11 +499,13 @@ export default function AgentComparePage() {
                 {/* Side-by-side trend charts */}
                 <div
                   className={`grid grid-cols-1 gap-4 ${
-                    agents.length === 2
+                    agents.length <= 2
                       ? "sm:grid-cols-2"
                       : agents.length === 3
                       ? "sm:grid-cols-3"
-                      : "sm:grid-cols-2 lg:grid-cols-4"
+                      : agents.length === 4
+                      ? "sm:grid-cols-2 lg:grid-cols-4"
+                      : "sm:grid-cols-2 lg:grid-cols-3"
                   }`}
                   data-testid="grid-calibration-charts"
                 >
