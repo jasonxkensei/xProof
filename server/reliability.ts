@@ -193,6 +193,20 @@ export const outcomeSubmitRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Outcome submission rate limit exceeded: max 10 per 5 minutes per API key" },
 });
 
+// GET /api/agent/calibration/:agentId/eligible-proofs — owner-only read.
+// Keyed on req.apiKey.id (per-key bucket) when an API key is present, falling
+// back to IP for browser-session callers. 30 req/min matches the CSV owner
+// tier so all owner-side calibration reads share the same generous budget.
+export const eligibleProofsRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => (req.apiKey?.id as string) ?? getClientIp(req),
+  store: new PgRateLimitStore("eligible_proofs"),
+  message: { error: "TOO_MANY_REQUESTS", message: "Eligible-proofs rate limit exceeded: max 30 per minute per API key" },
+});
+
 // /api/stats runs ~15 unauthenticated full-table aggregates per call. The
 // generic /api limiter (100 rpm) leaves room for a single client to keep the
 // database busy. We pair this strict limiter with an in-memory response

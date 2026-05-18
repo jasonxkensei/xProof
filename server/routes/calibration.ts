@@ -6,7 +6,7 @@ import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { validateApiKey, getClientIp } from "./helpers";
-import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter, csvAnonStore, CSV_OWNER_RL_NAMESPACE, CSV_OWNER_RL_MAX, CSV_OWNER_RL_WINDOW_MS } from "../reliability";
+import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter, csvAnonStore, CSV_OWNER_RL_NAMESPACE, CSV_OWNER_RL_MAX, CSV_OWNER_RL_WINDOW_MS, eligibleProofsRateLimiter } from "../reliability";
 import { pgCheckRateLimit } from "../pgRateLimit";
 
 // ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
@@ -290,12 +290,18 @@ export function registerCalibrationRoutes(app: Express) {
   //    OR authenticated wallet session  (browser / dashboard)
   // Returns: { proofs: [{ id, file_name, confidence_level, created_at }] }
   // Capped at 50 rows ordered by created_at DESC.
-  app.get("/api/agent/calibration/:agentId/eligible-proofs", optionalApiKey, async (req, res) => {
+  // preloadApiKeyForRateLimit runs before eligibleProofsRateLimiter so the
+  // limiter can key on req.apiKey.id (per-key bucket) rather than falling back
+  // to IP for API-key callers.  The handler reuses req.apiKey.userId directly
+  // to avoid a second DB round-trip for the same key.
+  app.get("/api/agent/calibration/:agentId/eligible-proofs", preloadApiKeyForRateLimit, eligibleProofsRateLimiter, async (req, res) => {
     try {
       const { agentId } = req.params;
 
-      // Resolve caller identity: API key takes priority over session
-      const callerUserId: string | undefined = (req as any).optionalUserId;
+      // Resolve caller identity: API key (set by preloadApiKeyForRateLimit) takes
+      // priority over session wallet.
+      const preloadedKey = (req as any).apiKey as { id: string; userId: string; isActive: boolean } | undefined;
+      const callerUserId: string | undefined = preloadedKey?.userId;
       const sessionWallet = (req as any).session?.walletAddress as string | undefined;
 
       // Resolve agentId → user
