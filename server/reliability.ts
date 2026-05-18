@@ -193,10 +193,40 @@ export const outcomeSubmitRateLimiter = rateLimit({
   message: { error: "TOO_MANY_REQUESTS", message: "Outcome submission rate limit exceeded: max 10 per 5 minutes per API key" },
 });
 
-// GET /api/agent/calibration/:agentId/eligible-proofs — owner-only read.
-// Keyed on req.apiKey.id (per-key bucket) when an API key is present, falling
-// back to IP for browser-session callers. 30 req/min matches the CSV owner
-// tier so all owner-side calibration reads share the same generous budget.
+// GET /api/agent/calibration/:agentId/eligible-proofs — two-tier rate limiting.
+//
+// Layer 1 — eligibleProofsIpRateLimiter (10 req/min per IP)
+//   Runs FIRST in the route chain, before preloadApiKeyForRateLimit and before
+//   any DB work. Bounds ALL callers — including unauthenticated probes and
+//   requests for non-existent agentId values — at the middleware level.
+//   Uses eligibleProofsIpAnonStore so the handler can call
+//   eligibleProofsIpAnonStore.decrement() to refund the token for confirmed
+//   owners (see Layer 2 note below).
+//
+// Layer 2 — eligibleProofsRateLimiter (30 req/min per API key or session IP)
+//   Applied after preloadApiKeyForRateLimit so the key generator can use
+//   req.apiKey.id (per-key bucket) rather than falling back to IP.
+//   Confirmed owners have their layer-1 token refunded first (via
+//   eligibleProofsIpAnonStore.decrement()), so their effective cap is 30/min
+//   from this tier, not the 10/min IP pre-check.
+//   Non-owners are NOT refunded — they remain capped at 10/min by layer 1.
+//   404 paths exit before the refund → still bounded at 10/min.
+export const eligibleProofsIpAnonStore = new PgRateLimitStore("eligible_proofs_ip");
+
+export const eligibleProofsIpRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
+  store: eligibleProofsIpAnonStore,
+  message: { error: "TOO_MANY_REQUESTS", message: "Too many eligible-proofs requests, please try again later" },
+});
+
+// Layer 2 — owner-tier limiter. Keyed on req.apiKey.id (per-key bucket) when
+// an API key is present, falling back to IP for browser-session callers.
+// 30 req/min matches the CSV owner tier so all owner-side calibration reads
+// share the same generous budget.
 export const eligibleProofsRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,

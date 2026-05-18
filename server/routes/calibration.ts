@@ -6,7 +6,7 @@ import { eq, or, and, gte } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { validateApiKey, getClientIp } from "./helpers";
-import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter, csvAnonStore, CSV_OWNER_RL_NAMESPACE, CSV_OWNER_RL_MAX, CSV_OWNER_RL_WINDOW_MS, eligibleProofsRateLimiter } from "../reliability";
+import { publicCalibrationRateLimiter, outcomeSubmitRateLimiter, calibrationCsvExportRateLimiter, csvAnonStore, CSV_OWNER_RL_NAMESPACE, CSV_OWNER_RL_MAX, CSV_OWNER_RL_WINDOW_MS, eligibleProofsRateLimiter, eligibleProofsIpRateLimiter, eligibleProofsIpAnonStore } from "../reliability";
 import { pgCheckRateLimit } from "../pgRateLimit";
 
 // ── 30-second in-memory cache for GET /api/agent/calibration/:agentId ────────
@@ -290,11 +290,13 @@ export function registerCalibrationRoutes(app: Express) {
   //    OR authenticated wallet session  (browser / dashboard)
   // Returns: { proofs: [{ id, file_name, confidence_level, created_at }] }
   // Capped at 50 rows ordered by created_at DESC.
-  // preloadApiKeyForRateLimit runs before eligibleProofsRateLimiter so the
-  // limiter can key on req.apiKey.id (per-key bucket) rather than falling back
-  // to IP for API-key callers.  The handler reuses req.apiKey.userId directly
-  // to avoid a second DB round-trip for the same key.
-  app.get("/api/agent/calibration/:agentId/eligible-proofs", preloadApiKeyForRateLimit, eligibleProofsRateLimiter, async (req, res) => {
+  // eligibleProofsIpRateLimiter (10/min per IP) runs FIRST — before any DB
+  // work — to bound unauthenticated probe traffic at the middleware level.
+  // preloadApiKeyForRateLimit then resolves req.apiKey so the second-tier
+  // eligibleProofsRateLimiter (30/min) can key on req.apiKey.id for API-key
+  // callers.  The handler reuses req.apiKey.userId directly to avoid a second
+  // DB round-trip for the same key.
+  app.get("/api/agent/calibration/:agentId/eligible-proofs", eligibleProofsIpRateLimiter, preloadApiKeyForRateLimit, eligibleProofsRateLimiter, async (req, res) => {
     try {
       const { agentId } = req.params;
 
@@ -326,6 +328,12 @@ export function registerCalibrationRoutes(app: Express) {
           message: "Authentication required. Provide 'Authorization: Bearer pm_xxx' or authenticate with your wallet.",
         });
       }
+
+      // Refund the layer-1 IP token for confirmed owners so they are governed
+      // by the 30/min eligibleProofsRateLimiter (layer 2) rather than the
+      // 10/min IP pre-check.  Non-owners return above — no refund for them.
+      // 404 paths also return above — no refund on unknown agent IDs.
+      await eligibleProofsIpAnonStore.decrement(getClientIp(req));
 
       // Query certifications that have metadata.confidence_level and no outcome yet
       const result = await pool.query<{
