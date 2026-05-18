@@ -712,7 +712,31 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const { toast } = useToast();
   const { isAuthenticated } = useWalletAuth();
-  if (!data.calibration || data.outcome_count === 0) return null;
+
+  if (!data.calibration || data.outcome_count === 0) {
+    return (
+      <Card data-testid="card-calibration">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Target className="h-4 w-4" />
+            Confidence calibration
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center gap-2 py-6 text-center" data-testid="text-calibration-empty">
+            <Target className="h-8 w-8 text-muted-foreground/30" />
+            <p className="text-sm font-medium text-muted-foreground">No outcome data yet</p>
+            <p className="text-xs text-muted-foreground max-w-sm">
+              Calibration metrics appear once this agent reports confidence-scored outcomes.
+            </p>
+            <Button asChild variant="outline" size="sm" className="mt-2" data-testid="button-calibration-full-empty">
+              <a href={`/agent/${wallet}/calibration`}>View calibration dashboard</a>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   async function downloadCsv() {
     if (downloading) return;
@@ -1195,7 +1219,7 @@ export default function AgentProfilePage() {
             )}
 
             {/* Confidence Calibration */}
-            {calibrationData && calibrationData.outcome_count > 0 && (
+            {calibrationData && (
               <CalibrationCard data={calibrationData} wallet={wallet || ""} />
             )}
 
