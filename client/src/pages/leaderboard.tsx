@@ -610,6 +610,14 @@ export default function Leaderboard() {
               {selectedWallets.size}/6 selected
             </span>
             <Button
+              data-testid="button-clear-compare"
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedWallets(new Set())}
+            >
+              Clear
+            </Button>
+            <Button
               data-testid="button-compare-agents"
               onClick={handleCompare}
               disabled={selectedWallets.size < 2}
