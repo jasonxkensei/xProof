@@ -351,16 +351,106 @@ export async function createMcpServer(ctx: McpContext) {
           }
         }
 
-        // Atomically consume credit BEFORE the blockchain write to prevent parallel-request race conditions.
-        if (cwcTrialInfo && !cwcCreditInfo) {
-          const consumed = await atomicConsumeTrialCredit(cwcTrialInfo.userId);
-          if (!consumed) {
-            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+        // Pre-check for ACP reservations: must happen BEFORE consuming credit so we can
+        // decide whether to displace (holding a durable entitlement) vs return early.
+        let cwcCreditConsumed = false;
+        const [cwcExisting] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
+        if (cwcExisting) {
+          const cwcExistingIsAcp = cwcExisting.authMethod === "acp" && cwcExisting.blockchainStatus === "pending" && !cwcExisting.transactionHash;
+          if (cwcExistingIsAcp) {
+            // Security: atomically consume the caller's entitlement BEFORE displacing the ACP
+            // reservation. This closes the race window where multiple concurrent requests can
+            // each pass the non-atomic precheck, displace separate victim reservations, and
+            // only afterward race in atomicConsume — allowing underfunded requests to destroy
+            // legitimate checkout slots at zero cost.
+            if (cwcTrialInfo && !cwcCreditInfo) {
+              const consumed = await atomicConsumeTrialCredit(cwcTrialInfo.userId);
+              if (!consumed) {
+                return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+              }
+            } else if (cwcCreditInfo) {
+              const consumed = await atomicConsumeCredit(cwcCreditInfo.userId);
+              if (!consumed) {
+                return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." }) }], isError: true };
+              }
+            }
+            cwcCreditConsumed = true;
+
+            // Displace the unpaid ACP reservation so this paid MCP caller can certify.
+            let cwcDispResult: "displaced" | "not_acp_reservation" | "no_row";
+            try {
+              cwcDispResult = await tryDisplaceAcpReservation(file_hash);
+            } catch (cwcDispErr: any) {
+              if (cwcTrialInfo && !cwcCreditInfo) await refundTrialCredit(cwcTrialInfo.userId).catch(() => {});
+              else if (cwcCreditInfo) await refundCredit(cwcCreditInfo.userId).catch(() => {});
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "DISPLACEMENT_FAILED", message: "Could not reclaim a pending reservation for this file hash. Your credit has been refunded. Please retry shortly." }) }], isError: true };
+            }
+            if (cwcDispResult !== "displaced") {
+              // Race: the reservation may have been confirmed/converted between pre-check and now.
+              const [cwcNowExisting] = await db.select().from(certifications).where(eq(certifications.fileHash, file_hash));
+              if (cwcNowExisting) {
+                const cwcNowIsAcp = cwcNowExisting.authMethod === "acp" && cwcNowExisting.blockchainStatus === "pending" && !cwcNowExisting.transactionHash;
+                if (cwcNowIsAcp) {
+                  // Still an ACP reservation — make a second displacement attempt, then ask caller to retry.
+                  await tryDisplaceAcpReservation(file_hash).catch(() => {});
+                  if (cwcTrialInfo && !cwcCreditInfo) await refundTrialCredit(cwcTrialInfo.userId).catch(() => {});
+                  else if (cwcCreditInfo) await refundCredit(cwcCreditInfo.userId).catch(() => {});
+                  return { content: [{ type: "text" as const, text: JSON.stringify({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this hash. It has been cleared — please retry your request." }) }], isError: true };
+                }
+                // Another caller already certified this hash; refund and surface the result.
+                if (cwcTrialInfo && !cwcCreditInfo) await refundTrialCredit(cwcTrialInfo.userId).catch(() => {});
+                else if (cwcCreditInfo) await refundCredit(cwcCreditInfo.userId).catch(() => {});
+                return {
+                  content: [{
+                    type: "text" as const,
+                    text: JSON.stringify({
+                      proof_id: cwcNowExisting.id,
+                      status: cwcNowExisting.blockchainStatus === "confirmed" ? "certified" : cwcNowExisting.blockchainStatus,
+                      file_hash: cwcNowExisting.fileHash,
+                      filename: cwcNowExisting.fileName,
+                      verify_url: `${baseUrl}/proof/${cwcNowExisting.id}`,
+                      blockchain: { network: "MultiversX", transaction_hash: cwcNowExisting.transactionHash, explorer_url: cwcNowExisting.transactionUrl },
+                      timestamp: cwcNowExisting.createdAt?.toISOString(),
+                      message: "File already certified on MultiversX blockchain.",
+                    }),
+                  }],
+                };
+              }
+            }
+            // displaced or no_row: fall through to certify below.
+          } else {
+            // Non-ACP-pending occupant: already certified or confirmed — return it immediately.
+            return {
+              content: [{
+                type: "text" as const,
+                text: JSON.stringify({
+                  proof_id: cwcExisting.id,
+                  status: cwcExisting.blockchainStatus === "confirmed" ? "certified" : cwcExisting.blockchainStatus,
+                  file_hash: cwcExisting.fileHash,
+                  filename: cwcExisting.fileName,
+                  verify_url: `${baseUrl}/proof/${cwcExisting.id}`,
+                  blockchain: { network: "MultiversX", transaction_hash: cwcExisting.transactionHash, explorer_url: cwcExisting.transactionUrl },
+                  timestamp: cwcExisting.createdAt?.toISOString(),
+                  message: "File already certified on MultiversX blockchain.",
+                }),
+              }],
+            };
           }
-        } else if (cwcCreditInfo) {
-          const consumed = await atomicConsumeCredit(cwcCreditInfo.userId);
-          if (!consumed) {
-            return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." }) }], isError: true };
+        }
+
+        // Atomically consume credit BEFORE the blockchain write to prevent parallel-request race
+        // conditions. Skip if credit was already consumed during ACP displacement above.
+        if (!cwcCreditConsumed) {
+          if (cwcTrialInfo && !cwcCreditInfo) {
+            const consumed = await atomicConsumeTrialCredit(cwcTrialInfo.userId);
+            if (!consumed) {
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "TRIAL_EXHAUSTED", message: "Trial quota exhausted. Purchase prepaid credits to continue certifying via MCP." }) }], isError: true };
+            }
+          } else if (cwcCreditInfo) {
+            const consumed = await atomicConsumeCredit(cwcCreditInfo.userId);
+            if (!consumed) {
+              return { content: [{ type: "text" as const, text: JSON.stringify({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." }) }], isError: true };
+            }
           }
         }
 

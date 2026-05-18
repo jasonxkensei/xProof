@@ -932,17 +932,26 @@ export function registerProofWriteRoutes(app: Express) {
       const fileName = `audit-log-${data.session_id}.json`;
 
       // Check duplicate (same audit log already certified)
-      const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
-      if (existing) {
+      const [auditOccupant] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
+      const auditOccupantIsAcpReservation =
+        !!auditOccupant &&
+        auditOccupant.authMethod === "acp" &&
+        auditOccupant.blockchainStatus === "pending" &&
+        !auditOccupant.transactionHash;
+
+      if (auditOccupant && !auditOccupantIsAcpReservation) {
+        // A real (non-ACP-pending) certification exists — return it immediately.
         return res.status(200).json({
           status: "already_certified",
-          proof_id: existing.id,
-          audit_url: `${baseUrl}/audit/${existing.id}`,
-          proof_url: `${baseUrl}/proof/${existing.id}`,
+          proof_id: auditOccupant.id,
+          audit_url: `${baseUrl}/audit/${auditOccupant.id}`,
+          proof_url: `${baseUrl}/proof/${auditOccupant.id}`,
           file_hash: fileHash,
           message: "This exact audit log was already certified. Returning existing proof.",
         });
       }
+      // If auditOccupantIsAcpReservation is true we fall through so the caller's
+      // entitlement is consumed first and the unpaid reservation can be displaced.
 
       if (!isMultiversXConfigured()) {
         return res.status(503).json({ error: "BLOCKCHAIN_UNAVAILABLE", message: "MultiversX is not configured on this server." });
@@ -959,6 +968,44 @@ export function registerProofWriteRoutes(app: Express) {
         if (!consumed) {
           return res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: "Credit balance insufficient. Purchase additional credits to continue." });
         }
+      }
+
+      // If the pre-check found an unpaid ACP reservation, displace it now that
+      // the caller's entitlement has been durably consumed. If displacement fails
+      // (e.g. the reservation was concurrently paid/confirmed), refund and surface
+      // the real certification to the caller.
+      if (auditOccupantIsAcpReservation && auditOccupant) {
+        let auditDispOutcome: "displaced" | "not_acp_reservation" | "no_row";
+        try {
+          auditDispOutcome = await tryDisplaceAcpReservation(fileHash);
+        } catch (displaceErr: any) {
+          if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+          else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+          logger.withRequest(req).error("ACP displacement threw on /api/audit — refunded entitlement", {
+            fileHash,
+            error: (displaceErr as any)?.message,
+          });
+          return res.status(503).json({
+            error: "DISPLACEMENT_FAILED",
+            message: "Could not reclaim a pending reservation for this audit hash. Please retry shortly.",
+          });
+        }
+        if (auditDispOutcome === "not_acp_reservation") {
+          // The reservation was confirmed between our pre-check and now — refund and return it.
+          if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
+          else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
+          const [refreshed] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
+          const target = refreshed ?? auditOccupant;
+          return res.status(200).json({
+            status: "already_certified",
+            proof_id: target.id,
+            audit_url: `${baseUrl}/audit/${target.id}`,
+            proof_url: `${baseUrl}/proof/${target.id}`,
+            file_hash: fileHash,
+            message: "This exact audit log was already certified. Returning existing proof.",
+          });
+        }
+        // "displaced" or "no_row": fall through to insert the real pending row below.
       }
 
       // Resolve ownerUserId before the pending-row insert (ownerUserId is needed as a foreign key).
@@ -1009,14 +1056,24 @@ export function registerProofWriteRoutes(app: Express) {
         // Unique constraint — a concurrent request already reserved or completed this audit hash.
         if (trialInfo) await refundTrialCredit(trialInfo.userId).catch(() => {});
         else if (creditInfo) await refundCredit(creditInfo.userId).catch(() => {});
-        const [existing] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
-        if (existing) {
-          logger.withRequest(req).info("Concurrent duplicate audit request detected, credit refunded", { fileHash, certificationId: existing.id });
+        const [existingOnConflict] = await db.select().from(certifications).where(eq(certifications.fileHash, fileHash));
+        if (existingOnConflict) {
+          const conflictIsAcpReservation =
+            existingOnConflict.authMethod === "acp" &&
+            existingOnConflict.blockchainStatus === "pending" &&
+            !existingOnConflict.transactionHash;
+          if (conflictIsAcpReservation) {
+            // An unpaid ACP reservation won the insert race despite our displacement attempt.
+            // The credit has been refunded; ask the caller to retry.
+            logger.withRequest(req).warn("Concurrent ACP reservation blocked audit insert after displacement — credit refunded", { fileHash, certificationId: existingOnConflict.id });
+            return res.status(409).json({ error: "RETRY_REQUIRED", message: "An unpaid ACP reservation was blocking this audit hash. It has been cleared — please retry your request." });
+          }
+          logger.withRequest(req).info("Concurrent duplicate audit request detected, credit refunded", { fileHash, certificationId: existingOnConflict.id });
           return res.status(200).json({
-            status: existing.blockchainStatus === "confirmed" ? "already_certified" : existing.blockchainStatus,
-            proof_id: existing.id,
-            audit_url: `${baseUrl}/audit/${existing.id}`,
-            proof_url: `${baseUrl}/proof/${existing.id}`,
+            status: existingOnConflict.blockchainStatus === "confirmed" ? "already_certified" : existingOnConflict.blockchainStatus,
+            proof_id: existingOnConflict.id,
+            audit_url: `${baseUrl}/audit/${existingOnConflict.id}`,
+            proof_url: `${baseUrl}/proof/${existingOnConflict.id}`,
             file_hash: fileHash,
             message: "This exact audit log was already certified. Returning existing proof.",
           });
