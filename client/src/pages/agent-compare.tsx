@@ -70,7 +70,14 @@ const BIAS_LABEL_STYLES: Record<string, string> = {
   calibrated: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
 };
 
-const CHART_COLORS = ["hsl(var(--primary))", "#f59e0b"];
+const CHART_COLORS = [
+  "hsl(var(--primary))",
+  "#f59e0b",
+  "#10b981",
+  "#8b5cf6",
+  "#ef4444",
+  "#06b6d4",
+];
 
 const CATEGORY_LABELS: Record<string, string> = {
   trading: "Trading", data: "Data", content: "Content", code: "Code",
@@ -203,8 +210,12 @@ export default function AgentComparePage() {
   });
 
   const calibrationQueries = [
-    useCalibration(wallets[0] || "", wallets.length >= 2 && !!data),
-    useCalibration(wallets[1] || "", wallets.length >= 2 && !!data),
+    useCalibration(wallets[0] ?? "", wallets.length >= 2 && !!data && wallets.length > 0),
+    useCalibration(wallets[1] ?? "", wallets.length >= 2 && !!data && wallets.length > 1),
+    useCalibration(wallets[2] ?? "", wallets.length >= 2 && !!data && wallets.length > 2),
+    useCalibration(wallets[3] ?? "", wallets.length >= 2 && !!data && wallets.length > 3),
+    useCalibration(wallets[4] ?? "", wallets.length >= 2 && !!data && wallets.length > 4),
+    useCalibration(wallets[5] ?? "", wallets.length >= 2 && !!data && wallets.length > 5),
   ];
 
   if (wallets.length < 2) {
@@ -494,7 +505,16 @@ export default function AgentComparePage() {
                 </div>
 
                 {/* Side-by-side trend charts */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="grid-calibration-charts">
+                <div
+                  className={`grid grid-cols-1 gap-4 ${
+                    agents.length === 2
+                      ? "sm:grid-cols-2"
+                      : agents.length === 3
+                      ? "sm:grid-cols-3"
+                      : "sm:grid-cols-2 lg:grid-cols-4"
+                  }`}
+                  data-testid="grid-calibration-charts"
+                >
                   {agents.map((agent, idx) => {
                     const cal = calibrationQueries[idx]?.data;
                     return (
