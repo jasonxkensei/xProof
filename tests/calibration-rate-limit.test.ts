@@ -63,19 +63,22 @@ beforeAll(async () => {
   );
   testApiKeyId = keyRow.rows[0].id;
 
-  // 4. Wipe any leftover rate-limit counters for this key so the test
-  //    always starts from a clean bucket regardless of when it runs.
+  // 4. Wipe any leftover rate-limit counters for this key AND for localhost
+  //    IPs so both the per-key bucket and the IP-fallback bucket start clean.
   await pool.query(
-    `DELETE FROM rate_limit_counters WHERE bucket LIKE $1`,
+    `DELETE FROM rate_limit_counters
+     WHERE bucket LIKE $1
+        OR bucket LIKE 'eligible_proofs:127.0.0.1:%'
+        OR bucket LIKE 'eligible_proofs:::1:%'`,
     [`eligible_proofs:${testApiKeyId}:%`],
   );
 });
 
 afterAll(async () => {
   // Remove fixture data — deletion cascades from users to api_keys.
+  // Do NOT call pool.end(): the shared DB module is reused across the worker
+  // and Node.js closes open sockets automatically when the process exits.
   await pool.query(`DELETE FROM users WHERE wallet_address = $1`, [TEST_WALLET]);
-  // Close the connection pool opened by this worker so vitest exits cleanly.
-  await pool.end();
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -88,7 +91,17 @@ describe("GET /api/agent/calibration/:agentId/eligible-proofs", () => {
         const url     = `${BASE_URL}/api/agent/calibration/${testUserId}/eligible-proofs`;
         const headers = { Authorization: `Bearer ${TEST_RAW_KEY}` };
 
-        // ── Within-limit: first 30 requests ─────────────────────────────────
+        // ── Verify rate limiter does not swallow normal auth errors ──────────
+        // An unauthenticated request (no Authorization header) within the limit
+        // must get a 401 UNAUTHORIZED from the handler, NOT a 429, proving the
+        // rate limiter only blocks callers who have exhausted their own quota.
+        // Unauthenticated requests key on IP (separate bucket from the API key).
+        const unauthRes  = await fetch(url);
+        const unauthBody = await unauthRes.json() as Record<string, unknown>;
+        expect(unauthRes.status).toBe(401);
+        expect(unauthBody.error).toBe("UNAUTHORIZED");
+
+        // ── Within-limit: first 30 authenticated requests ────────────────────
         // The rate limiter passes these through; the handler returns 200 because
         // callerUserId (from req.apiKey.userId) matches agent.id.
         for (let i = 0; i < 30; i++) {
