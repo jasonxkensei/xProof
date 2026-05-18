@@ -159,3 +159,10 @@ Required guarantees:
 - Current `/api/stats` has route-specific throttling, a short in-memory cache, and in-flight coalescing; treat the prior public-stats aggregate DoS as fixed unless those protections regress.
 - Public pagination endpoints remain in scope even when `limit` is capped. Unbounded `offset` on high-cardinality public proof/timeline searches can still force database scans/sorts; prefer capped offsets, keyset pagination, and indexes matching `(user_id, blockchain_status, is_public, created_at DESC)` style predicates.
 - The current webhook delivery path pins DNS resolution to the outbound HTTPS socket, refuses redirects, bounds timeouts, and redacts URL paths/query strings before logging. Treat older webhook SSRF/log-leak scanner leads as fixed unless a new call path bypasses `safeWebhookFetch()` or logs raw destination URLs.
+
+## Scan Notes — 2026-05-18
+
+- Current auth/admin review found no production-reachable wallet spoofing or fail-open admin path. Legacy wallet spoofing endpoints remain disabled, wallet sessions are only created from verified Native Auth tokens, and reviewed admin checks still fail closed when configuration is missing.
+- Public trust and leaderboard reads remain a production DoS surface even with rate limits, short caches, and in-flight coalescing when cold requests still trigger dataset-scale trust recomputation. Keep `server/routes/trust.ts`, `server/trust.ts`, `server/routes/proof-read.ts`, and `server/prerender.ts` as review anchors until trust data is served from bounded summaries or async refresh.
+- ACP pending reservations must never be treated as equivalent to confirmed proofs on downstream write paths. Any duplicate fast-path on `fileHash` must distinguish unpaid `authMethod: "acp"` + `blockchainStatus: "pending"` rows from real certifications and either displace them after durable entitlement consumption or fail explicitly.
+- `certify_with_confidence` still lacks parity with the main proof and audit write paths: after a durable entitlement is consumed, unpaid ACP reservations should be displaced rather than converted into a refunded `ACP_RESERVED` deadlock for paid MCP callers.
