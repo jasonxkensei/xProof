@@ -46,6 +46,8 @@ const outcomeSubmitSchema = z.object({
     .min(0, "outcome_score must be >= 0")
     .max(1, "outcome_score must be <= 1"),
   visibility: z.enum(["public", "private"]).default("public"),
+  // Optional: allows agents to back-fill historical outcomes. Defaults to now().
+  submitted_at: z.string().datetime({ offset: true }).optional(),
 });
 
 // ── Optional API-key extractor (non-blocking — sets req.optionalUserId) ──────
@@ -80,11 +82,59 @@ async function optionalApiKey(req: Request, res: Response, next: NextFunction) {
 
 export function registerCalibrationRoutes(app: Express) {
   // ── POST /api/agent/outcome ───────────────────────────────────────────────
-  // Auth: Authorization: Bearer pm_xxx (operator only, not the agent itself)
+  // Auth: Authorization: Bearer pm_xxx  (API key)
+  //    OR authenticated wallet session  (browser / dashboard)
   // Submits the actual outcome for a decision previously anchored with
   // metadata.confidence_level. Computes and stores the calibration gap.
-  app.post("/api/agent/outcome", validateApiKey, outcomeSubmitRateLimiter, async (req, res) => {
+  // Optional submitted_at (ISO 8601) lets agents back-fill historical outcomes.
+  app.post("/api/agent/outcome", outcomeSubmitRateLimiter, async (req, res) => {
     try {
+      // ── Resolve caller identity: API key takes priority over session ─────
+      let userId: string | null = null;
+
+      const authHeader = req.headers["authorization"];
+      if (authHeader?.startsWith("Bearer pm_")) {
+        // API key auth — mirrors validateApiKey from helpers.ts
+        const rawKey = authHeader.slice(7);
+        const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+        let [key] = await db
+          .select({ userId: apiKeys.userId, isActive: apiKeys.isActive })
+          .from(apiKeys)
+          .where(eq(apiKeys.keyHash, keyHash))
+          .limit(1);
+        // Rotated-key fallback within grace period
+        if (!key) {
+          const [rotated] = await db
+            .select({ userId: apiKeys.userId, isActive: apiKeys.isActive })
+            .from(apiKeys)
+            .where(and(eq(apiKeys.previousKeyHash, keyHash), gte(apiKeys.previousKeyExpiresAt, new Date())))
+            .limit(1);
+          if (rotated) key = rotated;
+        }
+        if (!key?.isActive) {
+          return res.status(401).json({ error: "UNAUTHORIZED", message: "Invalid or inactive API key." });
+        }
+        userId = key.userId;
+      } else {
+        // Wallet session fallback (MultiversX Native Auth — set by express-session)
+        const sessionWallet = (req as any).session?.walletAddress as string | undefined;
+        if (sessionWallet) {
+          const [user] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.walletAddress, sessionWallet))
+            .limit(1);
+          userId = user?.id ?? null;
+        }
+      }
+
+      if (!userId) {
+        return res.status(401).json({
+          error: "UNAUTHORIZED",
+          message: "Authentication required. Provide 'Authorization: Bearer pm_xxx' or authenticate with your wallet.",
+        });
+      }
+
       const parsed = outcomeSubmitSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({
@@ -94,8 +144,7 @@ export function registerCalibrationRoutes(app: Express) {
         });
       }
 
-      const { proof_id, outcome_score, visibility } = parsed.data;
-      const apiKey = (req as any).apiKey;
+      const { proof_id, outcome_score, visibility, submitted_at } = parsed.data;
 
       // Fetch the certification and verify ownership
       const [cert] = await db
@@ -111,11 +160,11 @@ export function registerCalibrationRoutes(app: Express) {
         });
       }
 
-      // Ownership check: certification must belong to the API key's user
-      if (cert.userId !== apiKey.userId) {
+      // Ownership check: certification must belong to the authenticated user
+      if (cert.userId !== userId) {
         return res.status(403).json({
           error: "FORBIDDEN",
-          message: "You can only submit outcomes for proofs anchored by your own API key.",
+          message: "You can only submit outcomes for proofs anchored by your own account.",
         });
       }
 
@@ -146,22 +195,40 @@ export function registerCalibrationRoutes(app: Express) {
           .insert(agentOutcomes)
           .values({
             certificationId: cert.id,
-            userId: apiKey.userId,
+            userId,
             anchoredConfidence: anchoredNum,
             outcomeScore: outcome_score,
             confidenceGap,
             visibility,
+            ...(submitted_at ? { submittedAt: new Date(submitted_at) } : {}),
           })
           .returning();
 
         logger.info("Agent outcome submitted", {
           component: "calibration",
           certificationId: cert.id,
-          userId: apiKey.userId,
+          userId,
           anchoredConfidence: anchoredNum,
           outcomeScore: outcome_score,
           confidenceGap,
         });
+
+        // ── Bust calibration cache for this agent ─────────────────────────
+        // Cache keys are `${agentId}:${n}:${cursor}` where agentId can be
+        // either the userId OR the wallet address. Invalidate both prefixes
+        // so the next GET returns fresh data immediately.
+        const [ownerUser] = await db
+          .select({ walletAddress: users.walletAddress })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        const walletPrefix = ownerUser?.walletAddress ? `${ownerUser.walletAddress}:` : null;
+        const userPrefix = `${userId}:`;
+        for (const cacheKey of calibrationCache.keys()) {
+          if (cacheKey.startsWith(userPrefix) || (walletPrefix && cacheKey.startsWith(walletPrefix))) {
+            calibrationCache.delete(cacheKey);
+          }
+        }
 
         return res.status(201).json({
           outcome_id: inserted.id,

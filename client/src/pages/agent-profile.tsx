@@ -1,5 +1,6 @@
 import { useParams, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Shield,
   ExternalLink,
@@ -21,6 +22,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  Plus,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -710,29 +712,122 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
   const [hovered, setHovered] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [proofId, setProofId] = useState("");
+  const [outcomeScore, setOutcomeScore] = useState("");
   const { toast } = useToast();
-  const { isAuthenticated } = useWalletAuth();
+  const { isAuthenticated, walletAddress } = useWalletAuth();
+  const isOwner = isAuthenticated && !!walletAddress && walletAddress === wallet;
+
+  const submitOutcomeMutation = useMutation({
+    mutationFn: (body: { proof_id: string; outcome_score: number; visibility: string }) =>
+      apiRequest("POST", "/api/agent/outcome", body),
+    onSuccess: () => {
+      toast({ title: "Outcome recorded", description: "Calibration data updated." });
+      setProofId("");
+      setOutcomeScore("");
+      setShowForm(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/calibration", wallet] });
+    },
+    onError: async (err: any) => {
+      let description = "Failed to submit outcome.";
+      try {
+        const body = await err?.response?.json?.();
+        if (body?.message) description = body.message;
+        else if (body?.error === "OUTCOME_ALREADY_SUBMITTED") description = "An outcome has already been submitted for this proof.";
+        else if (body?.error === "NO_CONFIDENCE_LEVEL") description = "This proof has no confidence_level in its metadata.";
+      } catch {}
+      toast({ title: "Submission failed", description, variant: "destructive" });
+    },
+  });
+
+  function handleOutcomeSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const score = parseFloat(outcomeScore);
+    if (!proofId.trim()) {
+      toast({ title: "Proof ID required", variant: "destructive" });
+      return;
+    }
+    if (isNaN(score) || score < 0 || score > 1) {
+      toast({ title: "Score must be between 0.00 and 1.00", variant: "destructive" });
+      return;
+    }
+    submitOutcomeMutation.mutate({ proof_id: proofId.trim(), outcome_score: score, visibility: "public" });
+  }
 
   if (!data.calibration || data.outcome_count === 0) {
     return (
       <Card data-testid="card-calibration">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2 text-base flex-wrap">
             <Target className="h-4 w-4" />
             Confidence calibration
+            {isOwner && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-auto text-xs"
+                onClick={() => setShowForm((v) => !v)}
+                data-testid="button-outcome-toggle"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add outcome
+              </Button>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center gap-2 py-6 text-center" data-testid="text-calibration-empty">
-            <Target className="h-8 w-8 text-muted-foreground/30" />
-            <p className="text-sm font-medium text-muted-foreground">No outcome data yet</p>
-            <p className="text-xs text-muted-foreground max-w-sm">
-              Calibration metrics appear once this agent reports confidence-scored outcomes.
-            </p>
-            <Button asChild variant="outline" size="sm" className="mt-2" data-testid="button-calibration-full-empty">
-              <a href={`/agent/${wallet}/calibration`}>View calibration dashboard</a>
-            </Button>
-          </div>
+          {isOwner && showForm ? (
+            <form onSubmit={handleOutcomeSubmit} className="space-y-3" data-testid="form-submit-outcome">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Proof ID</label>
+                <input
+                  type="text"
+                  value={proofId}
+                  onChange={(e) => setProofId(e.target.value)}
+                  placeholder="e.g. abc123..."
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  data-testid="input-proof-id"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Must be a proof anchored with <code className="text-xs">metadata.confidence_level</code>.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Outcome score (0.00 – 1.00)</label>
+                <input
+                  type="number"
+                  value={outcomeScore}
+                  onChange={(e) => setOutcomeScore(e.target.value)}
+                  placeholder="0.75"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  data-testid="input-outcome-score"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" disabled={submitOutcomeMutation.isPending} data-testid="button-submit-outcome">
+                  {submitOutcomeMutation.isPending ? "Submitting…" : "Submit outcome"}
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setShowForm(false)} data-testid="button-cancel-outcome">
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex flex-col items-center gap-2 py-6 text-center" data-testid="text-calibration-empty">
+              <Target className="h-8 w-8 text-muted-foreground/30" />
+              <p className="text-sm font-medium text-muted-foreground">No outcome data yet</p>
+              <p className="text-xs text-muted-foreground max-w-sm">
+                Calibration metrics appear once this agent reports confidence-scored outcomes.
+              </p>
+              <Button asChild variant="outline" size="sm" className="mt-2" data-testid="button-calibration-full-empty">
+                <a href={`/agent/${wallet}/calibration`}>View calibration dashboard</a>
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -802,6 +897,17 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
             <span className="text-xs font-normal text-muted-foreground" data-testid="text-outcome-count">
               {data.outcome_count} outcome{data.outcome_count !== 1 ? "s" : ""}
             </span>
+            {isOwner && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setShowForm((v) => !v)}
+                data-testid="button-outcome-toggle-full"
+                aria-label="Add an outcome"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            )}
             <Button
               asChild
               size="sm"
@@ -902,6 +1008,48 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
 
         {showChart && hasChart && (
           <CalibrationGapChart points={[...data.time_series].reverse()} />
+        )}
+
+        {isOwner && showForm && (
+          <form onSubmit={handleOutcomeSubmit} className="space-y-3 border-t pt-4 mt-2" data-testid="form-submit-outcome">
+            <p className="text-xs font-medium text-muted-foreground">Record a new outcome</p>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Proof ID</label>
+              <input
+                type="text"
+                value={proofId}
+                onChange={(e) => setProofId(e.target.value)}
+                placeholder="e.g. abc123…"
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                data-testid="input-proof-id"
+              />
+              <p className="text-xs text-muted-foreground">
+                Must be a proof anchored with <code className="text-xs">metadata.confidence_level</code>.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Outcome score (0.00 – 1.00)</label>
+              <input
+                type="number"
+                value={outcomeScore}
+                onChange={(e) => setOutcomeScore(e.target.value)}
+                placeholder="0.75"
+                min={0}
+                max={1}
+                step={0.01}
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                data-testid="input-outcome-score"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" disabled={submitOutcomeMutation.isPending} data-testid="button-submit-outcome">
+                {submitOutcomeMutation.isPending ? "Submitting…" : "Submit outcome"}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setShowForm(false)} data-testid="button-cancel-outcome">
+                Cancel
+              </Button>
+            </div>
+          </form>
         )}
       </CardContent>
       <WalletLoginModal open={loginModalOpen} onOpenChange={setLoginModalOpen} redirectTo={`/agent/${data.wallet_address}`} />
