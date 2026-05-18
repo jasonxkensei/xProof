@@ -345,6 +345,10 @@ export default function AgentComparePage() {
     },
   ];
 
+  const calibrationByWallet = new Map(
+    wallets.map((w, i) => [w, calibrationQueries[i]])
+  );
+
   const calibrationLoading = calibrationQueries.some(q => q.isLoading);
 
   return (
@@ -418,7 +422,7 @@ export default function AgentComparePage() {
                       <tr className="border-b">
                         <th className="text-left py-3 px-3 font-medium text-muted-foreground min-w-[140px]">Metric</th>
                         {agents.map((agent, idx) => {
-                          const cal = calibrationQueries[idx]?.data;
+                          const cal = calibrationByWallet.get(agent.walletAddress)?.data;
                           return (
                             <th key={agent.walletAddress} className="text-left py-3 px-3 font-medium min-w-[160px]" data-testid={`th-calib-agent-${agent.walletAddress}`}>
                               <span
@@ -434,8 +438,8 @@ export default function AgentComparePage() {
                     <tbody>
                       <tr className="border-b">
                         <td className="py-3 px-3 font-medium text-muted-foreground">Outcomes</td>
-                        {agents.map((agent, idx) => {
-                          const cal = calibrationQueries[idx]?.data;
+                        {agents.map((agent) => {
+                          const cal = calibrationByWallet.get(agent.walletAddress)?.data;
                           return (
                             <td key={agent.walletAddress} className="py-3 px-3" data-testid={`cell-outcomes-${agent.walletAddress}`}>
                               {cal ? cal.outcome_count.toLocaleString() : "—"}
@@ -445,11 +449,11 @@ export default function AgentComparePage() {
                       </tr>
                       <tr className="border-b">
                         <td className="py-3 px-3 font-medium text-muted-foreground">Mean Gap</td>
-                        {agents.map((agent, idx) => {
-                          const cal = calibrationQueries[idx]?.data;
+                        {agents.map((agent) => {
+                          const cal = calibrationByWallet.get(agent.walletAddress)?.data;
                           const meanGap = cal?.calibration?.mean_gap;
-                          const allGaps = calibrationQueries
-                            .map(q => q.data?.calibration?.mean_gap)
+                          const allGaps = agents
+                            .map(a => calibrationByWallet.get(a.walletAddress)?.data?.calibration?.mean_gap)
                             .filter((v): v is number => v !== undefined);
                           const bestGap = allGaps.length
                             ? allGaps.reduce((best, v) => Math.abs(v) < Math.abs(best) ? v : best, allGaps[0])
@@ -472,8 +476,8 @@ export default function AgentComparePage() {
                       </tr>
                       <tr>
                         <td className="py-3 px-3 font-medium text-muted-foreground">Bias</td>
-                        {agents.map((agent, idx) => {
-                          const cal = calibrationQueries[idx]?.data;
+                        {agents.map((agent) => {
+                          const cal = calibrationByWallet.get(agent.walletAddress)?.data;
                           const biasLabel = cal?.calibration?.bias_label;
                           return (
                             <td key={agent.walletAddress} className="py-3 px-3" data-testid={`cell-bias-${agent.walletAddress}`}>
@@ -510,7 +514,7 @@ export default function AgentComparePage() {
                   data-testid="grid-calibration-charts"
                 >
                   {agents.map((agent, idx) => {
-                    const cal = calibrationQueries[idx]?.data;
+                    const cal = calibrationByWallet.get(agent.walletAddress)?.data;
                     return (
                       <div key={agent.walletAddress} className="rounded-md border p-4">
                         <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">
