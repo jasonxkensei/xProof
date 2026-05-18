@@ -22,7 +22,9 @@ import {
   Loader2,
   Key,
   File,
-  ExternalLink
+  ExternalLink,
+  Link2,
+  Terminal
 } from "lucide-react";
 import { WalletLoginModal } from "@/components/wallet-login-modal";
 import {
@@ -396,6 +398,7 @@ export default function Landing() {
                   </>
                 ) : (
                   /* Success state */
+                  <>
                   <div className="rounded-md bg-primary/10 border border-primary/20 p-5 text-left" data-testid="card-proof-result">
                     <div className="flex items-center gap-2 mb-3">
                       <CheckCircle className="h-5 w-5 text-primary shrink-0" />
@@ -437,11 +440,25 @@ export default function Landing() {
                       </Button>
                       <Button
                         size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const url = proofResult.verify_url
+                            ? `https://xproof.app${proofResult.verify_url.startsWith("/") ? "" : "/"}${proofResult.verify_url}`
+                            : `https://xproof.app/proof/${proofResult.proof_id}`;
+                          navigator.clipboard.writeText(url);
+                        }}
+                        data-testid="button-copy-proof-url"
+                      >
+                        <Link2 className="mr-1.5 h-3 w-3" />
+                        Copy link
+                      </Button>
+                      <Button
+                        size="sm"
                         variant="ghost"
                         onClick={() => { setProofFile(null); setProofHash(""); setProofResult(null); setProofError(null); }}
                         data-testid="button-proof-another"
                       >
-                        Anchor another file
+                        Anchor another
                       </Button>
                       {proofResult.trial?.remaining !== undefined && (
                         <Badge variant="outline" className="text-xs ml-auto">
@@ -450,20 +467,53 @@ export default function Landing() {
                       )}
                     </div>
                   </div>
+
+                  {/* Post-success next steps — no wallet needed */}
+                  <div className="mt-5 rounded-md border border-muted bg-muted/30 p-4 text-left">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Next: integrate into your fleet</p>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-start gap-3">
+                        <Terminal className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium">Add one line to your agent's loop</p>
+                          <p className="text-xs text-muted-foreground">
+                            Hash the output → POST to <code className="font-mono bg-muted px-1 rounded">/api/proof</code> with your <code className="font-mono bg-muted px-1 rounded">pm_</code> key. 
+                            Every action becomes a verifiable record.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button asChild size="sm" data-testid="button-trial-fleet-docs">
+                        <a href="/docs">
+                          Fleet integration guide
+                          <ArrowRight className="ml-1 h-3 w-3" />
+                        </a>
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleConnect} data-testid="button-trial-connect-wallet">
+                        <Wallet className="mr-1.5 h-3.5 w-3.5" />
+                        Connect wallet
+                      </Button>
+                    </div>
+                  </div>
+                  </>
                 )}
 
+                {/* Pre-proof next steps (key obtained but no proof yet) */}
+                {!proofResult && (
                 <div className="mt-5 flex flex-wrap gap-3 justify-center">
                   <Button asChild variant="outline" size="sm" data-testid="button-trial-docs">
                     <a href="/docs">
-                      Full API docs
+                      Fleet integration guide
                       <ArrowRight className="ml-1 h-3 w-3" />
                     </a>
                   </Button>
-                  <Button size="sm" onClick={handleConnect} data-testid="button-trial-connect-wallet">
+                  <Button size="sm" variant="ghost" onClick={handleConnect} data-testid="button-trial-connect-wallet">
                     <Wallet className="mr-2 h-3.5 w-3.5" />
-                    Connect wallet to manage
+                    Connect wallet
                   </Button>
                 </div>
+                )}
               </div>
             )}
           </div>
@@ -547,11 +597,11 @@ export default function Landing() {
             <div className="mb-16 text-center">
               <Badge variant="outline" className="mb-4">How it works</Badge>
               <h2 className="mb-4 text-3xl md:text-4xl font-bold">
-                3 simple steps
+                One API call. Permanent accountability.
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                No technical knowledge required. 
-                If you can send an email, you can use xproof.
+                Integrate xproof into your agent's execution loop.
+                Every decision, output, and action becomes a verifiable on-chain record.
               </p>
             </div>
             
@@ -560,10 +610,10 @@ export default function Landing() {
                 <div className="mb-6 mx-auto md:mx-0 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
                   1
                 </div>
-                <h3 className="mb-3 text-xl font-semibold">Upload your file</h3>
+                <h3 className="mb-3 text-xl font-semibold">Your agent acts</h3>
                 <p className="text-muted-foreground">
-                  Drag any file: photo, document, music, code... 
-                  Your file stays private, it is never uploaded.
+                  Your agent makes a decision, produces an output, or executes a task.
+                  Before moving on, it hashes that action locally — nothing leaves your infrastructure.
                 </p>
                 <div className="hidden md:block absolute top-8 left-[calc(100%-20px)] w-[calc(100%-40px)]">
                   <ArrowRight className="h-6 w-6 text-muted-foreground/30" />
@@ -574,10 +624,10 @@ export default function Landing() {
                 <div className="mb-6 mx-auto md:mx-0 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
                   2
                 </div>
-                <h3 className="mb-3 text-xl font-semibold">We compute the fingerprint</h3>
+                <h3 className="mb-3 text-xl font-semibold">POST the fingerprint</h3>
                 <p className="text-muted-foreground">
-                  A unique fingerprint (SHA-256 hash) is computed locally. 
-                  It's like the DNA of your file.
+                  One API call with a SHA-256 hash and optional metadata — model version, strategy, 
+                  confidence level, session ID. Your API key handles authentication. No overhead.
                 </p>
                 <div className="hidden md:block absolute top-8 left-[calc(100%-20px)] w-[calc(100%-40px)]">
                   <ArrowRight className="h-6 w-6 text-muted-foreground/30" />
@@ -588,22 +638,24 @@ export default function Landing() {
                 <div className="mb-6 mx-auto md:mx-0 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
                   3
                 </div>
-                <h3 className="mb-3 text-xl font-semibold">Engraved on the blockchain</h3>
+                <h3 className="mb-3 text-xl font-semibold">Proof anchored on-chain</h3>
                 <p className="text-muted-foreground">
-                  The fingerprint is permanently recorded on the blockchain. 
-                  You receive a verifiable proof with a QR code.
+                  xproof anchors the fingerprint on MultiversX and returns a <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">proof_id</code> and a public verification URL.
+                  Your entire fleet now has a tamper-proof audit trail.
                 </p>
               </div>
             </div>
 
             <div className="mt-12 text-center">
               <Button 
-                size="lg" 
-                onClick={handleConnect}
+                asChild
+                size="lg"
                 data-testid="button-try-now"
               >
-                Try it now
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <a href="#free-trial">
+                  Try it with your fleet
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </a>
               </Button>
             </div>
           </div>
