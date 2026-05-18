@@ -80,6 +80,39 @@ async function optionalApiKey(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// ── Pre-middleware for outcome rate limiting ──────────────────────────────────
+// Resolves the caller's API key (if present) and sets req.apiKey so that
+// outcomeSubmitRateLimiter can key on req.apiKey.id (per-key bucket) instead
+// of falling back to IP. Non-blocking: invalid/missing keys just leave
+// req.apiKey unset so the limiter falls back to IP keying gracefully.
+async function preloadApiKeyForRateLimit(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader?.startsWith("Bearer pm_")) return next();
+  const rawKey = authHeader.slice(7);
+  try {
+    const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+    let [key] = await db
+      .select({ id: apiKeys.id, userId: apiKeys.userId, isActive: apiKeys.isActive })
+      .from(apiKeys)
+      .where(eq(apiKeys.keyHash, keyHash))
+      .limit(1);
+    if (!key) {
+      const [rotated] = await db
+        .select({ id: apiKeys.id, userId: apiKeys.userId, isActive: apiKeys.isActive })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.previousKeyHash, keyHash), gte(apiKeys.previousKeyExpiresAt, new Date())))
+        .limit(1);
+      if (rotated) key = rotated;
+    }
+    // Store on request so the handler can reuse the already-resolved key
+    // (avoids a second DB round-trip) and the rate limiter gets the key PK.
+    if (key?.isActive) (req as any).apiKey = key;
+  } catch {
+    // Non-blocking — let handler surface auth errors instead
+  }
+  next();
+}
+
 export function registerCalibrationRoutes(app: Express) {
   // ── POST /api/agent/outcome ───────────────────────────────────────────────
   // Auth: Authorization: Bearer pm_xxx  (API key)
@@ -87,34 +120,28 @@ export function registerCalibrationRoutes(app: Express) {
   // Submits the actual outcome for a decision previously anchored with
   // metadata.confidence_level. Computes and stores the calibration gap.
   // Optional submitted_at (ISO 8601) lets agents back-fill historical outcomes.
-  app.post("/api/agent/outcome", outcomeSubmitRateLimiter, async (req, res) => {
+  //
+  // preloadApiKeyForRateLimit runs first: it resolves the API key (if any)
+  // and sets req.apiKey so outcomeSubmitRateLimiter keys on req.apiKey.id
+  // (per-key bucket) rather than falling back to IP for API-key callers.
+  app.post("/api/agent/outcome", preloadApiKeyForRateLimit, outcomeSubmitRateLimiter, async (req, res) => {
     try {
       // ── Resolve caller identity: API key takes priority over session ─────
+      // req.apiKey may already be set by preloadApiKeyForRateLimit (API key path).
+      // Wallet session is the fallback for browser-authenticated owners.
       let userId: string | null = null;
 
+      const preloadedKey = (req as any).apiKey as { id: string; userId: string; isActive: boolean } | undefined;
       const authHeader = req.headers["authorization"];
+
       if (authHeader?.startsWith("Bearer pm_")) {
-        // API key auth — mirrors validateApiKey from helpers.ts
-        const rawKey = authHeader.slice(7);
-        const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
-        let [key] = await db
-          .select({ userId: apiKeys.userId, isActive: apiKeys.isActive })
-          .from(apiKeys)
-          .where(eq(apiKeys.keyHash, keyHash))
-          .limit(1);
-        // Rotated-key fallback within grace period
-        if (!key) {
-          const [rotated] = await db
-            .select({ userId: apiKeys.userId, isActive: apiKeys.isActive })
-            .from(apiKeys)
-            .where(and(eq(apiKeys.previousKeyHash, keyHash), gte(apiKeys.previousKeyExpiresAt, new Date())))
-            .limit(1);
-          if (rotated) key = rotated;
-        }
-        if (!key?.isActive) {
+        // API key path: key was already resolved by preloadApiKeyForRateLimit.
+        // Re-check isActive here in case the key was deactivated between the
+        // pre-middleware and now (edge case, belt-and-suspenders).
+        if (!preloadedKey?.isActive) {
           return res.status(401).json({ error: "UNAUTHORIZED", message: "Invalid or inactive API key." });
         }
-        userId = key.userId;
+        userId = preloadedKey.userId;
       } else {
         // Wallet session fallback (MultiversX Native Auth — set by express-session)
         const sessionWallet = (req as any).session?.walletAddress as string | undefined;

@@ -729,13 +729,16 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
       setShowForm(false);
       queryClient.invalidateQueries({ queryKey: ["/api/agent/calibration", wallet] });
     },
-    onError: async (err: any) => {
+    onError: (err: any) => {
+      // apiRequest throws Error with message pattern "STATUS: body_text"
       let description = "Failed to submit outcome.";
       try {
-        const body = await err?.response?.json?.();
-        if (body?.message) description = body.message;
-        else if (body?.error === "OUTCOME_ALREADY_SUBMITTED") description = "An outcome has already been submitted for this proof.";
-        else if (body?.error === "NO_CONFIDENCE_LEVEL") description = "This proof has no confidence_level in its metadata.";
+        const raw = String(err?.message ?? "");
+        const match = raw.match(/^\d+: (.+)$/s);
+        if (match) {
+          const body = JSON.parse(match[1]);
+          if (body?.message) description = body.message;
+        }
       } catch {}
       toast({ title: "Submission failed", description, variant: "destructive" });
     },
