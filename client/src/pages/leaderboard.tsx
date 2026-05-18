@@ -407,22 +407,36 @@ export default function Leaderboard() {
                     onClick={() => navigate(`/agent/${entry.walletAddress}`)}
                   >
                     <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        data-testid={`checkbox-compare-${entry.walletAddress}`}
-                        checked={selectedWallets.has(entry.walletAddress)}
-                        disabled={!selectedWallets.has(entry.walletAddress) && selectedWallets.size >= 5}
-                        onCheckedChange={() => {
-                          setSelectedWallets((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(entry.walletAddress)) {
-                              next.delete(entry.walletAddress);
-                            } else if (next.size < 5) {
-                              next.add(entry.walletAddress);
-                            }
-                            return next;
-                          });
-                        }}
-                      />
+                      {!selectedWallets.has(entry.walletAddress) && selectedWallets.size >= 6 ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex">
+                              <Checkbox
+                                data-testid={`checkbox-compare-${entry.walletAddress}`}
+                                checked={false}
+                                disabled
+                              />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">Maximum 6 agents</TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Checkbox
+                          data-testid={`checkbox-compare-${entry.walletAddress}`}
+                          checked={selectedWallets.has(entry.walletAddress)}
+                          onCheckedChange={() => {
+                            setSelectedWallets((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(entry.walletAddress)) {
+                                next.delete(entry.walletAddress);
+                              } else if (next.size < 6) {
+                                next.add(entry.walletAddress);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
                       {entry.rank}
@@ -589,15 +603,23 @@ export default function Leaderboard() {
         </p>
       </div>
 
-      {selectedWallets.size >= 2 && (
+      {selectedWallets.size >= 1 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" data-testid="compare-floating-container">
-          <Button
-            data-testid="button-compare-agents"
-            onClick={handleCompare}
-            className="shadow-lg gap-2"
-          >
-            Compare ({selectedWallets.size})
-          </Button>
+          <div className="flex items-center gap-3 rounded-lg border bg-background/95 px-4 py-2.5 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <span className="text-sm text-muted-foreground tabular-nums" data-testid="text-compare-selection-count">
+              {selectedWallets.size}/6 selected
+            </span>
+            <Button
+              data-testid="button-compare-agents"
+              onClick={handleCompare}
+              disabled={selectedWallets.size < 2}
+              size="sm"
+              className="gap-1.5"
+            >
+              Compare
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       )}
     </div>
