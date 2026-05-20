@@ -80,10 +80,13 @@ export function registerProofReadRoutes(app: Express) {
         return res.status(404).json({ message: "Proof not found" });
       }
       const [owner] = await db
-        .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
+        .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile, isTrial: users.isTrial })
         .from(users)
         .where(eq(users.id, certification.userId));
-      if (!owner?.isPublicProfile) {
+      // Trial users have synthetic wallet addresses and no real identity to
+      // protect. Allow their public certifications through even though their
+      // profile is not public (is_public_profile defaults to false for trials).
+      if (!owner?.isPublicProfile && !owner?.isTrial) {
         return res.status(404).json({ message: "Proof not found" });
       }
       const ownerWallet = owner.walletAddress;
@@ -135,10 +138,12 @@ export function registerProofReadRoutes(app: Express) {
         return res.status(404).json({ error: "No proof found for this hash" });
       }
       const [hashOwner] = await db
-        .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile })
+        .select({ walletAddress: users.walletAddress, isPublicProfile: users.isPublicProfile, isTrial: users.isTrial })
         .from(users)
         .where(eq(users.id, cert.userId));
-      if (!hashOwner?.isPublicProfile) {
+      // Same trial carve-out as /api/proof/:id — trial users have synthetic
+      // wallets and no real identity to protect.
+      if (!hashOwner?.isPublicProfile && !hashOwner?.isTrial) {
         return res.status(404).json({ error: "No proof found for this hash" });
       }
       const ownerWallet = hashOwner.walletAddress;

@@ -732,10 +732,13 @@ export function prerenderMiddleware() {
           // both certifications.isPublic AND owning users.isPublicProfile must be true.
           if (cert && cert.isPublic && cert.userId) {
             const [owner] = await db
-              .select({ isPublicProfile: users.isPublicProfile })
+              .select({ isPublicProfile: users.isPublicProfile, isTrial: users.isTrial })
               .from(users)
               .where(eq(users.id, cert.userId));
-            if (owner?.isPublicProfile) {
+            // Mirror the same trial carve-out as /api/proof/:id: trial users
+            // hold synthetic wallet addresses, so their public certifications
+            // are accessible without a public profile flag.
+            if (owner?.isPublicProfile || owner?.isTrial) {
               return res.status(200).set("Content-Type", "text/html").send(renderProofPage(baseUrl, cert));
             }
           }
