@@ -230,3 +230,59 @@ describe("GET /api/proof/hash/:hash — visibility gate", () => {
     expect(res.status).toBe(404);
   });
 });
+
+// ── Prerender parity tests ─────────────────────────────────────────────────────
+// The prerender middleware in server/prerender.ts must enforce the same
+// visibility gate as /api/proof/:id. These tests fire requests with a
+// crawler-style user-agent (no "mozilla") so the prerender middleware
+// activates, and verify that the HTML response respects is_public and
+// isPublicProfile in exactly the same way as the JSON API.
+describe("GET /proof/:id (prerender — crawler UA) — visibility gate parity", () => {
+  const crawlerHeaders = {
+    "User-Agent": "xproof-visibility-test/1.0",
+    "Accept": "text/html,*/*",
+  };
+
+  it("returns 200 HTML for a public certification owned by a trial user (trial carve-out)", async () => {
+    const res = await fetch(`${BASE_URL}/proof/${trialCertId}`, { headers: crawlerHeaders });
+
+    expect(res.status, `expected 200 but got ${res.status}`).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/text\/html/);
+    const html = await res.text();
+    expect(html).toContain("trial-fixture.txt");
+  });
+
+  it("returns 404 HTML for a public certification whose owner has is_public_profile = false and is not a trial user", async () => {
+    const res = await fetch(`${BASE_URL}/proof/${privateCertId}`, { headers: crawlerHeaders });
+
+    expect(res.status, `expected 404 but got ${res.status}`).toBe(404);
+    expect(res.headers.get("content-type")).toMatch(/text\/html/);
+    const html = await res.text();
+    expect(html).toContain("not found");
+  });
+
+  it("returns 200 HTML for a public certification owned by a non-trial user with is_public_profile = true", async () => {
+    const res = await fetch(`${BASE_URL}/proof/${publicCertId}`, { headers: crawlerHeaders });
+
+    expect(res.status, `expected 200 but got ${res.status}`).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/text\/html/);
+    const html = await res.text();
+    expect(html).toContain("public-fixture.txt");
+  });
+
+  it("returns 404 HTML for a certification with is_public = FALSE even when the owner has a public profile", async () => {
+    const res = await fetch(`${BASE_URL}/proof/${privateCertOwnedByPublicProfileId}`, { headers: crawlerHeaders });
+
+    expect(res.status, `expected 404 but got ${res.status}`).toBe(404);
+    expect(res.headers.get("content-type")).toMatch(/text\/html/);
+    const html = await res.text();
+    expect(html).toContain("not found");
+  });
+
+  it("returns 404 HTML for an unknown proof id", async () => {
+    const res = await fetch(`${BASE_URL}/proof/00000000-0000-0000-0000-000000000000`, { headers: crawlerHeaders });
+
+    expect(res.status, `expected 404 but got ${res.status}`).toBe(404);
+    expect(res.headers.get("content-type")).toMatch(/text\/html/);
+  });
+});
