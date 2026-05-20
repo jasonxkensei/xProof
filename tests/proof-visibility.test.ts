@@ -18,21 +18,25 @@ const BASE_URL = "http://localhost:5000";
 
 // ── Stable test fixtures ──────────────────────────────────────────────────────
 // Unique wallet addresses that will never collide with real data.
-const TRIAL_WALLET    = "erd1prooftest_trial_000000000000000000000000000000000000000000";
-const NONTRIAL_WALLET = "erd1prooftest_private000000000000000000000000000000000000000000";
-const PUBLIC_WALLET   = "erd1prooftest_public000000000000000000000000000000000000000000";
+const TRIAL_WALLET          = "erd1prooftest_trial_000000000000000000000000000000000000000000";
+const NONTRIAL_WALLET       = "erd1prooftest_private000000000000000000000000000000000000000000";
+const PUBLIC_WALLET         = "erd1prooftest_public000000000000000000000000000000000000000000";
+const PUBLIC_PROFILE_WALLET = "erd1prooftest_pubprofile0000000000000000000000000000000000000000";
 
 // Deterministic file hashes for each fixture certification.
-const TRIAL_FILE_HASH   = crypto.createHash("sha256").update("proof-visibility-trial-fixture-v1").digest("hex");
-const PRIVATE_FILE_HASH = crypto.createHash("sha256").update("proof-visibility-private-fixture-v1").digest("hex");
-const PUBLIC_FILE_HASH  = crypto.createHash("sha256").update("proof-visibility-public-fixture-v1").digest("hex");
+const TRIAL_FILE_HASH        = crypto.createHash("sha256").update("proof-visibility-trial-fixture-v1").digest("hex");
+const PRIVATE_FILE_HASH      = crypto.createHash("sha256").update("proof-visibility-private-fixture-v1").digest("hex");
+const PUBLIC_FILE_HASH       = crypto.createHash("sha256").update("proof-visibility-public-fixture-v1").digest("hex");
+const PRIVATE_CERT_FILE_HASH = crypto.createHash("sha256").update("proof-visibility-private-cert-fixture-v1").digest("hex");
 
-let trialUserId   = "";
-let trialCertId   = "";
-let privateUserId = "";
-let privateCertId = "";
-let publicUserId  = "";
-let publicCertId  = "";
+let trialUserId       = "";
+let trialCertId       = "";
+let privateUserId     = "";
+let privateCertId     = "";
+let publicUserId      = "";
+let publicCertId      = "";
+let publicProfileUserId = "";
+let privateCertOwnedByPublicProfileId = "";
 
 // ── Setup / teardown ──────────────────────────────────────────────────────────
 beforeAll(async () => {
@@ -101,6 +105,30 @@ beforeAll(async () => {
     [privateUserId, PRIVATE_FILE_HASH],
   );
   privateCertId = privateCertRow.rows[0].id;
+
+  // ── Public-profile user: is_trial = FALSE, is_public_profile = TRUE ────────
+  // This user has a public profile, but owns a certification with is_public = FALSE.
+  // Both proof endpoints must still return 404 for that certification.
+  const publicProfileUserRow = await pool.query<{ id: string }>(
+    `INSERT INTO users (wallet_address, is_trial, is_public_profile)
+     VALUES ($1, FALSE, TRUE)
+     ON CONFLICT (wallet_address)
+     DO UPDATE SET is_trial = FALSE, is_public_profile = TRUE
+     RETURNING id`,
+    [PUBLIC_PROFILE_WALLET],
+  );
+  publicProfileUserId = publicProfileUserRow.rows[0].id;
+
+  // Private certification (is_public = FALSE) owned by the public-profile user.
+  const privateCertPublicProfileRow = await pool.query<{ id: string }>(
+    `INSERT INTO certifications (user_id, file_name, file_hash, is_public, blockchain_status)
+     VALUES ($1, 'private-cert-fixture.txt', $2, FALSE, 'pending')
+     ON CONFLICT (file_hash)
+     DO UPDATE SET user_id = $1, is_public = FALSE
+     RETURNING id`,
+    [publicProfileUserId, PRIVATE_CERT_FILE_HASH],
+  );
+  privateCertOwnedByPublicProfileId = privateCertPublicProfileRow.rows[0].id;
 });
 
 afterAll(async () => {
@@ -108,11 +136,11 @@ afterAll(async () => {
   // Certifications must go first (FK → users).
   await pool.query(
     `DELETE FROM certifications WHERE file_hash = ANY($1)`,
-    [[TRIAL_FILE_HASH, PRIVATE_FILE_HASH, PUBLIC_FILE_HASH]],
+    [[TRIAL_FILE_HASH, PRIVATE_FILE_HASH, PUBLIC_FILE_HASH, PRIVATE_CERT_FILE_HASH]],
   );
   await pool.query(
     `DELETE FROM users WHERE wallet_address = ANY($1)`,
-    [[TRIAL_WALLET, NONTRIAL_WALLET, PUBLIC_WALLET]],
+    [[TRIAL_WALLET, NONTRIAL_WALLET, PUBLIC_WALLET, PUBLIC_PROFILE_WALLET]],
   );
 });
 
@@ -145,6 +173,13 @@ describe("GET /api/proof/:id — visibility gate", () => {
     expect(body.isPublic).toBe(true);
   });
 
+  it("returns 404 for a certification with is_public = FALSE even when the owner has a public profile", async () => {
+    const res  = await fetch(`${BASE_URL}/api/proof/${privateCertOwnedByPublicProfileId}`);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status, `expected 404 but got ${res.status}: ${JSON.stringify(body)}`).toBe(404);
+  });
+
   it("returns 404 for an unknown proof id", async () => {
     const res = await fetch(`${BASE_URL}/api/proof/00000000-0000-0000-0000-000000000000`);
     expect(res.status).toBe(404);
@@ -175,6 +210,13 @@ describe("GET /api/proof/hash/:hash — visibility gate", () => {
     expect(res.status, `expected 200 but got ${res.status}: ${JSON.stringify(body)}`).toBe(200);
     expect(body.proof_id).toBe(publicCertId);
     expect(body.file_hash).toBe(PUBLIC_FILE_HASH);
+  });
+
+  it("returns 404 for a certification with is_public = FALSE even when the owner has a public profile", async () => {
+    const res  = await fetch(`${BASE_URL}/api/proof/hash/${PRIVATE_CERT_FILE_HASH}`);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status, `expected 404 but got ${res.status}: ${JSON.stringify(body)}`).toBe(404);
   });
 
   it("returns 400 for a malformed hash", async () => {
