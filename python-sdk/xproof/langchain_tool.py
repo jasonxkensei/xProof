@@ -247,7 +247,8 @@ class XProofCertifyTool(BaseTool):  # type: ignore[misc]  # BaseTool is Any when
 
         if not check.policy_compliant:
             violation_lines = [
-                f"[{v.severity.upper()}] {v.rule}: {v.message}" for v in check.policy_violations
+                f"[POLICY VIOLATION] {v.rule} (proof_id={v.proof_id}, confidence_level={v.confidence_level}, threshold={v.threshold})"
+                for v in check.policy_violations
             ]
             summary = "; ".join(violation_lines)
             raise PolicyViolationError(

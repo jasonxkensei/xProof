@@ -135,18 +135,35 @@ class ContextDrift:
 
 @dataclass
 class PolicyViolation:
-    """A single policy violation detected by the server."""
+    """A single policy violation detected by the server.
 
+    Matches the shape returned by ``GET /api/confidence-trail/{id}`` and
+    ``GET /api/proofs/policy-check``:
+
+    - ``proof_id`` — the certification that triggered the violation
+    - ``confidence_level`` — confidence at which the proof was anchored
+    - ``reversibility_class`` — governance class of the action
+    - ``threshold_stage`` — decision stage (initial / partial / pre-commitment / final)
+    - ``threshold`` — minimum confidence required (e.g. 0.95 for irreversible)
+    - ``rule`` — machine-readable rule identifier
+    """
+
+    proof_id: str
+    confidence_level: Optional[float]
+    reversibility_class: str
+    threshold_stage: Optional[str]
+    threshold: float
     rule: str
-    message: str
-    severity: str = "error"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "PolicyViolation":
         return cls(
+            proof_id=data.get("proof_id", ""),
+            confidence_level=data.get("confidence_level"),
+            reversibility_class=data.get("reversibility_class", ""),
+            threshold_stage=data.get("threshold_stage"),
+            threshold=float(data.get("threshold", 0.0)),
             rule=data.get("rule", ""),
-            message=data.get("message", ""),
-            severity=data.get("severity", "error"),
         )
 
 

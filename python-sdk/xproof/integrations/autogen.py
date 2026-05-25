@@ -284,7 +284,7 @@ def xproof_certify_decision(
             print(f"Policy compliant — proceeding (tx: {tx_hash})")
         except PolicyViolationError as exc:
             for v in exc.violations:
-                print(f"BLOCKED [{v.severity.upper()}] {v.rule}: {v.message}")
+                print(f"BLOCKED [POLICY VIOLATION] {v.rule} (proof_id={v.proof_id}, confidence_level={v.confidence_level}, threshold={v.threshold})")
     """
     if not decision_id:
         raise ValueError("decision_id must be provided.")
@@ -321,7 +321,8 @@ def xproof_certify_decision(
 
     if not check.policy_compliant:
         violation_lines = [
-            f"[{v.severity.upper()}] {v.rule}: {v.message}" for v in check.policy_violations
+            f"[POLICY VIOLATION] {v.rule} (proof_id={v.proof_id}, confidence_level={v.confidence_level}, threshold={v.threshold})"
+            for v in check.policy_violations
         ]
         summary = "; ".join(violation_lines)
         raise PolicyViolationError(

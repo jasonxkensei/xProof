@@ -44,8 +44,11 @@ def _emit_violation(decision_id: str, violation: PolicyViolation) -> None:
         "event": "policy_violation",
         "decision_id": decision_id,
         "rule": violation.rule,
-        "severity": violation.severity,
-        "message": violation.message,
+        "proof_id": violation.proof_id,
+        "confidence_level": violation.confidence_level,
+        "reversibility_class": violation.reversibility_class,
+        "threshold_stage": violation.threshold_stage,
+        "threshold": violation.threshold,
     }
     logger.error(json.dumps(payload))
 
@@ -70,9 +73,12 @@ def build_mock_client(decision_id: str) -> MagicMock:
     calls."""
 
     violation_data = {
+        "proof_id": "proof-retention-demo",
+        "confidence_level": 0.6,
+        "reversibility_class": "irreversible",
+        "threshold_stage": "partial",
+        "threshold": 0.95,
         "rule": "data-retention-90d",
-        "severity": "error",
-        "message": "Document retention period exceeds the 90-day policy limit.",
     }
 
     policy_check = PolicyCheckResult.from_dict(
@@ -141,8 +147,9 @@ def run(decision_id: str) -> None:
             emitted.append(
                 {
                     "rule": v.rule,
-                    "severity": v.severity,
-                    "message": v.message,
+                    "proof_id": v.proof_id,
+                    "confidence_level": v.confidence_level,
+                    "threshold": v.threshold,
                 }
             )
 
@@ -213,8 +220,11 @@ def _emit_violation_with_url(
         "event": "policy_violation",
         "decision_id": decision_id,
         "rule": violation.rule,
-        "severity": violation.severity,
-        "message": violation.message,
+        "proof_id": violation.proof_id,
+        "confidence_level": violation.confidence_level,
+        "reversibility_class": violation.reversibility_class,
+        "threshold_stage": violation.threshold_stage,
+        "threshold": violation.threshold,
     }
     logger.error(json.dumps(payload))
 
@@ -386,7 +396,9 @@ def run_crewai_certification(decision_id: str) -> None:
                     "result": "blocked",
                     "tool": "XProofCrewCertifyTool",
                     "rule": v.rule,
-                    "severity": v.severity,
+                    "proof_id": v.proof_id,
+                    "confidence_level": v.confidence_level,
+                    "threshold": v.threshold,
                 }
             )
         )
@@ -456,7 +468,9 @@ def run_autogen_certification(decision_id: str) -> None:
                     "result": "blocked",
                     "tool": "xproof_certify_decision",
                     "rule": v.rule,
-                    "severity": v.severity,
+                    "proof_id": v.proof_id,
+                    "confidence_level": v.confidence_level,
+                    "threshold": v.threshold,
                 }
             )
         )

@@ -51,12 +51,12 @@ def _build_mock_client(decision_id: str, *, compliant: bool) -> MagicMock:
         if compliant
         else [
             {
-                "rule": "irreversible-above-threshold",
-                "severity": "error",
-                "message": (
-                    "Irreversible action requires confidence_level >= 0.95; "
-                    "got 0.82."
-                ),
+                "proof_id": "proof-langchain-demo-blocked",
+                "confidence_level": 0.82,
+                "reversibility_class": "irreversible",
+                "threshold_stage": "pre-commitment",
+                "threshold": 0.95,
+                "rule": "irreversible actions require confidence_level >= 0.95",
             }
         ]
     )
@@ -100,7 +100,7 @@ def run_compliant_scenario(base_decision_id: str) -> None:
         # delete_pii_records("eu-region")   # your actual execution here
     except PolicyViolationError as exc:
         for v in exc.violations:
-            print(f"  BLOCKED [{v.severity.upper()}] {v.rule}: {v.message}")
+            print(f"  BLOCKED [POLICY VIOLATION] {v.rule} (proof_id={v.proof_id}, confidence_level={v.confidence_level}, threshold={v.threshold})")
         raise RuntimeError("Deletion aborted: policy compliance check failed.") from exc
 
     print()
@@ -129,7 +129,7 @@ def run_blocked_scenario(base_decision_id: str) -> None:
         raise AssertionError("Expected PolicyViolationError was not raised")
     except PolicyViolationError as exc:
         for v in exc.violations:
-            print(f"  BLOCKED [{v.severity.upper()}] {v.rule}: {v.message}")
+            print(f"  BLOCKED [POLICY VIOLATION] {v.rule} (proof_id={v.proof_id}, confidence_level={v.confidence_level}, threshold={v.threshold})")
         print("  Deletion aborted — audit trail preserved on-chain.")
 
     print()

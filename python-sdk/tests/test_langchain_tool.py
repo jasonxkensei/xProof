@@ -77,9 +77,12 @@ def test_policy_violation_raises_policy_violation_error(tool, mock_client):
     """When policy_compliant is False, PolicyViolationError is raised."""
     violations = [
         PolicyViolation(
+            proof_id="proof-001",
+            confidence_level=0.5,
+            reversibility_class="irreversible",
+            threshold_stage="final",
+            threshold=0.95,
             rule="irreversible_confidence_threshold",
-            message="Confidence too low for irreversible action",
-            severity="error",
         )
     ]
     mock_client.get_policy_check.return_value = _make_violation_check(violations)
@@ -98,14 +101,20 @@ def test_policy_violation_error_includes_violations_list(tool, mock_client):
     """PolicyViolationError.violations contains the full list of PolicyViolation objects."""
     violations = [
         PolicyViolation(
+            proof_id="proof-002",
+            confidence_level=0.4,
+            reversibility_class="irreversible",
+            threshold_stage="partial",
+            threshold=0.95,
             rule="irreversible_confidence_threshold",
-            message="Confidence too low for irreversible action",
-            severity="error",
         ),
         PolicyViolation(
+            proof_id="proof-003",
+            confidence_level=None,
+            reversibility_class="irreversible",
+            threshold_stage=None,
+            threshold=0.95,
             rule="missing_reversibility_class",
-            message="Anchor at stage 'partial' lacks a reversibility_class field",
-            severity="warning",
         ),
     ]
     mock_client.get_policy_check.return_value = _make_violation_check(violations)
@@ -228,7 +237,7 @@ def test_raises_value_error_when_no_hash_source(tool, mock_client):
 
 def test_policy_violation_error_message_contains_decision_id(tool, mock_client):
     """The PolicyViolationError message includes the decision_id for traceability."""
-    violations = [PolicyViolation(rule="some_rule", message="Some violation", severity="error")]
+    violations = [PolicyViolation(proof_id="proof-004", confidence_level=0.5, reversibility_class="irreversible", threshold_stage="partial", threshold=0.95, rule="some_rule")]
     mock_client.get_policy_check.return_value = _make_violation_check(violations)
 
     with pytest.raises(PolicyViolationError) as exc_info:
@@ -242,13 +251,16 @@ def test_policy_violation_error_message_contains_decision_id(tool, mock_client):
     assert DECISION_ID in str(exc_info.value)
 
 
-def test_violation_error_message_contains_severity_and_rule(tool, mock_client):
-    """The PolicyViolationError message includes severity and rule for each violation."""
+def test_violation_error_message_contains_rule_and_proof_id(tool, mock_client):
+    """The PolicyViolationError message includes the rule and proof_id for each violation."""
     violations = [
         PolicyViolation(
+            proof_id="proof-005",
+            confidence_level=0.3,
+            reversibility_class="irreversible",
+            threshold_stage="pre-commitment",
+            threshold=0.95,
             rule="irreversible_confidence_threshold",
-            message="Confidence too low",
-            severity="error",
         )
     ]
     mock_client.get_policy_check.return_value = _make_violation_check(violations)
@@ -262,8 +274,9 @@ def test_violation_error_message_contains_severity_and_rule(tool, mock_client):
         )
 
     error_message = str(exc_info.value)
-    assert "ERROR" in error_message
+    assert "POLICY VIOLATION" in error_message
     assert "irreversible_confidence_threshold" in error_message
+    assert "proof-005" in error_message
 
 
 # ---------------------------------------------------------------------------
@@ -291,9 +304,12 @@ async def test_arun_policy_violation_raises_policy_violation_error(tool, mock_cl
     """_arun propagates PolicyViolationError when the policy check fails."""
     violations = [
         PolicyViolation(
+            proof_id="proof-006",
+            confidence_level=0.5,
+            reversibility_class="irreversible",
+            threshold_stage="final",
+            threshold=0.95,
             rule="irreversible_confidence_threshold",
-            message="Confidence too low for irreversible action",
-            severity="error",
         )
     ]
     mock_client.get_policy_check.return_value = _make_violation_check(violations)

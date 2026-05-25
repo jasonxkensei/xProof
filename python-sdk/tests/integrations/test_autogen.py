@@ -309,7 +309,14 @@ def test_xproof_certify_decision_raises_policy_violation_error(mock_client_cwc):
     mock_client_cwc.get_policy_check.return_value = MagicMock(
         policy_compliant=False,
         policy_violations=[
-            PolicyViolation(rule="confidence_below_threshold", message="Too low", severity="error")
+            PolicyViolation(
+                proof_id="proof-ag-001",
+                confidence_level=0.5,
+                reversibility_class="irreversible",
+                threshold_stage="partial",
+                threshold=0.95,
+                rule="confidence_below_threshold",
+            )
         ],
     )
     with pytest.raises(PolicyViolationError):

@@ -182,9 +182,12 @@ def test_get_confidence_trail_with_policy_violations():
             "policy_compliant": False,
             "policy_violations": [
                 {
-                    "rule": "irreversible_confidence_threshold",
-                    "message": "Irreversible action certified below confidence threshold",
-                    "severity": "error",
+                    "proof_id": "proof-v",
+                    "confidence_level": 0.5,
+                    "reversibility_class": "irreversible",
+                    "threshold_stage": "partial",
+                    "threshold": 0.95,
+                    "rule": "irreversible actions require confidence_level >= 0.95",
                 }
             ],
             "stages": [
@@ -198,9 +201,12 @@ def test_get_confidence_trail_with_policy_violations():
                     "transaction_url": "",
                     "policy_violations": [
                         {
-                            "rule": "irreversible_confidence_threshold",
-                            "message": "Irreversible action certified below confidence threshold",
-                            "severity": "error",
+                            "proof_id": "proof-v",
+                            "confidence_level": 0.5,
+                            "reversibility_class": "irreversible",
+                            "threshold_stage": "partial",
+                            "threshold": 0.95,
+                            "rule": "irreversible actions require confidence_level >= 0.95",
                         }
                     ],
                 }
@@ -216,15 +222,19 @@ def test_get_confidence_trail_with_policy_violations():
 
     v = trail.policy_violations[0]
     assert isinstance(v, PolicyViolation)
-    assert v.rule == "irreversible_confidence_threshold"
-    assert v.message == "Irreversible action certified below confidence threshold"
-    assert v.severity == "error"
+    assert v.proof_id == "proof-v"
+    assert v.confidence_level == 0.5
+    assert v.reversibility_class == "irreversible"
+    assert v.threshold_stage == "partial"
+    assert v.threshold == 0.95
+    assert v.rule == "irreversible actions require confidence_level >= 0.95"
 
     stage = trail.stages[0]
     assert len(stage.policy_violations) == 1
     sv = stage.policy_violations[0]
     assert isinstance(sv, PolicyViolation)
-    assert sv.rule == "irreversible_confidence_threshold"
+    assert sv.proof_id == "proof-v"
+    assert sv.rule == "irreversible actions require confidence_level >= 0.95"
 
 
 @responses.activate

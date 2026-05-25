@@ -49,14 +49,20 @@ def test_get_policy_check_non_compliant():
             "policy_compliant": False,
             "policy_violations": [
                 {
-                    "rule": "irreversible_confidence_threshold",
-                    "message": "Irreversible action certified below required confidence threshold (0.9)",
-                    "severity": "error",
+                    "proof_id": "proof-xyz-1",
+                    "confidence_level": 0.7,
+                    "reversibility_class": "irreversible",
+                    "threshold_stage": "partial",
+                    "threshold": 0.95,
+                    "rule": "irreversible actions require confidence_level >= 0.95",
                 },
                 {
-                    "rule": "missing_reversibility_class",
-                    "message": "Anchor at stage 'partial' lacks a reversibility_class field",
-                    "severity": "warning",
+                    "proof_id": "proof-xyz-2",
+                    "confidence_level": None,
+                    "reversibility_class": "irreversible",
+                    "threshold_stage": None,
+                    "threshold": 0.95,
+                    "rule": "irreversible actions require confidence_level >= 0.95",
                 },
             ],
             "total_anchors": 2,
@@ -77,16 +83,19 @@ def test_get_policy_check_non_compliant():
 
     first = result.policy_violations[0]
     assert isinstance(first, PolicyViolation)
-    assert first.rule == "irreversible_confidence_threshold"
-    assert (
-        first.message == "Irreversible action certified below required confidence threshold (0.9)"
-    )
-    assert first.severity == "error"
+    assert first.proof_id == "proof-xyz-1"
+    assert first.confidence_level == 0.7
+    assert first.reversibility_class == "irreversible"
+    assert first.threshold_stage == "partial"
+    assert first.threshold == 0.95
+    assert first.rule == "irreversible actions require confidence_level >= 0.95"
 
     second = result.policy_violations[1]
     assert isinstance(second, PolicyViolation)
-    assert second.rule == "missing_reversibility_class"
-    assert second.severity == "warning"
+    assert second.proof_id == "proof-xyz-2"
+    assert second.confidence_level is None
+    assert second.threshold_stage is None
+    assert second.rule == "irreversible actions require confidence_level >= 0.95"
 
 
 @responses.activate

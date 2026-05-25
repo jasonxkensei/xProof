@@ -200,7 +200,12 @@ class TestXProofCrewCertifyTool:
             policy_compliant=False,
             policy_violations=[
                 PolicyViolation(
-                    rule="confidence_below_threshold", message="Too low", severity="error"
+                    proof_id="proof-crew-001",
+                    confidence_level=0.5,
+                    reversibility_class="irreversible",
+                    threshold_stage="partial",
+                    threshold=0.95,
+                    rule="confidence_below_threshold",
                 )
             ],
         )

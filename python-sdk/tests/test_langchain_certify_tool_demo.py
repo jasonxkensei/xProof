@@ -78,7 +78,7 @@ def test_blocked_scenario_violation_rule() -> None:
 
     violations = exc_info.value.violations
     assert len(violations) == 1
-    assert violations[0].rule == "irreversible-above-threshold"
+    assert violations[0].rule == "irreversible actions require confidence_level >= 0.95"
 
 
 def test_compliant_scenario_transaction_hash() -> None:
