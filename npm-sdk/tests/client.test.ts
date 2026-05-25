@@ -599,7 +599,7 @@ describe("XProofClient", () => {
       createdAt: "2026-04-22T10:00:00Z",
     };
 
-    it("sends timing fields as snake_case inside metadata.timing_breakdown", async () => {
+    it("sends timing fields as flat snake_case keys directly in metadata", async () => {
       const fetchMock = mockFetch(201, okResponse);
       globalThis.fetch = fetchMock;
 
@@ -622,15 +622,16 @@ describe("XProofClient", () => {
       );
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-      const tb = body.metadata?.timing_breakdown;
-      expect(tb).toBeDefined();
-      expect(tb.instruction_received_at).toBe("2026-04-22T09:59:50Z");
-      expect(tb.reasoning_started_at).toBe("2026-04-22T09:59:51Z");
-      expect(tb.action_taken_at).toBe("2026-04-22T09:59:58Z");
-      expect(tb.jurisdiction_type).toBe("autonomous_inference");
+      const meta = body.metadata;
+      expect(meta).toBeDefined();
+      expect(meta.instruction_received_at).toBe("2026-04-22T09:59:50Z");
+      expect(meta.reasoning_started_at).toBe("2026-04-22T09:59:51Z");
+      expect(meta.action_taken_at).toBe("2026-04-22T09:59:58Z");
+      expect(meta.jurisdiction_type).toBe("autonomous_inference");
+      expect(meta.timing_breakdown).toBeUndefined();
     });
 
-    it("omits timing_breakdown from metadata when no timing provided", async () => {
+    it("omits timing keys from metadata when no timing provided", async () => {
       const fetchMock = mockFetch(201, okResponse);
       globalThis.fetch = fetchMock;
 
@@ -647,7 +648,12 @@ describe("XProofClient", () => {
       );
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-      expect(body.metadata?.timing_breakdown).toBeUndefined();
+      const meta = body.metadata;
+      expect(meta?.timing_breakdown).toBeUndefined();
+      expect(meta?.instruction_received_at).toBeUndefined();
+      expect(meta?.reasoning_started_at).toBeUndefined();
+      expect(meta?.action_taken_at).toBeUndefined();
+      expect(meta?.jurisdiction_type).toBeUndefined();
     });
 
     it("accepts partial timing (only some fields provided)", async () => {
@@ -670,12 +676,13 @@ describe("XProofClient", () => {
       );
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-      const tb = body.metadata?.timing_breakdown;
-      expect(tb).toBeDefined();
-      expect(tb.instruction_received_at).toBe("2026-04-22T10:00:00Z");
-      expect(tb.reasoning_started_at).toBeUndefined();
-      expect(tb.action_taken_at).toBeUndefined();
-      expect(tb.jurisdiction_type).toBeUndefined();
+      const meta = body.metadata;
+      expect(meta).toBeDefined();
+      expect(meta.instruction_received_at).toBe("2026-04-22T10:00:00Z");
+      expect(meta.reasoning_started_at).toBeUndefined();
+      expect(meta.action_taken_at).toBeUndefined();
+      expect(meta.jurisdiction_type).toBeUndefined();
+      expect(meta.timing_breakdown).toBeUndefined();
     });
 
     it("throws ValidationError for invalid jurisdictionType without hitting the network", async () => {
@@ -728,7 +735,8 @@ describe("XProofClient", () => {
         ).resolves.toBeDefined();
 
         const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-        expect(body.metadata.timing_breakdown.jurisdiction_type).toBe(jt);
+        expect(body.metadata.jurisdiction_type).toBe(jt);
+        expect(body.metadata.timing_breakdown).toBeUndefined();
       }
     });
 
@@ -754,11 +762,12 @@ describe("XProofClient", () => {
       );
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-      const tb = body.metadata?.timing_breakdown;
-      expect(tb).toBeDefined();
-      expect(tb.instruction_received_at).toBe("2026-04-22T10:00:00Z");
-      expect(tb.reasoning_duration_ms).toBeUndefined();
-      expect(tb.total_duration_ms).toBeUndefined();
+      const meta = body.metadata;
+      expect(meta).toBeDefined();
+      expect(meta.instruction_received_at).toBe("2026-04-22T10:00:00Z");
+      expect(meta.reasoning_duration_ms).toBeUndefined();
+      expect(meta.total_duration_ms).toBeUndefined();
+      expect(meta.timing_breakdown).toBeUndefined();
     });
   });
 });

@@ -284,6 +284,17 @@ class Certification:
         raw_timing: Optional[dict[str, Any]] = data.get(
             "timing_breakdown", metadata.get("timing_breakdown")
         )
+        if not raw_timing:
+            _TIMING_FLAT_KEYS = frozenset((
+                "instruction_received_at",
+                "reasoning_started_at",
+                "action_taken_at",
+                "jurisdiction_type",
+                "reasoning_duration_ms",
+                "total_duration_ms",
+            ))
+            if any(k in metadata for k in _TIMING_FLAT_KEYS):
+                raw_timing = metadata
         timing: Optional[TimingBreakdown] = None
         if raw_timing and isinstance(raw_timing, dict):
             tb: TimingBreakdown = {}

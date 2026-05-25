@@ -228,4 +228,59 @@ describe("parseCertification — timingBreakdown", () => {
     expect(cert.timingBreakdown!.reasoningDurationMs).toBeUndefined();
     expect(cert.timingBreakdown!.totalDurationMs).toBeUndefined();
   });
+
+  it("deserialises timing from flat keys stored directly in metadata (canonical backend format)", () => {
+    const data = {
+      id: "p-flat-timing",
+      metadata: {
+        confidence_level: 0.95,
+        threshold_stage: "final",
+        decision_id: "dec-flat-01",
+        instruction_received_at: "2026-04-22T09:59:50Z",
+        reasoning_started_at: "2026-04-22T09:59:51Z",
+        action_taken_at: "2026-04-22T09:59:58Z",
+        jurisdiction_type: "autonomous_inference",
+        reasoning_duration_ms: 7000,
+        total_duration_ms: 8000,
+      },
+    };
+    const cert = parseCertification(data);
+    expect(cert.timingBreakdown).toBeDefined();
+    expect(cert.timingBreakdown!.instructionReceivedAt).toBe("2026-04-22T09:59:50Z");
+    expect(cert.timingBreakdown!.reasoningStartedAt).toBe("2026-04-22T09:59:51Z");
+    expect(cert.timingBreakdown!.actionTakenAt).toBe("2026-04-22T09:59:58Z");
+    expect(cert.timingBreakdown!.jurisdictionType).toBe("autonomous_inference");
+    expect(cert.timingBreakdown!.reasoningDurationMs).toBe(7000);
+    expect(cert.timingBreakdown!.totalDurationMs).toBe(8000);
+  });
+
+  it("flat timing keys in metadata do not override top-level timing_breakdown", () => {
+    const data = {
+      id: "p-flat-vs-top",
+      timing_breakdown: {
+        instruction_received_at: "2026-04-22T10:00:00Z",
+        jurisdiction_type: "human_approved",
+      },
+      metadata: {
+        instruction_received_at: "1970-01-01T00:00:00Z",
+        jurisdiction_type: "instruction_following",
+      },
+    };
+    const cert = parseCertification(data);
+    expect(cert.timingBreakdown!.instructionReceivedAt).toBe("2026-04-22T10:00:00Z");
+    expect(cert.timingBreakdown!.jurisdictionType).toBe("human_approved");
+  });
+
+  it("returns undefined when metadata has no timing keys", () => {
+    const data = {
+      id: "p-meta-no-timing",
+      metadata: {
+        confidence_level: 0.9,
+        threshold_stage: "partial",
+        decision_id: "dec-no-timing",
+      },
+    };
+    const cert = parseCertification(data);
+    expect(cert.timingBreakdown).toBeUndefined();
+  });
 });

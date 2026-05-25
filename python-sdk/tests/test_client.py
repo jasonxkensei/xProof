@@ -1186,6 +1186,45 @@ def test_certification_from_dict_timing_breakdown_none_when_absent():
 
 
 @responses.activate
+def test_certification_from_dict_parses_flat_timing_keys_from_metadata():
+    """Certification.from_dict reads timing from flat keys in metadata (canonical backend format)."""
+    api_response = {
+        **CERT_RESPONSE,
+        "metadata": {
+            "confidence_level": 0.95,
+            "threshold_stage": "final",
+            "decision_id": "dec-flat-timing",
+            "instruction_received_at": "2026-04-20T14:30:00Z",
+            "reasoning_started_at": "2026-04-20T14:30:01Z",
+            "action_taken_at": "2026-04-20T14:30:05Z",
+            "jurisdiction_type": "autonomous_inference",
+            "reasoning_duration_ms": 4000,
+            "total_duration_ms": 5000,
+        },
+    }
+    responses.add(responses.POST, f"{BASE}/api/proof", json=api_response, status=201)
+    client = XProofClient(api_key="pm_test")
+    from xproof import TimingBreakdown
+
+    cert = client.certify_with_confidence(
+        file_hash="a" * 64,
+        file_name="flat-timing.json",
+        author="AgentX",
+        confidence_level=0.95,
+        threshold_stage="final",
+        decision_id="dec-flat-timing",
+    )
+    assert cert.timing_breakdown is not None
+    tb: TimingBreakdown = cert.timing_breakdown
+    assert tb["instruction_received_at"] == "2026-04-20T14:30:00Z"
+    assert tb["reasoning_started_at"] == "2026-04-20T14:30:01Z"
+    assert tb["action_taken_at"] == "2026-04-20T14:30:05Z"
+    assert tb["jurisdiction_type"] == "autonomous_inference"
+    assert tb["reasoning_duration_ms"] == 4000
+    assert tb["total_duration_ms"] == 5000
+
+
+@responses.activate
 def test_certify_with_confidence_timing_and_4w_combined():
     """timing fields coexist with 4W fields in metadata without conflict."""
     from xproof import TimingBreakdown

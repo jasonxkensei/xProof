@@ -199,17 +199,14 @@ export class XProofClient {
           {}
         );
       }
-      const timingSnake: Record<string, unknown> = {};
       if (t.instructionReceivedAt !== undefined)
-        timingSnake.instruction_received_at = t.instructionReceivedAt;
+        metadata.instruction_received_at = t.instructionReceivedAt;
       if (t.reasoningStartedAt !== undefined)
-        timingSnake.reasoning_started_at = t.reasoningStartedAt;
+        metadata.reasoning_started_at = t.reasoningStartedAt;
       if (t.actionTakenAt !== undefined)
-        timingSnake.action_taken_at = t.actionTakenAt;
+        metadata.action_taken_at = t.actionTakenAt;
       if (t.jurisdictionType !== undefined)
-        timingSnake.jurisdiction_type = t.jurisdictionType;
-      if (Object.keys(timingSnake).length > 0)
-        metadata.timing_breakdown = timingSnake;
+        metadata.jurisdiction_type = t.jurisdictionType;
     }
 
     const payload: Record<string, unknown> = {

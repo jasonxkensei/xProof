@@ -47,10 +47,19 @@ function parseTimingBreakdown(
 export function parseCertification(data: Record<string, unknown>): Certification {
   const blockchain = (data.blockchain as Record<string, unknown>) || {};
 
+  const _meta = data.metadata as Record<string, unknown> | undefined;
+  const _TIMING_KEYS = [
+    "instruction_received_at",
+    "reasoning_started_at",
+    "action_taken_at",
+    "jurisdiction_type",
+    "reasoning_duration_ms",
+    "total_duration_ms",
+  ] as const;
   const rawTiming =
     (data.timing_breakdown as Record<string, unknown> | undefined) ??
-    ((data.metadata as Record<string, unknown> | undefined)
-      ?.timing_breakdown as Record<string, unknown> | undefined);
+    (_meta?.timing_breakdown as Record<string, unknown> | undefined) ??
+    (_meta && _TIMING_KEYS.some((k) => _meta[k] != null) ? _meta : undefined);
 
   return {
     id: (data.id as string) || (data.proof_id as string) || "",
