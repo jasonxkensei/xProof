@@ -181,7 +181,7 @@ export default function Landing() {
         <div className="mx-auto max-w-5xl text-center">
           <Badge variant="secondary" className="mb-6 px-4 py-1.5">
             <Shield className="mr-2 h-3.5 w-3.5" />
-            The on-chain notary for AI agents
+            Verifiable Intent — the 5th pillar of the MultiversX Machine Economy Stack
           </Badge>
           
           <h1 className="mb-6 text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
@@ -251,6 +251,62 @@ export default function Landing() {
           )}
         </div>
       </section>
+      {/* Machine Economy Stack */}
+      <section className="border-t bg-muted/20 py-12 md:py-16">
+        <div className="container">
+          <div className="mx-auto max-w-4xl">
+            <p className="mb-8 text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              MultiversX Machine Economy Stack
+            </p>
+            <div className="flex flex-col sm:flex-row items-stretch gap-3 sm:gap-0">
+              {[
+                { id: "MX-8004", label: "Identity", desc: "Who is the agent?" },
+                { id: "AP2", label: "Authority", desc: "Is it authorised?" },
+                { id: "MCP", label: "Communication", desc: "What did it request?" },
+                { id: "x402", label: "Payments", desc: "What did it pay?" },
+                { id: "xProof", label: "Verifiable Intent", desc: "Why did it act?", highlight: true },
+              ].map((pillar, i) => (
+                <div key={pillar.id} className="flex flex-row sm:flex-col items-center sm:flex-1">
+                  {i > 0 && (
+                    <div className="hidden sm:block w-full h-px bg-border my-auto relative -mx-0.5 z-0" />
+                  )}
+                  <div
+                    className={`relative z-10 flex flex-col items-center text-center px-3 py-4 rounded-md border w-full sm:w-auto ${
+                      pillar.highlight
+                        ? "border-primary bg-primary/5"
+                        : "border-transparent bg-transparent"
+                    }`}
+                    data-testid={`stack-pillar-${pillar.id}`}
+                  >
+                    <span
+                      className={`mb-1 text-xs font-bold font-mono tracking-tight ${
+                        pillar.highlight ? "text-primary" : "text-foreground"
+                      }`}
+                    >
+                      {pillar.id}
+                    </span>
+                    <span
+                      className={`text-xs font-semibold ${
+                        pillar.highlight ? "text-primary" : "text-muted-foreground"
+                      }`}
+                    >
+                      {pillar.label}
+                    </span>
+                    <span className="mt-1 text-xs text-muted-foreground leading-snug max-w-[7rem]">
+                      {pillar.desc}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-8 text-center text-sm text-muted-foreground">
+              xproof is the accountability layer.{" "}
+              <span className="text-foreground font-medium">Every agent action, proven on-chain.</span>
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Free Trial — Interactive Registration */}
       <section id="free-trial" className="border-y bg-muted/30 py-16 md:py-20">
         <div className="container">
