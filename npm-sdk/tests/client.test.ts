@@ -151,6 +151,85 @@ describe("XProofClient", () => {
     expect(body.files[0].filename).toBe("a.pdf");
   });
 
+  it("batchCertify serializes timing as flat snake_case keys in entry metadata", async () => {
+    const fetchMock = mockFetch(201, {
+      batch_id: "batch-timing-001",
+      total: 2,
+      created: 2,
+      existing: 0,
+      results: [
+        { file_hash: "h1", filename: "a.pdf", proof_id: "p-bt1", status: "created" },
+        { file_hash: "h2", filename: "b.pdf", proof_id: "p-bt2", status: "created" },
+      ],
+    });
+    globalThis.fetch = fetchMock;
+
+    const client = new XProofClient({ apiKey: "pm_test" });
+    await client.batchCertify([
+      {
+        fileHash: "h1",
+        fileName: "a.pdf",
+        timing: {
+          instructionReceivedAt: "2026-04-22T09:59:50Z",
+          reasoningStartedAt: "2026-04-22T09:59:51Z",
+          actionTakenAt: "2026-04-22T09:59:58Z",
+          jurisdictionType: "autonomous_inference",
+        },
+      },
+      {
+        fileHash: "h2",
+        fileName: "b.pdf",
+        metadata: { custom: "value" },
+        timing: {
+          instructionReceivedAt: "2026-04-22T10:00:00Z",
+        },
+      },
+    ]);
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const e0 = body.files[0];
+    expect(e0.metadata.instruction_received_at).toBe("2026-04-22T09:59:50Z");
+    expect(e0.metadata.reasoning_started_at).toBe("2026-04-22T09:59:51Z");
+    expect(e0.metadata.action_taken_at).toBe("2026-04-22T09:59:58Z");
+    expect(e0.metadata.jurisdiction_type).toBe("autonomous_inference");
+    expect(e0.metadata.timing_breakdown).toBeUndefined();
+
+    const e1 = body.files[1];
+    expect(e1.metadata.custom).toBe("value");
+    expect(e1.metadata.instruction_received_at).toBe("2026-04-22T10:00:00Z");
+    expect(e1.metadata.reasoning_started_at).toBeUndefined();
+    expect(e1.metadata.timing_breakdown).toBeUndefined();
+  });
+
+  it("batchCertify omits metadata when no timing and no metadata on entry", async () => {
+    const fetchMock = mockFetch(201, {
+      batch_id: "batch-no-meta",
+      total: 1,
+      created: 1,
+      existing: 0,
+      results: [{ file_hash: "h1", filename: "a.pdf", proof_id: "p-nm1", status: "created" }],
+    });
+    globalThis.fetch = fetchMock;
+
+    const client = new XProofClient({ apiKey: "pm_test" });
+    await client.batchCertify([{ fileHash: "h1", fileName: "a.pdf" }]);
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.files[0].metadata).toBeUndefined();
+  });
+
+  it("batchCertify throws ValidationError for invalid jurisdictionType in timing", async () => {
+    const client = new XProofClient({ apiKey: "pm_test" });
+    await expect(
+      client.batchCertify([
+        {
+          fileHash: "h1",
+          timing: { jurisdictionType: "not_valid" as any },
+        },
+      ])
+    ).rejects.toThrow(ValidationError);
+  });
+
   it("batchCertify rejects more than 50 files", async () => {
     const client = new XProofClient({ apiKey: "pm_test" });
     const files = Array.from({ length: 51 }, (_, i) => ({

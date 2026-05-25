@@ -126,7 +126,28 @@ export class XProofClient {
         filename: f.fileName ?? "unknown",
         file_hash: f.fileHash,
       };
-      if (f.metadata) entry.metadata = f.metadata;
+      const entryMeta: Record<string, unknown> = f.metadata ? { ...f.metadata } : {};
+      if (f.timing !== undefined) {
+        const t = f.timing;
+        if (
+          t.jurisdictionType !== undefined &&
+          !(JURISDICTION_TYPES as readonly string[]).includes(t.jurisdictionType)
+        ) {
+          throw new ValidationError(
+            `timing.jurisdictionType must be one of: ${JURISDICTION_TYPES.join(", ")}`,
+            {}
+          );
+        }
+        if (t.instructionReceivedAt !== undefined)
+          entryMeta.instruction_received_at = t.instructionReceivedAt;
+        if (t.reasoningStartedAt !== undefined)
+          entryMeta.reasoning_started_at = t.reasoningStartedAt;
+        if (t.actionTakenAt !== undefined)
+          entryMeta.action_taken_at = t.actionTakenAt;
+        if (t.jurisdictionType !== undefined)
+          entryMeta.jurisdiction_type = t.jurisdictionType;
+      }
+      if (Object.keys(entryMeta).length > 0) entry.metadata = entryMeta;
       return entry;
     });
 

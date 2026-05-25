@@ -11,6 +11,7 @@ import {
   CheckCircle,
   Upload,
   ArrowRight,
+  ChevronRight,
   Blocks,
   CreditCard,
   ShoppingCart,
@@ -258,7 +259,8 @@ export default function Landing() {
             <p className="mb-8 text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               MultiversX Machine Economy Stack
             </p>
-            <div className="flex flex-col sm:flex-row items-stretch gap-3 sm:gap-0">
+            {/* Desktop: horizontal row with arrows */}
+            <div className="hidden sm:flex items-stretch gap-0">
               {[
                 { id: "MX-8004", label: "Identity", desc: "Who is the agent?" },
                 { id: "AP2", label: "Authority", desc: "Is it authorised?" },
@@ -266,33 +268,65 @@ export default function Landing() {
                 { id: "x402", label: "Payments", desc: "What did it pay?" },
                 { id: "xProof", label: "Verifiable Intent", desc: "Why did it act?", highlight: true },
               ].map((pillar, i) => (
-                <div key={pillar.id} className="flex flex-row sm:flex-col items-center sm:flex-1">
+                <div key={pillar.id} className="flex items-center flex-1 min-w-0">
                   {i > 0 && (
-                    <div className="hidden sm:block w-full h-px bg-border my-auto relative -mx-0.5 z-0" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/30 shrink-0 mx-1" />
                   )}
                   <div
-                    className={`relative z-10 flex flex-col items-center text-center px-3 py-4 rounded-md border w-full sm:w-auto ${
+                    className={`flex-1 flex flex-col items-center text-center px-3 py-5 rounded-md border h-full ${
                       pillar.highlight
                         ? "border-primary bg-primary/5"
-                        : "border-transparent bg-transparent"
+                        : "border-border/60 bg-background/60"
                     }`}
                     data-testid={`stack-pillar-${pillar.id}`}
                   >
                     <span
-                      className={`mb-1 text-xs font-bold font-mono tracking-tight ${
+                      className={`text-sm font-bold font-mono tracking-tight ${
                         pillar.highlight ? "text-primary" : "text-foreground"
                       }`}
                     >
                       {pillar.id}
                     </span>
                     <span
-                      className={`text-xs font-semibold ${
-                        pillar.highlight ? "text-primary" : "text-muted-foreground"
+                      className={`text-xs font-semibold mt-1 ${
+                        pillar.highlight ? "text-primary/80" : "text-muted-foreground"
                       }`}
                     >
                       {pillar.label}
                     </span>
-                    <span className="mt-1 text-xs text-muted-foreground leading-snug max-w-[7rem]">
+                    <span className="mt-1.5 text-xs text-muted-foreground/70 leading-snug">
+                      {pillar.desc}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Mobile: vertical stack */}
+            <div className="flex flex-col gap-2 sm:hidden">
+              {[
+                { id: "MX-8004", label: "Identity", desc: "Who is the agent?" },
+                { id: "AP2", label: "Authority", desc: "Is it authorised?" },
+                { id: "MCP", label: "Communication", desc: "What did it request?" },
+                { id: "x402", label: "Payments", desc: "What did it pay?" },
+                { id: "xProof", label: "Verifiable Intent", desc: "Why did it act?", highlight: true },
+              ].map((pillar) => (
+                <div
+                  key={pillar.id}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-md border ${
+                    pillar.highlight
+                      ? "border-primary bg-primary/5"
+                      : "border-border/60 bg-background/60"
+                  }`}
+                  data-testid={`stack-pillar-${pillar.id}`}
+                >
+                  <span className={`text-sm font-bold font-mono tracking-tight w-16 shrink-0 ${pillar.highlight ? "text-primary" : "text-foreground"}`}>
+                    {pillar.id}
+                  </span>
+                  <div className="min-w-0">
+                    <span className={`text-xs font-semibold block ${pillar.highlight ? "text-primary/80" : "text-muted-foreground"}`}>
+                      {pillar.label}
+                    </span>
+                    <span className="text-xs text-muted-foreground/70">
                       {pillar.desc}
                     </span>
                   </div>
@@ -709,7 +743,7 @@ export default function Landing() {
                 data-testid="button-try-now"
               >
                 <a href="#free-trial">
-                  Try it with your fleet
+                  Try it with your agent
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </a>
               </Button>

@@ -189,6 +189,7 @@ export interface BatchFileEntry {
   fileName?: string;
   author?: string;
   metadata?: Record<string, unknown>;
+  timing?: TimingBreakdown;
 }
 
 export interface XProofClientOptions {
