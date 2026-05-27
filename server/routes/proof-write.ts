@@ -14,6 +14,22 @@ import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
 import { checkRateLimit, isAdminWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit, getApiKeyOwnerWallet, TRIAL_QUOTA, RATE_LIMIT_MAX_VALUE, buildCanonicalId, tryDisplaceAcpReservation } from "./helpers";
 import { inArray } from "drizzle-orm";
 
+function build4WField(metadata: unknown, baseUrl: string, certId: number | string): Record<string, unknown> {
+  if (!metadata || typeof metadata !== "object") return {};
+  const m = metadata as Record<string, unknown>;
+  if (!m.who && !m.what && !m.when && !m.why) return {};
+  return {
+    audit_trail: {
+      has_4w: true,
+      who: m.who ?? null,
+      what: m.what ?? null,
+      when: m.when ?? null,
+      why: m.why ?? null,
+      view_url: `${baseUrl}/proof/${certId}#audit-trail`,
+    },
+  };
+}
+
 export function registerProofWriteRoutes(app: Express) {
   // ============================================
   // Metadata search endpoint
@@ -507,6 +523,7 @@ export function registerProofWriteRoutes(app: Express) {
           },
           timestamp: occupant.createdAt?.toISOString() || new Date().toISOString(),
           webhook_status: "not_applicable",
+          ...build4WField(occupant.metadata, baseUrl, occupant.id),
           message: "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
         });
       }
@@ -570,6 +587,7 @@ export function registerProofWriteRoutes(app: Express) {
             },
             timestamp: target.createdAt?.toISOString() || new Date().toISOString(),
             webhook_status: "not_applicable",
+            ...build4WField(target.metadata, baseUrl, target.id),
             message: "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
           });
         }
@@ -653,6 +671,7 @@ export function registerProofWriteRoutes(app: Express) {
             },
             timestamp: existing.createdAt?.toISOString() || new Date().toISOString(),
             webhook_status: "not_applicable",
+            ...build4WField(existing.metadata, baseUrl, existing.id),
             message: "File already certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
           });
         }
@@ -777,6 +796,7 @@ export function registerProofWriteRoutes(app: Express) {
         ...(isPerProofWebhook && generatedWebhookSecret ? { webhook_secret: generatedWebhookSecret } : {}),
         ...(trialInfo ? { trial: { remaining: Math.max(0, trialInfo.remaining - 1) } } : {}),
         ...(creditInfo ? { credits: { remaining: Math.max(0, creditInfo.balance - 1) } } : {}),
+        ...build4WField(certification.metadata, baseUrl, certification.id),
         message: "File certified on MultiversX blockchain. Proof is immutable and publicly verifiable.",
       });
     } catch (error) {

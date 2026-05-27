@@ -281,6 +281,35 @@ Discoverable endpoints:
 - \`POST ${baseUrl}/api/proof\` — single certification with 4W provenance
 - \`POST ${baseUrl}/api/batch\` — batch certification (up to 100 files)
 
+## 4W Audit Trail — Complete Example (One Shot)
+
+The fastest way to create a proof with full 4W provenance (Who, What, When, Why) visible on the public verification page:
+
+\`\`\`bash
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "file_hash": "YOUR_SHA256_HASH",
+    "filename": "my_agent_reasoning.md",
+    "metadata": {
+      "who": "MyAgent v1.0 (author: your-name)",
+      "what": "Description of the decision or content being certified",
+      "when": "2026-01-01T12:00:00Z",
+      "why": "Reason this action was taken — the full rationale",
+      "agent": "my-agent-id",
+      "model": "gpt-4o",
+      "type": "reasoning_certification"
+    }
+  }'
+\`\`\`
+
+The \`who\`, \`what\`, \`when\`, \`why\` fields are automatically rendered as a **4W Audit Trail** section on the public proof page (\`${baseUrl}/proof/{id}\`). No additional steps required.
+
+Response includes \`audit_trail.view_url\` pointing directly to the 4W display.
+
+**Rule**: include at least one of \`who\`, \`what\`, \`when\`, \`why\` in \`metadata\` to activate the 4W Audit Trail section on the proof page.
+
 ### For agents already using the Bazaar MCP server
 
 Add the Bazaar MCP to your config and search for xproof:
