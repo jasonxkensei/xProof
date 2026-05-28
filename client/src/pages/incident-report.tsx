@@ -522,10 +522,27 @@ export default function IncidentReportPage() {
 
         {error && (
           <Card>
-            <CardContent className="p-6 text-center">
-              <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-3" />
-              <p className="font-medium mb-1">Report unavailable</p>
-              <p className="text-sm text-muted-foreground">{(error as Error).message}</p>
+            <CardContent className="p-8 text-center">
+              <AlertTriangle className="h-9 w-9 text-destructive mx-auto mb-4" />
+              <p className="font-semibold text-lg mb-1">Report unavailable</p>
+              <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">{(error as Error).message}</p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button asChild variant="default" size="sm" data-testid="button-register-agent">
+                  <a href="/leaderboard">
+                    <Zap className="mr-2 h-4 w-4" />
+                    Register a public agent
+                  </a>
+                </Button>
+                <Button asChild variant="outline" size="sm" data-testid="button-back-to-proof">
+                  <a href={`/proof/${proofId}`}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    View proof page
+                  </a>
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-5 max-w-sm mx-auto">
+                Incident reports are available for any public proof. If your proof was certified with a trial key, registering a named agent on the leaderboard unlocks full trust analysis.
+              </p>
             </CardContent>
           </Card>
         )}
@@ -540,6 +557,22 @@ export default function IncidentReportPage() {
                 <CopyInline text={proofId} />
               </p>
             </div>
+
+            {data.agent?.partial && (
+              <div className="flex items-start gap-3 rounded-md border border-yellow-500/30 bg-yellow-500/5 px-4 py-3 mb-6" data-testid="banner-partial-report">
+                <Zap className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300">Partial report — no public agent profile</p>
+                  <p className="text-xs text-yellow-600/80 dark:text-yellow-400/80 mt-0.5">
+                    4W data was read directly from the proof. Register a named agent on the{" "}
+                    <a href="/leaderboard" className="underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300">
+                      leaderboard
+                    </a>{" "}
+                    to unlock full trust scoring and cross-proof pairing.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <VerdictBanner verdict={data.verdict} />
 

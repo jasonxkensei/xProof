@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, TrendingDown, Flame, BadgeCheck, Award, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Crosshair } from "lucide-react";
+import { Shield, Trophy, Search, Bot, ArrowRight, TrendingUp, TrendingDown, Flame, BadgeCheck, Award, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Crosshair, UserPlus, Loader2, Key, Copy, Check } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -139,6 +142,45 @@ function getInitialParam(key: string, defaultValue: string) {
 
 export default function Leaderboard() {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+
+  // ── Registration dialog ─────────────────────────────────────────────────────
+  const [showRegister, setShowRegister] = useState(false);
+  const [regName, setRegName] = useState("");
+  const [regDesc, setRegDesc] = useState("");
+  const [regResult, setRegResult] = useState<{ api_key: string; agent_name: string; trial: { quota: number } } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const registerMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/agent/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_name: regName.trim(), description: regDesc.trim() || undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || json.error || "Registration failed");
+      return json;
+    },
+    onSuccess: (data) => setRegResult(data),
+    onError: (err: Error) => toast({ title: "Registration failed", description: err.message, variant: "destructive" }),
+  });
+
+  function copyKey(key: string) {
+    navigator.clipboard.writeText(key).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function closeDialog() {
+    setShowRegister(false);
+    setRegName("");
+    setRegDesc("");
+    setRegResult(null);
+    setCopied(false);
+    registerMutation.reset();
+  }
+
   const [search, setSearch] = useState(() => getInitialParam("q", ""));
   const [categoryFilter, setCategoryFilter] = useState(() => getInitialParam("category", "all"));
   const [attestedOnly, setAttestedOnly] = useState(() => getInitialParam("attested", "") === "true");
@@ -211,6 +253,7 @@ export default function Leaderboard() {
   };
 
   return (
+    <>
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between gap-4">
@@ -242,11 +285,9 @@ export default function Leaderboard() {
               Agents who anchor their work on-chain. Every entry is backed by verifiable blockchain proofs — no claims, only evidence.
             </p>
           </div>
-          <Button asChild size="sm" data-testid="button-join-leaderboard">
-            <Link href="/settings">
-              Add my agent
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
+          <Button size="sm" data-testid="button-join-leaderboard" onClick={() => setShowRegister(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Register your agent
           </Button>
         </div>
 
@@ -631,5 +672,113 @@ export default function Leaderboard() {
         </div>
       )}
     </div>
+
+    {/* ── Register your agent dialog ───────────────────────────────────────── */}
+    <Dialog open={showRegister} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+      <DialogContent className="max-w-md" data-testid="dialog-register-agent">
+        {!regResult ? (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Key className="h-5 w-5 text-primary" />
+                Register your agent
+              </DialogTitle>
+              <DialogDescription>
+                Get a free API key with {10} certifications. Your proofs will appear on the leaderboard and incident reports unlock automatically.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="reg-name">Agent name</Label>
+                <Input
+                  id="reg-name"
+                  data-testid="input-reg-agent-name"
+                  placeholder="e.g. grok-xai-prod"
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                  disabled={registerMutation.isPending}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="reg-desc">Description <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Input
+                  id="reg-desc"
+                  data-testid="input-reg-agent-desc"
+                  placeholder="What does this agent do?"
+                  value={regDesc}
+                  onChange={(e) => setRegDesc(e.target.value)}
+                  disabled={registerMutation.isPending}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="ghost" size="sm" onClick={closeDialog} disabled={registerMutation.isPending} data-testid="button-reg-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  data-testid="button-reg-submit"
+                  disabled={!regName.trim() || registerMutation.isPending}
+                  onClick={() => registerMutation.mutate()}
+                >
+                  {registerMutation.isPending ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Registering…</>
+                  ) : (
+                    <>Get free API key</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                <BadgeCheck className="h-5 w-5" />
+                Agent registered
+              </DialogTitle>
+              <DialogDescription>
+                <span className="font-medium text-foreground">{regResult.agent_name}</span> is live with {regResult.trial.quota} free certifications.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label>Your API key — save it now, it won't be shown again</Label>
+                <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+                  <code className="flex-1 text-xs font-mono text-primary truncate" data-testid="text-api-key">
+                    {regResult.api_key}
+                  </code>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    data-testid="button-copy-key"
+                    onClick={() => copyKey(regResult!.api_key)}
+                  >
+                    {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground text-sm">Next steps</p>
+                <p>1. Use <code className="font-mono">Authorization: Bearer {regResult.api_key.slice(0, 14)}…</code> in your API calls.</p>
+                <p>2. Certify proofs with <code className="font-mono">POST /api/proof</code> — they appear on your incident reports immediately.</p>
+                <p>3. To unlock full trust analysis, connect your MultiversX wallet in <a href="/settings" className="text-primary underline-offset-2 hover:underline">Settings</a>.</p>
+              </div>
+
+              <div className="flex justify-end">
+                <Button size="sm" onClick={closeDialog} data-testid="button-reg-done">
+                  Done
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
