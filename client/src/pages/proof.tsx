@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, ExternalLink, Download, Copy, CheckCircle, Calendar, Hash, User, FileSearch, Gauge, GitBranch, Activity, AlertTriangle, CheckCircle2, FileText, Clock, Brain, Tag } from "lucide-react";
+import { Shield, ExternalLink, Download, Copy, CheckCircle, Calendar, Hash, User, FileSearch, Gauge, GitBranch, Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { formatHash, copyToClipboard } from "@/lib/hashUtils";
 import { useToast } from "@/hooks/use-toast";
@@ -70,23 +70,14 @@ export default function ProofPage() {
   const meta = (certification.metadata || {}) as Record<string, any>;
   const actionType = meta.action_type || null;
   const isAgentAction = !!actionType || meta.type === "heartbeat";
+  const has4W = !!(meta.who || meta.what || meta.when || meta.why);
   const ownerWallet = (certification as any).ownerWallet as string | null;
-  const canInvestigate = isAgentAction && ownerWallet;
+  const canInvestigate = (isAgentAction || has4W) && ownerWallet;
   const rawConfidence = meta.confidence_level !== undefined ? Number(meta.confidence_level) : null;
   const hasConfidence = rawConfidence !== null && !isNaN(rawConfidence) && rawConfidence >= 0 && rawConfidence <= 1;
   const confidenceLevel = hasConfidence ? rawConfidence : null;
   const thresholdStage = meta.threshold_stage as string | undefined;
   const decisionId = meta.decision_id as string | undefined;
-
-  const has4W = !!(meta.who || meta.what || meta.when || meta.why);
-  const SYSTEM_META_KEYS = new Set([
-    "who", "what", "when", "why",
-    "confidence_level", "threshold_stage", "decision_id",
-    "action_type", "instruction_received_at", "reasoning_started_at", "action_taken_at",
-  ]);
-  const extraMetaEntries = Object.entries(meta).filter(
-    ([k, v]) => !SYSTEM_META_KEYS.has(k) && v !== undefined && v !== null && v !== ""
-  );
 
   const stageLabels: Record<string, string> = {
     initial: "Initial signal",
@@ -212,84 +203,6 @@ export default function ProofPage() {
                 )}
               </div>
             </div>
-
-            {/* 4W Audit Trail */}
-            {has4W && (
-              <div className="border-t pt-6" id="audit-trail">
-                <div className="mb-4 flex items-center gap-2 flex-wrap">
-                  <FileSearch className="h-5 w-5 text-primary shrink-0" />
-                  <h3 className="text-lg font-semibold">4W Audit Trail</h3>
-                  <Badge className="bg-primary/10 text-primary text-xs" data-testid="badge-4w">
-                    Prove Before Act
-                  </Badge>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {meta.who && (
-                    <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4" data-testid="field-4w-who">
-                      <User className="mt-0.5 h-5 w-5 text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Who</p>
-                        <p className="font-semibold break-words text-sm">{String(meta.who)}</p>
-                      </div>
-                    </div>
-                  )}
-                  {meta.what && (
-                    <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4" data-testid="field-4w-what">
-                      <FileText className="mt-0.5 h-5 w-5 text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">What</p>
-                        <p className="font-semibold break-words text-sm">{String(meta.what)}</p>
-                      </div>
-                    </div>
-                  )}
-                  {meta.when && (
-                    <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4" data-testid="field-4w-when">
-                      <Clock className="mt-0.5 h-5 w-5 text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">When</p>
-                        <p className="font-semibold text-sm">
-                          {(() => {
-                            try { return format(new Date(String(meta.when)), "MM/dd/yyyy 'at' HH:mm"); }
-                            catch { return String(meta.when); }
-                          })()}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {meta.why && (
-                    <div className="flex items-start gap-3 rounded-lg bg-muted/30 p-4" data-testid="field-4w-why">
-                      <Brain className="mt-0.5 h-5 w-5 text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Why</p>
-                        <p className="font-semibold break-words text-sm">{String(meta.why)}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Extra metadata fields */}
-            {extraMetaEntries.length > 0 && (
-              <div className="border-t pt-6" data-testid="section-extra-metadata">
-                <div className="mb-4 flex items-center gap-2">
-                  <Tag className="h-5 w-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Certification context</h3>
-                </div>
-                <div className="rounded-lg bg-muted/30 p-4 divide-y divide-border/40">
-                  {extraMetaEntries.map(([key, value]) => (
-                    <div key={key} className="flex items-start justify-between gap-4 py-2 first:pt-0 last:pb-0">
-                      <span className="text-sm font-medium text-muted-foreground shrink-0 capitalize">
-                        {key.replace(/_/g, " ")}
-                      </span>
-                      <span className="text-sm text-right break-all" data-testid={`meta-field-${key}`}>
-                        {typeof value === "object" ? JSON.stringify(value) : String(value)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Confidence Level */}
             {hasConfidence && confidenceLevel !== null && (
