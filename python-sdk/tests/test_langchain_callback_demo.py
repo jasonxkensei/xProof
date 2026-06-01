@@ -33,6 +33,7 @@ from xproof.models import BatchResult, BatchResultSummary, Certification  # noqa
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_certification(proof_id: str, file_hash: str) -> Certification:
     return Certification(
         id=proof_id,
@@ -88,6 +89,7 @@ _main_module = _load_main()
 # ---------------------------------------------------------------------------
 # Direct handler tests (no importlib required)
 # ---------------------------------------------------------------------------
+
 
 def _make_llm_response(text: str) -> object:
     """Build the minimal LangChain-style LLM response object the handler reads."""
@@ -193,6 +195,7 @@ def test_flush_result_items_have_id_and_file_hash() -> None:
 # ---------------------------------------------------------------------------
 # Integration test via main() with patched XProofClient.register
 # ---------------------------------------------------------------------------
+
 
 def test_main_runs_end_to_end() -> None:
     """main() completes without error when XProofClient.register is patched."""

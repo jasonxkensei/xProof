@@ -237,7 +237,16 @@ def test_raises_value_error_when_no_hash_source(tool, mock_client):
 
 def test_policy_violation_error_message_contains_decision_id(tool, mock_client):
     """The PolicyViolationError message includes the decision_id for traceability."""
-    violations = [PolicyViolation(proof_id="proof-004", confidence_level=0.5, reversibility_class="irreversible", threshold_stage="partial", threshold=0.95, rule="some_rule")]
+    violations = [
+        PolicyViolation(
+            proof_id="proof-004",
+            confidence_level=0.5,
+            reversibility_class="irreversible",
+            threshold_stage="partial",
+            threshold=0.95,
+            rule="some_rule",
+        )
+    ]
     mock_client.get_policy_check.return_value = _make_violation_check(violations)
 
     with pytest.raises(PolicyViolationError) as exc_info:
