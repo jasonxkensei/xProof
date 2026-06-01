@@ -6,6 +6,7 @@ import { logger } from "./logger";
 import { getCertificationPriceUsd } from "./pricing";
 import { getLeaderboard, computeTrustScoreByWallet, getTrustLevel } from "./trust";
 import { publicReadRateLimiter } from "./reliability";
+import { getTxExplorerUrl } from "./blockchain";
 
 const CRAWLER_USER_AGENTS = [
   "ChatGPT", "GPTBot", "Googlebot", "Bingbot", "Twitterbot",
@@ -402,7 +403,7 @@ function renderProofPage(baseUrl: string, cert: any): string {
     <dl>
       <dt>Transaction hash</dt>
       <dd><code>${escapeHtml(cert.transactionHash)}</code></dd>
-      ${cert.transactionUrl ? `<dt>Explorer</dt><dd><a href="${escapeHtml(cert.transactionUrl)}">View on MultiversX explorer</a></dd>` : ""}
+      ${(() => { const u = getTxExplorerUrl(cert.transactionHash); return u ? `<dt>Explorer</dt><dd><a href="${escapeHtml(u)}">View on MultiversX explorer</a></dd>` : ""; })()}
     </dl>
   </section>` : ""}
 
@@ -719,7 +720,10 @@ export function prerenderMiddleware() {
       if (agentMatch) {
         const html = await renderAgentProfilePage(baseUrl, agentMatch[1]);
         if (html) {
-          return res.status(200).set("Content-Type", "text/html").send(html);
+          return res.status(200)
+            .set("Content-Type", "text/html")
+            .set("Cache-Control", "private, no-store")
+            .send(html);
         }
       }
 
@@ -739,7 +743,10 @@ export function prerenderMiddleware() {
             // hold synthetic wallet addresses, so their public certifications
             // are accessible without a public profile flag.
             if (owner?.isPublicProfile || owner?.isTrial) {
-              return res.status(200).set("Content-Type", "text/html").send(renderProofPage(baseUrl, cert));
+              return res.status(200)
+                .set("Content-Type", "text/html")
+                .set("Cache-Control", "private, no-store")
+                .send(renderProofPage(baseUrl, cert));
             }
           }
         } catch (e) {

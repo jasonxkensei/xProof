@@ -589,6 +589,7 @@ export function registerTrustRoutes(app: Express) {
       const badgeUrl = `${baseUrl}/badge/trust/${wallet}.svg`;
       const linkUrl = `${baseUrl}/agent/${wallet}`;
       const markdown = `[![xproof Trust](${badgeUrl})](${linkUrl})`;
+      res.setHeader("Cache-Control", "private, no-store");
       res.json({ markdown, badgeUrl, linkUrl });
     } catch (error) {
       res.status(500).json({ error: "Failed to generate markdown" });

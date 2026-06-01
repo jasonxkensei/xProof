@@ -15,6 +15,23 @@ const GATEWAY_URL = process.env.MULTIVERSX_GATEWAY_URL || "https://gateway.multi
 const API_URL = process.env.MULTIVERSX_API_URL || "https://api.multiversx.com";
 const CHAIN_ID = process.env.MULTIVERSX_CHAIN_ID || "1"; // 1 = mainnet, D = devnet, T = testnet
 
+/**
+ * Returns the canonical MultiversX explorer URL for a transaction hash, always
+ * server-derived. Never use a client-supplied URL as an explorer link — callers
+ * could point visitors to phishing pages while the UI labels it "MultiversX explorer".
+ */
+export function getTxExplorerUrl(txHash: string | null | undefined): string | null {
+  if (!txHash) return null;
+  const chainId = process.env.MULTIVERSX_CHAIN_ID || "1";
+  const explorerBase =
+    chainId === "D"
+      ? "https://devnet-explorer.multiversx.com"
+      : chainId === "T"
+      ? "https://testnet-explorer.multiversx.com"
+      : "https://explorer.multiversx.com";
+  return `${explorerBase}/transactions/${txHash}`;
+}
+
 // Check if MultiversX is properly configured
 export function isMultiversXConfigured(): boolean {
   return !!(PRIVATE_KEY && SENDER_ADDRESS);

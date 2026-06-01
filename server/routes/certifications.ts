@@ -7,7 +7,7 @@ import { eq, desc, sql, and, count } from "drizzle-orm";
 import { z } from "zod";
 import { isWalletAuthenticated } from "../walletAuth";
 import { getCertificationPriceEgld } from "../pricing";
-import { broadcastSignedTransaction } from "../blockchain";
+import { broadcastSignedTransaction, getTxExplorerUrl } from "../blockchain";
 import { tryDisplaceAcpReservation } from "./helpers";
 import { safeHttpUrlSchema } from "@shared/url";
 
@@ -118,6 +118,11 @@ export function registerCertificationsRoutes(app: Express) {
         blockchainStatus = "confirmed";
         blockchainLatencyMs = Date.now() - verifyStart;
         recordTransaction(true, blockchainLatencyMs, "certification");
+        // Override the client-supplied transactionUrl with a server-derived URL so
+        // that public proof pages always link to the real MultiversX explorer and
+        // cannot be turned into phishing vectors by an attacker who supplies a valid
+        // txHash paired with an unrelated attacker-controlled URL.
+        transactionUrl = getTxExplorerUrl(transactionHash) ?? transactionUrl;
       }
 
       // Verify that the on-chain transaction data field binds the payment to the certified

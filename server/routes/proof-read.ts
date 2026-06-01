@@ -8,6 +8,7 @@ import { publicReadRateLimiter, publicPdfRateLimiter } from "../reliability";
 import { generateCertificatePDF } from "../certificateGenerator";
 import { computeDrift, DRIFT_MONITORED_FIELDS } from "./helpers";
 import { IRREVERSIBLE_CONFIDENCE_THRESHOLD, buildTimingBreakdown } from "../auditSchema";
+import { getTxExplorerUrl } from "../blockchain";
 
 // Hard cap on rows materialized by any public metadata-keyed lookup. Public
 // integration endpoints filter `certifications.metadata` with JSONB extraction
@@ -94,6 +95,10 @@ export function registerProofReadRoutes(app: Express) {
       // Return only explicitly public fields — never spread the full DB row.
       // Internal fields (userId, webhookUrl, webhookStatus, webhookAttempts,
       // webhookLastAttempt, authMethod, blockchainLatencyMs, updatedAt) are excluded.
+      // transactionUrl is always server-derived from the verified txHash so that
+      // any client-supplied URL stored before this hardening cannot be used to
+      // present a phishing link as a trusted MultiversX explorer link.
+      res.setHeader("Cache-Control", "private, no-store");
       res.json({
         id: certification.id,
         fileName: certification.fileName,
@@ -103,7 +108,7 @@ export function registerProofReadRoutes(app: Express) {
         authorName: certification.authorName,
         authorSignature: certification.authorSignature,
         transactionHash: certification.transactionHash,
-        transactionUrl: certification.transactionUrl,
+        transactionUrl: getTxExplorerUrl(certification.transactionHash),
         blockchainStatus: certification.blockchainStatus,
         certificateUrl: certification.certificateUrl,
         isPublic: certification.isPublic,

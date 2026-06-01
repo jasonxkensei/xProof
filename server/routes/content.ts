@@ -8,6 +8,7 @@ import { getCertificationPriceUsd } from "../pricing";
 import { AUDIT_LOG_JSON_SCHEMA } from "../auditSchema";
 import { isMX8004Configured, getContractAddresses } from "../mx8004";
 import { TRIAL_QUOTA, getNetworkLabel, buildCanonicalId } from "./helpers";
+import { getTxExplorerUrl } from "../blockchain";
 
 export function registerContentRoutes(app: Express) {
   const GENESIS_CERTIFICATION = {
@@ -961,7 +962,9 @@ This genesis certification demonstrates:
           network: "MultiversX Mainnet",
           chain_id: chainId,
           transaction_hash: txHash,
-          explorer_url: certification.transactionUrl || null,
+          // Always server-derived so stored client-supplied URLs cannot present
+          // an attacker-controlled link as the canonical MultiversX explorer URL.
+          explorer_url: getTxExplorerUrl(txHash),
           status: certification.blockchainStatus
         },
         verification: {
@@ -981,6 +984,7 @@ This genesis certification demonstrates:
         }
       };
 
+      res.setHeader("Cache-Control", "private, no-store");
       res.json(proof);
     } catch (error) {
       logger.withRequest(req).error("Failed to fetch proof JSON");
@@ -1099,15 +1103,16 @@ This genesis certification demonstrates:
         return res.status(404).setHeader("Content-Type", "text/plain; charset=utf-8").send("Proof not found");
       }
 
-      let linkUrl: string;
-      if (cert?.transactionUrl && cert.blockchainStatus === "confirmed") {
-        linkUrl = cert.transactionUrl;
-      } else {
-        linkUrl = `${baseUrl}/proof/${certId}`;
-      }
+      // Use the server-derived explorer URL when confirmed; fall back to the
+      // proof page. Never trust cert.transactionUrl (could be attacker-controlled).
+      const derivedExplorerUrl = cert.blockchainStatus === "confirmed"
+        ? getTxExplorerUrl(cert.transactionHash)
+        : null;
+      const linkUrl = derivedExplorerUrl ?? `${baseUrl}/proof/${certId}`;
 
       const markdown = `[![xProof Verified](${badgeUrl})](${linkUrl})`;
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Cache-Control", "private, no-store");
       res.send(markdown);
     } catch (error) {
       logger.withRequest(req).error("Failed to generate badge markdown");
@@ -1182,7 +1187,7 @@ ${certification.fileHash}
 ${certification.transactionHash || 'Pending'}
 \`\`\`
 
-**Explorer**: ${certification.transactionUrl || 'Not yet available'}
+**Explorer**: ${getTxExplorerUrl(certification.transactionHash) || 'Not yet available'}
 
 ## Verification
 
@@ -1204,6 +1209,7 @@ This proof is self-verifiable. Trust derives from the MultiversX blockchain, not
 `;
 
       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.setHeader('Cache-Control', 'private, no-store');
       res.send(markdown);
     } catch (error) {
       logger.withRequest(req).error("Failed to fetch proof markdown");
