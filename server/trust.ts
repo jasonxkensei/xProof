@@ -912,17 +912,20 @@ export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestat
   const rightLabel = level + attestMark;
   const rightScore = scoreFormatted;
 
+  // xproof logo mark — cropped left portion of xproof-logo.png, 26×21px, encoded as base64
+  const LOGO_MARK_B64 = "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";
+
   // Layout constants
   const h = 28;
   const r = 6;
   const lCharW = 6.8;
   const rCharW = 6.5;
   const scoreCharW = 6.0;
-  // Shield icon dimensions (scaled from 512×512 viewBox; shield spans x:160-352, y:96-416)
-  const iconH = 13;
-  const iconW = 8; // approx rendered width after scale
-  const dotGap = 7;
-  const lPad = 11;
+  // Logo mark rendered at 20×16px in badge (preserving 26:21 aspect ratio of cropped PNG)
+  const iconW = 20;
+  const iconH = 16;
+  const dotGap = 4;
+  const lPad = 8;
   const rPad = 12;
   const scoreSep = 8;
 
@@ -933,12 +936,9 @@ export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestat
   const midY = h / 2;
   const textY = midY + 4;
 
-  // Shield icon: scale 512-space path down to ~iconH px tall, centered in left section
-  const shieldScale = iconH / 320; // shield height in 512 space is 320 (from y=96 to y=416)
-  const iconCx = lPad + iconW / 2;  // horizontal center of icon in badge
-  const iconCy = midY;              // vertical center
-  const shieldTx = (iconCx - 256 * shieldScale).toFixed(3);
-  const shieldTy = (iconCy - 256 * shieldScale).toFixed(3);
+  // Icon position: centered vertically in the left section
+  const iconX = lPad;
+  const iconY = Math.round(midY - iconH / 2);
 
   // X for label text center
   const labelCx = Math.round(lPad + iconW + dotGap + (labelText.length * lCharW) / 2);
@@ -965,13 +965,7 @@ export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestat
     <rect x="${labelWidth}" width="${rightWidth}" height="${h}" fill="url(#rst)"/>
   </g>
   <rect width="${totalWidth}" height="${h}" rx="${r}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-  <!-- xproof shield icon (scaled from favicon.svg paths) -->
-  <g transform="translate(${shieldTx} ${shieldTy}) scale(${shieldScale.toFixed(5)})">
-    <path d="M256 96C256 96 160 144 160 256c0 72 48 128 96 160 48-32 96-88 96-160 0-112-96-160-96-160z"
-          fill="none" stroke="${levelColor}" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M224 264l24 24 48-48"
-          fill="none" stroke="${levelColor}" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
+  <image href="data:image/png;base64,${LOGO_MARK_B64}" x="${iconX}" y="${iconY}" width="${iconW}" height="${iconH}"/>
   <text x="${labelCx}" y="${textY}" fill="rgba(255,255,255,0.92)" text-anchor="middle"
         font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="11"
         letter-spacing="0.6" text-rendering="geometricPrecision">${labelText}</text>
