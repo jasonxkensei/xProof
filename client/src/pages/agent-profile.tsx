@@ -710,7 +710,6 @@ function CalibrationGapChart({ points }: { points: CalibrationPoint[] }) {
 
 function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: string }) {
   const [expanded, setExpanded] = useState(false);
-  const [hovered, setHovered] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -906,13 +905,11 @@ function CalibrationCard({ data, wallet }: { data: CalibrationData; wallet: stri
   const { mean_gap, variance, bias_label } = data.calibration;
   const style = BIAS_STYLES[bias_label] ?? BIAS_STYLES.calibrated;
   const hasChart = data.time_series.length >= 2;
-  const showChart = expanded || hovered;
+  const showChart = expanded;
 
   return (
     <Card
       data-testid="card-calibration"
-      onMouseEnter={() => hasChart && setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base flex-wrap">
@@ -1220,6 +1217,8 @@ export default function AgentProfilePage() {
   const wallet = params.wallet;
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [auditFlagsExpanded, setAuditFlagsExpanded] = useState(true);
+  const [auditTimelineExpanded, setAuditTimelineExpanded] = useState(true);
 
   const { data: agent, isLoading, isError } = useQuery<AgentProfile>({
     queryKey: ["/api/agents", wallet],
@@ -1636,13 +1635,25 @@ export default function AgentProfilePage() {
                     <CardTitle className="flex items-center gap-2 text-base">
                       <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                       Audit Flags
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="ml-auto"
+                        onClick={() => setAuditFlagsExpanded((v) => !v)}
+                        data-testid="button-audit-flags-expand"
+                        aria-label={auditFlagsExpanded ? "Collapse audit flags" : "Expand audit flags"}
+                      >
+                        {auditFlagsExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      </Button>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground" data-testid="text-violations-empty">
-                      No audit flags recorded.
-                    </p>
-                  </CardContent>
+                  {auditFlagsExpanded && (
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground" data-testid="text-violations-empty">
+                        No audit flags recorded.
+                      </p>
+                    </CardContent>
+                  )}
                 </Card>
               );
               return (
@@ -1662,65 +1673,76 @@ export default function AgentProfilePage() {
                             {proposed.length} under review
                           </span>
                         )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setAuditFlagsExpanded((v) => !v)}
+                          data-testid="button-audit-flags-expand"
+                          aria-label={auditFlagsExpanded ? "Collapse audit flags" : "Expand audit flags"}
+                        >
+                          {auditFlagsExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        </Button>
                       </span>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {violations.map((v) => (
-                        <div
-                          key={v.id}
-                          data-testid={`violation-row-${v.id}`}
-                          className="rounded-md border bg-muted/30 p-4 space-y-2"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span
-                                data-testid={`badge-violation-type-${v.id}`}
-                                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${
-                                  v.type === "breach"
-                                    ? "border-amber-600/40 bg-amber-600/10 text-amber-700 dark:text-amber-400"
-                                    : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
-                                }`}
-                              >
-                                {v.type === "breach" ? "Confirmed breach" : "Structural anomaly"}
-                              </span>
-                              <span
-                                data-testid={`badge-violation-status-${v.id}`}
-                                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
-                                  v.status === "confirmed"
-                                    ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                    : v.status === "rejected"
-                                    ? "border-border bg-muted text-muted-foreground"
-                                    : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
-                                }`}
-                              >
-                                {v.status === "confirmed" && v.auto_confirmed ? "Auto-certified" : v.status === "confirmed" ? "Certified" : v.status === "rejected" ? "Cleared" : "Under review"}
+                  {auditFlagsExpanded && (
+                    <CardContent>
+                      <div className="space-y-3">
+                        {violations.map((v) => (
+                          <div
+                            key={v.id}
+                            data-testid={`violation-row-${v.id}`}
+                            className="rounded-md border bg-muted/30 p-4 space-y-2"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  data-testid={`badge-violation-type-${v.id}`}
+                                  className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${
+                                    v.type === "breach"
+                                      ? "border-amber-600/40 bg-amber-600/10 text-amber-700 dark:text-amber-400"
+                                      : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
+                                  }`}
+                                >
+                                  {v.type === "breach" ? "Confirmed breach" : "Structural anomaly"}
+                                </span>
+                                <span
+                                  data-testid={`badge-violation-status-${v.id}`}
+                                  className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
+                                    v.status === "confirmed"
+                                      ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                      : v.status === "rejected"
+                                      ? "border-border bg-muted text-muted-foreground"
+                                      : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
+                                  }`}
+                                >
+                                  {v.status === "confirmed" && v.auto_confirmed ? "Auto-certified" : v.status === "confirmed" ? "Certified" : v.status === "rejected" ? "Cleared" : "Under review"}
+                                </span>
+                              </div>
+                              <span className="text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-violation-time-${v.id}`}>
+                                {formatDistanceToNow(new Date(v.detected_at), { addSuffix: true })}
                               </span>
                             </div>
-                            <span className="text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-violation-time-${v.id}`}>
-                              {formatDistanceToNow(new Date(v.detected_at), { addSuffix: true })}
-                            </span>
+                            {v.reason && (
+                              <p className="text-xs text-muted-foreground" data-testid={`text-violation-reason-${v.id}`}>
+                                {v.reason}
+                              </p>
+                            )}
+                            {v.proof_id && (
+                              <Link
+                                href={`/proof/${v.proof_id}`}
+                                data-testid={`link-violation-proof-${v.id}`}
+                                className="inline-flex items-center gap-1 text-xs text-primary hover:underline underline-offset-2"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                View proof
+                              </Link>
+                            )}
                           </div>
-                          {v.reason && (
-                            <p className="text-xs text-muted-foreground" data-testid={`text-violation-reason-${v.id}`}>
-                              {v.reason}
-                            </p>
-                          )}
-                          {v.proof_id && (
-                            <Link
-                              href={`/proof/${v.proof_id}`}
-                              data-testid={`link-violation-proof-${v.id}`}
-                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline underline-offset-2"
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                              View proof
-                            </Link>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
+                        ))}
+                      </div>
+                    </CardContent>
+                  )}
                 </Card>
               );
             })()}
@@ -1732,23 +1754,35 @@ export default function AgentProfilePage() {
                     <Clock className="h-4 w-4" />
                     Audit Timeline
                   </span>
-                  {agent.transparencyTier && (
-                    <Badge
-                      variant="outline"
-                      className={
-                        agent.transparencyTier === "Tier 3"
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                          : agent.transparencyTier === "Tier 2"
-                          ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
-                          : "bg-muted text-muted-foreground"
-                      }
-                      data-testid="badge-transparency-tier"
+                  <span className="flex items-center gap-2">
+                    {agent.transparencyTier && (
+                      <Badge
+                        variant="outline"
+                        className={
+                          agent.transparencyTier === "Tier 3"
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                            : agent.transparencyTier === "Tier 2"
+                            ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                            : "bg-muted text-muted-foreground"
+                        }
+                        data-testid="badge-transparency-tier"
+                      >
+                        {agent.transparencyTier}
+                      </Badge>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setAuditTimelineExpanded((v) => !v)}
+                      data-testid="button-audit-timeline-expand"
+                      aria-label={auditTimelineExpanded ? "Collapse audit timeline" : "Expand audit timeline"}
                     >
-                      {agent.transparencyTier}
-                    </Badge>
-                  )}
+                      {auditTimelineExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </Button>
+                  </span>
                 </CardTitle>
               </CardHeader>
+              {auditTimelineExpanded && (
               <CardContent>
                 {!timeline ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1870,6 +1904,7 @@ export default function AgentProfilePage() {
                   </div>
                 )}
               </CardContent>
+              )}
             </Card>
           </div>
         )}

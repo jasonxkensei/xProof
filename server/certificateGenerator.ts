@@ -7,6 +7,7 @@ interface CertificateOptions {
   subscriptionTier: string;
   companyName?: string;
   companyLogoUrl?: string;
+  signerAddress?: string;
 }
 
 const COLORS = {
@@ -98,7 +99,7 @@ function generateCertificateNumber(certification: Certification): string {
 }
 
 export async function generateCertificatePDF(options: CertificateOptions): Promise<Buffer> {
-  const { certification, subscriptionTier, companyName } = options;
+  const { certification, subscriptionTier, companyName, signerAddress } = options;
   
   return new Promise(async (resolve, reject) => {
     try {
@@ -213,7 +214,7 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
 
       const boxMargin = margin + 25;
       const boxWidth = contentWidth - 50;
-      const boxHeight = 160;
+      const boxHeight = 215;
       
       doc.roundedRect(boxMargin, yPos, boxWidth, boxHeight, 5)
          .fillOpacity(0.03).fill(COLORS.primary);
@@ -249,13 +250,25 @@ export async function generateCertificatePDF(options: CertificateOptions): Promi
       doc.text(formatDate(certification.createdAt), valueX, infoY - 1, { width: valueWidth });
 
       infoY += 32;
-      
-      if (certification.authorName) {
-        doc.fontSize(9).font('Helvetica-Bold').fillColor(COLORS.textLight);
-        doc.text('CERTIFIED BY', labelX, infoY);
-        doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORS.text);
-        doc.text(certification.authorName, valueX, infoY - 1, { width: valueWidth });
-      }
+
+      // CERTIFIED BY: show agent name if meaningful, otherwise fall back to wallet address
+      const certifiedByValue =
+        certification.authorName && certification.authorName !== 'AI Agent'
+          ? certification.authorName
+          : signerAddress ?? certification.authorName ?? 'Unknown';
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(COLORS.textLight);
+      doc.text('CERTIFIED BY', labelX, infoY);
+      doc.fontSize(10).font('Helvetica-Bold').fillColor(COLORS.text);
+      doc.text(certifiedByValue, valueX, infoY - 1, { width: valueWidth });
+
+      infoY += 32;
+
+      // PUBLIC PROOF LINK
+      const proofUrl = `https://xproof.app/proof/${certification.id}`;
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(COLORS.textLight);
+      doc.text('PUBLIC PROOF', labelX, infoY);
+      doc.fontSize(9).font('Helvetica').fillColor(COLORS.primary);
+      doc.text(proofUrl, valueX, infoY - 1, { width: valueWidth, link: proofUrl, underline: true });
 
       yPos += boxHeight + 30;
 

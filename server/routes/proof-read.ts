@@ -1732,6 +1732,7 @@ export function registerProofReadRoutes(app: Express) {
         subscriptionTier: user?.subscriptionTier ?? 'free',
         companyName: user?.isPublicProfile ? (user.companyName ?? undefined) : undefined,
         companyLogoUrl: undefined,
+        signerAddress: user?.walletAddress ?? undefined,
       });
 
       certPdfCache.set(certId, { buf: pdfBuffer, generatedAt: Date.now() });
