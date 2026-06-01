@@ -7,7 +7,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentRateLimiter, publicReadRateLimiter } from "../reliability";
 import { isX402Configured, verifyX402Payment, send402Response } from "../x402";
-import { recordOnBlockchain, isMultiversXConfigured } from "../blockchain";
+import { recordOnBlockchain, isMultiversXConfigured, computeOnchainPayloadBytes, MAX_ONCHAIN_PAYLOAD_BYTES } from "../blockchain";
 import { getCertificationPriceEgld, getCertificationPriceUsd } from "../pricing";
 import { isMX8004Configured, recordCertificationAsJob } from "../mx8004";
 import { isAdminWallet, getApiKeyOwnerWallet, getTrialUser, consumeTrialCredit, getUserCreditBalance, consumeCredit, atomicConsumeCredit, atomicConsumeTrialCredit, refundCredit, refundTrialCredit, TRIAL_QUOTA, buildCanonicalId, tryDisplaceAcpReservation } from "./helpers";
@@ -378,6 +378,23 @@ export function registerStandardRoutes(app: Express) {
         });
       }
 
+      // Preflight: compute the on-chain payload byte length and reject BEFORE any ACP
+      // displacement, entitlement consumption, or blockchain work. This closes the
+      // reservation-griefing path where an oversized agent_id (which passes schema
+      // validation) triggers deterministic PAYLOAD_TOO_LARGE inside recordOnBlockchain()
+      // after the victim's ACP reservation has already been displaced. Both api_key and
+      // x402 paths are covered because this guard runs before the existing-cert block.
+      // Mirrors the same preflight applied in /api/proof and /api/batch.
+      const _preflightFileName = `standard_proof_${proof.agent_id.slice(0, 20)}_${Date.now()}`;
+      const _preflightAuthorName = proof.agent_id;
+      const _preflightBytes = computeOnchainPayloadBytes(canonicalHash, _preflightFileName, _preflightAuthorName);
+      if (_preflightBytes > MAX_ONCHAIN_PAYLOAD_BYTES) {
+        return res.status(400).json({
+          error: "PAYLOAD_TOO_LARGE",
+          message: `On-chain data payload exceeds ${MAX_ONCHAIN_PAYLOAD_BYTES} bytes (got ${_preflightBytes}). Shorten agent_id.`,
+        });
+      }
+
       // Check for an existing certification BEFORE any billing or blockchain work.
       // This makes the endpoint idempotent: re-submitting the same proof returns the
       // existing anchor at no cost rather than triggering a new blockchain transaction.
@@ -459,8 +476,8 @@ export function registerStandardRoutes(app: Express) {
         }
       }
 
-      const fileName = `standard_proof_${proof.agent_id.slice(0, 20)}_${Date.now()}`;
-      const authorName = proof.agent_id;
+      const fileName = _preflightFileName;
+      const authorName = _preflightAuthorName;
 
       if (!isMultiversXConfigured()) {
         return res.status(503).json({ error: "Blockchain anchoring is not configured" });
