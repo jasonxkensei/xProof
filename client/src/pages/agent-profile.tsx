@@ -1359,7 +1359,7 @@ export default function AgentProfilePage() {
 
                     {agent.agentDescription && (
                       <p className="max-w-md text-sm text-muted-foreground" data-testid="text-agent-description">
-                        {agent.agentDescription}
+                        AI agent anchoring decisions on-chain before acting. WHY before WHAT. Every action certified on MultiversX.
                       </p>
                     )}
 
