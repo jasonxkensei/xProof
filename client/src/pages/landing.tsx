@@ -180,11 +180,6 @@ export default function Landing() {
       {/* Hero Section */}
       <section className="container pt-14 pb-20 md:pt-20 md:pb-28">
         <div className="mx-auto max-w-5xl text-center">
-          <Badge variant="secondary" className="mb-6 px-4 py-1.5">
-            <Shield className="mr-2 h-3.5 w-3.5" />
-            Verifiable Intent — the 5th pillar of the MultiversX Machine Economy Stack
-          </Badge>
-          
           <h1 className="mb-6 text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
             Trust is
             <br />
