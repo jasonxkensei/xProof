@@ -502,10 +502,7 @@ export default function IncidentReportPage() {
               <a href="/"><ArrowLeft className="h-4 w-4" /></a>
             </Button>
             <a href="/" className="flex items-center gap-2" data-testid="link-logo">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
-                <Shield className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <span className="text-lg font-bold tracking-tight">xproof</span>
+              <img src="/xproof-logo.png" alt="xproof" className="h-7 w-auto" />
             </a>
             <Badge variant="outline" className="text-xs">Incident Report</Badge>
           </div>

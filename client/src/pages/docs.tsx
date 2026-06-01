@@ -820,10 +820,7 @@ export default function DocsPage() {
               <a href="/"><ArrowLeft className="h-4 w-4" /></a>
             </Button>
             <a href="/" className="flex items-center gap-2" data-testid="link-logo-docs">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-                <Shield className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold tracking-tight">xproof</span>
+              <img src="/xproof-logo.png" alt="xproof" className="h-8 w-auto" />
             </a>
             <Badge variant="outline">API Docs</Badge>
           </div>

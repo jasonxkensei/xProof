@@ -375,10 +375,7 @@ export default function Certify() {
         <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="container flex h-16 items-center justify-between gap-4">
             <a href="/" className="flex items-center gap-2" data-testid="link-logo-home">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-                <Shield className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold tracking-tight">xproof</span>
+              <img src="/xproof-logo.png" alt="xproof" className="h-8 w-auto" />
             </a>
             <div className="flex items-center gap-2">
               <Button asChild variant="ghost" size="sm" data-testid="button-leaderboard">
@@ -517,10 +514,7 @@ export default function Certify() {
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between gap-4">
           <a href="/" className="flex items-center gap-2" data-testid="link-logo-home">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-              <Shield className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold tracking-tight">xproof</span>
+            <img src="/xproof-logo.png" alt="xproof" className="h-8 w-auto" />
           </a>
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm" data-testid="button-leaderboard">

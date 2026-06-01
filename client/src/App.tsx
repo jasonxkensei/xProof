@@ -5,7 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
-import { Shield, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Landing from "@/pages/landing";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -38,7 +38,7 @@ function Router() {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <Shield className="h-12 w-12 text-primary animate-pulse" />
+          <img src="/xproof-logo.png" alt="xproof" className="h-12 w-auto animate-pulse" />
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Loading...</span>
@@ -51,7 +51,7 @@ function Router() {
   const fallback = (
     <div className="flex h-screen items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-4">
-        <Shield className="h-12 w-12 text-primary animate-pulse" />
+        <img src="/xproof-logo.png" alt="xproof" className="h-12 w-auto animate-pulse" />
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>Loading...</span>

@@ -197,10 +197,7 @@ export default function AgentsPage() {
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
           <a href="/" className="flex items-center gap-2" data-testid="link-logo-home">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-              <Shield className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold tracking-tight">xProof</span>
+            <img src="/xproof-logo.png" alt="xproof" className="h-8 w-auto" />
           </a>
           <nav className="hidden md:flex items-center gap-6">
             <a href="/#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-how-it-works">
@@ -395,10 +392,7 @@ export default function AgentsPage() {
             <div className="grid gap-8 md:grid-cols-4 mb-12">
               <div className="md:col-span-2">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-                    <Shield className="h-5 w-5 text-primary-foreground" />
-                  </div>
-                  <span className="text-xl font-bold">xproof</span>
+                  <img src="/xproof-logo.png" alt="xproof" className="h-8 w-auto" />
                 </div>
                 <p className="text-sm text-muted-foreground max-w-xs">
                   The on-chain notary for AI agents. Verifiable trust, anchored on MultiversX.
