@@ -222,7 +222,7 @@ function HistoryTableBody({ snapshots }: { snapshots: TrustSnapshot[] }) {
   );
 }
 
-function TrustHistoryChart({ snapshots }: { snapshots: TrustSnapshot[] }) {
+function TrustHistoryChart({ snapshots, tableExpanded }: { snapshots: TrustSnapshot[]; tableExpanded: boolean }) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
@@ -413,8 +413,8 @@ function TrustHistoryChart({ snapshots }: { snapshots: TrustSnapshot[] }) {
         </div>
       )}
 
-      {snapshots.length >= 3 && (
-        <div className="overflow-hidden rounded-md border" data-testid="table-trust-history">
+      {snapshots.length >= 3 && tableExpanded && (
+        <div className="mt-2 overflow-hidden rounded-md border" data-testid="table-trust-history">
           <table className="w-full text-xs">
             <thead className="border-b bg-muted/40">
               <tr>
@@ -1224,6 +1224,7 @@ export default function AgentProfilePage() {
   const [copied, setCopied] = useState(false);
   const [auditFlagsExpanded, setAuditFlagsExpanded] = useState(false);
   const [auditTimelineExpanded, setAuditTimelineExpanded] = useState(false);
+  const [trustHistoryTableExpanded, setTrustHistoryTableExpanded] = useState(false);
 
   const { data: agent, isLoading, isError } = useQuery<AgentProfile>({
     queryKey: ["/api/agents", wallet],
@@ -1536,13 +1537,27 @@ export default function AgentProfilePage() {
             {/* Trust Score History */}
             <Card data-testid="card-trust-history">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <TrendingUp className="h-4 w-4" />
-                  Trust score history
+                <CardTitle className="flex items-center justify-between gap-2 flex-wrap text-base">
+                  <span className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4" />
+                    Trust score history
+                  </span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setTrustHistoryTableExpanded((v) => !v)}
+                    data-testid="button-trust-history-expand"
+                    aria-label={trustHistoryTableExpanded ? "Collapse trust history table" : "Expand trust history table"}
+                  >
+                    {trustHistoryTableExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <TrustHistoryChart snapshots={history?.snapshots ?? []} />
+                <TrustHistoryChart
+                  snapshots={history?.snapshots ?? []}
+                  tableExpanded={trustHistoryTableExpanded}
+                />
               </CardContent>
             </Card>
 
@@ -1658,6 +1673,8 @@ export default function AgentProfilePage() {
                   )}
                 </Card>
               );
+
+              const recentViolations = violations.slice(0, 5);
               return (
                 <Card data-testid="card-violations">
                   <CardHeader>
@@ -1687,64 +1704,67 @@ export default function AgentProfilePage() {
                       </span>
                     </CardTitle>
                   </CardHeader>
-                  {auditFlagsExpanded && (
-                    <CardContent>
-                      <div className="space-y-3">
-                        {violations.map((v) => (
-                          <div
-                            key={v.id}
-                            data-testid={`violation-row-${v.id}`}
-                            className="rounded-md border bg-muted/30 p-4 space-y-2"
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span
-                                  data-testid={`badge-violation-type-${v.id}`}
-                                  className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${
-                                    v.type === "breach"
-                                      ? "border-amber-600/40 bg-amber-600/10 text-amber-700 dark:text-amber-400"
-                                      : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
-                                  }`}
-                                >
-                                  {v.type === "breach" ? "Confirmed breach" : "Structural anomaly"}
-                                </span>
-                                <span
-                                  data-testid={`badge-violation-status-${v.id}`}
-                                  className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
-                                    v.status === "confirmed"
-                                      ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                      : v.status === "rejected"
-                                      ? "border-border bg-muted text-muted-foreground"
-                                      : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
-                                  }`}
-                                >
-                                  {v.status === "confirmed" && v.auto_confirmed ? "Auto-certified" : v.status === "confirmed" ? "Certified" : v.status === "rejected" ? "Cleared" : "Under review"}
-                                </span>
-                              </div>
-                              <span className="text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-violation-time-${v.id}`}>
-                                {formatDistanceToNow(new Date(v.detected_at), { addSuffix: true })}
+                  <CardContent>
+                    <div className="space-y-3">
+                      {(auditFlagsExpanded ? violations : recentViolations).map((v) => (
+                        <div
+                          key={v.id}
+                          data-testid={`violation-row-${v.id}`}
+                          className="rounded-md border bg-muted/30 p-4 space-y-2"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                data-testid={`badge-violation-type-${v.id}`}
+                                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${
+                                  v.type === "breach"
+                                    ? "border-amber-600/40 bg-amber-600/10 text-amber-700 dark:text-amber-400"
+                                    : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
+                                }`}
+                              >
+                                {v.type === "breach" ? "Confirmed breach" : "Structural anomaly"}
+                              </span>
+                              <span
+                                data-testid={`badge-violation-status-${v.id}`}
+                                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
+                                  v.status === "confirmed"
+                                    ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                    : v.status === "rejected"
+                                    ? "border-border bg-muted text-muted-foreground"
+                                    : "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
+                                }`}
+                              >
+                                {v.status === "confirmed" && v.auto_confirmed ? "Auto-certified" : v.status === "confirmed" ? "Certified" : v.status === "rejected" ? "Cleared" : "Under review"}
                               </span>
                             </div>
-                            {v.reason && (
-                              <p className="text-xs text-muted-foreground" data-testid={`text-violation-reason-${v.id}`}>
-                                {v.reason}
-                              </p>
-                            )}
-                            {v.proof_id && (
-                              <Link
-                                href={`/proof/${v.proof_id}`}
-                                data-testid={`link-violation-proof-${v.id}`}
-                                className="inline-flex items-center gap-1 text-xs text-primary hover:underline underline-offset-2"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                                View proof
-                              </Link>
-                            )}
+                            <span className="text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-violation-time-${v.id}`}>
+                              {formatDistanceToNow(new Date(v.detected_at), { addSuffix: true })}
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  )}
+                          {v.reason && (
+                            <p className="text-xs text-muted-foreground" data-testid={`text-violation-reason-${v.id}`}>
+                              {v.reason}
+                            </p>
+                          )}
+                          {v.proof_id && (
+                            <Link
+                              href={`/proof/${v.proof_id}`}
+                              data-testid={`link-violation-proof-${v.id}`}
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline underline-offset-2"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              View proof
+                            </Link>
+                          )}
+                        </div>
+                      ))}
+                      {!auditFlagsExpanded && violations.length > 5 && (
+                        <p className="text-xs text-muted-foreground" data-testid="text-violations-more">
+                          +{violations.length - 5} more
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
                 </Card>
               );
             })()}
@@ -1784,7 +1804,6 @@ export default function AgentProfilePage() {
                   </span>
                 </CardTitle>
               </CardHeader>
-              {auditTimelineExpanded && (
               <CardContent>
                 {!timeline ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1796,14 +1815,14 @@ export default function AgentProfilePage() {
                 ) : (
                   <div className="relative space-y-0">
                     <div className="absolute left-[11px] top-3 bottom-3 w-px bg-border" />
-                    {timeline.events.map((evt, i) => {
+                    {(auditTimelineExpanded ? timeline.events : timeline.events.slice(0, 5)).map((evt, i, arr) => {
                       const isAudit = evt.event_type === "audit";
                       const hasMeta = evt.event_type === "metadata_cert";
                       return (
                         <div
                           key={evt.id}
                           data-testid={`timeline-event-${evt.id}`}
-                          className={`relative pl-8 py-3 ${i < timeline.events.length - 1 ? "border-b border-border/50" : ""}`}
+                          className={`relative pl-8 py-3 ${i < arr.length - 1 ? "border-b border-border/50" : ""}`}
                         >
                           <div className={`absolute left-1.5 top-4 h-3 w-3 rounded-full border-2 ${
                             isAudit
@@ -1898,7 +1917,12 @@ export default function AgentProfilePage() {
                       );
                     })}
 
-                    {timeline.total > timeline.events.length && (
+                    {!auditTimelineExpanded && timeline.events.length > 5 && (
+                      <div className="pt-3 pl-8 text-xs text-muted-foreground" data-testid="text-timeline-more">
+                        +{timeline.events.length - 5} more
+                      </div>
+                    )}
+                    {auditTimelineExpanded && timeline.total > timeline.events.length && (
                       <div className="pt-3 pl-8 text-xs text-muted-foreground" data-testid="text-timeline-total">
                         Showing {timeline.events.length} of {timeline.total} events
                       </div>
@@ -1906,7 +1930,6 @@ export default function AgentProfilePage() {
                   </div>
                 )}
               </CardContent>
-              )}
             </Card>
           </div>
         )}
