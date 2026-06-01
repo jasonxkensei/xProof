@@ -2011,7 +2011,88 @@ curl -X POST https://xproof.app/api/batch \\\\
 \\\`\\\`\\\`
 
 ### MCP (Model Context Protocol)
-Connect via JSON-RPC 2.0 over Streamable HTTP at POST /mcp. Tools: certify_file, certify_with_confidence, verify_proof, get_proof, discover_services, audit_agent_session, check_attestations, investigate_proof. Auth: Bearer pm_YOUR_API_KEY.
+Connect via JSON-RPC 2.0 over Streamable HTTP at POST /mcp (Streamable HTTP, spec 2025-03-26).
+
+**Critical:** every request must include \\\`Accept: application/json, text/event-stream\\\` or the server returns "Not Acceptable".
+
+\\\`\\\`\\\`bash
+curl -X POST https://xproof.app/mcp \\\\
+  -H "Content-Type: application/json" \\\\
+  -H "Accept: application/json, text/event-stream" \\\\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\\\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+\\\`\\\`\\\`
+
+Available tools (auth: Bearer pm_YOUR_API_KEY except where noted):
+- \\\`register_free_trial\\\` — get 10 free certifications instantly, **no auth required**
+- \\\`certify_file\\\` — certify a file hash on MultiversX blockchain
+- \\\`certify_with_confidence\\\` — staged certification with confidence score (initial/partial/pre-commitment/final), shared decision_id, reversibility governance
+- \\\`verify_proof\\\` — verify an existing certification
+- \\\`get_proof\\\` — retrieve a proof in JSON or Markdown format
+- \\\`discover_services\\\` — discover services and pricing, **no auth required**
+- \\\`audit_agent_session\\\` — certify a full agent decision (WHY + WHAT dual-proof, blocks execution without proof_id)
+- \\\`check_attestations\\\` — check third-party trust attestations for an agent wallet
+- \\\`investigate_proof\\\` — full 4W audit trail reconstruction (x402 paid or API key)
+- \\\`submit_outcome\\\` — record the actual outcome against a confidence-anchored decision
+- \\\`get_calibration\\\` — query an agent's calibration quality (bias, gap, variance) — **no auth required**
+
+MCP client config (Claude Desktop, Cursor, Codex, OpenClaw):
+\\\`\\\`\\\`json
+{
+  "mcpServers": {
+    "xproof": {
+      "url": "https://xproof.app/mcp",
+      "headers": { "Authorization": "Bearer pm_YOUR_API_KEY" }
+    }
+  }
+}
+\\\`\\\`\\\`
+
+### Confidence-Level Anchoring (certify_with_confidence)
+Record how certain you are at each decision stage. Creates an on-chain audit trail of your reasoning process.
+
+Stages: \\\`initial\\\` (60%) → \\\`partial\\\` → \\\`pre-commitment\\\` (80%) → \\\`final\\\` (100%). All share a \\\`decision_id\\\`.
+
+Governance rule: if \\\`reversibility_class\\\` is \\\`irreversible\\\` and \\\`confidence_level < 0.95\\\`, xproof flags a policy violation on-chain.
+
+\\\`\\\`\\\`bash
+curl -X POST https://xproof.app/mcp \\\\
+  -H "Content-Type: application/json" \\\\
+  -H "Accept: application/json, text/event-stream" \\\\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\\\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"certify_with_confidence","arguments":{"file_hash":"<sha256>","filename":"decision.json","decision_id":"<uuid>","confidence_level":0.8,"threshold_stage":"pre-commitment","reversibility_class":"irreversible","why":"instruction hash or reason","who":"erd1...or agent-id"}}}'
+\\\`\\\`\\\`
+
+After execution, call \\\`submit_outcome\\\` with the actual outcome to track calibration over time.
+
+### SDK — Python
+\\\`\\\`\\\`bash
+pip install xproof
+\\\`\\\`\\\`
+\\\`\\\`\\\`python
+from xproof import XProofClient
+client = XProofClient(api_key="pm_YOUR_API_KEY")
+proof = client.certify_file("path/to/file.pdf")
+print(proof.verify_url)
+# Staged confidence
+from xproof import certify_with_confidence
+certify_with_confidence(api_key="pm_...", file_hash="...", decision_id="...", confidence_level=0.8, stage="pre-commitment")
+\\\`\\\`\\\`
+PyPI: https://pypi.org/project/xproof/ — Integrations: LangChain, CrewAI, LlamaIndex, AutoGen, OpenAI Agents SDK, Vercel AI
+
+### SDK — JavaScript / TypeScript
+\\\`\\\`\\\`bash
+npm install @xproof/xproof
+\\\`\\\`\\\`
+\\\`\\\`\\\`typescript
+import { XProofClient } from "@xproof/xproof";
+const client = new XProofClient({ apiKey: "pm_YOUR_API_KEY" });
+const proof = await client.certifyFile("path/to/file.pdf");
+console.log(proof.verifyUrl);
+// With LangChain
+import { XProofTool } from "@xproof/xproof/langchain";
+\\\`\\\`\\\`
+npm: https://www.npmjs.com/package/@xproof/xproof — Integrations: LangChain, CrewAI, LlamaIndex, AutoGen, OpenAI Agents SDK, Vercel AI
 
 ### Verification Badge
 Embed a dynamic badge in README: \\\`[![xProof](https://xproof.app/badge/{proof_id})](https://explorer.multiversx.com/transactions/{tx_hash})\\\`
@@ -2384,16 +2465,62 @@ xproof exposes a native MCP server at \`POST ${baseUrl}/mcp\` using JSON-RPC 2.0
 **Protocol**: JSON-RPC 2.0 over Streamable HTTP (spec version 2025-03-26)
 **Authentication**: Bearer token (\`pm_\` prefixed API keys) via Authorization header
 **Session**: Stateless (no session management required)
+**Critical**: every request must include \`Accept: application/json, text/event-stream\` — without it the server returns "Not Acceptable" and tools/list returns an empty list.
 
 ### Available Tools
-- \`certify_file\` - Create a blockchain certification for a file
-- \`certify_with_confidence\` - Staged certification with confidence score (initial/partial/pre-commitment/final), shared decision_id
-- \`verify_proof\` - Verify an existing certification
-- \`get_proof\` - Retrieve a proof in JSON or Markdown format
-- \`discover_services\` - Discover available services and pricing
-- \`audit_agent_session\` - Certify a full agent decision session (WHY + WHAT dual-proof pattern)
-- \`check_attestations\` - Check third-party trust attestations for an agent wallet
-- \`investigate_proof\` - Deep investigation of a proof (x402 paid)
+
+| Tool | Auth required | Description |
+|------|--------------|-------------|
+| \`register_free_trial\` | No | Get 10 free certifications instantly — returns a pm_ API key with no wallet or payment |
+| \`certify_file\` | Yes | Certify a SHA-256 file hash on MultiversX blockchain (proof of existence, authorship, timestamp) |
+| \`certify_with_confidence\` | Yes | Staged certification with confidence score and decision_id. Supports reversibility governance. |
+| \`verify_proof\` | No | Verify any existing xproof certification by proof_id |
+| \`get_proof\` | No | Retrieve a proof as JSON or Markdown |
+| \`discover_services\` | No | List available services, pricing, and capabilities |
+| \`audit_agent_session\` | Yes | Certify a full WHY + WHAT dual-proof for an agent decision. Blocks execution without proof_id. |
+| \`check_attestations\` | No | Return active domain-specific attestations for an agent wallet (trust bonus per issuer level) |
+| \`investigate_proof\` | x402 or API key | Full 4W audit trail (WHO, WHAT, WHEN, WHY) for a contested agent action |
+| \`submit_outcome\` | Yes | Record the actual outcome against a confidence-anchored decision (operator-only, once per proof) |
+| \`get_calibration\` | No | Query an agent's calibration quality: mean gap, bias label, variance, per-decision time series |
+
+### Confidence-Level Anchoring — certify_with_confidence
+
+This is xproof's most advanced feature. It creates an on-chain audit trail of your decision process — not just what you decided, but how confident you were at each stage and why.
+
+**Stages:** \`initial\` → \`partial\` → \`pre-commitment\` → \`final\`. All stages share a \`decision_id\` UUID.
+
+**Governance rule:** If \`reversibility_class\` is \`irreversible\` and \`confidence_level < 0.95\`, xproof records a policy violation on-chain.
+
+**Full workflow:**
+1. Anchor at \`initial\` (confidence 0.6) with your first assessment hash
+2. Anchor at \`pre-commitment\` (confidence 0.8) as evidence accumulates
+3. Anchor at \`final\` (confidence 1.0) when you commit to the action
+4. Execute the action
+5. Call \`submit_outcome\` with the actual result
+6. \`get_calibration\` will show your bias (overconfident / underconfident / calibrated) over time
+
+\`\`\`bash
+# Stage 1 — initial assessment
+curl -X POST ${baseUrl}/mcp \\
+  -H "Content-Type: application/json" \\
+  -H "Accept: application/json, text/event-stream" \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"certify_with_confidence","arguments":{"file_hash":"<sha256>","filename":"decision-initial.json","decision_id":"<uuid>","confidence_level":0.6,"threshold_stage":"initial","reversibility_class":"irreversible","why":"<instruction-hash>","who":"<agent-id>"}}}'
+
+# Stage 2 — final commitment
+curl -X POST ${baseUrl}/mcp \\
+  -H "Content-Type: application/json" \\
+  -H "Accept: application/json, text/event-stream" \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"certify_with_confidence","arguments":{"file_hash":"<sha256>","filename":"decision-final.json","decision_id":"<same-uuid>","confidence_level":0.95,"threshold_stage":"final","reversibility_class":"irreversible"}}}'
+
+# After execution — record outcome
+curl -X POST ${baseUrl}/mcp \\
+  -H "Content-Type: application/json" \\
+  -H "Accept: application/json, text/event-stream" \\
+  -H "Authorization: Bearer pm_YOUR_API_KEY" \\
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"submit_outcome","arguments":{"proof_id":"<proof-id-from-final-stage>","actual_confidence":0.9,"outcome_notes":"action succeeded"}}}'
+\`\`\`
 
 ### Available Resources
 - \`xproof://specification\` - Full xproof specification
@@ -2506,6 +2633,71 @@ xproof works with any MCP-compatible agent (Claude Code, Codex, OpenClaw, Conway
 - GitHub Action repo: https://github.com/jasonxkensei/xProof-Action
 - Main repo: https://github.com/jasonxkensei/xProof
 - Supported protocols: MCP, ACP, x402, MX-8004, OpenAI Plugin, LangChain, CrewAI
+
+## SDKs
+
+### Python SDK
+Install: \`pip install xproof\`
+PyPI: https://pypi.org/project/xproof/
+
+\`\`\`python
+from xproof import XProofClient
+
+client = XProofClient(api_key="pm_YOUR_API_KEY")
+
+# Certify a file
+proof = client.certify_file("path/to/file.pdf")
+print(proof.verify_url)           # https://xproof.app/proof/{id}
+print(proof.blockchain.tx_hash)   # MultiversX transaction hash
+
+# Certify with confidence levels
+from xproof import certify_with_confidence
+proof = certify_with_confidence(
+    api_key="pm_...",
+    file_hash="<sha256>",
+    decision_id="<uuid>",
+    confidence_level=0.8,
+    stage="pre-commitment",
+    reversibility_class="irreversible"
+)
+
+# Batch certification
+proofs = client.certify_batch(["file1.pdf", "file2.json"])
+
+# Verify
+result = client.verify_proof(proof_id="<uuid>")
+\`\`\`
+
+Framework integrations: LangChain, CrewAI, LlamaIndex, AutoGen, OpenAI Agents SDK, Vercel AI.
+
+### JavaScript / TypeScript SDK
+Install: \`npm install @xproof/xproof\`
+npm: https://www.npmjs.com/package/@xproof/xproof
+
+\`\`\`typescript
+import { XProofClient } from "@xproof/xproof";
+
+const client = new XProofClient({ apiKey: "pm_YOUR_API_KEY" });
+
+// Certify a file
+const proof = await client.certifyFile("path/to/file.pdf");
+console.log(proof.verifyUrl);
+
+// Certify with confidence levels
+const staged = await client.certifyWithConfidence({
+  fileHash: "<sha256>",
+  decisionId: "<uuid>",
+  confidenceLevel: 0.8,
+  stage: "pre-commitment",
+  reversibilityClass: "irreversible",
+});
+
+// LangChain tool
+import { XProofTool } from "@xproof/xproof/langchain";
+const tool = new XProofTool({ apiKey: "pm_..." });
+\`\`\`
+
+Framework integrations: LangChain, CrewAI, LlamaIndex, AutoGen, OpenAI Agents SDK, Vercel AI.
 
 ## MX-8004 Integration (Trustless Agents Standard)
 
