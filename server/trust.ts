@@ -918,21 +918,30 @@ export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestat
   const lCharW = 6.8;
   const rCharW = 6.5;
   const scoreCharW = 6.0;
-  const dotR = 4;
-  const dotGap = 8;
-  const lPad = 12;
+  // Shield icon dimensions (scaled from 512×512 viewBox; shield spans x:160-352, y:96-416)
+  const iconH = 13;
+  const iconW = 8; // approx rendered width after scale
+  const dotGap = 7;
+  const lPad = 11;
   const rPad = 12;
-  const scoreSep = 8; // gap between level label and score in right section
+  const scoreSep = 8;
 
-  const labelWidth = Math.round(lPad + dotR * 2 + dotGap + labelText.length * lCharW + lPad);
+  const labelWidth = Math.round(lPad + iconW + dotGap + labelText.length * lCharW + lPad);
   const rightWidth = Math.round(rPad + rightLabel.length * rCharW + scoreSep + rightScore.length * scoreCharW + rPad);
   const totalWidth = labelWidth + rightWidth;
 
   const midY = h / 2;
   const textY = midY + 4;
 
-  // X centers
-  const labelCx = Math.round(lPad + dotR * 2 + dotGap + (labelText.length * lCharW) / 2);
+  // Shield icon: scale 512-space path down to ~iconH px tall, centered in left section
+  const shieldScale = iconH / 320; // shield height in 512 space is 320 (from y=96 to y=416)
+  const iconCx = lPad + iconW / 2;  // horizontal center of icon in badge
+  const iconCy = midY;              // vertical center
+  const shieldTx = (iconCx - 256 * shieldScale).toFixed(3);
+  const shieldTy = (iconCy - 256 * shieldScale).toFixed(3);
+
+  // X for label text center
+  const labelCx = Math.round(lPad + iconW + dotGap + (labelText.length * lCharW) / 2);
   const rightLabelStartX = Math.round(labelWidth + rPad);
   const scoreStartX = Math.round(labelWidth + rPad + rightLabel.length * rCharW + scoreSep);
 
@@ -956,7 +965,13 @@ export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestat
     <rect x="${labelWidth}" width="${rightWidth}" height="${h}" fill="url(#rst)"/>
   </g>
   <rect width="${totalWidth}" height="${h}" rx="${r}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-  <circle cx="${lPad + dotR}" cy="${midY}" r="${dotR}" fill="${levelColor}"/>
+  <!-- xproof shield icon (scaled from favicon.svg paths) -->
+  <g transform="translate(${shieldTx} ${shieldTy}) scale(${shieldScale.toFixed(5)})">
+    <path d="M256 96C256 96 160 144 160 256c0 72 48 128 96 160 48-32 96-88 96-160 0-112-96-160-96-160z"
+          fill="none" stroke="${levelColor}" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M224 264l24 24 48-48"
+          fill="none" stroke="${levelColor}" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
   <text x="${labelCx}" y="${textY}" fill="rgba(255,255,255,0.92)" text-anchor="middle"
         font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="11"
         letter-spacing="0.6" text-rendering="geometricPrecision">${labelText}</text>
