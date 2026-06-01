@@ -1194,9 +1194,12 @@ export async function createMcpServer(ctx: McpContext) {
           };
         }
 
-        // investigate_proof is a paid (x402 / API key) governance action: explicitly opt in
-        // to recording violations. Public unauthenticated read paths leave this disabled.
-        const result = await reconstructAuditTrail(wallet, proof_id, { recordViolations: true });
+        // x402-paid (anonymous) path: return the full audit trail as a read-only investigation.
+        // Payment authorizes the lookup, not governance writes. Recording violations requires
+        // an authenticated account (API key path above) so that the acting identity can be
+        // attributed. Unauthenticated callers must not be able to mutate agent_violations for
+        // arbitrary wallets by paying a small per-request fee.
+        const result = await reconstructAuditTrail(wallet, proof_id);
 
         return {
           content: [{
