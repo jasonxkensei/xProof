@@ -18,7 +18,7 @@ except ImportError:
         ) from err
 
 from ..client import XProofClient
-from ..models import CertifyEntry, Certification
+from ..models import Certification, CertifyEntry
 
 
 def _hash_data(data: Any) -> str:

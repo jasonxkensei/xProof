@@ -21,9 +21,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from xproof.integrations.langchain import XProofCallbackHandler
-from xproof.models import BatchResult, BatchResultSummary, Certification
+pytest.importorskip(
+    "langchain_core",
+    reason="langchain-core not installed; skipping LangChain callback demo tests",
+)
 
+from xproof.integrations.langchain import XProofCallbackHandler  # noqa: E402
+from xproof.models import BatchResult, BatchResultSummary, Certification  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
