@@ -1174,11 +1174,22 @@ export async function createMcpServer(ctx: McpContext) {
             }
           }
 
-          // investigate_proof is a paid (x402 / API key) governance action: explicitly opt in
-          // to recording violations. Public unauthenticated read paths leave this disabled.
+          // Governance writes (recordViolations) are only permitted for the subject wallet's own
+          // API key or a platform admin. Any other API-key holder gets a read-only audit trail:
+          // they can inspect the proof but cannot create or confirm agent_violations for a wallet
+          // they do not own or administer.
+          const callerWallet = await getApiKeyOwnerWallet({ userId: auth.userId });
+          const isAuthorizedGovernanceActor =
+            callerWallet !== null &&
+            (isAdminWallet(callerWallet) || callerWallet.toLowerCase() === wallet.toLowerCase());
+
           let result: Awaited<ReturnType<typeof reconstructAuditTrail>>;
           try {
-            result = await reconstructAuditTrail(wallet, proof_id, { recordViolations: true });
+            result = await reconstructAuditTrail(
+              wallet,
+              proof_id,
+              isAuthorizedGovernanceActor ? { recordViolations: true } : {},
+            );
           } catch (trailErr: any) {
             // Refund the credit if the investigation itself fails (e.g. proof not found).
             if (invTrialInfo && !invCreditInfo) await refundTrialCredit(invTrialInfo.userId).catch(() => {});
