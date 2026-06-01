@@ -749,6 +749,116 @@ export function registerAdminRoutes(app: Express) {
   });
 
   // ============================================
+  // GET /api/admin/trial/funnel
+  // Returns per-agent funnel breakdown for all trial accounts.
+  // For each trial agent, computes which onboarding stage they reached:
+  //   zombie          → registered but key never used
+  //   key_used        → key called at least once, no cert attempted
+  //   cert_attempted  → at least one cert submitted, none confirmed
+  //   cert_confirmed  → at least one cert confirmed, quota not exhausted
+  //   quota_exhausted → used all 10 free certifications
+  // Also returns aggregate counts per stage for quick funnel overview.
+  // Protected: wallet-authenticated admin only.
+  // ============================================
+  app.get("/api/admin/trial/funnel", isWalletAuthenticated, requireAdmin, async (req: any, res) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT
+          u.id,
+          COALESCE(u.agent_name, u.company_name) AS agent_name,
+          u.created_at,
+          u.trial_quota,
+          u.trial_used,
+          u.webhook_url IS NOT NULL AS has_webhook,
+          COALESCE(SUM(ak.request_count), 0)::int AS total_key_requests,
+          MAX(ak.last_used_at) AS key_last_used_at,
+          COUNT(c.id)::int AS cert_count,
+          COUNT(c.id) FILTER (WHERE c.blockchain_status = 'confirmed')::int AS confirmed_count,
+          MIN(c.created_at) AS first_cert_at,
+          MAX(c.created_at) AS last_cert_at
+        FROM users u
+        LEFT JOIN api_keys ak ON ak.user_id = u.id AND ak.is_active = true
+        LEFT JOIN certifications c ON c.user_id = u.id
+        WHERE u.wallet_address LIKE 'erd1trial%'
+        GROUP BY u.id, u.agent_name, u.company_name, u.created_at,
+                 u.trial_quota, u.trial_used, u.webhook_url
+        ORDER BY u.created_at DESC
+      `);
+
+      const now = Date.now();
+
+      const agents = (result.rows as any[]).map((r) => {
+        const keyRequests = Number(r.total_key_requests) || 0;
+        const certCount = Number(r.cert_count) || 0;
+        const confirmedCount = Number(r.confirmed_count) || 0;
+        const trialUsed = Number(r.trial_used) || 0;
+        const trialQuota = Number(r.trial_quota) || 10;
+
+        let stage: string;
+        if (trialUsed >= trialQuota && trialUsed > 0) {
+          stage = "quota_exhausted";
+        } else if (confirmedCount > 0) {
+          stage = "cert_confirmed";
+        } else if (certCount > 0) {
+          stage = "cert_attempted";
+        } else if (keyRequests > 0) {
+          stage = "key_used";
+        } else {
+          stage = "zombie";
+        }
+
+        const createdAt = r.created_at ? new Date(r.created_at).getTime() : now;
+        const lastActivity = r.last_cert_at
+          ? new Date(r.last_cert_at).getTime()
+          : r.key_last_used_at
+          ? new Date(r.key_last_used_at).getTime()
+          : createdAt;
+
+        return {
+          agent_name: r.agent_name,
+          registered_at: r.created_at,
+          days_since_registration: Math.floor((now - createdAt) / 86_400_000),
+          days_since_last_activity: Math.floor((now - lastActivity) / 86_400_000),
+          stage,
+          has_webhook: r.has_webhook === true || r.has_webhook === "true",
+          key: {
+            total_requests: keyRequests,
+            last_used_at: r.key_last_used_at ?? null,
+          },
+          certifications: {
+            attempted: certCount,
+            confirmed: confirmedCount,
+            first_at: r.first_cert_at ?? null,
+            last_at: r.last_cert_at ?? null,
+          },
+          trial: {
+            used: trialUsed,
+            quota: trialQuota,
+            remaining: Math.max(0, trialQuota - trialUsed),
+          },
+        };
+      });
+
+      const stageCounts = agents.reduce(
+        (acc, a) => { acc[a.stage] = (acc[a.stage] || 0) + 1; return acc; },
+        {} as Record<string, number>,
+      );
+
+      const STAGES = ["zombie", "key_used", "cert_attempted", "cert_confirmed", "quota_exhausted"];
+
+      return res.json({
+        generated_at: new Date().toISOString(),
+        total: agents.length,
+        funnel: STAGES.map((s) => ({ stage: s, count: stageCounts[s] || 0 })),
+        agents,
+      });
+    } catch (err: any) {
+      logger.error("Failed to fetch trial funnel", { component: "admin", error: err.message });
+      return res.status(500).json({ error: "INTERNAL_ERROR", message: err.message });
+    }
+  });
+
+  // ============================================
   // DELETE /api/admin/cleanup/test-agents
   // Removes test agents created during development
   // ============================================
