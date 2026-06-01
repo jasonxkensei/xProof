@@ -44,4 +44,5 @@ No API key required — registers a free trial account automatically.
 ## Links
 
 - [xproof.app](https://xproof.app)
+- Docs (LLM-readable): [xproof.app/llms.txt](https://xproof.app/llms.txt)
 - [PyPI: xproof](https://pypi.org/project/xproof)

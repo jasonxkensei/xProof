@@ -1,0 +1,21 @@
+{
+  "_comment": "Claude Desktop config — MultiversX SC MCP + xProof MCP side by side. Replace the placeholders before use.",
+  "mcpServers": {
+    "multiversx-sc": {
+      "command": "npx",
+      "args": ["-y", "multiversx-sc-mcp"],
+      "env": {
+        "WALLET_PATH": "/path/to/your/wallet.json",
+        "WALLET_PASSWORD": "YOUR_WALLET_PASSWORD",
+        "NETWORK": "mainnet"
+      }
+    },
+    "xproof": {
+      "url": "https://xproof.app/mcp",
+      "headers": {
+        "Authorization": "Bearer pm_YOUR_XPROOF_API_KEY"
+      }
+    }
+  }
+}
+

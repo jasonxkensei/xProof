@@ -1,94 +1,78 @@
-# Fetch.ai uAgents + xProof
+# xProof + Fetch.ai uAgents
 
-Certify every message your uAgent sends or receives — tamper-proof, on-chain, in ~6 seconds.
+Anchor every uAgent decision on **MultiversX mainnet** before the action that follows it. Each certification records the 4W audit trail: **Who** acted, **What** was produced, **When** it happened, and **Why**.
 
-## What gets certified
+## Why this matters
 
-| Event | WHO | WHAT | WHY |
-|-------|-----|------|-----|
-| Incoming message | Agent name | SHA-256 of payload | `"message_received"` |
-| Outgoing response | Agent name | SHA-256 of payload | `"message_sent"` |
+uAgents operate autonomously — they send messages, execute trades, and trigger smart contracts without a human in the loop. When a dispute or audit occurs, self-reported logs are not independent evidence.
 
-## Install
+xProof anchors the **WHY** (trigger + reasoning) on-chain *before* the action, and the **WHAT** (output) *after*. Both proofs share a `decision_id`, creating a verifiable confidence trail no one can retroactively alter.
+
+## Quickstart
 
 ```bash
 pip install xproof uagents
 ```
 
-Get an xProof API key at **[xproof.app](https://xproof.app)**.
-
-## Quickstart — decorator pattern
-
 ```python
 from uagents import Agent, Context
-from xproof import XProofClient
-from xproof.integrations.fetchai import XProofuAgentMiddleware, xproof_handler
+from xproof.integrations.fetchai import XProofuAgentMiddleware, xproof_handler, wrap_agent
 
-client = XProofClient(api_key="pm_...")
-middleware = XProofuAgentMiddleware(
-    client=client,
-    agent_name="research-agent",
-    certify_incoming=True,
-    certify_outgoing=True,
-)
+agent = Agent(name="research-agent", seed="your-seed-phrase")
 
-agent = Agent(name="research-agent", seed="my-seed")
+# Create middleware once
+xp = wrap_agent(agent, api_key="pm_...")  # get key at xproof.app
 
-@agent.on_message(model=QueryMessage)
-@xproof_handler(middleware)
-async def handle_query(ctx: Context, sender: str, msg: QueryMessage):
-    response = await do_research(msg.query)
-    await ctx.send(sender, ResponseMessage(result=response))
-
-if __name__ == "__main__":
-    agent.run()
+# Wrap any message handler — zero changes to your logic
+@agent.on_message(model=ResearchQuery)
+@xproof_handler(xp, incoming_context="Research query received from peer")
+async def handle_query(ctx: Context, sender: str, msg: ResearchQuery):
+    response = await run_research(msg.topic)
+    return response  # returned value is certified as WHAT
 ```
 
-## Quickstart — manual certification
+## Dual-certification pattern
 
 ```python
-from xproof import XProofClient
-from xproof.integrations.fetchai import XProofuAgentMiddleware
-
-client = XProofClient(api_key="pm_...")
-middleware = XProofuAgentMiddleware(
-    client=client,
-    agent_name="my-agent",
+# One call creates a WHY+WHAT pair with shared decision_id
+result = xp.certify_action(
+    action_name="yield-research",
+    inputs={"query": "USDC yield pools on Base"},
+    outputs={"top_apy": 8.2, "pool": "Aave V3"},
+    why="Peer agent requested yield analysis for rebalancing",
+    confidence_level=0.94,
 )
 
-# Inside your handler:
-middleware.certify_incoming(
-    message=msg.payload,
-    decision_id=ctx.session,
-    context="message_received",
-)
+print(result["decision_id"])           # links WHY and WHAT
+print(result["why_proof"]["proof_id"]) # on-chain before the action
+print(result["what_proof"]["proof_id"])# on-chain after the action
 ```
 
-## Batch mode
-
-Collect certifications and flush them at the end of a handler cycle to reduce latency:
+## Manual certification
 
 ```python
-middleware = XProofuAgentMiddleware(
-    client=client,
-    agent_name="my-agent",
-    batch_mode=True,
+import uuid
+
+decision_id = str(uuid.uuid4())
+
+# Before action — certify the trigger
+why = xp.certify_incoming(
+    message=incoming_msg,
+    sender=ctx.sender,
+    context="Market data query",
+    decision_id=decision_id,
 )
 
-# After handling the request:
-middleware.flush()
-```
+# ... agent logic ...
 
-## Runtime toggles
-
-Enable or disable incoming/outgoing certification at runtime without recreating the middleware:
-
-```python
-# Pause outgoing certification (e.g. during maintenance)
-middleware.set_certify_outgoing(False)
-
-# Resume
-middleware.set_certify_outgoing(True)
+# After action — certify the output
+what = xp.certify_outgoing(
+    response=result,
+    recipient=ctx.sender,
+    context="Market data response",
+    decision_id=decision_id,
+    confidence_level=0.91,
+)
 ```
 
 ## Run the demo
@@ -97,10 +81,19 @@ middleware.set_certify_outgoing(True)
 python main.py
 ```
 
-The demo simulates an agent session using a mock client — no real API key or uAgents installation required to run.
+No API key needed — the demo uses mocked responses. To certify on-chain for real, replace `XProofClient.register()` with `XProofClient(api_key="pm_...")` obtained from [xproof.app/llms.txt](https://xproof.app/llms.txt).
+
+## 4W metadata recorded per proof
+
+| Field | Value |
+|-------|-------|
+| **WHO** | Agent name (`research-agent`) |
+| **WHAT** | SHA-256 hash of the message / response |
+| **WHEN** | UTC timestamp at certification time |
+| **WHY** | Context string describing the action |
 
 ## Links
 
-- [xproof.app](https://xproof.app)
-- [PyPI: xproof](https://pypi.org/project/xproof/)
-- [Fetch.ai uAgents docs](https://docs.fetch.ai/uagents/)
+- SDK: `pip install xproof`
+- Docs (LLM-readable): [xproof.app/llms.txt](https://xproof.app/llms.txt)
+- GitHub: [github.com/jasonxkensei/xproof](https://github.com/jasonxkensei/xproof)

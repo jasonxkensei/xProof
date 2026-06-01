@@ -15,8 +15,9 @@ xProof gives every agent action a tamper-proof audit trail anchored on-chain in 
 | [OpenAI Agents SDK](./openai-agents/) | Python | Certify tool executions and agent completions via RunHooks or TracingProcessor |
 | [Vercel AI SDK](./vercel/) | TypeScript | Certify AI generations in a Next.js API route |
 | [AutoGen](./autogen/) | Python | Certify messages exchanged between AutoGen agents |
-| [Fetch.ai uAgents](./fetchai/) | Python | Certify incoming/outgoing messages between uAgents |
 | [DeerFlow](./deerflow/) | Python | Certify DeerFlow agent outputs via a skill |
+| [Fetch.ai uAgents](./fetchai/) | Python | Anchor WHY+WHAT proofs for every uAgent message handler |
+| [MultiversX SC MCP](./multiversx-mcp/) | Config | Certify SC deploy/upgrade/call operations via Claude Desktop with both MCPs side by side |
 
 ## Quick start
 
@@ -30,9 +31,11 @@ npm install @xproof/xproof
 
 Get a free API key or start with the trial tier at **[xproof.app](https://xproof.app)**.
 
+AI agents: read **[xproof.app/llms.txt](https://xproof.app/llms.txt)** — one page, machine-readable, register + certify in under 2 minutes.
+
 ## Links
 
 - PyPI: [pypi.org/project/xproof](https://pypi.org/project/xproof)
 - npm: [npmjs.com/package/@xproof/xproof](https://www.npmjs.com/package/@xproof/xproof)
-- Docs: [xproof.app/docs](https://xproof.app/docs)
+- Docs (LLM-readable): [xproof.app/llms.txt](https://xproof.app/llms.txt)
 - GitHub (SDK): [github.com/jasonxkensei/xproof](https://github.com/jasonxkensei/xproof)
