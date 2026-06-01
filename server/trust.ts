@@ -894,37 +894,56 @@ export async function getCalibrationSummaryByWallet(walletAddress: string): Prom
 
 export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestationCount = 0, violationCount = 0, calibrationLabel?: string | null): string {
   const levelColor = getTrustLevelColor(level);
-  const levelColorDark = adjustColor(levelColor, -20);
-  const hasAttestations = attestationCount > 0;
+  const levelColorDark = adjustColor(levelColor, -30);
 
+  // Format score compactly: 43701 → "43.7k", 1234 → "1.2k", 999 → "999"
+  const scoreFormatted = score >= 10000
+    ? `${Math.round(score / 100) / 10}k`
+    : score >= 1000
+    ? `${(score / 1000).toFixed(1)}k`
+    : `${score}`;
+
+  // Attestation marker appended to level (compact, no prose)
+  const attestMark = attestationCount > 0 ? " ✦" : "";
+
+  // Badge text — concise: level name + optional attestation mark + score
+  // Violations and calibration labels are intentionally omitted — too verbose for an embeddable badge
   const labelText = "xproof";
-  const attestedLabel = hasAttestations ? ` · ${attestationCount} attested` : "";
-  const violationLabel = violationCount > 0 ? ` · ${violationCount} violation${violationCount > 1 ? "s" : ""}` : "";
-  const calibrationText = calibrationLabel
-    ? ` · ${calibrationLabel.charAt(0).toUpperCase() + calibrationLabel.slice(1)}`
-    : "";
-  const statusText = `${level}${attestedLabel}${violationLabel}${calibrationText} (${score})`;
-  const pad = 10;
-  const labelCharW = 6.8;
-  const statusCharW = 6.2;
-  const dotR = 3.5;
-  const dotSpace = 12;
-  const labelWidth = Math.round(labelText.length * labelCharW + pad * 2);
-  const statusWidth = Math.round(statusText.length * statusCharW + pad * 2 + dotSpace);
-  const totalWidth = labelWidth + statusWidth;
-  const h = 24;
-  const r = 5;
+  const rightLabel = level + attestMark;
+  const rightScore = scoreFormatted;
 
-  const attestedStarX = labelWidth + dotSpace + (statusWidth - dotSpace) / 2 + statusText.length * statusCharW * 0.1;
+  // Layout constants
+  const h = 28;
+  const r = 6;
+  const lCharW = 6.8;
+  const rCharW = 6.5;
+  const scoreCharW = 6.0;
+  const dotR = 4;
+  const dotGap = 8;
+  const lPad = 12;
+  const rPad = 12;
+  const scoreSep = 8; // gap between level label and score in right section
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${h}" role="img" aria-label="${labelText}: ${statusText}">
-  <title>${labelText}: ${statusText}</title>
+  const labelWidth = Math.round(lPad + dotR * 2 + dotGap + labelText.length * lCharW + lPad);
+  const rightWidth = Math.round(rPad + rightLabel.length * rCharW + scoreSep + rightScore.length * scoreCharW + rPad);
+  const totalWidth = labelWidth + rightWidth;
+
+  const midY = h / 2;
+  const textY = midY + 4;
+
+  // X centers
+  const labelCx = Math.round(lPad + dotR * 2 + dotGap + (labelText.length * lCharW) / 2);
+  const rightLabelStartX = Math.round(labelWidth + rPad);
+  const scoreStartX = Math.round(labelWidth + rPad + rightLabel.length * rCharW + scoreSep);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${h}" role="img" aria-label="xproof trust: ${level} ${score}">
+  <title>xproof · ${level} · ${score}</title>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1E1E1E"/>
-      <stop offset="100%" stop-color="#161616"/>
+    <linearGradient id="lbg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#252525"/>
+      <stop offset="100%" stop-color="#181818"/>
     </linearGradient>
-    <linearGradient id="st" x1="0" y1="0" x2="0" y2="1">
+    <linearGradient id="rst" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="${levelColor}"/>
       <stop offset="100%" stop-color="${levelColorDark}"/>
     </linearGradient>
@@ -933,15 +952,20 @@ export function generateTrustBadgeSvg(level: TrustLevel, score: number, attestat
     </clipPath>
   </defs>
   <g clip-path="url(#cr)">
-    <rect width="${totalWidth}" height="${h}" fill="url(#bg)"/>
-    <rect x="${labelWidth}" width="${statusWidth}" height="${h}" fill="url(#st)"/>
+    <rect width="${totalWidth}" height="${h}" fill="url(#lbg)"/>
+    <rect x="${labelWidth}" width="${rightWidth}" height="${h}" fill="url(#rst)"/>
   </g>
-  <rect width="${totalWidth}" height="${h}" rx="${r}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-  <circle cx="${labelWidth + pad + dotR}" cy="${h / 2}" r="${dotR}" fill="${levelColor}"/>
-  <g text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="600" font-size="11" text-rendering="geometricPrecision">
-    <text x="${labelWidth / 2}" y="${h / 2 + 4}" fill="rgba(255,255,255,0.9)" letter-spacing="0.5">${labelText}</text>
-    <text x="${labelWidth + dotSpace + (statusWidth - dotSpace) / 2}" y="${h / 2 + 4}" fill="rgba(255,255,255,0.95)">${statusText}</text>
-  </g>
+  <rect width="${totalWidth}" height="${h}" rx="${r}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+  <circle cx="${lPad + dotR}" cy="${midY}" r="${dotR}" fill="${levelColor}"/>
+  <text x="${labelCx}" y="${textY}" fill="rgba(255,255,255,0.92)" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="11"
+        letter-spacing="0.6" text-rendering="geometricPrecision">${labelText}</text>
+  <text x="${rightLabelStartX}" y="${textY}" fill="rgba(255,255,255,0.97)" text-anchor="start"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="11"
+        text-rendering="geometricPrecision">${rightLabel}</text>
+  <text x="${scoreStartX}" y="${textY}" fill="rgba(255,255,255,0.65)" text-anchor="start"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="400" font-size="10"
+        text-rendering="geometricPrecision">${rightScore}</text>
 </svg>`;
 }
 

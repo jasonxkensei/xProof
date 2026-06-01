@@ -1125,14 +1125,19 @@ function BadgeEmbedPanel({ wallet }: { wallet: string }) {
     <Card data-testid="card-badge-embed">
       <CardContent className="pt-5 pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <img
-              src={previewUrl}
-              alt="xproof Trust Badge"
-              className="h-7"
-              data-testid="img-badge-preview"
-            />
-            <span className="text-sm text-muted-foreground">Trust badge</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 rounded-md bg-[#0d1117] px-3 py-2">
+              <img
+                src={previewUrl}
+                alt="xproof Trust Badge"
+                className="h-7 block"
+                data-testid="img-badge-preview"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">Trust badge</p>
+              <p className="text-xs text-muted-foreground">For READMEs and websites</p>
+            </div>
           </div>
           <Button
             variant="ghost"
@@ -1141,7 +1146,7 @@ function BadgeEmbedPanel({ wallet }: { wallet: string }) {
             data-testid="button-badge-embed-toggle"
           >
             <Code2 className="h-3.5 w-3.5 mr-1.5" />
-            Embed this badge
+            Embed
             {expanded ? (
               <ChevronUp className="h-3 w-3 ml-1.5" />
             ) : (
