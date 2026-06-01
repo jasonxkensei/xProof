@@ -383,10 +383,12 @@ class XProofClient:
             )
         if not decision_id or not decision_id.strip():
             raise ValueError("decision_id is required")
-        if reversibility_class is not None and reversibility_class not in self.VALID_REVERSIBILITY_CLASSES:
+        if (
+            reversibility_class is not None
+            and reversibility_class not in self.VALID_REVERSIBILITY_CLASSES
+        ):
             raise ValueError(
-                f"reversibility_class must be one of: "
-                f"{', '.join(self.VALID_REVERSIBILITY_CLASSES)}"
+                f"reversibility_class must be one of: {', '.join(self.VALID_REVERSIBILITY_CLASSES)}"
             )
 
         proof_metadata: dict[str, Any] = dict(metadata) if metadata else {}
@@ -407,8 +409,7 @@ class XProofClient:
             jt = timing.get("jurisdiction_type")
             if jt is not None and jt not in JURISDICTION_TYPES:
                 raise ValueError(
-                    f"timing['jurisdiction_type'] must be one of: "
-                    f"{', '.join(JURISDICTION_TYPES)}"
+                    f"timing['jurisdiction_type'] must be one of: {', '.join(JURISDICTION_TYPES)}"
                 )
             for key in (
                 "instruction_received_at",
@@ -417,7 +418,7 @@ class XProofClient:
                 "jurisdiction_type",
             ):
                 if key in timing:
-                    proof_metadata[key] = timing[key]  # type: ignore[literal-required]
+                    proof_metadata[key] = timing[key]
 
         payload: dict[str, Any] = {
             "filename": file_name,
@@ -575,7 +576,7 @@ class XProofClient:
                 "file_hash": fhash,
             }
             entry_meta: dict[str, Any] = dict(f.get("metadata") or {})
-            entry_timing = f.get("timing")
+            entry_timing = cast(Optional[dict[str, Any]], f.get("timing"))
             if entry_timing:
                 jt = entry_timing.get("jurisdiction_type")
                 if jt is not None and jt not in JURISDICTION_TYPES:

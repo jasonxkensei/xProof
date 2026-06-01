@@ -285,14 +285,16 @@ class Certification:
             "timing_breakdown", metadata.get("timing_breakdown")
         )
         if not raw_timing:
-            _TIMING_FLAT_KEYS = frozenset((
-                "instruction_received_at",
-                "reasoning_started_at",
-                "action_taken_at",
-                "jurisdiction_type",
-                "reasoning_duration_ms",
-                "total_duration_ms",
-            ))
+            _TIMING_FLAT_KEYS = frozenset(
+                (
+                    "instruction_received_at",
+                    "reasoning_started_at",
+                    "action_taken_at",
+                    "jurisdiction_type",
+                    "reasoning_duration_ms",
+                    "total_duration_ms",
+                )
+            )
             if any(k in metadata for k in _TIMING_FLAT_KEYS):
                 raw_timing = metadata
         timing: Optional[TimingBreakdown] = None
@@ -307,7 +309,7 @@ class Certification:
                 "total_duration_ms",
             ):
                 if key in raw_timing and raw_timing[key] is not None:
-                    tb[key] = raw_timing[key]  # type: ignore[literal-required]
+                    tb[key] = raw_timing[key]
             timing = tb if tb else None
 
         return cls(

@@ -17,6 +17,11 @@ import types
 
 import pytest
 
+pytest.importorskip(
+    "langchain_core",
+    reason="langchain-core not installed; skipping LangChain certify-tool demo tests",
+)
+
 
 def _load_demo() -> types.ModuleType:
     """Load certify_tool_demo.py from the langchain-chain examples directory.
@@ -25,9 +30,7 @@ def _load_demo() -> types.ModuleType:
     We use importlib to load the module directly from its file path.
     """
     sdk_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    demo_path = os.path.join(
-        sdk_root, "examples", "langchain-chain", "certify_tool_demo.py"
-    )
+    demo_path = os.path.join(sdk_root, "examples", "langchain-chain", "certify_tool_demo.py")
     spec = importlib.util.spec_from_file_location("certify_tool_demo", demo_path)
     assert spec is not None and spec.loader is not None, (
         f"Could not load module spec from {demo_path}"
@@ -66,14 +69,16 @@ def test_blocked_scenario_violation_rule() -> None:
     tool = XProofCertifyTool(client=client, author="data-hygiene-agent")
 
     with pytest.raises(PolicyViolationError) as exc_info:
-        tool.run({
-            "decision_text": decision_text,
-            "confidence_level": 0.82,
-            "threshold_stage": "pre-commitment",
-            "decision_id": decision_id,
-            "reversibility_class": "irreversible",
-            "why": "Scheduled GDPR retention cleanup",
-        })
+        tool.run(
+            {
+                "decision_text": decision_text,
+                "confidence_level": 0.82,
+                "threshold_stage": "pre-commitment",
+                "decision_id": decision_id,
+                "reversibility_class": "irreversible",
+                "why": "Scheduled GDPR retention cleanup",
+            }
+        )
 
     violations = exc_info.value.violations
     assert len(violations) == 1
@@ -94,13 +99,15 @@ def test_compliant_scenario_transaction_hash() -> None:
     client = _demo._build_mock_client(decision_id, compliant=True)
     tool = XProofCertifyTool(client=client, author="data-hygiene-agent")
 
-    tx_hash = tool.run({
-        "decision_text": decision_text,
-        "confidence_level": 0.97,
-        "threshold_stage": "pre-commitment",
-        "decision_id": decision_id,
-        "reversibility_class": "irreversible",
-        "why": "Scheduled GDPR retention cleanup",
-    })
+    tx_hash = tool.run(
+        {
+            "decision_text": decision_text,
+            "confidence_level": 0.97,
+            "threshold_stage": "pre-commitment",
+            "decision_id": decision_id,
+            "reversibility_class": "irreversible",
+            "why": "Scheduled GDPR retention cleanup",
+        }
+    )
 
     assert tx_hash == "tx-mvx-langchain-demo"

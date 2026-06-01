@@ -154,7 +154,7 @@ class XProofuAgentMiddleware:
         """
         return _CertFlag(self._cert_outgoing, self._certify_outgoing_impl)
 
-    @certify_incoming.setter
+    @certify_incoming.setter  # type: ignore
     def certify_incoming(self, value: bool) -> None:
         """Enable or disable incoming certification at runtime.
 
@@ -165,7 +165,7 @@ class XProofuAgentMiddleware:
         """
         self._cert_incoming = bool(value)
 
-    @certify_outgoing.setter
+    @certify_outgoing.setter  # type: ignore
     def certify_outgoing(self, value: bool) -> None:
         """Enable or disable outgoing certification at runtime.
 
