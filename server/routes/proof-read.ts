@@ -1698,14 +1698,24 @@ export function registerProofReadRoutes(app: Express) {
         return res.status(402).json({ message: "Certificate not yet available — payment is still pending blockchain confirmation" });
       }
 
-      // Fetch user for subscription tier / branding — no longer gating on
-      // isPublicProfile because the proof's own isPublic flag (checked above)
-      // is the consent signal. All data in the certificate (hash, filename,
-      // blockchain tx) is already visible on the public proof page.
+      // Enforce the same profile-visibility gate as /api/proof/:id and
+      // prerender.ts. The certificate embeds the same details (filename, hash,
+      // author, tx) that those endpoints hide when isPublicProfile is false.
+      // Trial users are exempt because they use synthetic wallet addresses and
+      // have no real identity to protect — mirroring the carve-out in /api/proof/:id.
+      if (!certification.userId) {
+        certPdfCache.delete(certId);
+        return res.status(404).json({ message: "Certificate not found" });
+      }
       const [user] = await db
         .select()
         .from(users)
         .where(eq(users.id, certification.userId));
+
+      if (!user || (!user.isPublicProfile && !user.isTrial)) {
+        certPdfCache.delete(certId);
+        return res.status(404).json({ message: "Certificate not found" });
+      }
 
       // Return cached PDF if still fresh — visibility has already been re-confirmed above.
       const cached = certPdfCache.get(certId);
