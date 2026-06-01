@@ -1217,8 +1217,8 @@ export default function AgentProfilePage() {
   const wallet = params.wallet;
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
-  const [auditFlagsExpanded, setAuditFlagsExpanded] = useState(true);
-  const [auditTimelineExpanded, setAuditTimelineExpanded] = useState(true);
+  const [auditFlagsExpanded, setAuditFlagsExpanded] = useState(false);
+  const [auditTimelineExpanded, setAuditTimelineExpanded] = useState(false);
 
   const { data: agent, isLoading, isError } = useQuery<AgentProfile>({
     queryKey: ["/api/agents", wallet],
