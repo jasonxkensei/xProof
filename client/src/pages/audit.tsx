@@ -25,6 +25,7 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { copyToClipboard } from "@/lib/hashUtils";
 import type { Certification } from "@shared/schema";
+import { safeHref } from "@shared/url";
 
 const ACTION_TYPE_CONFIG: Record<string, { label: string; icon: any; color: string }> = {
   trade_execution: { label: "Trade Execution", icon: Activity, color: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
@@ -323,9 +324,9 @@ export default function AuditPage() {
               </div>
             )}
 
-            {certification.transactionUrl && (
+            {safeHref(certification.transactionUrl) && (
               <Button asChild variant="outline" className="w-full" data-testid="button-view-blockchain">
-                <a href={certification.transactionUrl} target="_blank" rel="noopener noreferrer">
+                <a href={safeHref(certification.transactionUrl)!} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="mr-2 h-4 w-4" />
                   View on MultiversX Explorer
                 </a>

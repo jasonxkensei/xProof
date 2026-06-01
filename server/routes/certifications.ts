@@ -9,7 +9,6 @@ import { isWalletAuthenticated } from "../walletAuth";
 import { getCertificationPriceEgld } from "../pricing";
 import { broadcastSignedTransaction, getTxExplorerUrl } from "../blockchain";
 import { tryDisplaceAcpReservation } from "./helpers";
-import { safeHttpUrlSchema } from "@shared/url";
 
 export function registerCertificationsRoutes(app: Express) {
   // Create certification (unlimited, free service)
@@ -34,11 +33,11 @@ export function registerCertificationsRoutes(app: Express) {
         authorName: z.string().min(1),
         authorSignature: z.string().optional(),
         transactionHash: z.string().optional(),
-        // Restricted to absolute http/https URLs. The public proof page
-        // renders this value into an anchor `href`, so accepting arbitrary
-        // schemes (`javascript:`, `data:`, `vbscript:`) would create a
-        // stored XSS vector for any visitor who clicks the explorer link.
-        transactionUrl: safeHttpUrlSchema.optional(),
+        // transactionUrl is intentionally NOT accepted from the client. The
+        // stored URL is always server-derived from the verified transactionHash
+        // via getTxExplorerUrl(), so a caller cannot point the "View on
+        // MultiversX explorer" link at an attacker-controlled phishing page
+        // while supplying a legitimate on-chain txHash.
       });
 
       const data = schema.parse(req.body);
@@ -69,8 +68,8 @@ export function registerCertificationsRoutes(app: Express) {
       // A client-signed transaction is always required.
       // Server-funded blockchain writes are not permitted on this route — any authenticated
       // wallet can trigger them, which would allow free use of the operator's signing key.
-      if (!data.transactionHash || !data.transactionUrl) {
-        return res.status(402).json({ message: "Payment required. Please provide a valid transactionHash and transactionUrl from a signed MultiversX transaction." });
+      if (!data.transactionHash) {
+        return res.status(402).json({ message: "Payment required. Please provide a valid transactionHash from a signed MultiversX transaction." });
       }
 
       // Prevent transaction replay: the same txHash cannot be reused to certify a different file.
@@ -83,7 +82,8 @@ export function registerCertificationsRoutes(app: Express) {
       }
 
       let transactionHash: string = data.transactionHash;
-      let transactionUrl: string = data.transactionUrl;
+      // Always derived server-side after on-chain verification; never from client input.
+      let transactionUrl: string | null = null;
       let blockchainStatus: string = "confirmed";
       let blockchainLatencyMs: number | null = null;
 
@@ -118,11 +118,10 @@ export function registerCertificationsRoutes(app: Express) {
         blockchainStatus = "confirmed";
         blockchainLatencyMs = Date.now() - verifyStart;
         recordTransaction(true, blockchainLatencyMs, "certification");
-        // Override the client-supplied transactionUrl with a server-derived URL so
-        // that public proof pages always link to the real MultiversX explorer and
-        // cannot be turned into phishing vectors by an attacker who supplies a valid
-        // txHash paired with an unrelated attacker-controlled URL.
-        transactionUrl = getTxExplorerUrl(transactionHash) ?? transactionUrl;
+        // Derive transactionUrl server-side from the verified txHash. No
+        // client-supplied URL is ever used — the stored URL always points to
+        // the canonical MultiversX explorer for the confirmed transaction.
+        transactionUrl = getTxExplorerUrl(transactionHash);
       }
 
       // Verify that the on-chain transaction data field binds the payment to the certified
