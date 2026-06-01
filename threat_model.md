@@ -170,6 +170,8 @@ Required guarantees:
 ## Scan Notes — 2026-06-01
 
 - `investigate_proof` on MCP is not a read-only lookup surface. Any branch that enables `recordViolations: true` is a governance write path and must require an authorization model appropriate for mutating another wallet's public trust state; x402 payment alone is not sufficient authorization.
+- Current x402-paid `investigate_proof` keeps `recordViolations` disabled and is now a read-only lookup path; keep the API-key branch as the review anchor until it enforces subject/admin authorization before creating `agent_violations`.
 - Standard-proof write parity still needs the same downstream payload-byte preflight used by `/api/proof` and `/api/batch`. Entitlement consumption before ACP displacement is necessary but not sufficient when later deterministic validation failures can still strand displaced reservations.
 - Visibility-gated public artifacts remain in scope for stale-cache disclosure until every JSON, Markdown, badge-markdown, and prerendered HTML variant of a proof/profile explicitly uses `Cache-Control: private, no-store` or an equivalent anti-caching policy.
+- `/api/certificates/:id.pdf` must mirror the same proof-plus-profile visibility gate used by `/api/proof/:id`, prerendered proof HTML, and the JSON/Markdown proof artifacts. Treat "proof `isPublic` alone is consent" as insufficient for public certificate download.
 - `transactionUrl` should not be treated as a generic user-controlled hyperlink when downstream surfaces label it as a blockchain explorer destination. Scheme allowlisting prevents XSS, but public proof integrity still requires either a trusted explorer allowlist or server-derived explorer URLs bound to the verified transaction hash.
