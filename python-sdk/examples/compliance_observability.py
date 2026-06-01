@@ -353,10 +353,10 @@ def run_crewai_certification(decision_id: str) -> None:
     Here we use :class:`XProofCrewCertifyTool` with a mocked client so the
     example remains self-contained and network-free.
     """
+    import json as _json
+
     from xproof.exceptions import PolicyViolationError
     from xproof.integrations.crewai import XProofCrewCertifyTool
-
-    import json as _json
 
     decision_text = _json.dumps(
         {"action": "delete_pii_records", "scope": "eu-region", "count": 15_000}
@@ -423,10 +423,10 @@ def run_autogen_certification(decision_id: str) -> None:
     identical to the CrewAI section above so both integrations are directly
     comparable.
     """
+    import json as _json
+
     from xproof.exceptions import PolicyViolationError
     from xproof.integrations.autogen import xproof_certify_decision
-
-    import json as _json
 
     decision_text = _json.dumps(
         {"action": "delete_pii_records", "scope": "eu-region", "count": 15_000}

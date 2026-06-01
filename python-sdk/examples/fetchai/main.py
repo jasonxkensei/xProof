@@ -12,7 +12,6 @@ Requirements:
     pip install xproof
 """
 
-import json
 from unittest.mock import MagicMock
 
 from xproof.integrations.fetchai import XProofuAgentMiddleware
@@ -26,8 +25,7 @@ def _make_mock_client() -> MagicMock:
         transaction_hash="tx-mvx-fetchai-demo",
     )
     mock.batch_certify.return_value = [
-        MagicMock(id=f"proof-batch-{i}", transaction_hash=f"tx-batch-{i}")
-        for i in range(3)
+        MagicMock(id=f"proof-batch-{i}", transaction_hash=f"tx-batch-{i}") for i in range(3)
     ]
     return mock
 

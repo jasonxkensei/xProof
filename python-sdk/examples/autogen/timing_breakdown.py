@@ -104,7 +104,10 @@ def main() -> None:
     )
     print(f"  Reply: '{reply_1}'")
     print(f"  Proof: {result_1['proof_id']}")
-    if result_1["timing_breakdown"] and result_1["timing_breakdown"].get("total_duration_ms") is not None:
+    if (
+        result_1["timing_breakdown"]
+        and result_1["timing_breakdown"].get("total_duration_ms") is not None
+    ):
         print(f"  Total latency: {result_1['timing_breakdown']['total_duration_ms']} ms")
     print()
 
@@ -114,7 +117,9 @@ def main() -> None:
     print(f"[{instruction_received_at_2}] AssistantAgent → CriticAgent (autonomous):")
     print(f"  '{follow_up_message}'")
 
-    critic_reply = "Agreed on FX risk. Supply chain risk appears overstated — add confidence interval."
+    critic_reply = (
+        "Agreed on FX risk. Supply chain risk appears overstated — add confidence interval."
+    )
     result_2 = certify_agent_reply(
         client=client,
         agent_name="critic-agent",
@@ -127,7 +132,10 @@ def main() -> None:
     )
     print(f"  Reply: '{critic_reply}'")
     print(f"  Proof: {result_2['proof_id']}")
-    if result_2["timing_breakdown"] and result_2["timing_breakdown"].get("total_duration_ms") is not None:
+    if (
+        result_2["timing_breakdown"]
+        and result_2["timing_breakdown"].get("total_duration_ms") is not None
+    ):
         print(f"  Total latency: {result_2['timing_breakdown']['total_duration_ms']} ms")
     print()
 

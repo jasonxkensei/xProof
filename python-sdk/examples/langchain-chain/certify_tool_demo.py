@@ -88,19 +88,23 @@ def run_compliant_scenario(base_decision_id: str) -> None:
 
     print("Scenario 1 — compliant (confidence 0.97)")
     try:
-        tx_hash = tool.run({
-            "decision_text": decision_text,
-            "confidence_level": 0.97,
-            "threshold_stage": "pre-commitment",
-            "decision_id": decision_id,
-            "reversibility_class": "irreversible",
-            "why": "Scheduled GDPR retention cleanup",
-        })
+        tx_hash = tool.run(
+            {
+                "decision_text": decision_text,
+                "confidence_level": 0.97,
+                "threshold_stage": "pre-commitment",
+                "decision_id": decision_id,
+                "reversibility_class": "irreversible",
+                "why": "Scheduled GDPR retention cleanup",
+            }
+        )
         print(f"  Policy compliant — proceeding (tx: {tx_hash})")
         # delete_pii_records("eu-region")   # your actual execution here
     except PolicyViolationError as exc:
         for v in exc.violations:
-            print(f"  BLOCKED [POLICY VIOLATION] {v.rule} (proof_id={v.proof_id}, confidence_level={v.confidence_level}, threshold={v.threshold})")
+            print(
+                f"  BLOCKED [POLICY VIOLATION] {v.rule} (proof_id={v.proof_id}, confidence_level={v.confidence_level}, threshold={v.threshold})"
+            )
         raise RuntimeError("Deletion aborted: policy compliance check failed.") from exc
 
     print()
@@ -118,18 +122,22 @@ def run_blocked_scenario(base_decision_id: str) -> None:
 
     print("Scenario 2 — blocked (confidence 0.82, below 0.95 threshold)")
     try:
-        tool.run({
-            "decision_text": decision_text,
-            "confidence_level": 0.82,
-            "threshold_stage": "pre-commitment",
-            "decision_id": decision_id,
-            "reversibility_class": "irreversible",
-            "why": "Scheduled GDPR retention cleanup",
-        })
+        tool.run(
+            {
+                "decision_text": decision_text,
+                "confidence_level": 0.82,
+                "threshold_stage": "pre-commitment",
+                "decision_id": decision_id,
+                "reversibility_class": "irreversible",
+                "why": "Scheduled GDPR retention cleanup",
+            }
+        )
         raise AssertionError("Expected PolicyViolationError was not raised")
     except PolicyViolationError as exc:
         for v in exc.violations:
-            print(f"  BLOCKED [POLICY VIOLATION] {v.rule} (proof_id={v.proof_id}, confidence_level={v.confidence_level}, threshold={v.threshold})")
+            print(
+                f"  BLOCKED [POLICY VIOLATION] {v.rule} (proof_id={v.proof_id}, confidence_level={v.confidence_level}, threshold={v.threshold})"
+            )
         print("  Deletion aborted — audit trail preserved on-chain.")
 
     print()
