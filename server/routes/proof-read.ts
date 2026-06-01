@@ -1693,16 +1693,14 @@ export function registerProofReadRoutes(app: Express) {
         return res.status(402).json({ message: "Certificate not yet available — payment is still pending blockchain confirmation" });
       }
 
-      // Get user to determine subscription tier and enforce public profile requirement.
+      // Fetch user for subscription tier / branding — no longer gating on
+      // isPublicProfile because the proof's own isPublic flag (checked above)
+      // is the consent signal. All data in the certificate (hash, filename,
+      // blockchain tx) is already visible on the public proof page.
       const [user] = await db
         .select()
         .from(users)
         .where(eq(users.id, certification.userId));
-
-      if (!user || !user.isPublicProfile) {
-        certPdfCache.delete(certId);
-        return res.status(404).json({ message: "Certificate not found" });
-      }
 
       // Return cached PDF if still fresh — visibility has already been re-confirmed above.
       const cached = certPdfCache.get(certId);
@@ -1713,11 +1711,11 @@ export function registerProofReadRoutes(app: Express) {
         return res.send(cached.buf);
       }
 
-      // Generate PDF (free service - standard branding)
+      // Generate PDF — tier/branding from user when available, free otherwise
       const pdfBuffer = await generateCertificatePDF({
         certification,
-        subscriptionTier: 'free',
-        companyName: undefined,
+        subscriptionTier: user?.subscriptionTier ?? 'free',
+        companyName: user?.isPublicProfile ? (user.companyName ?? undefined) : undefined,
         companyLogoUrl: undefined,
       });
 
