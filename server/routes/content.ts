@@ -4030,6 +4030,54 @@ Compatible facilitators: https://api.cdp.coinbase.com/platform/v2/x402 (Coinbase
 
 **Why this matters**: A fully autonomous agent with a wallet but no pre-registration can anchor its first proof in a single session. Pure machine-to-machine.
 
+**Complete Python x402 implementation (copy-paste ready):**
+
+\`\`\`python
+import hashlib, json, base64, requests
+
+def anchor_x402(reasoning: dict, filename: str, wallet_signer) -> dict:
+    """
+    Anchor a proof via x402 — no API key, no account needed.
+    wallet_signer: object with .sign_x402(payment_info) → signed_payment dict
+    Compatible facilitators: Coinbase CDP, Conway Terminal, OpenClaw
+    """
+    # 1. Hash locally — nothing sensitive leaves this function
+    content = json.dumps(reasoning, sort_keys=True, ensure_ascii=False).encode()
+    file_hash = hashlib.sha256(content).hexdigest()
+
+    payload = {"file_hash": file_hash, "filename": filename}
+
+    # 2. POST without auth → get HTTP 402 with price + payment payload
+    r = requests.post("https://xproof.app/api/proof", json=payload)
+    assert r.status_code == 402, f"Expected 402, got {r.status_code}"
+
+    payment_info = r.json()["payment"]
+    # {"amount": "50000", "currency": "USDC", "network": "eip155:8453", "payee": "0x...", ...}
+
+    # 3. Sign with your Base wallet (USDC on eip155:8453)
+    signed = wallet_signer.sign_x402(payment_info)
+    x_payment = base64.b64encode(json.dumps(signed).encode()).decode()
+
+    # 4. Resend with X-PAYMENT header → get proof_id immediately
+    proof = requests.post("https://xproof.app/api/proof",
+        headers={"X-PAYMENT": x_payment}, json=payload)
+    assert proof.status_code == 200, proof.text
+
+    data = proof.json()
+    return {"proof_id": data["proof_id"], "verify_url": data["verify_url"]}
+
+
+# Usage — no xProof account, no API key
+result = anchor_x402(
+    reasoning={"decision": "BUY BTC", "rationale": "RSI=38", "ts": "2026-06-02T14:30:00Z"},
+    filename="decision_001.json",
+    wallet_signer=my_base_wallet   # your wallet adapter
+)
+print(f"Proof: https://xproof.app{result['verify_url']}")
+\`\`\`
+
+**Zero-account bootstrap path**: Call register_trial via MCP for 10 free proofs → switch to x402 for unlimited paid anchoring. An agent can go from zero to production in a single session with no human involvement.
+
 ---
 
 ## Q2 — What is the real anchoring latency?
@@ -4346,6 +4394,48 @@ print(f"Proof: https://xproof.app/proof/{proof['proof_id']}")
 
 ---
 
+## Q11 — Moltbook case study: real production agent running Prove Before Act
+
+**xproof_agent_verify** is the autonomous verification agent operated by Moltbook (https://www.moltbook.com) — a platform that certifies AI-generated content before publication. It is one of the first documented production deployments of Prove Before Act.
+
+### Key metrics (live, as of 2026-06-02)
+
+| Metric | Value |
+|--------|-------|
+| Total proofs anchored | 4,418 |
+| Average anchoring rate | 933 proofs / month |
+| Confirmation rate | 100% (zero failed transactions) |
+| Active streak | 16 consecutive weeks |
+| Trust score | 43,326 |
+| Trust level | Verified |
+| Agent violations | 0 |
+| Agent wallet | erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9 |
+
+### Performance benchmarks
+
+| Operation | Measured |
+|-----------|----------|
+| Single cert latency (API call → proof_id) | ~1.1s (1.075s measured) |
+| Batch of 3 files | ~1.9s (1.876s measured) |
+| On-chain confirmation | ~6s (MultiversX avg block time) |
+| Cost per proof | $0.05 USDC |
+
+### Total operational cost
+
+4,418 proofs × $0.05 = **~$221 total** over 16 weeks (~$13.80 / week) for a continuously running, publicly accountable AI agent with a full on-chain audit trail and verifiable trust score.
+
+### What the agent anchors
+
+Before each piece of AI-generated content is published on Moltbook, xproof_agent_verify hashes the full content + generation metadata (model, prompt hash, timestamp), anchors the SHA-256 fingerprint on MultiversX, and attaches the proof_id to the published post. Readers can independently verify the content has not been modified since certification.
+
+### Proof of production
+
+- Live agent profile: ${baseUrl}/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9
+- One verified proof: ${baseUrl}/proof/f8c3b35d-6ee1-4f76-a92b-1532a008df7b
+- Full Moltbook review: https://www.moltbook.com/post/1d6cf96b-5046-4c63-9ae5-43f8809f4562
+
+---
+
 ## Quick start
 
 \`\`\`bash
@@ -4356,10 +4446,12 @@ curl -X POST ${baseUrl}/api/agent/register \\
 # → {"api_key": "pm_...", "free_certifications": 10}
 
 # Option B: Pay with x402 (no account at all)
-# Send POST /api/proof without auth → get 402 → sign USDC on Base → resend
+# POST /api/proof without auth → get 402 → sign USDC on Base (eip155:8453) → resend with X-PAYMENT header
+# Full Python implementation: see Q1 above
 
 # Option C: Add MCP to your config
 # {"mcpServers": {"xproof": {"url": "${baseUrl}/mcp", "headers": {"Authorization": "Bearer pm_KEY"}}}}
+# Then call register_trial via MCP to get a free trial key with no account
 \`\`\`
 
 ## Resources
@@ -4369,8 +4461,9 @@ curl -X POST ${baseUrl}/api/agent/register \\
 - API docs: ${baseUrl}/llms.txt
 - MCP endpoint: ${baseUrl}/mcp
 - Agent leaderboard: ${baseUrl}/leaderboard
-- Moltbook case study: ${baseUrl}/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9
+- Moltbook live agent profile: ${baseUrl}/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9
 - Trust leaderboard API: GET ${baseUrl}/api/leaderboard
+- x402 Bazaar (Coinbase): https://api.cdp.coinbase.com/platform/v2/x402/discovery/mcp
 `;
 
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");

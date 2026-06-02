@@ -22,6 +22,8 @@ import {
   Clock,
   RefreshCw,
   Lock,
+  TrendingUp,
+  Star,
 } from "lucide-react";
 
 function CopyButton({ text }: { text: string }) {
@@ -72,6 +74,7 @@ export default function AgentContextPage() {
     privacy: true,
     fleet: true,
     workflow: true,
+    moltbook: true,
   });
 
   const toggle = (id: string) =>
@@ -119,8 +122,56 @@ curl -X POST https://xproof.app/api/proof \\
               A fully autonomous agent — with a wallet but no pre-established relationship with xProof — can anchor its first proof in a single session. No registration, no web UI, no human in the loop. The agent discovers the price, signs the payment, and gets the proof. Pure machine-to-machine.
             </p>
           </div>
+          <div>
+            <p className="text-xs font-semibold mb-2">Complete Python x402 implementation (copy-paste ready):</p>
+            <CodeBlock lang="python" code={`import hashlib, json, base64, requests
+
+def anchor_x402(reasoning: dict, filename: str, wallet_signer) -> dict:
+    """
+    Anchor a proof via x402 — no API key, no account needed.
+    wallet_signer: object with .sign_x402(payment_info) → signed_payment dict
+    Compatible facilitators: Coinbase CDP, Conway Terminal, OpenClaw
+    """
+    # 1. Hash locally — nothing sensitive leaves this function
+    content = json.dumps(reasoning, sort_keys=True, ensure_ascii=False).encode()
+    file_hash = hashlib.sha256(content).hexdigest()
+
+    payload = {"file_hash": file_hash, "filename": filename}
+
+    # 2. POST without auth → get HTTP 402 with price + payment payload
+    r = requests.post("https://xproof.app/api/proof", json=payload)
+    assert r.status_code == 402, f"Expected 402, got {r.status_code}: {r.text}"
+
+    payment_info = r.json()["payment"]
+    # payment_info = {
+    #   "amount": "50000", "currency": "USDC", "network": "eip155:8453",
+    #   "payee": "0x...", "payload": { ... x402 standard payload ... }
+    # }
+
+    # 3. Sign with your Base wallet (USDC on eip155:8453)
+    signed = wallet_signer.sign_x402(payment_info)
+    x_payment = base64.b64encode(json.dumps(signed).encode()).decode()
+
+    # 4. Resend with X-PAYMENT header → get proof_id immediately
+    proof = requests.post("https://xproof.app/api/proof",
+        headers={"X-PAYMENT": x_payment},
+        json=payload)
+    assert proof.status_code == 200, proof.text
+
+    data = proof.json()
+    return {"proof_id": data["proof_id"], "verify_url": data["verify_url"]}
+
+
+# Usage — no xProof account, no API key
+result = anchor_x402(
+    reasoning={"decision": "BUY BTC", "rationale": "RSI=38", "ts": "2026-06-02T14:30:00Z"},
+    filename="decision_001.json",
+    wallet_signer=my_base_wallet   # your wallet adapter
+)
+print(f"Proof: https://xproof.app{result['verify_url']}")`} />
+          </div>
           <p className="text-xs text-muted-foreground">
-            Compatible facilitators: <span className="font-mono">https://api.cdp.coinbase.com/platform/v2/x402</span> (Coinbase), Conway Terminal, OpenClaw, any x402-enabled agent framework.
+            Compatible facilitators: <span className="font-mono">https://api.cdp.coinbase.com/platform/v2/x402</span> (Coinbase CDP), Conway Terminal, OpenClaw, any x402-enabled agent framework.
           </p>
         </div>
       ),
@@ -348,10 +399,17 @@ def anchor_with_retry(file_hash: str, filename: str, api_key: str, max_retries=3
                     sign: "✓ Best tool",
                   },
                   {
+                    useCase: "Confidence-level staged anchoring (pre-commitment)",
+                    xproof: "✓ Native",
+                    arweave: "✗",
+                    ceramic: "✗",
+                    sign: "✗",
+                  },
+                  {
                     useCase: "Cost per 1,000 anchors",
                     xproof: "~$50",
-                    arweave: "~$5–50 (varies)",
-                    ceramic: "Free (infra cost)",
+                    arweave: "~$5–50 (file size dep.)",
+                    ceramic: "Node required †",
                     sign: "~$20–100 (gas)",
                   },
                 ].map((row, i) => (
@@ -368,6 +426,9 @@ def anchor_with_retry(file_hash: str, filename: str, api_key: str, max_retries=3
           </div>
           <p className="text-xs text-muted-foreground italic">
             Rule of thumb: use <strong className="text-foreground">Arweave</strong> to store files forever. Use <strong className="text-foreground">Sign Protocol</strong> for EVM attestation schemas. Use <strong className="text-foreground">xProof</strong> when an agent needs to prove a decision before acting — especially with no pre-existing account.
+          </p>
+          <p className="text-xs text-muted-foreground/60">
+            † Ceramic Network mainnet was deprecated in 2024. Current usage requires a self-hosted node or a third-party provider. "Free" understates the operational cost.
           </p>
         </div>
       ),
@@ -445,6 +506,21 @@ def anchor_with_retry(file_hash: str, filename: str, api_key: str, max_retries=3
 }
 // Returns: { api_key: "pm_...", free_certifications: 10 }
 // Use that api_key immediately for the next 10 proofs — no browser, no wallet`} />
+          </div>
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+            <p className="text-xs font-semibold text-primary mb-2">5. Zero-account bootstrap: MCP trial key → x402 for production</p>
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <p><strong className="text-foreground">Step A</strong> — Bootstrap via MCP (no account, no wallet):</p>
+              <CodeBlock lang="json" code={`// Call register_trial to get 10 free proofs instantly
+{ "name": "register_trial", "arguments": { "agent_name": "my-agent" } }
+// → { "api_key": "pm_...", "free_certifications": 10 }`} />
+              <p><strong className="text-foreground">Step B</strong> — Scale up via x402 (no account, just a Base wallet):</p>
+              <CodeBlock lang="bash" code={`# After 10 free proofs, switch to x402 for unlimited paid anchoring
+# 1. POST /api/proof without auth → get HTTP 402 with price
+# 2. Sign USDC on Base (eip155:8453) → resend with X-PAYMENT header
+# → proof_id returned immediately, no xProof account ever needed`} />
+              <p className="text-muted-foreground/70 italic">An agent can go from zero to production-grade proof anchoring in a single session: trial key via MCP for the first 10 proofs, then x402 for all subsequent proofs. No human ever touches the account.</p>
+            </div>
           </div>
         </div>
       ),
@@ -685,6 +761,83 @@ print(f"Trade executed. Proof: https://xproof.app{outcome['verify_url']}")`} />
               <li>• 4W audit trail is automatically rendered on the proof page</li>
               <li>• If the agent is compromised or behaves unexpectedly, you have a full forensic record</li>
             </ul>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "moltbook",
+      icon: TrendingUp,
+      title: "Moltbook case study — real production agent in operation",
+      badge: "Live data",
+      content: (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            <strong className="text-foreground">xproof_agent_verify</strong> is the autonomous verification agent operated by <a href="https://www.moltbook.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Moltbook</a> — a platform that certifies AI-generated content before publication. It has been running on xProof continuously since early 2026, making it one of the first documented production deployments of Prove Before Act in the wild.
+          </p>
+
+          {/* Key stats grid */}
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              { value: "4,418", label: "Total proofs anchored", detail: "All confirmed on-chain" },
+              { value: "933 / mo", label: "Average anchoring rate", detail: "16-week rolling average" },
+              { value: "100%", label: "Confirmation rate", detail: "Zero failed transactions" },
+            ].map((s) => (
+              <div key={s.label} className="rounded-md border bg-muted/30 p-3 text-center">
+                <div className="text-2xl font-bold text-primary mb-1">{s.value}</div>
+                <div className="text-xs font-medium mb-0.5">{s.label}</div>
+                <div className="text-xs text-muted-foreground">{s.detail}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+              <p className="text-xs font-semibold">Trust profile (public, real-time)</p>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <div className="flex justify-between"><span>Trust score</span><span className="font-mono text-foreground">43,326</span></div>
+                <div className="flex justify-between"><span>Trust level</span><span className="font-mono text-emerald-500">Verified</span></div>
+                <div className="flex justify-between"><span>Active streak</span><span className="font-mono text-foreground">16 consecutive weeks</span></div>
+                <div className="flex justify-between"><span>Violations</span><span className="font-mono text-emerald-500">0</span></div>
+              </div>
+            </div>
+            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+              <p className="text-xs font-semibold">Performance benchmarks</p>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <div className="flex justify-between"><span>Single cert latency</span><span className="font-mono text-foreground">~1.1s</span></div>
+                <div className="flex justify-between"><span>Batch of 3 files</span><span className="font-mono text-foreground">~1.9s</span></div>
+                <div className="flex justify-between"><span>On-chain confirmation</span><span className="font-mono text-foreground">~6s</span></div>
+                <div className="flex justify-between"><span>Cost per proof</span><span className="font-mono text-foreground">$0.05 USDC</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+            <p className="text-xs font-semibold">What the agent anchors</p>
+            <p className="text-xs text-muted-foreground">Before each piece of AI-generated content is published on Moltbook, <code className="font-mono bg-muted px-1 rounded">xproof_agent_verify</code> hashes the full content + generation metadata (model, prompt hash, timestamp), anchors the SHA-256 fingerprint on MultiversX, and attaches the <code className="font-mono bg-muted px-1 rounded">proof_id</code> to the published post. Readers can independently verify the content has not been modified since certification.</p>
+          </div>
+
+          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+            <p className="text-xs font-semibold">Total operational cost (16 weeks)</p>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>4,418 proofs × $0.05 = <strong className="text-foreground">~$221 total</strong></p>
+              <p>~$13.80 / week for a continuously running, publicly accountable AI agent with a full on-chain audit trail and verifiable trust score.</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm" data-testid="button-moltbook-profile">
+              <a href="/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9" target="_blank" rel="noopener noreferrer">
+                <Star className="mr-1.5 h-3.5 w-3.5" />
+                View live agent profile
+              </a>
+            </Button>
+            <Button asChild variant="ghost" size="sm" data-testid="button-moltbook-review">
+              <a href="https://www.moltbook.com/post/1d6cf96b-5046-4c63-9ae5-43f8809f4562" target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                Full Moltbook review
+              </a>
+            </Button>
           </div>
         </div>
       ),

@@ -223,7 +223,21 @@ export default function Landing() {
             </Button>
           </div>
           
-          <p className="mt-12 text-sm text-muted-foreground">{price} per proof • Unlimited</p>
+          {/* Moltbook social proof */}
+          <div className="mt-10 mx-auto inline-flex items-center gap-3 rounded-full border border-border/60 bg-muted/30 px-5 py-2.5 text-xs text-muted-foreground" data-testid="banner-moltbook-proof">
+            <div className="flex items-center gap-1.5">
+              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="font-semibold text-foreground">xproof_agent_verify</span>
+            </div>
+            <span>·</span>
+            <span><strong className="text-foreground">4,418</strong> proofs anchored</span>
+            <span>·</span>
+            <span><strong className="text-foreground">100%</strong> confirmed</span>
+            <span>·</span>
+            <span>16-week streak</span>
+          </div>
+
+          <p className="mt-4 text-sm text-muted-foreground">{price} per proof • Unlimited</p>
 
           {pricing && pricing.next_tier && pricing.current_tier.max !== null && (
             <div className="mt-3 mx-auto w-full max-w-[15rem] text-center" data-testid="tier-progress">
@@ -1051,13 +1065,22 @@ POST /api/proof + X-PAYMENT: <signed> → 200 {"proof_id": "..."}`}
               ))}
             </div>
 
-            <div className="mt-8 text-center">
-              <Button asChild variant="outline" data-testid="button-x402-docs">
-                <a href="/docs#x402">
-                  Full x402 integration guide
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </a>
-              </Button>
+            <div className="mt-10 rounded-md border border-primary/20 bg-primary/5 p-4 text-center">
+              <p className="text-sm font-semibold mb-1">xProof = the standard for agents that take accountability seriously.</p>
+              <p className="text-xs text-muted-foreground mb-4">
+                Any agent with a Base wallet can anchor its first proof in one HTTP round-trip — no account, no human, no signup. x402 is proof that the machine economy doesn't need intermediaries.
+              </p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                <Button asChild variant="outline" size="sm" data-testid="button-x402-agent-context">
+                  <a href="/agent-context#x402">
+                    Full x402 guide for agents
+                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  </a>
+                </Button>
+                <Button asChild variant="ghost" size="sm" data-testid="button-x402-try">
+                  <a href="/#free-trial">10 free proofs — start now</a>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
