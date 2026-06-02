@@ -2109,7 +2109,15 @@ Certified agents can prove originality, timestamp, and integrity. Non-certified 
 ## Pricing
 Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01. Current pricing and tier info: https://xproof.app/api/pricing
 
+## Agent Context Document
+Dedicated document answering the 10 exact questions agents ask when evaluating xProof (x402 flow, latency, retry policy, cost per 1000 anchors, comparison vs Arweave/Ceramic/Sign Protocol, MCP integration, 4W audit trail, privacy risks, fleet monitoring, Prove Before Act workflow):
+- Human-readable page: https://xproof.app/agent-context
+- Machine-readable markdown: https://xproof.app/agent-context.md
+
+The markdown version is optimized for LLM indexers and crawlers. It includes copy-paste Python code and a full comparison matrix.
+
 ## Documentation & Machine Interfaces
+- [Agent Context (10 questions agents ask)](https://xproof.app/agent-context.md)
 - [OpenAPI Specification](/api/acp/openapi.json)
 - [API Guide](/learn/api.md)
 - [Service Discovery](/api/acp/products)
@@ -3870,6 +3878,7 @@ export const xproofAuditPlugin: Plugin = {
         openapi: `${baseUrl}/api/acp/openapi.json`,
       },
       docs: {
+        agent_context: `${baseUrl}/agent-context.md`,
         llms: `${baseUrl}/llms.txt`,
         full: `${baseUrl}/llms-full.txt`,
         spec: `${baseUrl}/.well-known/xproof.md`,
@@ -3899,6 +3908,7 @@ export const xproofAuditPlugin: Plugin = {
         x402: `${baseUrl}/api/proof`,
         llms_txt: `${baseUrl}/llms.txt`,
         llms_full: `${baseUrl}/llms-full.txt`,
+        agent_context: `${baseUrl}/agent-context.md`,
       },
       integrations: {
         openclaw_skill: "https://github.com/jasonxkensei/xproof-openclaw-skill",
@@ -3952,6 +3962,7 @@ export const xproofAuditPlugin: Plugin = {
         payment_methods: ["EGLD (MultiversX)", "USDC (Base via x402)"],
       },
       documentation: {
+        agent_context: `${baseUrl}/agent-context.md`,
         specification: `${baseUrl}/.well-known/xproof.md`,
         api_guide: `${baseUrl}/learn/api.md`,
         verification: `${baseUrl}/learn/verification.md`,
@@ -3970,7 +3981,16 @@ export const xproofAuditPlugin: Plugin = {
     const baseUrl = `https://${req.get("host")}`;
     const priceUsd = await getCertificationPriceUsd();
 
-    const doc = `# xProof — Agent Context Document
+    const doc = `---
+title: xProof Agent Context Document
+description: Answers to the 10 exact questions autonomous agents ask when evaluating xProof as a proof-of-action service
+url: ${baseUrl}/agent-context.md
+human_page: ${baseUrl}/agent-context
+updated: 2026-06-02
+tags: [proof-of-existence, blockchain-certification, agent-accountability, x402, MCP, audit-trail, Prove-Before-Act]
+---
+
+# xProof — Agent Context Document
 > Answers to the 10 questions autonomous agents ask when evaluating xProof.
 > Machine-readable version. Human page: ${baseUrl}/agent-context
 
@@ -4097,7 +4117,7 @@ Rule: use the right tool for the right job. xProof is not a competitor to these 
 | Privacy by default (hash only, file never uploaded) | **xProof** (default behavior) |
 | Agent trust leaderboard + public reputation profile | **xProof** only |
 
-Cost comparison per 1,000 anchors: xProof ~$${(priceUsd * 1000).toFixed(0)} | Arweave ~$5–50 (varies by file size) | Ceramic ~free (infra cost) | Sign Protocol ~$20–100 (gas)
+Cost comparison per 1,000 anchors: xProof ~$${(priceUsd * 1000).toFixed(0)} | Arweave ~$5–50 (file size dependent; hash-only closer to $0.01) | Ceramic ~variable (requires hosted node or third-party provider; mainnet deprecated 2024) | Sign Protocol ~$20–100 (EVM gas)
 
 ---
 
