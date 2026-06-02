@@ -197,8 +197,16 @@ export default function Landing() {
             <span className="text-primary">programmable.</span>
           </h1>
           
-          <p className="mx-auto mb-8 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">Anchor verifiable proofs of what your agent saw, decided, and produced — on-chain, composable, API-first.</p>
-          
+          <p className="mx-auto mb-5 max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">Anchor verifiable proofs of what your agent saw, decided, and produced — on-chain, composable, API-first.</p>
+
+          {/* x402 callout — above the fold */}
+          <div className="mb-8 flex justify-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5 text-sm" data-testid="badge-x402-hero">
+              <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="text-muted-foreground">No API key needed — anchor + pay via <strong className="text-foreground">x402</strong> · one HTTP request · USDC on Base</span>
+            </div>
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               size="lg" 

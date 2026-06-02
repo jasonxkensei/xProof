@@ -1964,9 +1964,9 @@ ${urls}
     const priceUsd = await getCertificationPriceUsd();
     const content = `# xproof — Prove Before Act
 
-> The pragmatic, privacy-first proof layer for AI agents in production.
+> No API key needed. Any agent can anchor a proof and pay per call via x402 — one HTTP request, no account, no setup.
 
-**x402 — no account, no API key, no human**: POST /api/proof → HTTP 402 → sign $${priceUsd} USDC on Base → resend → proof_id. Any agent with a Base wallet is production-ready in one session.
+**x402 — machine-native payment**: POST /api/proof (no auth) → HTTP 402 → sign $${priceUsd} USDC on Base (eip155:8453) → resend with X-PAYMENT header → proof_id returned. Zero setup, zero human involvement. Any agent with a Base wallet is production-ready in one session.
 
 **Prove Before Act**: anchor reasoning (SHA-256 hash) BEFORE executing any significant agent action. Hash stays local — nothing sensitive ever leaves the agent.
 

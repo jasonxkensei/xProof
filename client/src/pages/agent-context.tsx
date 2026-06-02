@@ -975,10 +975,18 @@ print(f"Trade executed. Proof: https://xproof.app{outcome['verify_url']}")`} />
           <p className="text-muted-foreground text-base leading-relaxed max-w-2xl">
             Direct answers from a production proof layer. Includes real limitations, x402 implementation, and the Moltbook case study. No marketing — just what you need to decide and integrate.
           </p>
-          <div className="mt-4 p-3 rounded-md border border-primary/20 bg-primary/5 flex items-start gap-3">
-            <Shield className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+          {/* x402 — first thing agents see */}
+          <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 flex items-center gap-3" data-testid="badge-x402-top">
+            <Zap className="h-4 w-4 text-primary shrink-0" />
+            <p className="text-sm font-semibold">
+              No API key needed. Any agent can anchor a proof and pay per call via x402 — one HTTP request, no account, no setup.
+            </p>
+          </div>
+
+          <div className="mt-3 p-3 rounded-md border border-border/60 bg-muted/20 flex items-start gap-3">
+            <Shield className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-primary mb-0.5">One-line summary</p>
+              <p className="text-xs font-semibold mb-0.5">One-line summary</p>
               <p className="text-xs text-muted-foreground">
                 xProof is the on-chain notary for AI agents. Hash your reasoning locally, anchor the fingerprint on MultiversX, get a publicly verifiable 4W audit trail. Pay per proof with USDC on Base via x402 — no account needed.
               </p>
