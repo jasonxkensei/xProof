@@ -3962,6 +3962,408 @@ export const xproofAuditPlugin: Plugin = {
   });
 
   // ============================================
+  // /agent-context.md — LLM-optimized context document
+  // Answers the 10 exact questions agents ask during discovery tests
+  // ============================================
+
+  app.get("/agent-context.md", publicReadRateLimiter, async (req, res) => {
+    const baseUrl = `https://${req.get("host")}`;
+    const priceUsd = await getCertificationPriceUsd();
+
+    const doc = `# xProof — Agent Context Document
+> Answers to the 10 questions autonomous agents ask when evaluating xProof.
+> Machine-readable version. Human page: ${baseUrl}/agent-context
+
+## One-line summary
+
+xProof is the on-chain notary for AI agents. Hash your reasoning locally, anchor the SHA-256 fingerprint on MultiversX, get a publicly verifiable 4W audit trail (Who, What, When, Why). Pay per proof with USDC on Base via x402 — no account needed.
+
+**The principle**: Prove Before Act. Anchor reasoning BEFORE executing any significant action.
+
+---
+
+## Q1 — How does x402 work exactly? (payment without an API key)
+
+x402 is a payment-in-HTTP protocol. An agent sends a request with no credentials, receives HTTP 402 with the price and payment instructions, signs a USDC micro-payment on Base, then resends with the X-PAYMENT header. No account registration, no API key, no human in the loop.
+
+**Flow:**
+1. POST ${baseUrl}/api/proof with no auth → receive HTTP 402 with price ($${priceUsd} USDC) and signed payment payload template
+2. Agent signs USDC payment on Base (network: eip155:8453)
+3. Resend same request with header X-PAYMENT: <base64-signed-payment> → receive HTTP 200 with proof_id
+
+\`\`\`bash
+# Step 1 — discover price
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Content-Type: application/json" \\
+  -d '{"file_hash": "YOUR_SHA256", "filename": "decision.md"}'
+# → HTTP 402 {"payment": {"amount": "50000", "currency": "USDC", "network": "eip155:8453", ...}}
+
+# Step 3 — pay and anchor in one request
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Content-Type: application/json" \\
+  -H "X-PAYMENT: <base64-signed-payment>" \\
+  -d '{"file_hash": "YOUR_SHA256", "filename": "decision.md"}'
+# → HTTP 200 {"proof_id": "...", "verify_url": "/proof/..."}
+\`\`\`
+
+Compatible facilitators: https://api.cdp.coinbase.com/platform/v2/x402 (Coinbase CDP), Conway Terminal, OpenClaw.
+
+**Why this matters**: A fully autonomous agent with a wallet but no pre-registration can anchor its first proof in a single session. Pure machine-to-machine.
+
+---
+
+## Q2 — What is the real anchoring latency?
+
+Based on production measurements from xproof_agent_verify (4,418 on-chain anchors, 16-week streak):
+
+| Operation | Measured latency |
+|-----------|-----------------|
+| Single certification (API call → proof_id) | ~1.1s (1.075s measured) |
+| Batch of 3 files | ~1.9s (1.876s measured) |
+| On-chain confirmation (MultiversX) | ~6s (avg block time) |
+| On-chain verification lookup | ~198ms |
+
+The proof_id is returned immediately (status: pending). On-chain confirmation is asynchronous (~6s). Use webhook_url to receive a callback when confirmed.
+
+**Your agent does not need to wait for on-chain confirmation before proceeding.** Get proof_id → continue → blockchain confirms in background.
+
+---
+
+## Q3 — What to do if the xProof call fails? (retry policy + fallback)
+
+| HTTP status | Recommended action |
+|------------|-------------------|
+| 200 | Success — proceed |
+| 402 | x402 payment required — sign USDC and retry |
+| 409 | Hash already anchored — retrieve existing_proof_id, no re-anchor needed |
+| 429 | Rate limited — retry after Retry-After header value |
+| 5xx | Server error — retry with exponential backoff (1s, 2s, 4s) |
+| timeout | Retry up to 3x — fallback: log locally, continue |
+
+**Fallback policy**: If unreachable after 3 retries, log the hash + timestamp locally and proceed with the action. Attempt retroactive anchoring when connectivity restores. Never block a critical agent action indefinitely on proof anchoring.
+
+\`\`\`python
+def anchor_with_retry(file_hash, filename, api_key, max_retries=3):
+    backoff = [1, 2, 4]
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(
+                "https://xproof.app/api/proof",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"file_hash": file_hash, "filename": filename},
+                timeout=10
+            )
+            if resp.status_code == 200: return resp.json()["proof_id"]
+            if resp.status_code == 409: return resp.json()["existing_proof_id"]
+            if resp.status_code == 429:
+                time.sleep(int(resp.headers.get("Retry-After", 5))); continue
+            if resp.status_code >= 500:
+                time.sleep(backoff[attempt]); continue
+        except requests.Timeout:
+            time.sleep(backoff[attempt]); continue
+    log_local_fallback(file_hash, filename)
+    return None
+\`\`\`
+
+---
+
+## Q4 — What is the average cost per 1,000 anchors?
+
+Current price: **$${priceUsd} per certification**.
+
+| Volume | Cost |
+|--------|------|
+| 100 anchors | $${(priceUsd * 100).toFixed(2)} |
+| 1,000 anchors | $${(priceUsd * 1000).toFixed(2)} |
+| 10,000 anchors | ~$${(priceUsd * 0.7 * 10000).toFixed(0)} (next pricing tier) |
+| 50 agents × 20 actions/day × 30 days = 30,000 anchors/month | ~$${(priceUsd * 30000).toFixed(0)}/month |
+
+Price decreases as total platform volume grows (tiered model). Payment methods: EGLD on MultiversX (ACP/wallet) or USDC on Base (x402, no account needed). Batch endpoint (POST /api/batch, up to 100 files) reduces API overhead at same per-file price.
+
+---
+
+## Q5 — How does xProof compare to Arweave, Ceramic, Sign Protocol?
+
+Rule: use the right tool for the right job. xProof is not a competitor to these — it occupies a distinct niche.
+
+| Use case | Best tool |
+|----------|-----------|
+| Anchor agent decision BEFORE execution with 4W audit trail | **xProof** |
+| Pay per proof with no API key (x402 / USDC on Base) | **xProof** only |
+| MCP tool for agent frameworks (JSON-RPC 2.0) | **xProof** only |
+| Store full file permanently on-chain forever | **Arweave** |
+| EVM attestation schemas (Ethereum ecosystem) | **Sign Protocol** |
+| Mutable verifiable data streams | **Ceramic** |
+| Privacy by default (hash only, file never uploaded) | **xProof** (default behavior) |
+| Agent trust leaderboard + public reputation profile | **xProof** only |
+
+Cost comparison per 1,000 anchors: xProof ~$${(priceUsd * 1000).toFixed(0)} | Arweave ~$5–50 (varies by file size) | Ceramic ~free (infra cost) | Sign Protocol ~$20–100 (gas)
+
+---
+
+## Q6 — How to integrate xProof via MCP? Concrete examples.
+
+MCP endpoint: ${baseUrl}/mcp (Streamable HTTP transport, POST only)
+
+Available tools:
+- certify_file — anchor a file hash or reasoning document
+- audit_agent_session — compliance gate before critical actions (Agent Audit Log Standard)
+- investigate_proof — look up a proof by ID or hash
+- register_trial — get a free api_key instantly (no wallet needed, 10 free proofs)
+
+\`\`\`json
+// MCP server config (add to claude_desktop_config.json, Cursor, etc.)
+{
+  "mcpServers": {
+    "xproof": {
+      "url": "${baseUrl}/mcp",
+      "headers": { "Authorization": "Bearer pm_YOUR_API_KEY" }
+    }
+  }
+}
+\`\`\`
+
+\`\`\`json
+// Tool: certify_file — anchor reasoning before acting
+{
+  "name": "certify_file",
+  "arguments": {
+    "file_hash": "sha256_of_reasoning_document",
+    "filename": "decision_session_001.md",
+    "metadata": {
+      "who": "my-agent-v2",
+      "what": "Approved BUY 0.5 BTC at market",
+      "when": "2026-06-02T14:30:00Z",
+      "why": "RSI=38, below 40 threshold; allocation=2.1%, below 3% cap",
+      "model": "gpt-4o-mini",
+      "session_id": "sess_abc123"
+    }
+  }
+}
+// → { proof_id: "uuid", verify_url: "/proof/uuid", status: "pending" }
+\`\`\`
+
+\`\`\`json
+// Tool: audit_agent_session — compliance gate (action blocked until proof_id obtained)
+{
+  "name": "audit_agent_session",
+  "arguments": {
+    "agent_id": "trading-agent-v2",
+    "session_id": "sess_abc123",
+    "action_type": "trade_execution",
+    "action_description": "Execute BUY 0.5 BTC",
+    "inputs_hash": "sha256_of_all_input_data",
+    "inputs_manifest": {
+      "fields": ["btc_price", "portfolio_nav", "rsi_14d"],
+      "sources": ["binance_ws", "coingecko"]
+    },
+    "risk_level": "high",
+    "decision": "approved"
+  }
+}
+\`\`\`
+
+For agents without an API key yet — use register_trial:
+\`\`\`json
+{ "name": "register_trial", "arguments": { "agent_name": "my-new-agent" } }
+// → { api_key: "pm_...", free_certifications: 10 }
+// Use immediately — no browser, no wallet, no human in the loop
+\`\`\`
+
+---
+
+## Q7 — How does the 4W audit trail work?
+
+The 4W audit trail is automatically rendered on the public proof page when you include at least one of the four fields in metadata:
+
+- **WHO**: Which agent, model, or actor made this decision
+- **WHAT**: What action or output was certified
+- **WHEN**: Immutable on-chain timestamp from MultiversX block
+- **WHY**: The full reasoning that led to the decision
+
+\`\`\`bash
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Authorization: Bearer pm_YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "file_hash": "YOUR_SHA256",
+    "filename": "reasoning.md",
+    "metadata": {
+      "who": "my-agent-v2 (gpt-4o-mini)",
+      "what": "Approved BUY 0.5 BTC at $67,400",
+      "when": "2026-06-02T14:30:00Z",
+      "why": "RSI=38 (below 40 threshold), allocation=2.1% (below 3% cap), risk policy v3.1 approved"
+    }
+  }'
+\`\`\`
+
+The 4W section is rendered at ${baseUrl}/proof/{id} — publicly verifiable by anyone without an account.
+
+For the Agent Audit Log Standard (compliance gate), use POST /api/audit instead — it adds structured fields: inputs_manifest, risk_level, decision.
+
+---
+
+## Q8 — Privacy risks — what is sent, what stays local?
+
+**What is SENT to xProof:**
+- SHA-256 hash (64 hex chars) — mathematically one-way
+- Filename (can be synthetic/generic)
+- Optional metadata fields you choose to include (who/what/when/why)
+
+**What STAYS LOCAL (never transmitted):**
+- The actual file content
+- Reasoning document text
+- Input data values
+- Model weights or strategy details
+
+**Known privacy considerations:**
+- **Timing correlation**: Frequent anchor patterns can reveal agent activity rhythm. Mitigate by batching (POST /api/batch) or adding jitter.
+- **Metadata exposure**: who/what/why fields are stored and rendered publicly if is_public=true. Use generic descriptions for sensitive decisions.
+- **On-chain permanence**: MultiversX transactions cannot be deleted. Design metadata accordingly.
+- **Not a ZK system**: SHA-256 hashing, not zero-knowledge proofs. A party with the original data can verify the hash. If ZK is required, use a ZK proving layer upstream and anchor the ZK proof commitment.
+
+xProof is a "hash-and-anchor" system optimized for agent accountability, not cryptographic privacy. For maximum privacy: anchor hash-only, omit sensitive metadata, use a synthetic filename.
+
+---
+
+## Q9 — Can you monitor proofs from a fleet of agents? How?
+
+Yes. All agent profiles and proof timelines are public APIs — no auth needed to read.
+
+Per-agent monitoring:
+\`\`\`
+GET ${baseUrl}/api/agents/{wallet}          → trust score, total certs, streak, violations, level
+GET ${baseUrl}/api/agents/{wallet}/timeline  → paginated audit timeline
+GET ${baseUrl}/api/trust/{wallet}            → lightweight trust lookup
+GET ${baseUrl}/badge/trust/{wallet}.svg      → embeddable SVG trust badge
+GET ${baseUrl}/api/leaderboard               → top 50 public agents by trust score
+\`\`\`
+
+**Recommended fleet architecture:**
+1. Each agent has its own pm_ API key tied to its MultiversX wallet
+2. Each agent anchors with its own who field (agent ID + model version)
+3. Supervisor polls /api/agents/{wallet} for each agent hourly
+4. Alert conditions: trust score drops, violation count increases, streak breaks, no anchor in 24h
+5. Use webhook_url on each certification for real-time callbacks on confirmation
+
+**Production reference — Moltbook fleet (xproof_agent_verify):**
+- Total anchors: 4,418 confirmed on-chain
+- Active since: December 2025
+- Streak: 16 consecutive weeks
+- Confirmation rate: 100%
+- Trust score: 43,326 (Verified level)
+- Public profile: ${baseUrl}/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9
+- Architecture: single agent, REST API, POST /api/proof with 4W metadata, webhook for confirmation
+
+---
+
+## Q10 — Complete agent workflow: reasoning → hash → anchor → action
+
+**The canonical Prove Before Act loop:**
+
+\`\`\`
+1. Agent produces reasoning (WHY)
+2. Serialize reasoning to canonical JSON
+3. Compute SHA-256 hash locally (file never leaves agent)
+4. POST hash to xProof → receive proof_id
+5. Execute the action (WHAT) — include proof_id as audit reference
+\`\`\`
+
+\`\`\`python
+import hashlib, json, requests, time
+
+class ProveBeforeAct:
+    def __init__(self, api_key: str, agent_id: str):
+        self.api_key = api_key
+        self.agent_id = agent_id
+
+    def anchor(self, reasoning: dict, action_description: str) -> str | None:
+        reasoning_json = json.dumps(reasoning, sort_keys=True, ensure_ascii=False)
+        file_hash = hashlib.sha256(reasoning_json.encode()).hexdigest()
+        try:
+            resp = requests.post(
+                "https://xproof.app/api/proof",
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                json={
+                    "file_hash": file_hash,
+                    "filename": f"reasoning_{reasoning.get('session_id')}.json",
+                    "metadata": {
+                        "who": self.agent_id,
+                        "what": action_description,
+                        "when": reasoning.get("timestamp"),
+                        "why": reasoning.get("rationale"),
+                        "model": reasoning.get("model"),
+                    }
+                },
+                timeout=10
+            )
+            if resp.status_code == 200:
+                return resp.json()["proof_id"]
+        except Exception:
+            pass
+        return None
+
+    def run(self, reasoning: dict, action_fn, action_description: str):
+        proof_id = self.anchor(reasoning, action_description)
+        result = action_fn()  # action proceeds regardless (soft policy)
+        return {"result": result, "proof_id": proof_id}
+
+# Usage
+agent = ProveBeforeAct(api_key="pm_YOUR_KEY", agent_id="trading-agent-v2")
+
+proof = agent.run(
+    reasoning={
+        "session_id": "sess_001",
+        "timestamp": "2026-06-02T14:30:00Z",
+        "model": "gpt-4o-mini",
+        "rationale": "BTC RSI=38 (below 40 threshold). Portfolio allocation=2.1% (below 3% cap). Risk policy v3.1 approves. Confidence: HIGH.",
+    },
+    action_fn=lambda: execute_trade("BUY", "BTC", 0.5),
+    action_description="Execute BUY 0.5 BTC at market price"
+)
+print(f"Proof: https://xproof.app/proof/{proof['proof_id']}")
+\`\`\`
+
+---
+
+## Quick start
+
+\`\`\`bash
+# Option A: Get 10 free proofs instantly (no wallet, no credit card)
+curl -X POST ${baseUrl}/api/agent/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent_name": "my-agent"}'
+# → {"api_key": "pm_...", "free_certifications": 10}
+
+# Option B: Pay with x402 (no account at all)
+# Send POST /api/proof without auth → get 402 → sign USDC on Base → resend
+
+# Option C: Add MCP to your config
+# {"mcpServers": {"xproof": {"url": "${baseUrl}/mcp", "headers": {"Authorization": "Bearer pm_KEY"}}}}
+\`\`\`
+
+## Resources
+
+- Human-readable page: ${baseUrl}/agent-context
+- Full spec: ${baseUrl}/.well-known/xproof.md
+- API docs: ${baseUrl}/llms.txt
+- MCP endpoint: ${baseUrl}/mcp
+- Agent leaderboard: ${baseUrl}/leaderboard
+- Moltbook case study: ${baseUrl}/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9
+- Trust leaderboard API: GET ${baseUrl}/api/leaderboard
+`;
+
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+    res.send(doc);
+  });
+
+  // Alias: /agent-context.txt for plaintext consumers
+  app.get("/agent-context.txt", publicReadRateLimiter, (req, res) => {
+    res.redirect(301, "/agent-context.md");
+  });
+
+  // ============================================
   // MCP (Model Context Protocol) Server Endpoint
   // Streamable HTTP transport for native AI agent integration
   // ============================================

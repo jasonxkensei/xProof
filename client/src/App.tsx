@@ -30,6 +30,7 @@ const Docs4WPage = lazy(() => import("@/pages/docs-4w"));
 const DocsBaseViolationsPage = lazy(() => import("@/pages/docs-base-violations"));
 const IncidentReportPage = lazy(() => import("@/pages/incident-report"));
 const AgentCalibrationPage = lazy(() => import("@/pages/agent-calibration"));
+const AgentContextPage = lazy(() => import("@/pages/agent-context"));
 
 function Router() {
   const { isAuthenticated, isLoading } = useWalletAuth();
@@ -82,6 +83,7 @@ function Router() {
           <Route path="/docs/4w" component={Docs4WPage} />
           <Route path="/docs/base-violations" component={DocsBaseViolationsPage} />
           <Route path="/incident/:wallet/:proofId" component={IncidentReportPage} />
+          <Route path="/agent-context" component={AgentContextPage} />
           <Route path="/stats" component={AdminDashboard} />
           <Route path="/admin" component={AdminDashboard} />
           <Route>
@@ -118,6 +120,7 @@ function Router() {
         <Route path="/docs/4w" component={Docs4WPage} />
         <Route path="/docs/base-violations" component={DocsBaseViolationsPage} />
         <Route path="/incident/:wallet/:proofId" component={IncidentReportPage} />
+        <Route path="/agent-context" component={AgentContextPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

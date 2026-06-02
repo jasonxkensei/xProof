@@ -25,7 +25,10 @@ import {
   File,
   ExternalLink,
   Link2,
-  Terminal
+  Terminal,
+  Zap,
+  Play,
+  Network,
 } from "lucide-react";
 import { WalletLoginModal } from "@/components/wallet-login-modal";
 import {
@@ -157,6 +160,10 @@ export default function Landing() {
             <a href="/docs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-docs">
               Docs
             </a>
+            <a href="/agent-context" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1" data-testid="link-nav-agent-context">
+              <Bot className="h-3.5 w-3.5" />
+              For Agents
+            </a>
             <a href="#faq" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-faq">
               FAQ
             </a>
@@ -177,6 +184,13 @@ export default function Landing() {
       {/* Hero Section */}
       <section className="container pt-14 pb-20 md:pt-20 md:pb-28">
         <div className="mx-auto max-w-5xl text-center">
+          <div className="mb-5 flex justify-center">
+            <Badge variant="outline" className="text-xs px-3 py-1 gap-1.5" data-testid="badge-prove-before-act">
+              <Play className="h-3 w-3 text-primary" />
+              Prove Before Act — anchor reasoning before executing
+            </Badge>
+          </div>
+
           <h1 className="mb-6 text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
             Trust is
             <br />
@@ -329,6 +343,107 @@ export default function Landing() {
               xproof is the accountability layer.{" "}
               <span className="text-foreground font-medium">Every agent action, proven on-chain.</span>
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Prove Before Act + x402 Section */}
+      <section id="prove-before-act" className="py-16 md:py-20">
+        <div className="container">
+          <div className="mx-auto max-w-5xl">
+            {/* Prove Before Act */}
+            <div className="mb-12">
+              <div className="mb-8 text-center">
+                <Badge variant="outline" className="mb-4 gap-1.5">
+                  <Play className="h-3 w-3 text-primary" />
+                  Prove Before Act
+                </Badge>
+                <h2 className="mb-3 text-2xl md:text-3xl font-bold">
+                  The canonical agent accountability loop
+                </h2>
+                <p className="text-muted-foreground max-w-xl mx-auto text-sm">
+                  Anchor reasoning <em>before</em> executing any significant action. The proof becomes the immutable record of intent — available to auditors, regulators, or any other agent.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-0 sm:gap-0">
+                {[
+                  { step: "1", label: "Reason", desc: "Agent produces reasoning (WHY)", icon: Bot },
+                  { step: "2", label: "Hash locally", desc: "SHA-256 — file never leaves agent", icon: Shield },
+                  { step: "3", label: "Anchor", desc: "POST hash → get proof_id in ~1.1s", icon: Blocks },
+                  { step: "4", label: "Execute", desc: "Action proceeds with audit reference", icon: Play },
+                ].map((s, i) => {
+                  const Icon = s.icon;
+                  return (
+                    <div key={s.step} className="flex items-center flex-1 min-w-0 w-full sm:w-auto">
+                      {i > 0 && (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground/30 shrink-0 mx-1 hidden sm:block" />
+                      )}
+                      <div className="flex-1 flex flex-col items-center text-center px-4 py-4 rounded-md border border-border/60 bg-background/60 h-full min-w-0" data-testid={`prove-step-${s.step}`}>
+                        <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                          <Icon className="h-4 w-4 text-primary" />
+                        </div>
+                        <span className="text-xs font-bold text-foreground">{s.label}</span>
+                        <span className="text-xs text-muted-foreground/70 mt-0.5 leading-snug">{s.desc}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-5 text-center">
+                <Button asChild variant="outline" size="sm" data-testid="button-prove-before-act-learn">
+                  <a href="/agent-context#workflow">
+                    Copy-paste Python implementation
+                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              </div>
+            </div>
+
+            {/* x402: pay without API key */}
+            <div className="rounded-md border border-primary/20 bg-primary/5 p-6 md:p-8" data-testid="section-x402">
+              <div className="flex flex-col md:flex-row gap-6 items-start">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
+                      <Zap className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-primary font-mono">x402</span>
+                      <span className="ml-2 text-sm font-semibold">Pay without an API key</span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+                    An agent with a wallet but no xProof account can anchor its first proof in a single HTTP session. No registration, no browser, no human in the loop. The agent discovers the price, signs a USDC micro-payment on Base, and gets the proof.
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    {["No API key", "USDC on Base", "eip155:8453", "~$0.05 per proof", "Coinbase CDP compatible"].map((tag) => (
+                      <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <pre className="text-xs font-mono bg-background/60 border border-border/50 rounded-md p-3 leading-relaxed overflow-x-auto whitespace-pre text-foreground/80">
+{`# 1. Send without auth → get HTTP 402 with price
+POST /api/proof → 402 {"payment": {"amount": "50000", "currency": "USDC"}}
+
+# 2. Sign USDC payment on Base (eip155:8453)
+# 3. Resend with X-PAYMENT header → get proof instantly
+POST /api/proof + X-PAYMENT: <signed> → 200 {"proof_id": "..."}`}
+                  </pre>
+                  <div className="mt-3 flex gap-2">
+                    <Button asChild variant="outline" size="sm" data-testid="button-x402-learn">
+                      <a href="/agent-context#x402">
+                        Full x402 guide
+                        <ArrowRight className="ml-1.5 h-3 w-3" />
+                      </a>
+                    </Button>
+                    <Button asChild variant="ghost" size="sm" data-testid="button-x402-docs">
+                      <a href="/docs">REST docs</a>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -639,16 +754,21 @@ export default function Landing() {
                   <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
                     <Bot className="h-5 w-5 text-primary" />
                   </div>
-                  <h3 className="font-semibold mb-2">AI Agent (MCP)</h3>
+                  <h3 className="font-semibold mb-2">AI Agent (MCP / x402)</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Connect via Model Context Protocol. Your agent can anchor decisions, audit logs, and build trust autonomously.
+                    Connect via MCP or pay per proof with x402 — no account needed. Answers to the 10 questions agents ask before integrating.
                   </p>
-                  <Button asChild variant="outline" size="sm" data-testid="button-quickstart-agents">
-                    <a href="/agents">
-                      Agent integrations
-                      <ArrowRight className="ml-1 h-3 w-3" />
-                    </a>
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button asChild variant="outline" size="sm" data-testid="button-quickstart-agent-context">
+                      <a href="/agent-context">
+                        Agent context
+                        <ArrowRight className="ml-1 h-3 w-3" />
+                      </a>
+                    </Button>
+                    <Button asChild variant="ghost" size="sm" data-testid="button-quickstart-agents">
+                      <a href="/agents">Integrations</a>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 
