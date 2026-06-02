@@ -1059,7 +1059,32 @@ POST /api/proof + X-PAYMENT: <signed> → 200 {"proof_id": "..."}`}
               </div>
             </div>
 
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+            {/* Python implementation — copy-paste ready */}
+            <div className="mt-10 rounded-md bg-[#0d1117] overflow-hidden" data-testid="code-x402-python">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-[#30363d]">
+                <span className="text-xs text-[#8b949e] font-mono">Python — complete x402 implementation</span>
+                <Badge variant="outline" className="text-xs font-mono border-[#30363d] text-[#8b949e]">copy-paste ready</Badge>
+              </div>
+              <div className="p-4 font-mono text-xs text-[#e6edf3] overflow-x-auto leading-relaxed">
+                <div className="text-[#8b949e]">import hashlib, json, base64, requests</div>
+                <div className="mt-3"><span className="text-[#f97583]">def</span> <span className="text-[#b392f0]">anchor_x402</span><span className="text-[#e6edf3]">(reasoning: dict, wallet_signer) -&gt; dict:</span></div>
+                <div className="pl-4 text-[#8b949e]">"""Prove Before Act — anchor reasoning, then execute."""</div>
+                <div className="pl-4 mt-2 text-[#8b949e]"># 1. Hash locally — nothing sensitive leaves this function</div>
+                <div className="pl-4"><span className="text-[#e3b341]">file_hash</span> = hashlib.sha256(json.dumps(reasoning, sort_keys=<span className="text-[#79c0ff]">True</span>).encode()).hexdigest()</div>
+                <div className="pl-4 mt-2 text-[#8b949e]"># 2. POST without auth → HTTP 402 with price + payment terms</div>
+                <div className="pl-4"><span className="text-[#e3b341]">r</span> = requests.post(<span className="text-[#a5d6ff]">"https://xproof.app/api/proof"</span>, json=&#123;<span className="text-[#a5d6ff]">"file_hash"</span>: file_hash&#125;)</div>
+                <div className="pl-4"><span className="text-[#f97583]">assert</span> r.status_code == <span className="text-[#ffa657]">402</span>  <span className="text-[#8b949e]"># ← this is the x402 challenge</span></div>
+                <div className="pl-4 mt-2 text-[#8b949e]"># 3. Sign USDC on Base (eip155:8453) via your wallet adapter</div>
+                <div className="pl-4"><span className="text-[#e3b341]">signed</span> = wallet_signer.sign_x402(r.json()[<span className="text-[#a5d6ff]">"payment"</span>])</div>
+                <div className="pl-4"><span className="text-[#e3b341]">x_payment</span> = base64.b64encode(json.dumps(signed).encode()).decode()</div>
+                <div className="pl-4 mt-2 text-[#8b949e]"># 4. Resend with X-PAYMENT header → proof_id returned immediately</div>
+                <div className="pl-4"><span className="text-[#e3b341]">proof</span> = requests.post(<span className="text-[#a5d6ff]">"https://xproof.app/api/proof"</span>,</div>
+                <div className="pl-8">headers=&#123;<span className="text-[#a5d6ff]">"X-PAYMENT"</span>: x_payment&#125;, json=&#123;<span className="text-[#a5d6ff]">"file_hash"</span>: file_hash&#125;)</div>
+                <div className="pl-4 mt-2"><span className="text-[#f97583]">return</span> proof.json()  <span className="text-[#8b949e]"># &#123; proof_id, verify_url &#125;</span></div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               {["USDC", "Base Mainnet", "eip155:8453", "No account needed", "$0.05 / proof"].map((label) => (
                 <Badge key={label} variant="outline" className="text-xs font-mono" data-testid={`badge-x402-${label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}>{label}</Badge>
               ))}

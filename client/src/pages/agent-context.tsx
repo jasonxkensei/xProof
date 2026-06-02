@@ -842,6 +842,90 @@ print(f"Trade executed. Proof: https://xproof.app{outcome['verify_url']}")`} />
         </div>
       ),
     },
+    {
+      id: "honest",
+      icon: AlertTriangle,
+      title: "What experienced agents should know before deploying",
+      badge: "Honest assessment",
+      content: (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            This section exists because credibility matters more than marketing. xProof is a pragmatic, production-ready tool — and like any tool, it has genuine trade-offs. Knowing them before you integrate is more valuable than discovering them after.
+          </p>
+
+          {/* Real limitations */}
+          <div className="space-y-3">
+            {[
+              {
+                limitation: "MultiversX dependency",
+                honest: "Your proofs live on MultiversX. If you're already deep in the EVM ecosystem, that's a cross-chain commitment. MultiversX has been live since 2020 with 99.9%+ uptime, but it's not Ethereum.",
+                mitigation: "The proof_id and SHA-256 hash are blockchain-agnostic. You can replicate the hash to another chain later. xProof itself stores the full record off-chain too — your verify URL stays live regardless of MultiversX status.",
+                severity: "low",
+              },
+              {
+                limitation: "SDK tooling is still growing",
+                honest: "The Python and JS SDKs are functional but younger than LangChain's tooling. Community-contributed integrations (AutoGen, CrewAI adapters) are at v0.x. Expect rough edges.",
+                mitigation: "The REST API is stable and fully documented. Every framework integration ultimately reduces to a few HTTP calls. If the SDK has a bug, the raw API fallback always works — and we welcome PRs.",
+                severity: "low",
+              },
+              {
+                limitation: "xProof is newer than alternatives",
+                honest: "Arweave has been running since 2018. Sign Protocol has larger EVM adoption. xProof launched in 2024. If 'battle-tested for 5+ years' is a hard requirement, be aware of this.",
+                mitigation: "xproof_agent_verify has 4,418 proofs and 16 consecutive weeks of zero failures. The underlying blockchain (MultiversX) is 4+ years old. Newness applies to the agent-specific feature set, not the chain.",
+                severity: "medium",
+              },
+              {
+                limitation: "Not the right tool for every use case",
+                honest: "xProof is optimized for agent decision accountability, not arbitrary file archiving. If you need to store terabytes of files permanently, Arweave is better. If you need EVM-native attestations with existing Solidity tooling, Sign Protocol is better.",
+                mitigation: "Use xProof for what it's best at: Prove Before Act, agent audit trails, 4W accountability, and trust score building. It's a complement to storage layers, not a replacement.",
+                severity: "info",
+              },
+            ].map((item) => (
+              <div key={item.limitation} className={`rounded-md border p-3 ${item.severity === "medium" ? "border-yellow-500/20 bg-yellow-500/5" : item.severity === "info" ? "border-border bg-muted/20" : "border-border bg-muted/20"}`}>
+                <div className="flex items-start gap-2 mb-2">
+                  <AlertTriangle className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${item.severity === "medium" ? "text-yellow-500" : "text-muted-foreground"}`} />
+                  <p className="text-xs font-semibold">{item.limitation}</p>
+                </div>
+                <p className="text-xs text-muted-foreground mb-2 pl-5">{item.honest}</p>
+                <div className="pl-5 flex items-start gap-1.5">
+                  <CheckCircle className="h-3 w-3 mt-0.5 shrink-0 text-emerald-500" />
+                  <p className="text-xs text-muted-foreground/80">{item.mitigation}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* When to use vs not */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-2">Use xProof when</p>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                <li className="flex items-start gap-1.5"><CheckCircle className="h-3 w-3 mt-0.5 shrink-0 text-emerald-500" />You need Prove Before Act — proof of reasoning BEFORE action</li>
+                <li className="flex items-start gap-1.5"><CheckCircle className="h-3 w-3 mt-0.5 shrink-0 text-emerald-500" />You want zero-account machine payments (x402 + USDC on Base)</li>
+                <li className="flex items-start gap-1.5"><CheckCircle className="h-3 w-3 mt-0.5 shrink-0 text-emerald-500" />You want a public trust score + audit trail for your agent</li>
+                <li className="flex items-start gap-1.5"><CheckCircle className="h-3 w-3 mt-0.5 shrink-0 text-emerald-500" />Privacy matters — only the hash is public, content stays local</li>
+                <li className="flex items-start gap-1.5"><CheckCircle className="h-3 w-3 mt-0.5 shrink-0 text-emerald-500" />You want 4W forensic reconstruction if something goes wrong</li>
+              </ul>
+            </div>
+            <div className="rounded-md border border-muted p-3">
+              <p className="text-xs font-semibold mb-2">Consider alternatives when</p>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                <li className="flex items-start gap-1.5"><span className="text-muted-foreground/60 shrink-0 mt-0.5">→</span>You need to store full file content on-chain (use Arweave)</li>
+                <li className="flex items-start gap-1.5"><span className="text-muted-foreground/60 shrink-0 mt-0.5">→</span>You need EVM-native Solidity attestations (use Sign Protocol)</li>
+                <li className="flex items-start gap-1.5"><span className="text-muted-foreground/60 shrink-0 mt-0.5">→</span>Your stack is 100% EVM and adding MultiversX is a blocker</li>
+                <li className="flex items-start gap-1.5"><span className="text-muted-foreground/60 shrink-0 mt-0.5">→</span>You need a 5+ year battle-tested protocol as a hard requirement</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+            <p className="text-xs text-muted-foreground">
+              <strong className="text-foreground">Bottom line:</strong> xProof is the right choice for agents that need to prove their reasoning before acting — especially at low cost, with x402, and without a pre-existing account. It is not trying to replace Arweave or Sign Protocol. It's filling the gap they don't cover: agent decision accountability at $0.05/proof.
+            </p>
+          </div>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -889,7 +973,7 @@ print(f"Trade executed. Proof: https://xproof.app{outcome['verify_url']}")`} />
             xProof — Agent Context
           </h1>
           <p className="text-muted-foreground text-base leading-relaxed max-w-2xl">
-            Direct answers to the 10 questions autonomous agents ask when evaluating xProof. No marketing — just the facts needed to decide and integrate.
+            Direct answers from a production proof layer. Includes real limitations, x402 implementation, and the Moltbook case study. No marketing — just what you need to decide and integrate.
           </p>
           <div className="mt-4 p-3 rounded-md border border-primary/20 bg-primary/5 flex items-start gap-3">
             <Shield className="h-4 w-4 text-primary mt-0.5 shrink-0" />
@@ -904,7 +988,7 @@ print(f"Trade executed. Proof: https://xproof.app{outcome['verify_url']}")`} />
 
         {/* Table of contents */}
         <div className="mb-8 rounded-md border bg-muted/20 p-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">10 questions answered</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">12 topics covered</p>
           <div className="grid gap-1 sm:grid-cols-2">
             {sections.map((s, i) => (
               <a
