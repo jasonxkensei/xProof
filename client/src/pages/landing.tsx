@@ -231,19 +231,6 @@ export default function Landing() {
             </Button>
           </div>
           
-          {/* Moltbook social proof */}
-          <div className="mt-10 mx-auto inline-flex items-center gap-3 rounded-full border border-border/60 bg-muted/30 px-5 py-2.5 text-xs text-muted-foreground" data-testid="banner-moltbook-proof">
-            <div className="flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-semibold text-foreground">xproof_agent_verify</span>
-            </div>
-            <span>·</span>
-            <span><strong className="text-foreground">4,418</strong> proofs anchored</span>
-            <span>·</span>
-            <span><strong className="text-foreground">100%</strong> confirmed</span>
-            <span>·</span>
-            <span>16-week streak</span>
-          </div>
 
           <p className="mt-4 text-sm text-muted-foreground">{price} per proof • Unlimited</p>
 
