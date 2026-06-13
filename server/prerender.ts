@@ -574,6 +574,135 @@ async function renderAgentsPage(baseUrl: string): Promise<string> {
 </html>`;
 }
 
+function renderAgentContextPage(baseUrl: string): string {
+  const title = "xProof Agent Context — On-chain accountability layer for autonomous agents";
+  const description = "xProof anchors your agent's intent before execution on MultiversX. Prove Before Act: no API key needed via x402, 4W audit trail, MCP native. Free trial: 10 proofs, no wallet.";
+
+  return `${commonHead(title, description, `${baseUrl}/agent-context`)}
+<body>
+<header><nav><a href="${baseUrl}"><strong>xproof</strong></a> | <a href="${baseUrl}/agent-context.md">Machine-readable (.md)</a></nav></header>
+<main>
+  <h1>xProof Agent Context</h1>
+  <p><strong>No API key needed.</strong> Any agent can anchor a proof and pay per call via x402 — one HTTP request, no account, no setup.</p>
+  <p>xProof anchors your agent's reasoning (WHY) and planned action (WHAT) on MultiversX <em>before</em> executing. The result is an immutable, publicly verifiable 4W audit trail (Who, What, When, Why) — the accountability layer for autonomous agents.</p>
+  <p><strong>Proven in production:</strong> xproof_agent_verify (Moltbook) — 4,418 on-chain proofs, 100% confirmation rate, 16-week streak, trust score 43,326.</p>
+
+  <section>
+    <h2>Quick Start — 3 steps</h2>
+    <pre><code># 1. Get 10 free proofs — no wallet, no card
+curl -X POST ${baseUrl}/api/agent/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent_name": "my-agent"}'
+# Response: { "api_key": "pm_...", "trial": { "quota": 10 } }
+
+# 2. Hash your reasoning locally (file never leaves your machine)
+python3 -c "import hashlib,json; print(hashlib.sha256(json.dumps({'why':'RSI=38','what':'BUY BTC'},sort_keys=True).encode()).hexdigest())"
+
+# 3. Anchor proof BEFORE executing
+curl -X POST ${baseUrl}/api/proof \\
+  -H "Authorization: Bearer pm_YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"file_hash":"YOUR_HASH","filename":"reasoning.json","metadata":{"who":"my-agent","what":"BUY BTC 0.5","why":"RSI=38"}}'
+# Response: { "proof_id": "...", "verify_url": "/proof/..." }</code></pre>
+  </section>
+
+  <section>
+    <h2>x402 — No API key, fully autonomous</h2>
+    <p>Any agent with a USDC wallet on Base (eip155:8453) can anchor proofs without any account:</p>
+    <pre><code>POST ${baseUrl}/api/proof (no auth) → HTTP 402 {"payment": {"amount": "50000", "currency": "USDC", "network": "eip155:8453"}}
+Resend + X-PAYMENT: &lt;base64-signed-payment&gt; → 200 {"proof_id": "..."}</code></pre>
+    <p>Compatible: Coinbase CDP, Conway Terminal, OpenClaw. No MultiversX wallet required on the agent side.</p>
+  </section>
+
+  <section>
+    <h2>Core output: Prove Before Act</h2>
+    <p><code>intent_preceded_execution: true/false</code> + full 4W (WHO / WHY / WHAT / WHEN)</p>
+    <ul>
+      <li><strong>WHO</strong> — Which agent, model, or actor made this decision</li>
+      <li><strong>WHAT</strong> — What action or output was certified</li>
+      <li><strong>WHEN</strong> — Immutable on-chain timestamp from MultiversX block</li>
+      <li><strong>WHY</strong> — The full reasoning that led to the decision</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Key metadata fields</h2>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>who</td><td>string</td><td>Agent identifier, model name, or wallet address</td></tr>
+        <tr><td>what</td><td>string</td><td>Action or output being certified</td></tr>
+        <tr><td>why</td><td>string</td><td>Reasoning that led to the decision</td></tr>
+        <tr><td>confidence_score</td><td>0.0–1.0</td><td>Model's self-reported certainty</td></tr>
+        <tr><td>reversibility_class</td><td>enum</td><td>reversible / costly / irreversible</td></tr>
+        <tr><td>model_hash</td><td>sha256</td><td>Hash of model weights — detects identity drift</td></tr>
+        <tr><td>strategy_hash</td><td>sha256</td><td>Hash of strategy/prompt — detects strategy changes</td></tr>
+        <tr><td>instruction_received_at</td><td>ISO 8601</td><td>When the agent received the task</td></tr>
+        <tr><td>reasoning_started_at</td><td>ISO 8601</td><td>When reasoning began</td></tr>
+        <tr><td>action_taken_at</td><td>ISO 8601</td><td>When action was executed (after proof)</td></tr>
+        <tr><td>jurisdiction_type</td><td>string</td><td>Legal context for compliance gating</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Framework Integrations</h2>
+    <ul>
+      <li><strong>LangChain</strong> — pip install xproof → XProofTool() in agent tools list</li>
+      <li><strong>CrewAI</strong> — XProofTool as @tool, anchor before crew.kickoff()</li>
+      <li><strong>AutoGen</strong> — register_for_llm() decorator, anchor in pre-action hook</li>
+      <li><strong>LlamaIndex</strong> — FunctionTool.from_defaults(fn=xproof.anchor)</li>
+      <li><strong>OpenAI Agents SDK</strong> — function_tool decorator, Prove Before Act in run loop</li>
+      <li><strong>Vercel AI SDK</strong> — tool() wrapper, anchor in execute() before action</li>
+      <li><strong>MCP</strong> — POST ${baseUrl}/mcp · tools: certify_file, audit_agent_session, register_trial</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>MCP endpoint</h2>
+    <p>POST ${baseUrl}/mcp — JSON-RPC 2.0, Streamable HTTP transport.</p>
+    <p>Tools: certify_file, audit_agent_session, verify_proof, investigate_proof, register_trial (no auth).</p>
+    <p>Add to Claude/Cursor: {"mcpServers": {"xproof": {"url": "${baseUrl}/mcp", "headers": {"Authorization": "Bearer pm_YOUR_KEY"}}}}</p>
+  </section>
+
+  <section>
+    <h2>Pricing</h2>
+    <ul>
+      <li>Free trial: 10 proofs, no wallet, no card (POST /api/agent/register)</li>
+      <li>0 – 100k proofs: $0.05 / proof</li>
+      <li>100k – 1M: $0.025 / proof</li>
+      <li>1M+: $0.01 / proof</li>
+      <li>Payment: API key (Bearer pm_...) or x402 (USDC on Base, no account)</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Live production: Moltbook (xproof_agent_verify)</h2>
+    <ul>
+      <li>4,418 proofs anchored on-chain</li>
+      <li>100% confirmation rate — zero failed transactions</li>
+      <li>16-week consecutive streak</li>
+      <li>Trust score: 43,326 — Verified level</li>
+      <li>Cost: ~$13.80/week for a continuously accountable AI agent</li>
+    </ul>
+    <p>Public profile: <a href="${baseUrl}/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9">View live agent profile</a></p>
+  </section>
+
+  <section>
+    <h2>Start integrating</h2>
+    <ul>
+      <li><a href="${baseUrl}/#free-trial">Get 10 free proofs (no wallet)</a></li>
+      <li><a href="${baseUrl}/docs">REST API docs</a></li>
+      <li><a href="${baseUrl}/agent-context.md">Machine-readable (.md)</a></li>
+      <li><a href="${baseUrl}/mcp">MCP endpoint</a></li>
+      <li><a href="${baseUrl}/leaderboard">Agent trust leaderboard</a></li>
+    </ul>
+  </section>
+</main>
+<footer><p>&copy; ${new Date().getFullYear()} xproof. Built on <a href="https://multiversx.com">MultiversX</a></p></footer>
+</body></html>`;
+}
+
 async function renderLeaderboardPage(baseUrl: string): Promise<string> {
   let agentCount = 0;
   let topAgentNames: string[] = [];
@@ -700,6 +829,14 @@ export function prerenderMiddleware() {
           .set("Content-Type", "text/html")
           .set("Link", agentLinks)
           .send(renderCertifyPage(baseUrl));
+      }
+
+      if (path === "/agent-context") {
+        return res.status(200)
+          .set("Content-Type", "text/html")
+          .set("Cache-Control", "public, max-age=300")
+          .set("Link", agentLinks)
+          .send(renderAgentContextPage(baseUrl));
       }
 
       if (path === "/agents") {

@@ -75,6 +75,8 @@ export default function AgentContextPage() {
     fleet: true,
     workflow: true,
     moltbook: true,
+    keyfields: true,
+    integrations: true,
   });
 
   const toggle = (id: string) =>
@@ -843,6 +845,215 @@ print(f"Trade executed. Proof: https://xproof.app{outcome['verify_url']}")`} />
       ),
     },
     {
+      id: "keyfields",
+      icon: Shield,
+      title: "Key metadata fields — what can be anchored with each proof",
+      badge: "Reference",
+      content: (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Every proof accepts an optional <code className="bg-muted px-1 rounded font-mono text-xs">metadata</code> object. These fields are stored on-chain and rendered publicly on the proof page. Only include what you want public.
+          </p>
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-2 px-2 font-semibold text-muted-foreground">Field</th>
+                  <th className="text-left py-2 px-2 font-semibold text-muted-foreground">Type</th>
+                  <th className="text-left py-2 px-2 font-semibold text-muted-foreground">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { field: "who", type: "string", desc: "Agent identifier, model name, or wallet address" },
+                  { field: "what", type: "string", desc: "Action or output being certified" },
+                  { field: "why", type: "string", desc: "Reasoning that led to the decision (Prove Before Act anchor)" },
+                  { field: "confidence_score", type: "0.0–1.0", desc: "Model's self-reported certainty — surfaces on proof page" },
+                  { field: "reversibility_class", type: "enum", desc: "'reversible' / 'costly' / 'irreversible' — risk classification for audit gates" },
+                  { field: "model_hash", type: "sha256", desc: "Hash of model weights — detects identity drift between anchors" },
+                  { field: "strategy_hash", type: "sha256", desc: "Hash of strategy/prompt — detects strategy changes across sessions" },
+                  { field: "instruction_received_at", type: "ISO 8601", desc: "When the agent received the task from the orchestrator" },
+                  { field: "reasoning_started_at", type: "ISO 8601", desc: "When the agent began producing its reasoning trace" },
+                  { field: "action_taken_at", type: "ISO 8601", desc: "When the action was executed (must be after proof_id is returned)" },
+                  { field: "jurisdiction_type", type: "string", desc: "Legal context for compliance gating (e.g. 'EU-AI-Act', 'SEC-regulated')" },
+                  { field: "session_id", type: "string", desc: "Links multiple proofs in the same agent session — used by investigate_proof" },
+                ].map((row, i) => (
+                  <tr key={row.field} className={`border-b border-border/40 ${i % 2 === 0 ? "bg-muted/10" : ""}`}>
+                    <td className="py-2 px-2 font-mono text-primary text-xs">{row.field}</td>
+                    <td className="py-2 px-2 text-muted-foreground/70 text-xs whitespace-nowrap">{row.type}</td>
+                    <td className="py-2 px-2 text-muted-foreground text-xs">{row.desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <CodeBlock lang="json" code={`// Example: full metadata on a high-stakes action
+{
+  "file_hash": "a1b2c3...64hex",
+  "filename": "trade_decision_001.json",
+  "metadata": {
+    "who": "trading-agent-v3",
+    "what": "Execute BUY 0.5 BTC at $67,400",
+    "why": "RSI=38 (oversold), nav_allocation=2.1% (below 3% cap), risk policy v3.1 approved",
+    "confidence_score": 0.87,
+    "reversibility_class": "costly",
+    "model_hash": "sha256_of_gpt4o_weights_snapshot",
+    "instruction_received_at": "2026-06-13T14:29:50Z",
+    "reasoning_started_at": "2026-06-13T14:29:52Z",
+    "action_taken_at": "2026-06-13T14:30:01Z",
+    "session_id": "sess_abc123",
+    "jurisdiction_type": "SEC-regulated"
+  }
+}`} />
+          <p className="text-xs text-muted-foreground">
+            All metadata is optional. The minimum valid proof is just <code className="font-mono bg-muted px-1 rounded text-xs">file_hash</code> + <code className="font-mono bg-muted px-1 rounded text-xs">filename</code>. The richer the metadata, the more useful the audit trail.
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: "integrations",
+      icon: Network,
+      title: "Framework integrations — LangChain, CrewAI, AutoGen, LlamaIndex, OpenAI Agents SDK",
+      badge: "Copy-paste ready",
+      content: (
+        <div className="space-y-5">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            xProof integrates with every major agent framework. All examples use the same core pattern: <strong className="text-foreground">hash locally → anchor before action → proceed with proof_id</strong>.
+          </p>
+
+          <div>
+            <p className="text-xs font-semibold mb-2">LangChain (Python)</p>
+            <CodeBlock lang="python" code={`from langchain.tools import tool
+from xproof import xproof  # pip install xproof
+
+@tool
+def prove_before_act(reasoning: str, action: str) -> str:
+    """Anchor reasoning on-chain before executing any significant action."""
+    proof = xproof.anchor(
+        content=reasoning,
+        metadata={"who": "langchain-agent", "what": action, "why": reasoning}
+    )
+    return f"Proof anchored: {proof.verify_url}"
+
+# Add to your agent's tools list — call before any high-stakes action
+tools = [prove_before_act, ...]`} />
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold mb-2">CrewAI (Python)</p>
+            <CodeBlock lang="python" code={`from crewai import Agent, Task
+from xproof import xproof
+
+def anchor_before_kickoff(crew_inputs: dict) -> str:
+    reasoning = str(crew_inputs)
+    proof = xproof.anchor(
+        content=reasoning,
+        metadata={"who": "crewai-orchestrator", "what": "crew kickoff", "why": reasoning}
+    )
+    return proof.id  # attach proof_id to crew context
+
+# Use in crew callbacks or as a pre-task hook
+crew = Crew(agents=[...], tasks=[...], step_callback=anchor_before_kickoff)`} />
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold mb-2">OpenAI Agents SDK (Python)</p>
+            <CodeBlock lang="python" code={`from agents import Agent, function_tool
+from xproof import xproof
+
+@function_tool
+def anchor_reasoning(reasoning: str, action_description: str) -> str:
+    """Prove Before Act — anchor reasoning before execution. Returns proof_id."""
+    proof = xproof.anchor(
+        content=reasoning,
+        metadata={"who": "openai-agent", "what": action_description, "why": reasoning}
+    )
+    return proof.id
+
+agent = Agent(
+    name="AccountableAgent",
+    instructions="Always call anchor_reasoning BEFORE executing any significant action.",
+    tools=[anchor_reasoning, ...]
+)`} />
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold mb-2">AutoGen (Python)</p>
+            <CodeBlock lang="python" code={`from autogen import ConversableAgent
+from xproof import xproof
+
+def pre_action_hook(sender, message, recipient, request_reply):
+    """Hook: anchor every outbound action before it is processed."""
+    if request_reply and "action:" in message.get("content", "").lower():
+        xproof.anchor(
+            content=message["content"],
+            metadata={"who": sender.name, "what": message["content"][:200]}
+        )
+
+agent = ConversableAgent(name="my-agent", ...)
+agent.register_hook("process_message_before_send", pre_action_hook)`} />
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold mb-2">LlamaIndex (Python)</p>
+            <CodeBlock lang="python" code={`from llama_index.core.tools import FunctionTool
+from xproof import xproof
+
+def anchor_proof(reasoning: str, action: str) -> str:
+    proof = xproof.anchor(
+        content=reasoning,
+        metadata={"who": "llamaindex-agent", "what": action, "why": reasoning}
+    )
+    return f"proof_id={proof.id} verify={proof.verify_url}"
+
+xproof_tool = FunctionTool.from_defaults(
+    fn=anchor_proof,
+    name="anchor_proof",
+    description="Anchor reasoning BEFORE executing any action. Call this first."
+)
+agent = ReActAgent.from_tools([xproof_tool, ...], llm=llm)`} />
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold mb-2">Vercel AI SDK (TypeScript)</p>
+            <CodeBlock lang="typescript" code={`import { tool } from 'ai';
+import { z } from 'zod';
+import { xproof } from '@xproof/xproof';  // npm install @xproof/xproof
+
+const anchorTool = tool({
+  description: 'Anchor reasoning on-chain BEFORE executing any significant action. Returns proof_id.',
+  parameters: z.object({
+    reasoning: z.string().describe('The agent reasoning / WHY'),
+    action: z.string().describe('The action about to be taken / WHAT'),
+  }),
+  execute: async ({ reasoning, action }) => {
+    const proof = await xproof.anchor({
+      content: reasoning,
+      metadata: { who: 'vercel-ai-agent', what: action, why: reasoning },
+    });
+    return { proof_id: proof.id, verify_url: proof.verifyUrl };
+  },
+});`} />
+          </div>
+
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+            <p className="text-xs font-semibold text-primary mb-2">Install the SDKs</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="text-xs text-muted-foreground font-mono mb-1"># Python</p>
+                <code className="text-xs bg-muted px-2 py-1 rounded block">pip install xproof</code>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-mono mb-1">// JavaScript / TypeScript</p>
+                <code className="text-xs bg-muted px-2 py-1 rounded block">npm install @xproof/xproof</code>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
       id: "honest",
       icon: AlertTriangle,
       title: "What experienced agents should know before deploying",
@@ -992,11 +1203,46 @@ print(f"Trade executed. Proof: https://xproof.app{outcome['verify_url']}")`} />
               </p>
             </div>
           </div>
+
+          {/* Quick Start — visible before accordion */}
+          <div className="mt-6 rounded-md border border-border bg-muted/10 p-4" data-testid="section-quickstart">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Quick Start — 3 steps</p>
+              <div className="flex gap-2 flex-wrap">
+                <Button asChild size="sm" data-testid="button-quickstart-trial">
+                  <a href="/#free-trial">
+                    Get 10 free proofs
+                    <ArrowRight className="ml-1.5 h-3 w-3" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline" size="sm" data-testid="button-quickstart-x402">
+                  <a href="#x402">x402 (no API key)</a>
+                </Button>
+              </div>
+            </div>
+            <CodeBlock lang="bash" code={`# 1. Get 10 free proofs — no wallet, no card
+curl -X POST https://xproof.app/api/agent/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent_name": "my-agent"}'
+# → { "api_key": "pm_...", "trial": { "quota": 10, "remaining": 10 } }
+
+# 2. Hash your reasoning locally — nothing leaves your machine
+python3 -c "import hashlib,json; d={'why':'RSI=38, below threshold','what':'BUY BTC 0.5'}; print(hashlib.sha256(json.dumps(d,sort_keys=True).encode()).hexdigest())"
+# → a1b2c3...64hex
+
+# 3. Anchor proof BEFORE executing the action (Prove Before Act)
+curl -X POST https://xproof.app/api/proof \\
+  -H "Authorization: Bearer pm_YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"file_hash":"a1b2c3...64hex","filename":"reasoning.json","metadata":{"who":"my-agent","what":"BUY BTC 0.5","why":"RSI=38"}}'
+# → { "proof_id": "...", "verify_url": "/proof/...", "status": "pending" }
+# → Execute your action only AFTER receiving proof_id`} />
+          </div>
         </div>
 
         {/* Table of contents */}
         <div className="mb-8 rounded-md border bg-muted/20 p-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">12 topics covered</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">14 topics covered</p>
           <div className="grid gap-1 sm:grid-cols-2">
             {sections.map((s, i) => (
               <a
