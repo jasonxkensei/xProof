@@ -1,31 +1,37 @@
-# Published — xproof v3.0.0 SKILL.md
+# Published — xproof v3.1.0 SKILL.md
 
-**Date:** 2026-05-03T16:45:18Z  
+**Date:** 2026-06-13T00:00:00Z  
 **Target repo:** https://github.com/jasonxkensei/xproof-openclaw-skill  
-**Branch:** main (archived as `xproof/SKILL-v3.0.0.md`)
+**Branch:** main (archived as `xproof/SKILL-v3.1.0.md`)
 
 ## Verification
 
 | Item | Value |
 |---|---|
-| Commit SHA | `0096495dd823a42086457114920fe42bcd1183f9` |
-| Commit URL | https://github.com/jasonxkensei/xproof-openclaw-skill/commit/0096495dd823a42086457114920fe42bcd1183f9 |
-| SKILL-v3.0.0.md blob SHA | `804fa55c2ef562ceb9138c331c657964525b84b6` |
-| Archived raw URL | https://raw.githubusercontent.com/jasonxkensei/xproof-openclaw-skill/main/xproof/SKILL-v3.0.0.md |
+| Commit SHA (SKILL.md update) | `e665a34a769bb154e40f80170f4e1b390e9597fd` |
+| Commit SHA (archive) | `8b9f250318dacef5b702e6ba71f5887d76e57392` |
+| Commit URL | https://github.com/jasonxkensei/xproof-openclaw-skill/commit/e665a34a769bb154e40f80170f4e1b390e9597fd |
+| SKILL-v3.1.0.md blob SHA | `8b9f250318dacef5b702e6ba71f5887d76e57392` |
+| Archived raw URL | https://raw.githubusercontent.com/jasonxkensei/xproof-openclaw-skill/main/xproof/SKILL-v3.1.0.md |
 
 ## Files pushed
 
 | Local path | GitHub path | Result |
 |---|---|---|
-| `clawhub-publish/xproof/SKILL.md` | `xproof/SKILL-v3.0.0.md` | Created (new archived file) |
+| `clawhub-publish/xproof/SKILL.md` | `xproof/SKILL.md` | Updated (live canonical) |
+| `clawhub-publish/xproof/SKILL.md` | `xproof/SKILL-v3.1.0.md` | Created (new archived snapshot) |
 
-## Security additions present in v3.0.0
+## Changes in v3.1.0
 
-- `NEVER send plaintext content to xproof.app` — always hash locally first
-- x402 autonomous spending-cap warning — configure a cap before enabling in production
-- `llms.txt` / `llms-full.txt` runtime note — load once at install, not per-call
+- **Tier 3 pricing** — updated from $0.01 to **$0.015** per proof (1M+ proofs)
+- **Launch promo** — -50% on prepaid packs ≥ 1,000 certs (Tier 1: <100k all-time proofs)
+- **Fetch.ai / uAgents** — `XProofuAgentMiddleware` added to integrations section
+- **Hermes Skills Hub** — registered as a Hermes skill with discovery badge
+- **Frontmatter version** bumped from 3.0.0 → 3.1.0
 
-## Note
+## Previous release
 
-v3.0.0 is archived at `xproof/SKILL-v3.0.0.md` in the public repo.  
-The canonical Quick Install URL points to `xproof/SKILL.md` which serves v3.1.0.
+| Version | Commit |
+|---|---|
+| v3.0.0 | `0096495dd823a42086457114920fe42bcd1183f9` |
+| v3.0.0 archive | `xproof/SKILL-v3.0.0.md` |
