@@ -1,6 +1,6 @@
 ---
 name: xproof
-version: 3.0.0
+version: 3.1.0
 description: Proof and accountability layer for AI agents. Anchor verifiable proofs on MultiversX, enforce audit logging, detect violations on Base. REST API, MCP, x402. No proof = no action.
 homepage: https://xproof.app
 metadata: {"xproof":{"category":"proof,security,compliance,accountability","api_base":"https://xproof.app"}}
@@ -21,7 +21,7 @@ This skill enables your agent to **anchor verifiable proofs on the MultiversX bl
 **All-time volume pricing** (global pool, not per-user):
 - **0–100k proofs**: $0.05 per proof
 - **100k–1M proofs**: $0.025 per proof
-- **1M+ proofs**: $0.01 per proof
+- **1M+ proofs**: $0.015 per proof
 
 ## Quick Install
 
