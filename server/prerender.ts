@@ -602,6 +602,7 @@ function renderAgentContextPage(baseUrl: string): string {
   <h1>xProof Agent Context</h1>
   <p><strong>Anchor intent before execution.</strong> Prove <code>intent_preceded_execution: true</code> on MultiversX — with a public 4W audit trail and zero-account x402 payments.</p>
   <p><strong>LLM-optimized document.</strong> No API key needed. Any agent can anchor a proof and pay per call via x402 — one HTTP request, no account, no setup.</p>
+  <p><strong>Discoverable by agents via llms.txt + /.well-known/xproof.json</strong> — machine-readable discovery endpoints serve this document in plain text and JSON for autonomous crawlers and orchestrators.</p>
   <p><strong>Production-proven on Moltbook:</strong> xproof_agent_verify — 4,418 on-chain proofs, 100% confirmation rate, 16-week streak, trust score 43,326. ~$13.80/week for a continuously accountable AI agent. <a href="${baseUrl}/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9">View live agent profile →</a></p>
 
   <section>
@@ -715,6 +716,7 @@ Resend + X-PAYMENT: &lt;base64-signed-payment&gt; → 200 {"proof_id": "..."}</c
       <li><strong>OpenAI Agents SDK</strong> — function_tool decorator, Prove Before Act in run loop</li>
       <li><strong>Vercel AI SDK</strong> — tool() wrapper, anchor in execute() before action</li>
       <li><strong>MCP</strong> — POST ${baseUrl}/mcp · tools: certify_file, audit_agent_session, register_trial</li>
+      <li><strong>Fetch.ai / uAgents</strong> — XProofuAgentMiddleware(agent, api_key="pm_...") — one-line integration, anchors WHY+WHAT proof before every message handler. Full example: github.com/jasonxkensei/xproof-examples/tree/main/fetchai</li>
     </ul>
   </section>
 
@@ -723,6 +725,7 @@ Resend + X-PAYMENT: &lt;base64-signed-payment&gt; → 200 {"proof_id": "..."}</c
     <p>POST ${baseUrl}/mcp — JSON-RPC 2.0, Streamable HTTP transport.</p>
     <p>Tools: certify_file, audit_agent_session, verify_proof, investigate_proof, register_trial (no auth).</p>
     <p>Add to Claude/Cursor: {"mcpServers": {"xproof": {"url": "${baseUrl}/mcp", "headers": {"Authorization": "Bearer pm_YOUR_KEY"}}}}</p>
+    <p><strong>Hermes Skills Hub compatible:</strong> xProof is published as an OpenClaw skill on ClawHub. Hermes-compatible agents can install it in one command: <code>hermes skills install clawhub/xproof</code></p>
   </section>
 
   <section>

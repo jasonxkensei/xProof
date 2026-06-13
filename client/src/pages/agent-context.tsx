@@ -444,6 +444,16 @@ def anchor_with_retry(file_hash: str, filename: str, api_key: str, max_retries=3
           <p className="text-sm text-muted-foreground leading-relaxed">
             xProof exposes a native MCP server at <code className="font-mono bg-muted px-1 rounded text-xs">https://xproof.app/mcp</code>. Use Streamable HTTP transport (POST). Tools available: <code className="font-mono bg-muted px-1 rounded text-xs">certify_file</code>, <code className="font-mono bg-muted px-1 rounded text-xs">audit_agent_session</code>, <code className="font-mono bg-muted px-1 rounded text-xs">investigate_proof</code>, <code className="font-mono bg-muted px-1 rounded text-xs">register_trial</code>.
           </p>
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-3 flex items-start gap-3">
+            <Cpu className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-primary mb-1">Hermes Skills Hub compatible</p>
+              <p className="text-xs text-muted-foreground mb-2">
+                xProof is published as an OpenClaw skill on ClawHub. Hermes-compatible agents can install it in one command:
+              </p>
+              <code className="text-xs bg-muted px-2 py-1 rounded block font-mono">hermes skills install clawhub/xproof</code>
+            </div>
+          </div>
           <div>
             <p className="text-xs font-semibold mb-2">1. Add to your MCP config (Claude, Cursor, any MCP client):</p>
             <CodeBlock lang="json" code={`{
@@ -1037,6 +1047,27 @@ const anchorTool = tool({
 });`} />
           </div>
 
+          <div>
+            <p className="text-xs font-semibold mb-2">Fetch.ai / uAgents (Python)</p>
+            <p className="text-xs text-muted-foreground mb-2 leading-relaxed">
+              xProof integrates natively with the Fetch.ai Agentverse ecosystem via <code className="font-mono bg-muted px-1 rounded">XProofuAgentMiddleware</code>. Every uAgent message handler automatically anchors a WHY+WHAT proof before processing — making your Fetch.ai agent auditable and trust-scored on the xProof leaderboard.
+            </p>
+            <CodeBlock lang="python" code={`from uagents import Agent, Context
+from xproof.integrations.fetchai import XProofuAgentMiddleware
+
+agent = Agent(name="my-fetchai-agent", seed="your_seed_phrase")
+
+# One-line integration — anchors proof before every message handler
+XProofuAgentMiddleware(agent, api_key="pm_YOUR_KEY")
+
+@agent.on_message(model=MyMessage)
+async def handle(ctx: Context, sender: str, msg: MyMessage):
+    # Proof is already anchored before this line executes
+    await ctx.send(sender, MyResponse(result="processed"))
+
+# Full example: github.com/jasonxkensei/xproof-examples/tree/main/fetchai`} />
+          </div>
+
           <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
             <p className="text-xs font-semibold text-primary mb-2">Install the SDKs</p>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -1182,6 +1213,10 @@ const anchorTool = tool({
             </Badge>
             <Badge variant="outline" className="text-xs text-muted-foreground">
               Last updated June 2026
+            </Badge>
+            <Badge variant="outline" className="text-xs text-muted-foreground">
+              <Network className="mr-1.5 h-3 w-3" />
+              Discoverable via llms.txt + /.well-known/xproof.json
             </Badge>
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold mb-3 tracking-tight">
