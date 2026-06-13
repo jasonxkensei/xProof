@@ -69,16 +69,16 @@ function commonHead(title: string, description: string, canonicalUrl: string, og
 <meta property="og:description" content="${escapeHtml(description)}">
 <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
 <meta property="og:site_name" content="xproof">
-<meta property="og:image" content="https://xproof.app/icon-512.png">
+<meta property="og:image" content="https://xproof.app/og-image.jpg">
 
-<meta name="twitter:card" content="summary">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(description)}">
-<meta name="twitter:image" content="https://xproof.app/icon-512.png">
+<meta name="twitter:image" content="https://xproof.app/og-image.jpg">
 
+<link rel="icon" href="/favicon-new.png" type="image/png">
 <link rel="icon" href="/favicon.ico" sizes="32x32">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="/favicon-new.png">
 <link rel="manifest" href="/site.webmanifest">
 <meta name="theme-color" content="#10b981">
 
