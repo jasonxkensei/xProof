@@ -6,7 +6,7 @@ import { count, and, eq, isNull, not } from "drizzle-orm";
 const PRICING_TIERS = [
   { min: 0, max: 100000, priceUsd: 0.05 },
   { min: 100001, max: 1000000, priceUsd: 0.025 },
-  { min: 1000001, max: Infinity, priceUsd: 0.01 },
+  { min: 1000001, max: Infinity, priceUsd: 0.015 },
 ];
 
 let cachedPrice: { egldUsd: number; timestamp: number } | null = null;
@@ -15,7 +15,7 @@ const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes cache
 let cachedTotalCount: { count: number; timestamp: number } | null = null;
 const COUNT_CACHE_DURATION_MS = 60 * 1000;
 
-async function getTotalCertificationCount(): Promise<number> {
+export async function getTotalCertificationCount(): Promise<number> {
   if (cachedTotalCount && Date.now() - cachedTotalCount.timestamp < COUNT_CACHE_DURATION_MS) {
     return cachedTotalCount.count;
   }

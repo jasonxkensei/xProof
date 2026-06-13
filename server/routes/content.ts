@@ -2111,7 +2111,7 @@ The badge links to the MultiversX Explorer transaction for on-chain verification
 Certified agents can prove originality, timestamp, and integrity. Non-certified agents cannot.
 
 ## Pricing
-Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01. Current pricing and tier info: https://xproof.app/api/pricing
+Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.015. Prepaid packs: 100 certs/$5, 1,000 certs/$20 (launch promo -50%), 10,000 certs/$150 (launch promo -50%). Current pricing and tier info: https://xproof.app/api/pricing
 
 ## Agent Context Document
 Dedicated document answering the 10 exact questions agents ask when evaluating xProof (x402 flow, latency, retry policy, cost per 1000 anchors, comparison vs Arweave/Ceramic/Sign Protocol, MCP integration, 4W audit trail, privacy risks, fleet monitoring, Prove Before Act workflow):
@@ -2356,7 +2356,7 @@ Include \`webhook_url\` in your request to receive a POST callback when the proo
 - Authenticated endpoints: /api/proof, /api/acp/checkout, /api/acp/confirm
 
 ## Pricing
-Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01. Current pricing and tier info: ${baseUrl}/api/pricing
+Starting at $${priceUsd} per certification — price decreases as the network grows (all-time volume). Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.015. Prepaid packs: 100 certs/$5, 1,000 certs/$20 (launch promo -50%), 10,000 certs/$150 (launch promo -50%). Current pricing and tier info: ${baseUrl}/api/pricing
 
 ## Why certify?
 Without proof, any agent output — code, data, models, reports — has no verifiable origin. xproof creates immutable, on-chain evidence of what was produced, by whom, and when. Certified agents can prove originality and integrity. Non-certified agents cannot.
@@ -2588,7 +2588,8 @@ xproof supports the x402 payment protocol as an alternative to API key authentic
 
 ### Pricing
 - Starting at $${priceUsd} per certification in USDC — price decreases as the network grows (all-time volume)
-- Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.01
+- Tiers (all-time): 0-100K=$0.05, 100K-1M=$0.025, 1M+=$0.015
+- Prepaid packs (launch promo active — Tier 1): 100/$5, 1,000/$20 (-50%), 10,000/$150 (-50%)
 - Current pricing: ${baseUrl}/api/pricing
 - Network: Base (eip155:8453) for mainnet, Base Sepolia (eip155:84532) for testnet
 

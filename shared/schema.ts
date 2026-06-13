@@ -354,6 +354,10 @@ export const creditPurchaseIntents = pgTable("credit_purchase_intents", {
   intentToken: varchar("intent_token").notNull().unique(),
   // EVM wallet that will originate the Base USDC transfer — verified as tx sender at confirm time
   payerAddress: varchar("payer_address").notNull(),
+  // Effective price at purchase time (may differ from base package price due to promos).
+  // Used at /confirm so a promo buyer who confirms after the promo ends is still charged
+  // the price that was quoted to them. Nullable for backward compat with existing intents.
+  priceUsdcRaw: varchar("price_usdc_raw"),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });

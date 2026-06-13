@@ -326,7 +326,7 @@ export function registerCertificationsRoutes(app: Express) {
             trial_used: trialUsed,
             trial_remaining: Math.max(0, trialQuota - trialUsed),
             upgrade: {
-              credits: "POST /api/credits/purchase — prepaid packs (100/$5, 1000/$40, 10k/$300 USDC on Base)",
+              credits: "POST /api/credits/purchase — prepaid packs: 100/$5, 1,000/$20 (launch promo -50%), 10,000/$150 (launch promo -50%) USDC on Base",
               x402: "Send requests without API key — pay per use via USDC on Base",
               acp: "Contact xproof for full API access with EGLD payments",
             },

@@ -728,12 +728,32 @@ Resend + X-PAYMENT: &lt;base64-signed-payment&gt; → 200 {"proof_id": "..."}</c
   <section>
     <h2>Pricing</h2>
     <ul>
-      <li>Free trial: 10 proofs, no wallet, no card (POST /api/agent/register)</li>
-      <li>0 – 100k proofs: $0.05 / proof</li>
-      <li>100k – 1M: $0.025 / proof</li>
-      <li>1M+: $0.01 / proof</li>
-      <li>Payment: API key (Bearer pm_...) or x402 (USDC on Base, no account)</li>
+      <li>Free trial: 10 proofs — no wallet, no card (POST /api/agent/register)</li>
+      <li>Pay-per-use via x402: $0.05 / proof — USDC on Base, no account needed</li>
+      <li>Prepaid packs — <strong>Launch promo active (Tier 1, &lt;100k total proofs): -50% on packs ≥1k certs</strong>:
+        <ul>
+          <li>Starter: 100 certs / $5.00 ($0.05/cert)</li>
+          <li>Pro: 1,000 certs / $20.00 ($0.02/cert) — was $40.00</li>
+          <li>Business: 10,000 certs / $150.00 ($0.015/cert) — was $300.00</li>
+        </ul>
+      </li>
+      <li>Volume tiers (pay-per-use, auto-applied as network grows):
+        <ul>
+          <li>0 – 100k proofs: $0.05 / proof</li>
+          <li>100k – 1M proofs: $0.025 / proof</li>
+          <li>1M+ proofs: $0.015 / proof</li>
+        </ul>
+      </li>
+      <li>Payment: API key (Authorization: Bearer pm_...) or x402 (USDC on Base, no account)</li>
     </ul>
+  </section>
+
+  <section>
+    <h2>Get your API key — 3 ways</h2>
+    <p><strong>1. No-account trial (fastest):</strong> POST /api/agent/register → instant pm_ key → 10 free proofs.</p>
+    <p><strong>2. MultiversX wallet (operator flow, most common):</strong> Connect your xPortal wallet on xproof.app/settings → create a pm_ API key → share it with your agent. Your wallet identity is anchored on-chain; the key is scoped, revocable, and tied to your MultiversX address.</p>
+    <p><strong>3. MultiversX wallet (autonomous agent flow, advanced):</strong> An agent with its own MultiversX wallet can sign a Native Auth token programmatically using @multiversx/sdk-core, POST it to /api/auth/wallet/sync, then create a pm_ key via /api/keys — no human operator required. Only relevant for agents that hold their own on-chain identity.</p>
+    <p><strong>4. x402 (no account, no key):</strong> Any agent with a USDC wallet on Base (eip155:8453) can anchor proofs with no setup — send USDC, get proof.</p>
   </section>
 
   <section>

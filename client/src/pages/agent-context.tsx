@@ -298,7 +298,7 @@ def anchor_with_retry(file_hash: str, filename: str, api_key: str, max_retries=3
             {[
               { label: "Current price", value: "$0.05", detail: "per certification at current tier" },
               { label: "Cost per 1,000 anchors", value: "$50", detail: "at $0.05 per cert" },
-              { label: "Cost per 10,000 anchors", value: "~$350", detail: "once next tier unlocks (~$0.035)" },
+              { label: "Cost per 10,000 anchors", value: "~$150", detail: "launch promo -50% pack (normally $300)" },
             ].map((m) => (
               <div key={m.label} className="rounded-md border bg-muted/30 p-3 text-center">
                 <div className="text-2xl font-bold text-primary mb-1">{m.value}</div>

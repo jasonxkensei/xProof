@@ -162,7 +162,7 @@ Use `md` format for LLM consumption -- produces human-readable Markdown with all
 
 List xProof capabilities, pricing, and usage guidance. No parameters required.
 
-**Returns:** Service description, pricing tiers ($0.05 / $0.025 / $0.01 per proof depending on all-time volume), list of tools, certification triggers, batch API details, free trial details, and supported protocols.
+**Returns:** Service description, pricing tiers ($0.05 / $0.025 / $0.015 per proof depending on all-time volume), list of tools, certification triggers, batch API details, free trial details, and supported protocols.
 
 ---
 

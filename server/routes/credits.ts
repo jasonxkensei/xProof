@@ -5,16 +5,23 @@ import { db } from "../db";
 import { logger } from "../logger";
 import { apiKeys, creditPurchases, creditPurchaseIntents } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
-import { CREDIT_PACKAGES, getPackage, verifyUsdcOnBase } from "../credits";
+import { CREDIT_PACKAGES, getPackage, getEffectivePackages, getEffectivePackage, verifyUsdcOnBase } from "../credits";
+import { getTotalCertificationCount } from "../pricing";
 import { addCredits, getUserCreditBalance } from "./helpers";
 
 export function registerCreditsRoutes(app: Express) {
   // ── Credit endpoints ─────────────────────────────────────────────────────────
   // GET /api/credits/packages — list available prepaid certification packages
-  app.get("/api/credits/packages", (_req, res) => {
+  app.get("/api/credits/packages", async (_req, res) => {
     const baseUrl = `https://${_req.get("host")}`;
+    const totalCerts = await getTotalCertificationCount();
+    const effectivePackages = getEffectivePackages(totalCerts);
+    const promoActive = effectivePackages.some((p) => p.promo_active);
     res.json({
-      packages: CREDIT_PACKAGES,
+      packages: effectivePackages,
+      promo: promoActive
+        ? { active: true, description: "Launch promo: -50% on packs ≥1,000 certs while network total < 100k proofs (Tier 1)" }
+        : { active: false },
       payment: {
         network: "eip155:8453",
         asset: "USDC",
@@ -52,12 +59,13 @@ export function registerCreditsRoutes(app: Express) {
       }
 
       const body = req.body as { package_id?: string; payer_address?: string; signature?: string };
-      const pkg = getPackage(body?.package_id || "");
+      const totalCerts = await getTotalCertificationCount();
+      const pkg = getEffectivePackage(body?.package_id || "", totalCerts);
       if (!pkg) {
         return res.status(400).json({
           error: "INVALID_PACKAGE",
           message: `Unknown package. Available: ${CREDIT_PACKAGES.map((p) => p.id).join(", ")}`,
-          packages: CREDIT_PACKAGES,
+          packages: getEffectivePackages(totalCerts),
         });
       }
 
@@ -139,6 +147,7 @@ export function registerCreditsRoutes(app: Express) {
         packageId: pkg.id,
         intentToken,
         payerAddress,
+        priceUsdcRaw: pkg.price_usdc_raw,
         expiresAt,
       });
 
@@ -233,13 +242,20 @@ export function registerCreditsRoutes(app: Express) {
         return res.status(503).json({ error: "PAYMENT_NOT_CONFIGURED" });
       }
 
+      // Use the price locked into the intent at purchase time (may reflect a promo discount).
+      // Falls back to the current package base price for intents created before this field existed.
+      const effectivePriceRaw = intent.priceUsdcRaw ?? pkg.price_usdc_raw;
+      const effectivePriceUsdc = intent.priceUsdcRaw
+        ? (parseInt(intent.priceUsdcRaw, 10) / 1_000_000).toFixed(2)
+        : pkg.price_usdc;
+
       // Verify the USDC transfer on Base, enforcing that the sender matches the registered payer_address
-      const { valid, error: verifyError, txTimestamp } = await verifyUsdcOnBase(txHash, payTo, pkg.price_usdc_raw, intent.payerAddress);
+      const { valid, error: verifyError, txTimestamp } = await verifyUsdcOnBase(txHash, payTo, effectivePriceRaw, intent.payerAddress);
       if (!valid) {
         return res.status(402).json({
           error: "PAYMENT_VERIFICATION_FAILED",
           message: verifyError || "Could not verify USDC transfer on Base",
-          expected: { pay_to: payTo, amount_usdc: pkg.price_usdc, asset: "USDC", network: "eip155:8453" },
+          expected: { pay_to: payTo, amount_usdc: effectivePriceUsdc, asset: "USDC", network: "eip155:8453" },
         });
       }
 
@@ -267,7 +283,7 @@ export function registerCreditsRoutes(app: Express) {
         packageId: pkg.id,
         txHash,
         creditsAdded: pkg.certs,
-        priceUsdc: pkg.price_usdc,
+        priceUsdc: effectivePriceUsdc,
         network: "eip155:8453",
       });
       await addCredits(apiKey.userId, pkg.certs);

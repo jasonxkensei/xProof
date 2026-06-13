@@ -1283,7 +1283,7 @@ export function registerProofWriteRoutes(app: Express) {
                 message: `Trial quota exhausted (${TRIAL_QUOTA}/${TRIAL_QUOTA} used). Purchase prepaid credits or pay per request via x402.`,
                 trial: { quota: TRIAL_QUOTA, used: TRIAL_QUOTA, remaining: 0 },
                 upgrade: {
-                  credits: `POST ${baseUrl}/api/credits/purchase — prepaid packs (100/$5, 1000/$40, 10k/$300 USDC on Base)`,
+                  credits: `POST ${baseUrl}/api/credits/purchase — prepaid packs: 100/$5, 1,000/$20 (launch promo -50%), 10,000/$150 (launch promo -50%) USDC on Base`,
                   x402: "Send POST /api/batch without auth header to pay per request via x402 (USDC on Base)",
                   acp: "Use POST /api/acp/checkout for EGLD payment on MultiversX",
                 },
