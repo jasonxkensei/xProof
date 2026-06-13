@@ -7,7 +7,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.2.8] — 2026-04-22
+## [0.2.8] — 2026-06-13
 
 ### Added
 - `TimingBreakdown` — `TypedDict` (all fields optional) for anchoring the full
@@ -31,6 +31,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
   timing + 4W combined, `JURISDICTION_TYPES` export, empty timing dict ignored.
 - **README**: *Timing Breakdown* section with code example, `jurisdiction_type`
   table, and read-back usage.
+
+### Changed
+- **Pricing update** — Tier 3 (1M+ proofs) lowered from $0.01 to **$0.015** per proof. The SDK reads pricing dynamically via `client.get_pricing()` — no code change required.
+- **Launch promo** — Prepaid packs ≥ 1,000 certs receive **-50% while network stays in Tier 1** (<100k total all-time proofs): Pro 1k $40→$20, Business 10k $300→$150. Auto-applied and auto-expires at 100k certs. Check current prices via `client.get_pricing()` or `GET /api/credits/packages`.
+- **Fetch.ai / uAgents integration** — `XProofuAgentMiddleware` fully documented in agent-context and examples. Use `pip install xproof[fetchai]` to install with uAgents support.
 
 ---
 
