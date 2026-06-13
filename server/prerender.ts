@@ -16,18 +16,35 @@ const CRAWLER_USER_AGENTS = [
   "Showyoubot", "outbrain", "Pinterest", "Pinterestbot", "Slack-ImgProxy",
   "vkShare", "W3C_Validator", "Redditbot", "Rogerbot", "AhrefsBot",
   "SemrushBot",
+  // LLM / AI agent browsing tools
+  "Grok", "xAI", "Perplexity", "Claude", "Anthropic",
+  "cohere", "mistral", "openai", "gemini", "copilot",
+  "Scrapy", "Wget", "libwww", "Go-http-client", "Java/",
+  "okhttp", "RestSharp", "Faraday",
 ];
 
 const SKIP_EXTENSIONS = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json|xml|txt|pdf|zip|webp|avif|mp4|webm)$/i;
 const SKIP_PATHS = ["/api/", "/.well-known/", "/mcp", "/llms.txt", "/llms-full.txt", "/robots.txt", "/sitemap.xml", "/learn/", "/dashboard", "/settings", "/agent-tools/", "/genesis.proof.json"];
 
-function isCrawler(userAgent: string): boolean {
-  if (!userAgent) return false;
+function isCrawler(userAgent: string, req?: Request): boolean {
+  if (!userAgent) return true; // No UA at all = definitely a bot
   const ua = userAgent.toLowerCase();
+
+  // Named crawlers — always prerender regardless of other headers
   if (CRAWLER_USER_AGENTS.some(bot => ua.includes(bot.toLowerCase()))) return true;
-  // Any non-browser HTTP client (no "mozilla" = not a real browser)
-  // Catches: python-requests, httpx, curl, Go-http-client, node-fetch, axios, LLM web_fetch tools, etc.
+
+  // Non-browser HTTP clients (no "mozilla" = not a real browser)
+  // Catches: python-requests, httpx, curl, Go-http-client, node-fetch, axios, etc.
   if (!ua.includes("mozilla")) return true;
+
+  // Has a "mozilla" UA (could be LLM tool, headless browser, or real browser).
+  // Real browsers ALWAYS send Sec-Fetch-Mode for top-level navigations.
+  // LLM web-browsing tools and headless HTTP clients never send it.
+  if (req) {
+    const secFetchMode = req.get("sec-fetch-mode");
+    if (!secFetchMode) return true; // No Sec-Fetch-Mode = bot/LLM tool despite mozilla UA
+  }
+
   return false;
 }
 
@@ -778,7 +795,7 @@ ${safeJsonLd({
 export function prerenderMiddleware() {
   return async (req: Request, res: Response, next: NextFunction) => {
     const userAgent = req.get("user-agent") || "";
-    if (!isCrawler(userAgent)) {
+    if (!isCrawler(userAgent, req)) {
       return next();
     }
 
