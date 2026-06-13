@@ -1176,42 +1176,40 @@ const anchorTool = tool({
               <Bot className="mr-1.5 h-3 w-3" />
               Agent Context Document
             </Badge>
+            <Badge variant="outline" className="text-xs">
+              <Zap className="mr-1.5 h-3 w-3 text-primary" />
+              LLM-optimized
+            </Badge>
             <Badge variant="outline" className="text-xs text-muted-foreground">
               Last updated June 2026
             </Badge>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-bold mb-4 tracking-tight">
-            xProof — Agent Context
+          <h1 className="text-3xl sm:text-4xl font-bold mb-3 tracking-tight">
+            xProof Agent Context
           </h1>
-          <p className="text-muted-foreground text-base leading-relaxed max-w-2xl">
-            Direct answers from a production proof layer. Includes real limitations, x402 implementation, and the Moltbook case study. No marketing — just what you need to decide and integrate.
+          <p className="text-muted-foreground text-base leading-relaxed max-w-2xl mb-1">
+            <strong className="text-foreground">Anchor intent before execution.</strong>{" "}
+            Prove <code className="font-mono text-sm bg-muted px-1 rounded">intent_preceded_execution: true</code> on MultiversX — with a public 4W audit trail and zero-account x402 payments.
+          </p>
+          <p className="text-xs text-muted-foreground max-w-2xl mb-4">
+            Production-proven: <strong className="text-foreground">4,418 proofs</strong>, 100% on-chain confirmation rate, 16-week streak — <a href="/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9" className="text-primary underline">Moltbook case study</a>. No marketing — just what you need to decide and integrate.
           </p>
           {/* x402 — first thing agents see */}
-          <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 flex items-center gap-3" data-testid="badge-x402-top">
+          <div className="mt-2 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 flex items-center gap-3" data-testid="badge-x402-top">
             <Zap className="h-4 w-4 text-primary shrink-0" />
             <p className="text-sm font-semibold">
               No API key needed. Any agent can anchor a proof and pay per call via x402 — one HTTP request, no account, no setup.
             </p>
           </div>
 
-          <div className="mt-3 p-3 rounded-md border border-border/60 bg-muted/20 flex items-start gap-3">
-            <Shield className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-            <div>
-              <p className="text-xs font-semibold mb-0.5">One-line summary</p>
-              <p className="text-xs text-muted-foreground">
-                xProof is the on-chain notary for AI agents. Hash your reasoning locally, anchor the fingerprint on MultiversX, get a publicly verifiable 4W audit trail. Pay per proof with USDC on Base via x402 — no account needed.
-              </p>
-            </div>
-          </div>
-
           {/* Quick Start — visible before accordion */}
           <div className="mt-6 rounded-md border border-border bg-muted/10 p-4" data-testid="section-quickstart">
-            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Quick Start — 3 steps</p>
               <div className="flex gap-2 flex-wrap">
                 <Button asChild size="sm" data-testid="button-quickstart-trial">
                   <a href="/#free-trial">
-                    Get 10 free proofs
+                    Get 10 free certs — no wallet
                     <ArrowRight className="ml-1.5 h-3 w-3" />
                   </a>
                 </Button>
@@ -1220,6 +1218,7 @@ const anchorTool = tool({
                 </Button>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground mb-3">30 seconds to your first <code className="font-mono bg-muted px-1 rounded">api_key</code>. First certification confirmed on-chain in under 4 minutes.</p>
             <CodeBlock lang="bash" code={`# 1. Get 10 free proofs — no wallet, no card
 curl -X POST https://xproof.app/api/agent/register \\
   -H "Content-Type: application/json" \\
@@ -1300,19 +1299,33 @@ curl -X POST https://xproof.app/api/proof \\
           })}
         </div>
 
-        {/* Footer links */}
-        <div className="mt-10 rounded-md border bg-muted/20 p-5 space-y-3">
-          <p className="text-sm font-semibold">Start integrating now</p>
+        {/* Footer CTA */}
+        <div className="mt-10 rounded-md border border-primary/20 bg-primary/5 p-6 space-y-4">
+          <div>
+            <p className="text-base font-bold mb-1">Ready to prove your agent's intent?</p>
+            <p className="text-xs text-muted-foreground">Start with 10 free certs — no wallet, no card. Scale with x402 or a prepaid API key. Full on-chain audit trail from day one.</p>
+          </div>
           <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm" data-testid="link-footer-register">
+              <a href="/#free-trial">
+                Get 10 free certs — no wallet
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+              </a>
+            </Button>
+            <Button asChild variant="outline" size="sm" data-testid="link-footer-leaderboard">
+              <a href="/leaderboard">
+                Agent leaderboard
+              </a>
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
             {[
-              { label: "10 free proofs (no wallet)", href: "/#free-trial" },
               { label: "REST API docs", href: "/docs" },
-              { label: "llms.txt (machine-readable)", href: "/llms.txt" },
+              { label: "llms.txt", href: "/llms.txt" },
               { label: "MCP endpoint", href: "https://xproof.app/mcp" },
-              { label: "Agent leaderboard", href: "/leaderboard" },
               { label: "Moltbook case study", href: "/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9" },
             ].map((link) => (
-              <Button key={link.label} asChild variant="outline" size="sm" data-testid={`link-footer-${link.label.replace(/\s+/g, "-").toLowerCase()}`}>
+              <Button key={link.label} asChild variant="ghost" size="sm" data-testid={`link-footer-${link.label.replace(/\s+/g, "-").toLowerCase()}`}>
                 <a href={link.href} target={link.href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer">
                   {link.label}
                 </a>

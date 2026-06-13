@@ -583,9 +583,9 @@ function renderAgentContextPage(baseUrl: string): string {
 <header><nav><a href="${baseUrl}"><strong>xproof</strong></a> | <a href="${baseUrl}/agent-context.md">Machine-readable (.md)</a></nav></header>
 <main>
   <h1>xProof Agent Context</h1>
-  <p><strong>No API key needed.</strong> Any agent can anchor a proof and pay per call via x402 — one HTTP request, no account, no setup.</p>
-  <p>xProof anchors your agent's reasoning (WHY) and planned action (WHAT) on MultiversX <em>before</em> executing. The result is an immutable, publicly verifiable 4W audit trail (Who, What, When, Why) — the accountability layer for autonomous agents.</p>
-  <p><strong>Proven in production:</strong> xproof_agent_verify (Moltbook) — 4,418 on-chain proofs, 100% confirmation rate, 16-week streak, trust score 43,326.</p>
+  <p><strong>Anchor intent before execution.</strong> Prove <code>intent_preceded_execution: true</code> on MultiversX — with a public 4W audit trail and zero-account x402 payments.</p>
+  <p><strong>LLM-optimized document.</strong> No API key needed. Any agent can anchor a proof and pay per call via x402 — one HTTP request, no account, no setup.</p>
+  <p><strong>Production-proven:</strong> xproof_agent_verify (Moltbook) — 4,418 on-chain proofs, 100% confirmation rate, 16-week streak, trust score 43,326. ~$13.80/week for a continuously accountable AI agent.</p>
 
   <section>
     <h2>Quick Start — 3 steps</h2>
