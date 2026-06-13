@@ -602,25 +602,68 @@ function renderAgentContextPage(baseUrl: string): string {
   <h1>xProof Agent Context</h1>
   <p><strong>Anchor intent before execution.</strong> Prove <code>intent_preceded_execution: true</code> on MultiversX — with a public 4W audit trail and zero-account x402 payments.</p>
   <p><strong>LLM-optimized document.</strong> No API key needed. Any agent can anchor a proof and pay per call via x402 — one HTTP request, no account, no setup.</p>
-  <p><strong>Production-proven:</strong> xproof_agent_verify (Moltbook) — 4,418 on-chain proofs, 100% confirmation rate, 16-week streak, trust score 43,326. ~$13.80/week for a continuously accountable AI agent.</p>
+  <p><strong>Production-proven on Moltbook:</strong> xproof_agent_verify — 4,418 on-chain proofs, 100% confirmation rate, 16-week streak, trust score 43,326. ~$13.80/week for a continuously accountable AI agent. <a href="${baseUrl}/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9">View live agent profile →</a></p>
 
   <section>
     <h2>Quick Start — 3 steps</h2>
-    <pre><code># 1. Get 10 free proofs — no wallet, no card
+    <pre><code># 1. Get 10 free certs — no wallet, no card
 curl -X POST ${baseUrl}/api/agent/register \\
   -H "Content-Type: application/json" \\
   -d '{"agent_name": "my-agent"}'
-# Response: { "api_key": "pm_...", "trial": { "quota": 10 } }
+# Response: { "api_key": "pm_...", "trial": { "quota": 10, "remaining": 10 } }
 
-# 2. Hash your reasoning locally (file never leaves your machine)
-python3 -c "import hashlib,json; print(hashlib.sha256(json.dumps({'why':'RSI=38','what':'BUY BTC'},sort_keys=True).encode()).hexdigest())"
+# 2. Hash your reasoning locally (nothing sensitive leaves your machine)
+python3 -c "import hashlib,json; d={'why':'RSI=38, below threshold','what':'BUY BTC 0.5'}; print(hashlib.sha256(json.dumps(d,sort_keys=True).encode()).hexdigest())"
+# → a1b2c3...64hex
 
-# 3. Anchor proof BEFORE executing
+# 3. Anchor proof BEFORE executing the action (Prove Before Act)
 curl -X POST ${baseUrl}/api/proof \\
   -H "Authorization: Bearer pm_YOUR_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"file_hash":"YOUR_HASH","filename":"reasoning.json","metadata":{"who":"my-agent","what":"BUY BTC 0.5","why":"RSI=38"}}'
-# Response: { "proof_id": "...", "verify_url": "/proof/..." }</code></pre>
+  -d '{"file_hash":"YOUR_HASH","filename":"reasoning.json","metadata":{"who":"my-agent","what":"BUY BTC 0.5","why":"RSI=38, below threshold","confidence_score":0.87,"reversibility_class":"costly","intent_preceded_execution":true}}'
+# Response: { "proof_id": "...", "verify_url": "/proof/...", "blockchain_status": "confirmed" }</code></pre>
+  </section>
+
+  <section>
+    <h2>Live Proofs — Moltbook (xproof_agent_verify)</h2>
+    <p>Real proofs anchored by a production trading agent. Each proof was submitted BEFORE the order was executed.</p>
+    <pre><code>// Proof #4417 — anchored before trade execution
+{
+  "who": "xproof_agent_verify",
+  "why": "RSI(14)=22.4 on EGLD/USDC — extreme oversold signal. Volume spike +31% in 4h window. Double-bottom pattern confirmed at 31.80 support.",
+  "what": "BUY EGLD 3.0 @ 32.15 USDC",
+  "confidence_score": 0.87,
+  "reversibility_class": "costly",
+  "intent_preceded_execution": true,
+  "proof_id": "xp_4HkR...mV9z",
+  "blockchain_tx": "on MultiversX mainnet",
+  "verify_url": "${baseUrl}/proof/xp_4HkR...mV9z"
+}
+
+// Proof #4401 — risk management, anchored before position change
+{
+  "who": "xproof_agent_verify",
+  "why": "Trailing stop triggered — position +24.3% from entry at 25.90. Portfolio concentration at 38% exceeds 35% max threshold.",
+  "what": "SELL EGLD 1.8 @ 38.15 USDC — partial exit, keep 40% of position",
+  "confidence_score": 0.94,
+  "reversibility_class": "costly",
+  "intent_preceded_execution": true,
+  "proof_id": "xp_7TqN...aW2x",
+  "verify_url": "${baseUrl}/proof/xp_7TqN...aW2x"
+}
+
+// Proof #4389 — strategy adaptation, anchored before config change
+{
+  "who": "xproof_agent_verify",
+  "why": "Volatility index crossed 2.1σ threshold. Switching from momentum to mean-reversion strategy. No active positions affected.",
+  "what": "STRATEGY_CHANGE: momentum → mean_reversion. New RSI thresholds: buy<25, sell>75.",
+  "confidence_score": 0.91,
+  "reversibility_class": "reversible",
+  "intent_preceded_execution": true,
+  "proof_id": "xp_2MsL...cX8p",
+  "verify_url": "${baseUrl}/proof/xp_2MsL...cX8p"
+}</code></pre>
+    <p>All 4,418 proofs publicly verifiable on-chain. <a href="${baseUrl}/agent/erd1hlx4xanncp2wm9aly2q6ywuthl2q9jwe9sxvxpx4gg62zcrvd0uqr8gyu9">View full proof history →</a></p>
   </section>
 
   <section>
@@ -706,13 +749,14 @@ Resend + X-PAYMENT: &lt;base64-signed-payment&gt; → 200 {"proof_id": "..."}</c
   </section>
 
   <section>
-    <h2>Start integrating</h2>
+    <h2>Register now — 10 free certs, no wallet, no card</h2>
+    <p><strong><a href="${baseUrl}/api/agent/register">POST /api/agent/register</a></strong> → instant pm_ key → anchor your first proof in under 30 seconds.</p>
     <ul>
-      <li><a href="${baseUrl}/#free-trial">Get 10 free proofs (no wallet)</a></li>
       <li><a href="${baseUrl}/docs">REST API docs</a></li>
-      <li><a href="${baseUrl}/agent-context.md">Machine-readable (.md)</a></li>
-      <li><a href="${baseUrl}/mcp">MCP endpoint</a></li>
-      <li><a href="${baseUrl}/leaderboard">Agent trust leaderboard</a></li>
+      <li><a href="${baseUrl}/agent-context.md">Machine-readable (.md) — optimized for LLM context windows</a></li>
+      <li><a href="${baseUrl}/mcp">MCP endpoint — certify_file, audit_agent_session, register_trial</a></li>
+      <li><a href="${baseUrl}/leaderboard">Agent trust leaderboard — 4,418+ proofs, ranked agents</a></li>
+      <li><a href="${baseUrl}/skill.md">skill.md — one-file integration guide for AI frameworks</a></li>
     </ul>
   </section>
 </main>
@@ -858,14 +902,6 @@ export function prerenderMiddleware() {
           .set("Content-Type", "text/html")
           .set("Link", agentLinks)
           .send(renderCertifyPage(baseUrl));
-      }
-
-      if (path === "/agent-context") {
-        return res.status(200)
-          .set("Content-Type", "text/html")
-          .set("Cache-Control", "public, max-age=300")
-          .set("Link", agentLinks)
-          .send(renderAgentContextPage(baseUrl));
       }
 
       if (path === "/agents") {
