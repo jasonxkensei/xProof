@@ -794,6 +794,21 @@ ${safeJsonLd({
 
 export function prerenderMiddleware() {
   return async (req: Request, res: Response, next: NextFunction) => {
+    const path = req.path;
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const agentLinksHeader = `</skill.md>; rel="agent-skill", </.well-known/xproof.json>; rel="agent-info", </llms.txt>; rel="describedby"`;
+
+    // /agent-context is designed for AI agents — always serve prerendered HTML
+    // to every visitor (browsers, crawlers, LLM tools, curl) regardless of UA
+    // or Sec-Fetch headers. The static HTML is the canonical form of this page.
+    if (path === "/agent-context") {
+      return res.status(200)
+        .set("Content-Type", "text/html; charset=utf-8")
+        .set("Cache-Control", "public, max-age=300")
+        .set("Link", agentLinksHeader)
+        .send(renderAgentContextPage(baseUrl));
+    }
+
     const userAgent = req.get("user-agent") || "";
     if (!isCrawler(userAgent, req)) {
       return next();
@@ -804,7 +819,6 @@ export function prerenderMiddleware() {
       return next();
     }
 
-    const path = req.path;
     if (shouldSkip(path)) {
       return next();
     }
@@ -828,8 +842,6 @@ export function prerenderMiddleware() {
       publicReadRateLimiter(req, res, settle);
     });
     if (res.headersSent) return;
-
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
 
     const agentLinks = `</skill.md>; rel="agent-skill", </.well-known/xproof.json>; rel="agent-info", </llms.txt>; rel="describedby"`;
 
