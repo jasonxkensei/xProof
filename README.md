@@ -125,17 +125,9 @@ engaging. Trust becomes mathematical, not reputational.
 
 ## Pricing
 
-**$0.01 per certification** -- flat rate, no tiers, no subscriptions, no monthly fees.
+**$0.01 per certification — flat rate.** No tiers, no subscriptions, no monthly fees.
 
-| Pack | Price |
-|---|---|
-| 1 proof | $0.01 |
-| 100 proofs | $1 |
-| 1,000 proofs | $10 |
-| 10,000 proofs | $100 |
-| 1 proof (live rate) | See https://xproof.app/api/pricing |
-
-Current pricing & tier info: **https://xproof.app/api/pricing**
+Current pricing: **https://xproof.app/api/pricing**
 
 | Payment Method | Currency | Account Required |
 |---|---|---|
@@ -291,7 +283,7 @@ Any agent can certify without an API key using the x402 payment protocol:
 3. Sign the payment and resend with `X-PAYMENT` header
 4. Receive the proof
 
-**$0.01 per certification** -- flat rate. Current pricing: https://xproof.app/api/pricing. No signup. No API key. No account.
+**$0.01 per certification** — flat rate. Current pricing: https://xproof.app/api/pricing. No signup. No API key. No account.
 
 ### MCP -- Model Context Protocol
 
