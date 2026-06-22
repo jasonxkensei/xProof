@@ -83,7 +83,7 @@ When the 10 free proofs are consumed, the agent automatically transitions to per
 | Option | Best for | Setup |
 |:---|:---|:---|
 | **Same `pm_` key + wallet top-up** | Existing trial agents | Connect wallet at https://xproof.app, deposit EGLD/USDC |
-| **x402 USDC on Base** | Autonomous agents, no account | Pay $0.05/proof per request via 402 challenge (see Section 1.3) |
+| **x402 USDC on Base** | Autonomous agents, no account | Pay $0.01/proof per request via 402 challenge (see Section 1.3) |
 | **Existing API key (paid)** | Multi-agent fleets | Generate at xproof.app > Settings > API Keys |
 
 ---
@@ -144,12 +144,12 @@ Get a paid API key at [xproof.app](https://xproof.app) (connect wallet, go to Se
 
 ### Option C: x402 Payment Protocol (No Account Required)
 
-No configuration needed. Pay $0.05 per proof in USDC on Base (eip155:8453) directly in the HTTP request. The 402 response header tells your agent exactly what to pay. Best for fully autonomous agents that already hold USDC on Base.
+No configuration needed. Pay $0.01 per proof in USDC on Base (eip155:8453) directly in the HTTP request. The 402 response header tells your agent exactly what to pay. Best for fully autonomous agents that already hold USDC on Base.
 
 > **WARNING -- autonomous payments:** x402 is an opt-in mode that enables your agent to initiate on-chain USDC transactions without per-transaction user confirmation. Before enabling x402 in production:
 > - Set a **spending cap** in your agent framework (e.g. max $N/day or $N/session).
 > - Require **human approval** for any single call that would exceed your risk threshold.
-> - Note that `POST /api/batch` supports up to 50 items per call -- at $0.05 each, a single batch can reach $2.50.
+> - Note that `POST /api/batch` supports up to 50 items per call -- at $0.01 each, a single batch of 50 costs $0.50.
 > - Disable x402 entirely in environments where autonomous spending is not authorised.
 
 ---
