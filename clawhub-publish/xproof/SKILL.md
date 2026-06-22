@@ -19,9 +19,8 @@ This skill enables your agent to **anchor verifiable proofs on the MultiversX bl
 ## Pricing
 
 **All-time volume pricing** (global pool, not per-user):
-- **0–100k proofs**: $0.05 per proof
-- **100k–1M proofs**: $0.025 per proof
-- **1M+ proofs**: $0.015 per proof
+- **Flat rate**: $0.01 per proof — no tiers, no volume discounts
+
 
 ## Quick Install
 
@@ -70,7 +69,7 @@ No configuration needed. Pay in USDC on Base (eip155:8453) directly in the HTTP 
 > **WARNING -- autonomous payments:** x402 is an opt-in mode that enables your agent to initiate on-chain USDC transactions without per-transaction user confirmation. Before enabling x402 in production:
 > - Set a **spending cap** in your agent framework (e.g. max $N/day or $N/session).
 > - Require **human approval** for any single call that would exceed your risk threshold.
-> - Note that `POST /api/batch` supports up to 50 items per call -- at $0.05 each, a single batch can reach $2.50.
+> - Note that `POST /api/batch` supports up to 50 items per call -- at $0.01 each, a single batch of 50 costs $0.50.
 > - Disable x402 entirely in environments where autonomous spending is not authorised.
 
 ---
