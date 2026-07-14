@@ -83,7 +83,7 @@ When the 10 free proofs are consumed, the agent automatically transitions to per
 | Option | Best for | Setup |
 |:---|:---|:---|
 | **Same `pm_` key + wallet top-up** | Existing trial agents | Connect wallet at https://xproof.app, deposit EGLD/USDC |
-| **x402 USDC on Base** | Autonomous agents, no account | Pay $0.01/proof per request via 402 challenge (see Section 1.3) |
+| **x402 USDC on Base** | Autonomous agents, no account | Pay $0.05/proof per request via 402 challenge (see Section 1.3) |
 | **Existing API key (paid)** | Multi-agent fleets | Generate at xproof.app > Settings > API Keys |
 
 ---
@@ -93,13 +93,13 @@ When the 10 free proofs are consumed, the agent automatically transitions to per
 ```bash
 mkdir -p .agent/skills/xproof/references
 
-# Core Skill
-curl -sL https://raw.githubusercontent.com/jasonxkensei/xproof-openclaw-skill/main/xproof/SKILL.md \
+# Core Skill — from the canonical main repository (jasonxkensei/xProof)
+curl -sL https://raw.githubusercontent.com/jasonxkensei/xProof/main/clawhub-publish/xproof/SKILL.md \
   > .agent/skills/xproof/SKILL.md
 
 # Reference Manuals
-for f in certification x402 mcp api-reference; do
-  curl -sL "https://raw.githubusercontent.com/jasonxkensei/xproof-openclaw-skill/main/xproof/references/${f}.md" \
+for f in certification x402 mcp; do
+  curl -sL "https://raw.githubusercontent.com/jasonxkensei/xProof/main/clawhub-publish/xproof/references/${f}.md" \
     > ".agent/skills/xproof/references/${f}.md"
 done
 ```
@@ -144,12 +144,12 @@ Get a paid API key at [xproof.app](https://xproof.app) (connect wallet, go to Se
 
 ### Option C: x402 Payment Protocol (No Account Required)
 
-No configuration needed. Pay $0.01 per proof in USDC on Base (eip155:8453) directly in the HTTP request. The 402 response header tells your agent exactly what to pay. Best for fully autonomous agents that already hold USDC on Base.
+No configuration needed. Pay $0.05 per proof in USDC on Base (eip155:8453) directly in the HTTP request. The 402 response header tells your agent exactly what to pay. Best for fully autonomous agents that already hold USDC on Base.
 
 > **WARNING -- autonomous payments:** x402 is an opt-in mode that enables your agent to initiate on-chain USDC transactions without per-transaction user confirmation. Before enabling x402 in production:
 > - Set a **spending cap** in your agent framework (e.g. max $N/day or $N/session).
 > - Require **human approval** for any single call that would exceed your risk threshold.
-> - Note that `POST /api/batch` supports up to 50 items per call -- at $0.01 each, a single batch of 50 costs $0.50.
+> - Note that `POST /api/batch` supports up to 50 items per call -- at $0.05 each, a single batch can reach $2.50.
 > - Disable x402 entirely in environments where autonomous spending is not authorised.
 
 ---
@@ -443,12 +443,10 @@ curl -X POST https://xproof.app/api/audit \
 5. No fallback. No soft fail. No silent continue.
 ```
 
-Guard templates for multiple frameworks:
-- **LangChain**: `https://xproof.app/agent-tools/audit-guard-langchain.py`
-- **CrewAI**: `https://xproof.app/agent-tools/audit-guard-crewai.py`
-- **n8n**: `https://xproof.app/agent-tools/audit-guard-n8n.json`
-- **ElizaOS**: `https://xproof.app/agent-tools/audit-guard-eliza.ts`
-- **ElizaOS Plugin (NPM)**: `npm install xproof-eliza-plugin`
+Guard templates for multiple frameworks (pinned in the main repository — do not fetch from runtime URLs):
+- **LangChain / CrewAI / LlamaIndex**: use the `xproof` PyPI package (`pip install xproof`) — integrations are in `xproof.integrations.*`
+- **ElizaOS Plugin**: `npm install xproof-eliza-plugin`
+- **n8n / AutoGen / custom**: see `xproof-examples/` in [github.com/jasonxkensei/xProof](https://github.com/jasonxkensei/xProof)
 
 ### When to Audit
 
